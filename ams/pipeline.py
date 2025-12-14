@@ -4,13 +4,12 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 
 from .assessors import Assessor
+from .css_static import CSSStaticAssessor
 from .html_static import HTMLStaticAssessor
-from .models import Finding
+from .models import Finding, SubmissionContext
 from .reporting import ReportWriter
 from .scoring import ScoringEngine
 from .submission import SubmissionProcessor
-from .models import SubmissionContext
-
 
 class AssessmentPipeline:
     def __init__(
@@ -19,7 +18,7 @@ class AssessmentPipeline:
         scoring_engine: Optional[ScoringEngine] = None,
     ) -> None:
         if assessors is None:
-            self.assessors = [HTMLStaticAssessor()]
+            self.assessors = [HTMLStaticAssessor(), CSSStaticAssessor()]
         else:
             self.assessors: List[Assessor] = list(assessors)
         self.scoring_engine = scoring_engine or ScoringEngine()
