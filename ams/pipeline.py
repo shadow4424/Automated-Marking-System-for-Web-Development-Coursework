@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 
 from .assessors import Assessor
+from .html_static import HTMLStaticAssessor
 from .models import Finding
 from .reporting import ReportWriter
 from .scoring import ScoringEngine
@@ -17,7 +18,10 @@ class AssessmentPipeline:
         assessors: Optional[Iterable[Assessor]] = None,
         scoring_engine: Optional[ScoringEngine] = None,
     ) -> None:
-        self.assessors: List[Assessor] = list(assessors or [])
+        if assessors is None:
+            self.assessors = [HTMLStaticAssessor()]
+        else:
+            self.assessors: List[Assessor] = list(assessors)
         self.scoring_engine = scoring_engine or ScoringEngine()
 
     def run(self, submission_path: Path, workspace_path: Path) -> Path:

@@ -14,5 +14,6 @@ def test_pipeline_writes_report_json(tmp_path: Path) -> None:
         report_path = pipeline.run(submission_dir, Path(workspace_dir))
         assert report_path.exists()
         data = json.loads(report_path.read_text(encoding="utf-8"))
-        assert data.get("findings") == []
+        findings = data.get("findings")
+        assert isinstance(findings, list)
         assert data.get("scores") is not None
