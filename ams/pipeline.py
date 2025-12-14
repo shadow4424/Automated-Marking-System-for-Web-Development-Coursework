@@ -4,9 +4,11 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 
 from .assessors import Assessor
-from .models import Finding, SubmissionContext
+from .models import Finding
 from .reporting import ReportWriter
 from .scoring import ScoringEngine
+from .submission import SubmissionProcessor
+from .models import SubmissionContext
 
 
 class AssessmentPipeline:
@@ -29,15 +31,4 @@ class AssessmentPipeline:
         return report_path
 
     def _prepare_context(self, submission_path: Path, workspace_path: Path) -> SubmissionContext:
-        workspace_path.mkdir(parents=True, exist_ok=True)
-        submission_path = submission_path.resolve()
-        workspace_path = workspace_path.resolve()
-        metadata = {
-            "submission_name": submission_path.name,
-        }
-        return SubmissionContext(
-            submission_path=submission_path,
-            workspace_path=workspace_path,
-            discovered_files={},
-            metadata=metadata,
-        )
+        return SubmissionProcessor().prepare(submission_path, workspace_path)
