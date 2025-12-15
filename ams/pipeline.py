@@ -7,6 +7,7 @@ from .assessors import Assessor
 from .css_static import CSSStaticAssessor
 from .html_static import HTMLStaticAssessor
 from .js_static import JSStaticAssessor
+from .php_static import PHPStaticAssessor
 from .models import Finding, SubmissionContext
 from .reporting import ReportWriter
 from .scoring import ScoringEngine
@@ -23,6 +24,7 @@ class AssessmentPipeline:
                 HTMLStaticAssessor(),
                 CSSStaticAssessor(),
                 JSStaticAssessor(),
+                PHPStaticAssessor(),
             ]
         else:
             self.assessors: List[Assessor] = list(assessors)
