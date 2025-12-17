@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import pytest
 
 from ams.pipeline import AssessmentPipeline
 
@@ -24,7 +25,7 @@ def run_pipeline_with_files(tmp_path: Path, files: dict[str, str]):
 def test_scoring_all_missing_scores_zero(tmp_path):
     data, _ = run_pipeline_with_files(tmp_path, {})
 
-    assert data["scores"]["overall"] == 0.0
+    assert data["scores"]["overall"] == pytest.approx(0.0)
     for component in ["html", "css", "js", "php", "sql"]:
         assert data["scores"]["by_component"][component]["score"] == 0.0
 
@@ -36,7 +37,7 @@ def test_scoring_html_only_partial(tmp_path):
     others = ["css", "js", "php", "sql"]
     for component in others:
         assert data["scores"]["by_component"][component]["score"] == 0.0
-    assert data["scores"]["overall"] == 0.5 / 5
+    assert data["scores"]["overall"] == pytest.approx(0.5 / 5)
 
 
 def test_scoring_html_css_js_good_attempt(tmp_path):
@@ -52,7 +53,7 @@ def test_scoring_html_css_js_good_attempt(tmp_path):
     assert data["scores"]["by_component"]["js"]["score"] == 1.0
     assert data["scores"]["by_component"]["php"]["score"] == 0.0
     assert data["scores"]["by_component"]["sql"]["score"] == 0.0
-    assert data["scores"]["overall"] == 3 / 5
+    assert data["scores"]["overall"] == pytest.approx(3 / 5)
 
 
 def test_summary_txt_created(tmp_path):
