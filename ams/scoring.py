@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Mapping, Tuple
 
 from .models import Finding
+from .profiles import get_relevant_components
 
 
 class ScoringEngine:
@@ -12,16 +13,13 @@ class ScoringEngine:
     COMPONENTS = ["html", "css", "js", "php", "sql"]
 
     def score(self, findings: Iterable[Finding], profile: str = None) -> Mapping[str, object]:
-        from .profiles import PROFILES
         findings_list = list(findings)
         by_category: Dict[str, List[Finding]] = {c: [] for c in self.COMPONENTS}
         for finding in findings_list:
             if finding.category in by_category:
                 by_category[finding.category].append(finding)
-        # Determine relevant components per profile
-        relevant_components = self.COMPONENTS
-        if profile is not None and profile in PROFILES:
-            relevant_components = PROFILES[profile]["relevant_artefacts"]
+        relevant_components = self._determine_relevant_components(profile)
+
         component_results: Dict[str, dict] = {}
         for component in self.COMPONENTS:
             if component not in relevant_components:
@@ -37,7 +35,6 @@ class ScoringEngine:
                 "score": score_value,
                 "rationale": sorted(rationale, key=lambda r: r.get("rule", "")),
             }
-        # Calculate denominator and overall
         n_relevant = len([c for c in self.COMPONENTS if c in relevant_components])
         total = sum(
             (result["score"] if isinstance(result["score"], (float, int)) else 0.0)
@@ -62,6 +59,11 @@ class ScoringEngine:
         if scorer is None:
             return 0.0, []
         return scorer(findings)
+
+    def _determine_relevant_components(self, profile: str | None) -> List[str]:
+        if profile is None:
+            return self.COMPONENTS
+        return get_relevant_components(profile)
 
     def _score_html(self, findings: List[Finding]) -> Tuple[float, List[dict]]:
         rationale: List[dict] = []
