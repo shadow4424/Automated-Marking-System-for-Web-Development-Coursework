@@ -32,12 +32,15 @@ class AssessmentPipeline:
             self.assessors: List[Assessor] = list(assessors)
         self.scoring_engine = scoring_engine or ScoringEngine()
 
-    def run(self, submission_path: Path, workspace_path: Path) -> Path:
+    def run(self, submission_path: Path, workspace_path: Path, profile: str = None) -> Path:
         context = self._prepare_context(submission_path, workspace_path)
+        if profile is not None:
+            context.metadata["profile"] = profile
         findings: List[Finding] = []
         for assessor in self.assessors:
             findings.extend(assessor.run(context))
-        scores = self.scoring_engine.score(findings)
+        # Pass profile into scoring engine
+        scores = self.scoring_engine.score(findings, profile=profile)
         report_path = workspace_path / "report.json"
         ReportWriter(report_path).write(context, findings, scores)
         return report_path

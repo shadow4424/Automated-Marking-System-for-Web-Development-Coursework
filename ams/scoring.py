@@ -11,23 +11,39 @@ class ScoringEngine:
 
     COMPONENTS = ["html", "css", "js", "php", "sql"]
 
-    def score(self, findings: Iterable[Finding]) -> Mapping[str, object]:
+    def score(self, findings: Iterable[Finding], profile: str = None) -> Mapping[str, object]:
+        from .profiles import PROFILES
         findings_list = list(findings)
         by_category: Dict[str, List[Finding]] = {c: [] for c in self.COMPONENTS}
         for finding in findings_list:
             if finding.category in by_category:
                 by_category[finding.category].append(finding)
-
+        # Determine relevant components per profile
+        relevant_components = self.COMPONENTS
+        if profile is not None and profile in PROFILES:
+            relevant_components = PROFILES[profile]["relevant_artefacts"]
         component_results: Dict[str, dict] = {}
         for component in self.COMPONENTS:
+            if component not in relevant_components:
+                component_results[component] = {
+                    "score": "SKIPPED",
+                    "rationale": [
+                        {"rule": "component_skipped_profile", "finding_ids": [], "note": f"Skipped by profile [{profile}]"}
+                    ],
+                }
+                continue
             score_value, rationale = self._score_component(component, by_category.get(component, []))
             component_results[component] = {
                 "score": score_value,
                 "rationale": sorted(rationale, key=lambda r: r.get("rule", "")),
             }
-
-        overall = sum(result["score"] for result in component_results.values()) / len(self.COMPONENTS)
-
+        # Calculate denominator and overall
+        n_relevant = len([c for c in self.COMPONENTS if c in relevant_components])
+        total = sum(
+            (result["score"] if isinstance(result["score"], (float, int)) else 0.0)
+            for c, result in component_results.items() if c in relevant_components
+        )
+        overall = total / n_relevant if n_relevant > 0 else 0.0
         return {
             "overall": overall,
             "by_component": component_results,
