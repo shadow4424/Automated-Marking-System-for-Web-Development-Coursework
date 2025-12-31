@@ -2,7 +2,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from ams.pipeline import AssessmentPipeline
+from ams.core.pipeline import AssessmentPipeline
 
 
 def test_pipeline_writes_report_json(tmp_path: Path) -> None:

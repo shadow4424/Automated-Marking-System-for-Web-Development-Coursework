@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>Run History</h2>
+  <form method="get" style="margin-bottom: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+    <input type="text" name="q" value="{{ query }}" placeholder="Search run id..." style="padding: 0.35rem 0.5rem; min-width: 200px;">
+    <select name="mode" style="padding: 0.35rem 0.5rem;">
+      <option value="">All modes</option>
+      <option value="mark" {% if mode_filter == "mark" %}selected{% endif %}>Mark</option>
+      <option value="batch" {% if mode_filter == "batch" %}selected{% endif %}>Batch</option>
+    </select>
+    <select name="profile" style="padding: 0.35rem 0.5rem;">
+      <option value="">All profiles</option>
+      <option value="frontend" {% if profile_filter == "frontend" %}selected{% endif %}>Frontend</option>
+      <option value="fullstack" {% if profile_filter == "fullstack" %}selected{% endif %}>Fullstack</option>
+    </select>
+    <button type="submit" style="padding: 0.35rem 0.75rem; background: #1b4b8a; color: white; border: none; border-radius: 3px;">Filter</button>
+  </form>
+  {% if runs %}
+    <p style="color: #666; margin-bottom: 1rem;">View details of previous marking and batch runs.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Run ID</th>
+          <th>Mode</th>
+          <th>Profile</th>
+          <th>Created</th>
+          <th>Students</th>
+          <th>Overall</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+          {% set rid = run.id if run.id is defined else run['id'] %}
+          {% set mode = run.mode if run.mode is defined else run['mode'] %}
+          {% set profile = run.profile if run.profile is defined else run['profile'] %}
+          {% set subs = run.submissions if run.submissions is defined else run.get('submissions', []) %}
+          <tr>
+            <td><strong><a href="{{ url_for('run_detail', run_id=rid) }}">{{ rid }}</a></strong></td>
+            <td>
+              {% if mode == "mark" %}
+                <span style="background: #e7f3ff; color: #1b4b8a; padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.9em;">Single</span>
+              {% else %}
+                <span style="background: #fff3cd; color: #856404; padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.9em;">Batch</span>
+              {% endif %}
+            </td>
+            <td><span style="text-transform: capitalize;">{{ profile }}</span></td>
+            <td>{{ run.created_at if run.created_at is defined else run['created_at'] }}</td>
+            <td>
+              {% if subs|length == 1 %}
+                {% set s = subs[0] %}
+                {% if s.student_name %}
+                  {{ s.student_name }}{% if s.student_id %} ({{ s.student_id }}){% endif %}
+                {% else %}
+                  {{ s.submission_id or s.original_filename or "submission" }}
+                {% endif %}
+              {% elif subs|length > 1 %}
+                {% set names = [] %}
+                {% for s in subs[:2] %}
+                  {% if s.student_name %}
+                    {% set _ = names.append(s.student_name) %}
+                  {% elif s.submission_id %}
+                    {% set _ = names.append(s.submission_id) %}
+                  {% endif %}
+                {% endfor %}
+                {{ subs|length }} submissions{% if names %} (e.g., {{ names|join(", ") }}){% endif %}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td>{{ run.overall if run.overall is defined else run.get('overall','') }}</td>
+            <td>{{ run.status if run.status is defined else run.get('status','ok') }}</td>
+            <td>
+              {% if mode == "mark" %}
+                <a href="{{ url_for('run_detail', run_id=rid) }}" style="color: #1b4b8a;">View</a>
+              {% else %}
+                <a href="{{ url_for('batch_analytics', run_id=rid) }}" style="color: #1b4b8a;">Batch</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div style="padding: 2rem; text-align: center; background: #f8f9fa; border-radius: 6px;">
+      <p style="color: #666; margin: 0;">No runs yet. Start by <a href="{{ url_for('mark') }}">marking a single submission</a> or <a href="{{ url_for('batch') }}">running a batch</a>.</p>
+    </div>
+  {% endif %}
+{% endblock %}

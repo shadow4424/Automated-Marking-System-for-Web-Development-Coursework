@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card-grid">
+    <div class="card">
+      <h3>Mark Single Submission</h3>
+      <p>Upload a single student submission ZIP and run AMS checks.</p>
+      <a href="{{ url_for('mark') }}">Go to Mark</a>
+    </div>
+    <div class="card">
+      <h3>Batch Marking</h3>
+      <p>Upload a ZIP containing multiple submissions to run cohort analytics.</p>
+      <a href="{{ url_for('batch') }}">Go to Batch</a>
+    </div>
+    <div class="card">
+      <h3>Run History</h3>
+      <p>View recent marking and batch runs.</p>
+      <a href="{{ url_for('runs') }}">View Runs</a>
+    </div>
+  </div>
+{% endblock %}

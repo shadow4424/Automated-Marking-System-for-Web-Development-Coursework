@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>Mark Single Submission</h2>
+  <p style="color: #666; margin-bottom: 1.5rem;">
+    Upload a single student submission ZIP file to run automated marking checks.
+    The system will analyze HTML, CSS, JavaScript, and optionally PHP/SQL based on the selected profile.
+  </p>
+  <form method="post" enctype="multipart/form-data">
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 6px; margin-bottom: 1rem;">
+      <label>Assessment Profile
+        <select name="profile" style="margin-top: 0.5rem;">
+          {% for profile in profiles %}
+            <option value="{{ profile }}">{{ profile|capitalize }}</option>
+          {% endfor %}
+        </select>
+        <small style="display: block; color: #666; margin-top: 0.25rem; font-size: 0.9em;">
+          Select the assessment profile (frontend or fullstack) to determine which components are evaluated.
+        </small>
+      </label>
+    </div>
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 6px; margin-bottom: 1rem;">
+      <label>Submission ZIP File
+        <input type="file" name="submission" accept=".zip" required style="margin-top: 0.5rem;">
+        <small style="display: block; color: #666; margin-top: 0.25rem; font-size: 0.9em;">
+          Maximum file size: 25 MB. The ZIP should contain the student's submission files.
+        </small>
+      </label>
+    </div>
+    <button type="submit" style="width: 100%; max-width: 300px;">📤 Upload &amp; Mark</button>
+  </form>
+{% endblock %}

@@ -2,7 +2,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from ams.pipeline import AssessmentPipeline
+from ams.core.pipeline import AssessmentPipeline
 
 
 def _run_pipeline(submission_dir: Path) -> dict:
@@ -12,13 +12,15 @@ def _run_pipeline(submission_dir: Path) -> dict:
         return json.loads(report_path.read_text(encoding="utf-8"))
 
 
-def test_php_missing_results_in_skipped(tmp_path: Path) -> None:
+def test_php_missing_results_in_skipped_for_frontend(tmp_path: Path) -> None:
+    """PHP missing should be SKIPPED (not required) for frontend profile."""
     submission_dir = tmp_path / "submission"
     submission_dir.mkdir()
 
     report = _run_pipeline(submission_dir)
     findings = report.get("findings", [])
-    assert any(f["id"] == "PHP.MISSING" and f["severity"] == "SKIPPED" for f in findings)
+    # PHP is not required for frontend, so missing should be SKIPPED
+    assert any(f["id"] == "PHP.SKIPPED" and f["severity"] == "SKIPPED" for f in findings)
 
 
 def test_php_tag_ok_and_evidence_counts(tmp_path: Path) -> None:

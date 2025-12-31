@@ -2,7 +2,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from ams.pipeline import AssessmentPipeline
+from ams.core.pipeline import AssessmentPipeline
 
 
 def _run_pipeline(submission_dir: Path) -> dict:
@@ -12,13 +12,15 @@ def _run_pipeline(submission_dir: Path) -> dict:
         return json.loads(report_path.read_text(encoding="utf-8"))
 
 
-def test_sql_missing_results_in_skipped(tmp_path: Path) -> None:
+def test_sql_missing_results_in_skipped_for_frontend(tmp_path: Path) -> None:
+    """SQL missing should be SKIPPED (not required) for frontend profile."""
     submission_dir = tmp_path / "submission"
     submission_dir.mkdir()
 
     report = _run_pipeline(submission_dir)
     findings = report.get("findings", [])
-    assert any(f["id"] == "SQL.MISSING" and f["severity"] == "SKIPPED" for f in findings)
+    # SQL is not required for frontend, so missing should be SKIPPED
+    assert any(f["id"] == "SQL.SKIPPED" and f["severity"] == "SKIPPED" for f in findings)
 
 
 def test_sql_evidence_counts_and_structure_ok(tmp_path: Path) -> None:

@@ -1,0 +1,18 @@
+# Python cache
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+
+# Packaging
+*.egg-info/
+
+# AMS run outputs
+ams_runs/
+ams_eval_runs/
+ams_batch_runs/
+ams_web_runs/
+demo_out/
+tmp_phase5/
+scratch_sql_test/
+manual_submissions/

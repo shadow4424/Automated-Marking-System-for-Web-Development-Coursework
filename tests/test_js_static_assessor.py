@@ -2,7 +2,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from ams.pipeline import AssessmentPipeline
+from ams.core.pipeline import AssessmentPipeline
 
 
 def _run_pipeline(submission_dir: Path) -> dict:
@@ -12,13 +12,15 @@ def _run_pipeline(submission_dir: Path) -> dict:
         return json.loads(report_path.read_text(encoding="utf-8"))
 
 
-def test_js_missing_results_in_skipped(tmp_path: Path) -> None:
+def test_js_missing_results_in_fail_for_frontend(tmp_path: Path) -> None:
+    """JS missing should be FAIL (required but absent) for frontend profile."""
     submission_dir = tmp_path / "submission"
     submission_dir.mkdir()
 
     report = _run_pipeline(submission_dir)
     findings = report.get("findings", [])
-    assert any(f["id"] == "JS.MISSING" and f["severity"] == "SKIPPED" for f in findings)
+    # JS is required for frontend, so missing should be FAIL
+    assert any(f["id"] == "JS.MISSING_FILES" and f["severity"] == "FAIL" for f in findings)
 
 
 def test_js_syntax_ok_for_simple_js(tmp_path: Path) -> None:

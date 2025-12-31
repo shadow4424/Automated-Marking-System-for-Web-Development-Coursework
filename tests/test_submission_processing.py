@@ -3,7 +3,7 @@ import zipfile
 
 import pytest
 
-from ams.submission import SubmissionProcessor
+from ams.io.submission import SubmissionProcessor
 
 
 def create_sample_dir(tmp_path: Path) -> Path:

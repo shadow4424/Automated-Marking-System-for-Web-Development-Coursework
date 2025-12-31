@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import pytest
 
-from ams.pipeline import AssessmentPipeline
+from ams.core.pipeline import AssessmentPipeline
 
 
 def run_pipeline_with_files(tmp_path: Path, files: dict[str, str]):
@@ -27,7 +27,11 @@ def test_scoring_all_missing_scores_zero(tmp_path):
 
     assert data["scores"]["overall"] == pytest.approx(0.0)
     for component in ["html", "css", "js", "php", "sql"]:
-        assert data["scores"]["by_component"][component]["score"] == 0.0
+        score = data["scores"]["by_component"][component]["score"]
+        if component in ["html", "css", "js"]:
+            assert score == 0.0
+        else:
+            assert score == "SKIPPED"
 
 
 def test_scoring_html_only_partial(tmp_path):
@@ -36,8 +40,12 @@ def test_scoring_html_only_partial(tmp_path):
     assert data["scores"]["by_component"]["html"]["score"] == 0.5
     others = ["css", "js", "php", "sql"]
     for component in others:
-        assert data["scores"]["by_component"][component]["score"] == 0.0
-    assert data["scores"]["overall"] == pytest.approx(0.5 / 5)
+        score = data["scores"]["by_component"][component]["score"]
+        if component in ["css", "js"]:
+            assert score == 0.0
+        else:
+            assert score == "SKIPPED"
+    assert data["scores"]["overall"] == pytest.approx(0.5)
 
 
 def test_scoring_html_css_js_good_attempt(tmp_path):
@@ -51,9 +59,9 @@ def test_scoring_html_css_js_good_attempt(tmp_path):
     assert data["scores"]["by_component"]["html"]["score"] == 1.0
     assert data["scores"]["by_component"]["css"]["score"] == 1.0
     assert data["scores"]["by_component"]["js"]["score"] == 1.0
-    assert data["scores"]["by_component"]["php"]["score"] == 0.0
-    assert data["scores"]["by_component"]["sql"]["score"] == 0.0
-    assert data["scores"]["overall"] == pytest.approx(3 / 5)
+    assert data["scores"]["by_component"]["php"]["score"] == "SKIPPED"
+    assert data["scores"]["by_component"]["sql"]["score"] == "SKIPPED"
+    assert data["scores"]["overall"] == pytest.approx(1.0)
 
 
 def test_summary_txt_created(tmp_path):
@@ -64,3 +72,73 @@ def test_summary_txt_created(tmp_path):
     content = summary_path.read_text(encoding="utf-8")
     assert "Overall" in content
 
+
+def run_pipeline_with_profile(tmp_path: Path, files: dict[str, str], profile: str):
+    submission = tmp_path / "submission"
+    submission.mkdir()
+    for relative, content in files.items():
+        dest = submission / relative
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+
+    workspace = tmp_path / "workspace"
+    pipeline = AssessmentPipeline()
+    report_path = pipeline.run(submission, workspace, profile=profile)
+    data = json.loads(report_path.read_text(encoding="utf-8"))
+    return data
+
+
+def test_profile_frontend_skips_backend_components(tmp_path):
+    """Test that frontend profile marks php/sql as SKIPPED."""
+    files = {
+        "index.html": "<!doctype html><html><head><title>Test</title></head><body><form><input></form></body></html>",
+        "style.css": "body { color: red; }",
+        "app.js": "document.addEventListener('click', () => {});",
+    }
+    data = run_pipeline_with_profile(tmp_path, files, profile="frontend")
+
+    # Frontend components should be scored
+    assert isinstance(data["scores"]["by_component"]["html"]["score"], (int, float))
+    assert isinstance(data["scores"]["by_component"]["css"]["score"], (int, float))
+    assert isinstance(data["scores"]["by_component"]["js"]["score"], (int, float))
+
+    # Backend components should be SKIPPED
+    assert data["scores"]["by_component"]["php"]["score"] == "SKIPPED"
+    assert data["scores"]["by_component"]["sql"]["score"] == "SKIPPED"
+
+    assert data["scores"]["overall"] == pytest.approx(1.0)
+
+
+def test_profile_fullstack_includes_all_components(tmp_path):
+    """Test that fullstack profile includes all components."""
+    files = {
+        "index.html": "<!doctype html><html><head><title>Test</title></head><body><form><input></form></body></html>",
+        "style.css": "body { color: red; }",
+        "app.js": "document.addEventListener('click', () => {});",
+        "process.php": "<?php echo $_GET['x']; ?>",
+        "schema.sql": "CREATE TABLE users (id INT); INSERT INTO users VALUES (1); SELECT * FROM users;",
+    }
+    data = run_pipeline_with_profile(tmp_path, files, profile="fullstack")
+
+    # All components should be scored (not SKIPPED)
+    for component in ["html", "css", "js", "php", "sql"]:
+        score = data["scores"]["by_component"][component]["score"]
+        assert isinstance(score, (int, float)), f"{component} should be scored, got {score}"
+
+    assert data["scores"]["overall"] == pytest.approx(1.0)
+
+
+def test_profile_skipped_components_not_in_denominator(tmp_path):
+    """Test that SKIPPED components don't affect the overall score denominator."""
+    # Minimal frontend submission
+    files = {
+        "index.html": "<div>hi</div>",
+    }
+    data = run_pipeline_with_profile(tmp_path, files, profile="frontend")
+
+    # Only html, css, js are relevant (3 components)
+    # php and sql should be SKIPPED
+    assert data["scores"]["by_component"]["php"]["score"] == "SKIPPED"
+    assert data["scores"]["by_component"]["sql"]["score"] == "SKIPPED"
+
+    assert data["scores"]["overall"] == pytest.approx(0.5)

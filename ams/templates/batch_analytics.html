@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>Batch Analytics: {{ run_id }}</h2>
+  <p><strong>Profile:</strong> {{ run.profile if run.profile is defined else run['profile'] }} |
+     <strong>Created:</strong> {{ run.created_at if run.created_at is defined else run['created_at'] }}</p>
+  {% set total = analytics.overall.total %}
+  <p>
+    <strong>Total:</strong> {{ total }} |
+    <strong>Succeeded:</strong> {{ batch_summary.summary.succeeded if batch_summary.summary is defined else batch_summary['summary']['succeeded'] }} |
+    <strong>Failed:</strong> {{ batch_summary.summary.failed if batch_summary.summary is defined else batch_summary['summary']['failed'] }}
+  </p>
+
+  <h3>Environment & Runner Status</h3>
+  <ul>
+    <li>Behavioural checks skipped: {{ "%.1f"|format(analytics.runtime_health.behavioural_skipped_pct) }}%</li>
+    <li>Browser checks skipped: {{ "%.1f"|format(analytics.runtime_health.browser_skipped_pct) }}%</li>
+    <li>Console errors observed: {{ "%.1f"|format(analytics.runtime_health.console_error_pct) }}%</li>
+  </ul>
+
+  <h3>Overall Distribution</h3>
+  <table>
+    <tr><th>Bucket</th><th>Count</th><th>Percent</th></tr>
+    {% for label, count in analytics.overall.buckets.items() %}
+      {% set pct = (count / total * 100) if total else 0 %}
+      <tr><td>{{ label }}</td><td>{{ count }}</td><td>{{ "%.1f"|format(pct) }}%</td></tr>
+    {% endfor %}
+  </table>
+  <p>Mean: {{ analytics.overall.mean }} | Median: {{ analytics.overall.median }} | Min: {{ analytics.overall.min }} | Max: {{ analytics.overall.max }}</p>
+
+  <h3>Component Readiness</h3>
+  <table>
+    <tr><th>Component</th><th>Average</th><th>% Zero</th><th>% Half</th><th>% Full</th><th>Skipped</th></tr>
+    {% for comp, data in analytics.components.items() %}
+      <tr><td>{{ comp }}</td><td>{{ data.average }}</td><td>{{ data.pct_zero }}</td><td>{{ data.pct_half }}</td><td>{{ data.pct_full }}</td><td>{{ data.skipped }}</td></tr>
+    {% endfor %}
+  </table>
+
+  <h3>Student Issues</h3>
+  {% if analytics.student_issues %}
+    <ul>
+      {% for issue in analytics.student_issues %}
+        <li>{{ issue.category }}: {{ issue.students_affected }} students ({{ "%.1f"|format(issue.percent) }}%) {% if issue.examples %}- e.g., {{ issue.examples|join(", ") }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No student-facing issues detected.</p>
+  {% endif %}
+
+  <h3>Runner Limitations</h3>
+  {% if analytics.runner_limitations %}
+    <ul>
+      {% for issue in analytics.runner_limitations %}
+        <li>{{ issue.category }}: {{ issue.students_affected }} students ({{ "%.1f"|format(issue.percent) }}%) {% if issue.examples %}- e.g., {{ issue.examples|join(", ") }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No environment limitations detected.</p>
+  {% endif %}
+
+  <h3>Needs Attention</h3>
+  {% if analytics.needs_attention %}
+    <table>
+      <tr><th>Submission</th><th>Overall</th><th>Reason</th><th>Report</th></tr>
+      {% for entry in analytics.needs_attention %}
+        <tr>
+          <td>{{ entry.submission_id }}</td>
+          <td>{{ entry.overall }}</td>
+          <td>{{ entry.reason }}</td>
+          <td><a href="{{ url_for('batch_submission_report', run_id=run_id, submission_id=entry.submission_id) }}">Download report</a></td>
+        </tr>
+      {% endfor %}
+    </table>
+  {% else %}
+    <p>All submissions look good.</p>
+  {% endif %}
+
+  <h3>Downloads</h3>
+  <ul>
+    <li><a href="{{ url_for('download', run_id=run_id, filename='batch_analytics_' ~ run_id ~ '.json') }}">Analytics JSON</a></li>
+    <li><a href="{{ url_for('download', run_id=run_id, filename='batch_analytics_' ~ run_id ~ '.csv') }}">Analytics CSV</a></li>
+    <li><a href="{{ url_for('download', run_id=run_id, filename='component_breakdown_' ~ run_id ~ '.csv') }}">Component breakdown CSV</a></li>
+    <li><a href="{{ url_for('download', run_id=run_id, filename='needs_attention_' ~ run_id ~ '.csv') }}">Needs attention CSV</a></li>
+    <li><a href="{{ url_for('download', run_id=run_id, filename='runtime_health_' ~ run_id ~ '.csv') }}">Runtime health CSV</a></li>
+    <li><a href="{{ url_for('download', run_id=run_id, filename='batch_reports_' ~ (run.profile if run.profile is defined else run['profile']) ~ '_' ~ run_id ~ '.zip') }}">Batch reports ZIP</a></li>
+  </ul>
+{% endblock %}

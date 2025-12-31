@@ -16,4 +16,5 @@ ams = "ams.cli:main"
 where = ["."]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+dev = ["pytest>=7.0", "playwright>=1.41.0", "matplotlib>=3.7.0"]
+demo = ["matplotlib>=3.7.0"]

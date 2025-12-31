@@ -4,7 +4,7 @@ import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .pipeline import AssessmentPipeline
+from ams.core.pipeline import AssessmentPipeline
 
 
 def _create_parser() -> argparse.ArgumentParser:
@@ -50,6 +50,16 @@ def _create_parser() -> argparse.ArgumentParser:
         help="Output directory (default ams_batch_runs/<timestamp>)",
     )
 
+    export_parser = subparsers.add_parser("export-figures", help="Export figures/tables from a batch run")
+    export_parser.add_argument("--run-id", required=True, help="Run ID of batch analytics")
+    export_parser.add_argument("--runs-root", type=Path, default=Path("ams_batch_runs"), help="Root directory containing batch runs")
+    export_parser.add_argument("--out", "-o", type=Path, default=Path("figures"), help="Output directory for figures/tables")
+
+    demo_parser = subparsers.add_parser("demo", help="Build and run a full demo (batch, analytics, figures, evaluation)")
+    demo_parser.add_argument("--profile", choices=["frontend", "fullstack"], default="fullstack")
+    demo_parser.add_argument("--runs-root", type=Path, default=Path("demo_out"), help="Where to store the demo run outputs")
+    demo_parser.add_argument("--demo-root", type=Path, default=Path("demo"), help="Root folder containing demo scaffold")
+
     return parser
 
 
@@ -82,7 +92,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"Report written to {report_path}")
         return
     elif args.command == "eval":
-        from .evaluation import evaluate
+        from ams.tools.evaluation import evaluate
 
         if args.out:
             out_root = Path(args.out)
@@ -103,7 +113,7 @@ def main(argv: list[str] | None = None) -> None:
                 print(f"- {entry['profile']}/{entry['case']}: {reasons}")
         raise SystemExit(0 if failed == 0 else 1)
     elif args.command == "batch":
-        from .batch import run_batch
+        from ams.tools.batch import run_batch
 
         if args.out:
             out_root = Path(args.out)
@@ -122,6 +132,24 @@ def main(argv: list[str] | None = None) -> None:
         )
         failed = result["summary"]["failed"]
         raise SystemExit(0 if failed == 0 else 1)
+    elif args.command == "export-figures":
+        from .tools.export_figures import export_figures
+
+        export_figures(run_id=args.run_id, runs_root=Path(args.runs_root), out_dir=Path(args.out))
+        print(f"Figures exported to {args.out}")
+        return
+    elif args.command == "demo":
+        from .tools.demo_runner import run_demo
+
+        info = run_demo(profile=args.profile, runs_root=Path(args.runs_root), demo_root=Path(args.demo_root))
+        run_url = f"http://localhost:5000/runs/{info['run_id']}"
+        print("Demo run complete.")
+        print(f"- run_id: {info['run_id']}")
+        print(f"- run directory: {info['run_dir']}")
+        print(f"- web UI (set AMS_RUNS_ROOT={Path(args.runs_root).resolve()}): {run_url}")
+        print(f"- evaluation summary: {info['evaluation_dir'] / 'evaluation_summary.json'}")
+        print(f"- figures: {info['figures_dir']}")
+        return
     else:
         raise SystemExit(1)
 
