@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip("matplotlib")
+pytest.importorskip("demo.build_demo_batch", reason="demo scaffold not available in test env")
 
 from ams.tools.demo_runner import run_demo
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import List
 
 from ams.assessors.base import Assessor
@@ -166,6 +167,173 @@ class JSStaticAssessor(Assessor):
                     source=self.name,
                 )
             )
+
+            # Code Quality Checks
+            # 1. Detect global variables (variables declared without var/let/const)
+            # This is a heuristic - look for assignments that aren't in function scope
+            lines = content.splitlines()
+            potential_globals = []
+            in_function = False
+            brace_depth = 0
+            
+            for i, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if not stripped or stripped.startswith("//") or stripped.startswith("/*"):
+                    continue
+                
+                # Track function scope
+                brace_depth += line.count("{") - line.count("}")
+                if "function" in stripped or "=>" in stripped:
+                    in_function = True
+                if brace_depth == 0:
+                    in_function = False
+                
+                # Look for assignments that might be globals (simple heuristic)
+                # Pattern: identifier = value (not var/let/const/function)
+                if not in_function and "=" in stripped:
+                    # Check if it's not a declaration
+                    if not re.search(r'\b(var|let|const|function)\s+', stripped):
+                        # Simple identifier = pattern
+                        match = re.match(r'^\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=', stripped)
+                        if match:
+                            var_name = match.group(1)
+                            # Skip common patterns that are OK
+                            if var_name not in ["window", "document", "console", "Math", "Date"]:
+                                potential_globals.append({"line": i, "variable": var_name})
+            
+            if potential_globals:
+                findings.append(
+                    Finding(
+                        id="JS.QUALITY.GLOBAL_VARIABLES",
+                        category="js",
+                        message=f"Found {len(potential_globals)} potential global variable(s). Use var/let/const to avoid polluting global scope.",
+                        severity=Severity.WARN,
+                        evidence={
+                            "path": str(path),
+                            "global_count": len(potential_globals),
+                            "examples": potential_globals[:5],
+                        },
+                        source=self.name,
+                        finding_category=FindingCategory.STRUCTURE,
+                    )
+                )
+
+            # 2. Check for meaningful variable and function names
+            # Look for single-letter variables (except common ones like i, j, k in loops)
+            single_letter_vars = re.findall(r'\b([a-z])\s*[=:]', content.lower())
+            common_loop_vars = {"i", "j", "k", "x", "y", "z"}
+            suspicious_vars = [v for v in single_letter_vars if v not in common_loop_vars]
+            
+            # Check for very short function/variable names (1-2 chars, excluding common ones)
+            short_names = re.findall(r'\b([a-z]{1,2})\b', content.lower())
+            common_short = {"id", "el", "fn", "cb", "x", "y", "z", "i", "j", "k"}
+            suspicious_short = [n for n in set(short_names) if n not in common_short and len(n) == 1]
+            
+            if len(suspicious_vars) > 5 or len(suspicious_short) > 3:
+                findings.append(
+                    Finding(
+                        id="JS.QUALITY.POOR_NAMING",
+                        category="js",
+                        message="Found potentially unclear variable/function names. Use descriptive names for better code maintainability.",
+                        severity=Severity.WARN,
+                        evidence={
+                            "path": str(path),
+                            "suspicious_single_letter": len(suspicious_vars),
+                            "suspicious_short": len(suspicious_short),
+                        },
+                        source=self.name,
+                        finding_category=FindingCategory.STRUCTURE,
+                    )
+                )
+
+            # 3. Detect unused variables (heuristic - variables declared but never referenced)
+            # This is simplified - look for var/let/const declarations
+            declared_vars = set()
+            used_vars = set()
+            
+            # Find declarations
+            for match in re.finditer(r'\b(var|let|const)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)', content):
+                declared_vars.add(match.group(2))
+            
+            # Find usages (excluding declarations)
+            for match in re.finditer(r'\b([a-zA-Z_$][a-zA-Z0-9_$]*)\b', content):
+                var_name = match.group(1)
+                if var_name in declared_vars:
+                    used_vars.add(var_name)
+            
+            unused_vars = declared_vars - used_vars
+            # Filter out common patterns that might be false positives
+            unused_vars = {v for v in unused_vars if not v.startswith("_")}  # Private vars convention
+            
+            if len(unused_vars) > 2:
+                findings.append(
+                    Finding(
+                        id="JS.QUALITY.UNUSED_VARIABLES",
+                        category="js",
+                        message=f"Found {len(unused_vars)} potentially unused variable(s). Remove unused code to improve maintainability.",
+                        severity=Severity.WARN,
+                        evidence={
+                            "path": str(path),
+                            "unused_count": len(unused_vars),
+                            "examples": list(unused_vars)[:5],
+                        },
+                        source=self.name,
+                        finding_category=FindingCategory.STRUCTURE,
+                    )
+                )
+
+            # 4. Detect unreachable code (simplified - code after return/throw/break/continue)
+            # This is a basic check - look for statements after return
+            lines_after_return = []
+            for i, line in enumerate(lines[:-1], 1):  # Check all but last line
+                stripped = line.strip()
+                if stripped and not stripped.startswith("//"):
+                    # Check if line has return/throw/break/continue
+                    if re.search(r'\b(return|throw|break|continue)\b', stripped):
+                        # Check if next non-comment line has code
+                        for j in range(i, min(i + 3, len(lines))):
+                            next_line = lines[j].strip()
+                            if next_line and not next_line.startswith("//") and not next_line.startswith("/*"):
+                                if "}" not in next_line and "else" not in next_line and "catch" not in next_line:
+                                    lines_after_return.append(i + 1)
+                                break
+            
+            if lines_after_return:
+                findings.append(
+                    Finding(
+                        id="JS.QUALITY.UNREACHABLE_CODE",
+                        category="js",
+                        message=f"Found potentially unreachable code after return/throw/break/continue statements.",
+                        severity=Severity.WARN,
+                        evidence={
+                            "path": str(path),
+                            "unreachable_lines": lines_after_return[:10],
+                        },
+                        source=self.name,
+                        finding_category=FindingCategory.STRUCTURE,
+                    )
+                )
+
+            # 5. Check for modular functions (presence of function declarations vs inline code)
+            function_declarations = content.count("function ") + content.count("=>")
+            # If very few functions but lots of code, might not be modular
+            code_lines = sum(1 for line in lines if line.strip() and not line.strip().startswith("//"))
+            if code_lines > 50 and function_declarations < 3:
+                findings.append(
+                    Finding(
+                        id="JS.QUALITY.LACK_OF_MODULARITY",
+                        category="js",
+                        message="Code appears to lack modular structure. Consider breaking code into reusable functions.",
+                        severity=Severity.WARN,
+                        evidence={
+                            "path": str(path),
+                            "function_count": function_declarations,
+                            "code_lines": code_lines,
+                        },
+                        source=self.name,
+                        finding_category=FindingCategory.STRUCTURE,
+                    )
+                )
 
         return findings
 

@@ -4,8 +4,10 @@ import json
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Iterable, Mapping, Tuple, List
+from typing import Iterable, Mapping, Optional, Tuple, List
 from zipfile import ZipFile
+
+from ams.io.metadata import MetadataValidator, SubmissionMetadata
 
 
 def get_runs_root(app) -> Path:
@@ -15,21 +17,71 @@ def get_runs_root(app) -> Path:
     return root_path
 
 
-def create_run_dir(runs_root: Path, mode: str, profile: str) -> Tuple[str, Path]:
+def create_run_dir(
+    runs_root: Path, 
+    mode: str, 
+    profile: str,
+    metadata: Optional[SubmissionMetadata] = None
+) -> Tuple[str, Path]:
+    """Create a run directory with optional metadata-based structure."""
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     suffix = secrets.token_hex(4)
-    run_id = f"{timestamp}_{mode}_{profile}_{suffix}"
-    run_dir = runs_root / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
+    
+    # If metadata provided, use student_id and assignment_id in directory structure
+    if metadata:
+        # Sanitize identifiers for directory names
+        student_id_safe = MetadataValidator.sanitize_identifier(metadata.student_id)
+        assignment_id_safe = MetadataValidator.sanitize_identifier(metadata.assignment_id)
+        
+        # Create nested structure: assignment_id/student_id/run_id
+        assignment_dir = runs_root / assignment_id_safe
+        student_dir = assignment_dir / student_id_safe
+        student_dir.mkdir(parents=True, exist_ok=True)
+        
+        run_id = f"{timestamp}_{mode}_{profile}_{suffix}"
+        run_dir = student_dir / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        # Default flat structure
+        run_id = f"{timestamp}_{mode}_{profile}_{suffix}"
+        run_dir = runs_root / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+    
     return run_id, run_dir
 
 
-def safe_extract_zip(zip_path: Path, dest_dir: Path) -> None:
+def safe_extract_zip(zip_path: Path, dest_dir: Path, max_size_mb: int = 100) -> None:
+    """Safely extract ZIP file with size and path validation."""
+    max_size_bytes = max_size_mb * 1024 * 1024
+    total_size = 0
+    
     with ZipFile(zip_path, "r") as zf:
+        # Validate ZIP file first
+        for info in zf.infolist():
+            # Check individual file size
+            if info.file_size > max_size_bytes:
+                raise ValueError(f"File {info.filename} exceeds maximum size limit")
+            
+            # Check total extracted size
+            total_size += info.file_size
+            if total_size > max_size_bytes:
+                raise ValueError("Total extracted size would exceed maximum limit")
+            
+            member_path = PurePosixPath(info.filename)
+            _validate_zip_entry(member_path)
+        
+        # Extract after validation
         for info in zf.infolist():
             member_path = PurePosixPath(info.filename)
             _validate_zip_entry(member_path)
             target = dest_dir.joinpath(*member_path.parts)
+            
+            # Additional path validation
+            try:
+                target.resolve().relative_to(dest_dir.resolve())
+            except ValueError:
+                raise ValueError(f"Zip entry would escape extraction directory: {info.filename}")
+            
             if info.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
             else:
@@ -59,7 +111,48 @@ def find_submission_root(extracted_dir: Path) -> Path:
 
 
 def save_run_info(run_dir: Path, info: Mapping[str, object]) -> None:
-    (run_dir / "run_info.json").write_text(json.dumps(info, indent=2), encoding="utf-8")
+    """Save run info with tamper-resistant JSON formatting."""
+    info_path = run_dir / "run_info.json"
+    # Use consistent formatting for tamper detection
+    info_path.write_text(json.dumps(info, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def save_metadata(run_dir: Path, metadata: SubmissionMetadata) -> None:
+    """Save submission metadata in a tamper-resistant format."""
+    metadata_path = run_dir / "metadata.json"
+    metadata_dict = metadata.to_dict()
+    # Add integrity check
+    metadata_dict["_integrity"] = _compute_metadata_hash(metadata_dict)
+    metadata_path.write_text(json.dumps(metadata_dict, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def load_metadata(run_dir: Path) -> Optional[SubmissionMetadata]:
+    """Load submission metadata and verify integrity."""
+    metadata_path = run_dir / "metadata.json"
+    if not metadata_path.exists():
+        return None
+    
+    try:
+        data = json.loads(metadata_path.read_text(encoding="utf-8"))
+        stored_hash = data.pop("_integrity", None)
+        
+        # Verify integrity
+        computed_hash = _compute_metadata_hash(data)
+        if stored_hash != computed_hash:
+            # Metadata may have been tampered with
+            return None
+        
+        return SubmissionMetadata.from_dict(data)
+    except Exception:
+        return None
+
+
+def _compute_metadata_hash(metadata_dict: dict) -> str:
+    """Compute hash for metadata integrity checking."""
+    import hashlib
+    # Create deterministic string representation
+    metadata_str = json.dumps(metadata_dict, sort_keys=True, separators=(',', ':'))
+    return hashlib.sha256(metadata_str.encode('utf-8')).hexdigest()[:16]
 
 
 def load_run_info(run_dir: Path):
@@ -94,13 +187,83 @@ def allowed_download(filename: str, allowed: Iterable[str]) -> bool:
     return filename in allowed_set or any(filename.startswith(prefix) for prefix in allowed_set)
 
 
+def store_submission_with_metadata(
+    runs_root: Path,
+    mode: str,
+    profile: str,
+    metadata: SubmissionMetadata,
+    zip_file: Path,
+    versioned: bool = True
+) -> Tuple[str, Path]:
+    """Store submission with metadata, preventing overwrites and supporting versioning."""
+    # Sanitize identifiers
+    student_id_safe = MetadataValidator.sanitize_identifier(metadata.student_id)
+    assignment_id_safe = MetadataValidator.sanitize_identifier(metadata.assignment_id)
+    
+    # Create directory structure
+    assignment_dir = runs_root / assignment_id_safe
+    student_dir = assignment_dir / student_id_safe
+    student_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Check for existing submissions if versioned
+    if versioned:
+        existing_runs = [d for d in student_dir.iterdir() if d.is_dir()]
+        metadata.version = len(existing_runs) + 1
+    
+    # Create run directory
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    suffix = secrets.token_hex(4)
+    run_id = f"{timestamp}_{mode}_{profile}_{suffix}"
+    run_dir = student_dir / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Compute file hash
+    metadata.file_hash = MetadataValidator.compute_file_hash(zip_file)
+    
+    # Save metadata
+    save_metadata(run_dir, metadata)
+    
+    # Copy zip file with sanitized name
+    sanitized_filename = MetadataValidator.sanitize_filename(metadata.original_filename)
+    stored_zip = run_dir / sanitized_filename
+    import shutil
+    shutil.copy2(zip_file, stored_zip)
+    
+    return run_id, run_dir
+
+
+def validate_file_type(filename: str, allowed_extensions: Iterable[str] = (".zip",)) -> bool:
+    """Validate file type by extension."""
+    if not filename:
+        return False
+    filename_lower = filename.lower()
+    return any(filename_lower.endswith(ext.lower()) for ext in allowed_extensions)
+
+
+def validate_file_size(file_path: Path, max_size_mb: int = 25) -> Tuple[bool, Optional[str]]:
+    """Validate file size."""
+    max_size_bytes = max_size_mb * 1024 * 1024
+    try:
+        size = file_path.stat().st_size
+        if size > max_size_bytes:
+            return False, f"File size {size / 1024 / 1024:.2f} MB exceeds maximum {max_size_mb} MB"
+        return True, None
+    except OSError as exc:
+        return False, f"Cannot read file: {exc}"
+
+
 __all__ = [
     "get_runs_root",
     "create_run_dir",
     "safe_extract_zip",
     "save_run_info",
     "load_run_info",
+    "save_metadata",
+    "load_metadata",
     "list_runs",
     "allowed_download",
     "find_submission_root",
+    "store_submission_with_metadata",
+    "validate_file_type",
+    "validate_file_size",
 ]

@@ -1,29 +1,7 @@
-from __future__ import annotations
-
-import json
-from pathlib import Path
-
-from ams.core.pipeline import AssessmentPipeline
-
-
-def _run_pipeline_with_files(tmp_path: Path, files: dict[str, str]):
-    submission = tmp_path / "submission"
-    submission.mkdir()
-    for rel, content in files.items():
-        dest = submission / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(content, encoding="utf-8")
-
-    workspace = tmp_path / "workspace"
-    pipeline = AssessmentPipeline()
-    report_path = pipeline.run(submission, workspace, profile="frontend")
-    data = json.loads(report_path.read_text(encoding="utf-8"))
-    return data
-
-
-def test_html_required_missing_when_no_html(tmp_path: Path) -> None:
+def test_html_required_missing_when_no_html(build_submission, run_pipeline) -> None:
     """HTML is required for frontend, so missing files should be MISSING_FILES, not SKIPPED."""
-    data = _run_pipeline_with_files(tmp_path, {"style.css": "body{}"})
+    submission = build_submission({"style.css": "body{}"})
+    data = run_pipeline(submission, profile="frontend")
 
     findings = data["findings"]
     ids = [f["id"] for f in findings]
@@ -31,9 +9,10 @@ def test_html_required_missing_when_no_html(tmp_path: Path) -> None:
     assert "HTML.REQ.MISSING_FILES" in ids or "HTML.MISSING_FILES" in ids
 
 
-def test_html_required_passes_when_all_present(tmp_path: Path) -> None:
+def test_html_required_passes_when_all_present(build_submission, run_pipeline) -> None:
     html = "<!doctype html><html><body><form></form><input/><a href='#'>x</a></body></html>"
-    data = _run_pipeline_with_files(tmp_path, {"index.html": html})
+    submission = build_submission({"index.html": html})
+    data = run_pipeline(submission, profile="frontend")
 
     req_findings = [f for f in data["findings"] if f["id"].startswith("HTML.REQ.")]
     passed = [f for f in req_findings if f["id"] == "HTML.REQ.PASS"]
@@ -44,9 +23,10 @@ def test_html_required_passes_when_all_present(tmp_path: Path) -> None:
     assert counts.get("form", 0) >= 1
 
 
-def test_html_required_fail_when_missing_form(tmp_path: Path) -> None:
+def test_html_required_fail_when_missing_form(build_submission, run_pipeline) -> None:
     html = "<html><body><input/><a href='#'>x</a></body></html>"
-    data = _run_pipeline_with_files(tmp_path, {"index.html": html})
+    submission = build_submission({"index.html": html})
+    data = run_pipeline(submission, profile="frontend")
 
     req_findings = [f for f in data["findings"] if f["id"] == "HTML.REQ.FAIL"]
     assert any(f["evidence"]["rule_id"] == "html.has_form" for f in req_findings)

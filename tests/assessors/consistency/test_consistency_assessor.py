@@ -379,3 +379,5 @@ class TestConsistencyFindingsInReports:
             assert finding.get("profile") == "frontend"
 
 
+
+

@@ -24,6 +24,8 @@
           <th>Mode</th>
           <th>Profile</th>
           <th>Created</th>
+          <th>Student ID</th>
+          <th>Assignment ID</th>
           <th>Students</th>
           <th>Overall</th>
           <th>Status</th>
@@ -47,6 +49,24 @@
             </td>
             <td><span style="text-transform: capitalize;">{{ profile }}</span></td>
             <td>{{ run.created_at if run.created_at is defined else run['created_at'] }}</td>
+            <td>
+              {% if subs|length == 1 and subs[0].student_id %}
+                {{ subs[0].student_id }}
+              {% elif run.student_id %}
+                {{ run.student_id }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td>
+              {% if subs|length == 1 and subs[0].assignment_id %}
+                {{ subs[0].assignment_id }}
+              {% elif run.assignment_id %}
+                {{ run.assignment_id }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
             <td>
               {% if subs|length == 1 %}
                 {% set s = subs[0] %}

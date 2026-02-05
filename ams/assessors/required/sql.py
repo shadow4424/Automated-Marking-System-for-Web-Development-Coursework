@@ -100,9 +100,9 @@ class SQLRequiredFeaturesAssessor(Assessor):
                     )
                 )
                 content = ""
+            content_lower = content.lower()
             for rule in self.profile_spec.required_sql:
-                count = content.count(rule.needle.lower())
-                passed = count >= rule.min_count
+                count, passed = self._evaluate_rule(rule, content_lower)
                 findings.append(
                     Finding(
                         id="SQL.REQ.PASS" if passed else "SQL.REQ.FAIL",
@@ -115,11 +115,50 @@ class SQLRequiredFeaturesAssessor(Assessor):
                             "needle": rule.needle,
                             "min_count": rule.min_count,
                             "count": count,
+                            "weight": rule.weight,
                         },
                         source=self.name,
                     )
                 )
         return findings
+
+    def _evaluate_rule(self, rule, content_lower: str) -> tuple[int, bool]:
+        """Evaluate a single SQL rule against the file content.
+        
+        Returns:
+            A tuple of (count, passed) where count is the number of matches found
+            and passed indicates whether the rule requirement is satisfied.
+        """
+        needle = rule.needle.lower()
+        
+        # === FOREIGN KEY ===
+        if needle == "foreign_key" or rule.id == "sql.has_foreign_key":
+            fk_patterns = ["foreign key", "references "]
+            count = sum(1 for p in fk_patterns if p in content_lower)
+            return count, count >= rule.min_count
+        
+        # === CONSTRAINTS ===
+        if needle == "constraints" or rule.id == "sql.has_constraints":
+            constraint_patterns = ["not null", "unique", "check ", "default "]
+            count = sum(1 for p in constraint_patterns if p in content_lower)
+            return count, count >= rule.min_count
+        
+        # === DATA TYPES ===
+        if needle == "data_types" or rule.id == "sql.has_data_types":
+            data_types = ["int", "varchar", "text", "date", "datetime", "boolean", 
+                         "decimal", "float", "char(", "timestamp"]
+            count = sum(1 for t in data_types if t in content_lower)
+            return count, count >= rule.min_count
+        
+        # === AGGREGATE ===
+        if needle == "aggregate" or rule.id == "sql.has_aggregate":
+            agg_patterns = ["count(", "sum(", "avg(", "min(", "max(", "group by"]
+            count = sum(1 for p in agg_patterns if p in content_lower)
+            return count, count >= rule.min_count
+        
+        # === STANDARD NEEDLE COUNTING ===
+        count = content_lower.count(needle)
+        return count, count >= rule.min_count
 
     def _message(self, rule_id: str, passed: bool, count: int, min_count: int) -> str:
         status = "PASS" if passed else "FAIL"

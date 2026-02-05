@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Optional
 
+from typing import Mapping
+
 from ams.core.models import BehaviouralEvidence, BrowserEvidence, Finding, SubmissionContext, ScoreEvidenceBundle
 
 
@@ -18,13 +20,20 @@ class ReportWriter:
         findings: Iterable[Finding],
         scores: object,
         score_evidence: Optional[ScoreEvidenceBundle] = None,
+        metadata: Optional[Mapping[str, object]] = None,
     ) -> Path:
         profile = context.metadata.get("profile", "unknown")
         behavioural = [self._serialize_behavioural(e) for e in getattr(context, "behavioural_evidence", [])]
         browser = [self._serialize_browser(e) for e in getattr(context, "browser_evidence", [])]
         environment = self._environment_summary(context, behavioural, browser, score_evidence)
+        
+        # Merge metadata
+        report_metadata = dict(context.metadata)
+        if metadata:
+            report_metadata["submission_metadata"] = metadata
+        
         report = {
-            "metadata": dict(context.metadata),
+            "metadata": report_metadata,
             "submission_path": str(context.submission_path),
             "workspace_path": str(context.workspace_path),
             "findings": [self._serialize_finding(f) for f in findings],
@@ -38,7 +47,7 @@ class ReportWriter:
         }
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         self.output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-        self._write_summary(context, scores, profile, behavioural, browser)
+        self._write_summary(context, scores, profile, behavioural, browser, metadata)
         return self.output_path
 
     def _serialize_finding(self, finding: Finding) -> dict:
@@ -92,12 +101,27 @@ class ReportWriter:
         profile: str,
         behavioural: list[dict],
         browser: list[dict],
+        metadata: Optional[Mapping[str, object]] = None,
     ) -> None:
         summary_path = self.output_path.with_name("summary.txt")
         lines = []
         submission_name = context.metadata.get("submission_name", "submission")
         lines.append(f"Submission: {submission_name}")
         lines.append(f"Profile: {profile}")
+        
+        # Add metadata if available
+        if metadata:
+            lines.append("")
+            lines.append("Submission Metadata:")
+            if metadata.get("student_id"):
+                lines.append(f"  Student ID: {metadata.get('student_id')}")
+            if metadata.get("assignment_id"):
+                lines.append(f"  Assignment ID: {metadata.get('assignment_id')}")
+            if metadata.get("original_filename"):
+                lines.append(f"  Original Filename: {metadata.get('original_filename')}")
+            if metadata.get("timestamp"):
+                lines.append(f"  Upload Timestamp: {metadata.get('timestamp')}")
+        
         lines.append("")
         overall_score = scores.get("overall") if isinstance(scores, dict) else None
         if overall_score is not None:
@@ -141,17 +165,6 @@ class ReportWriter:
                 test_id = entry.get("test_id")
                 diag = entry.get("stderr") or entry.get("stdout") or ""
                 diag_first = diag.splitlines()[0] if diag else ""
-                lines.append(f"- {test_id}: {status.upper() if isinstance(status, str) else status}" + (f" ({diag_first})" if diag_first else ""))
-
-        if browser:
-            lines.append("")
-            lines.append("Browser tests:")
-            for entry in browser:
-                status = entry.get("status")
-                test_id = entry.get("test_id")
-                console_list = entry.get("console_errors") or []
-                diag = entry.get("notes") or (console_list[0] if console_list else "")
-                diag_first = diag.splitlines()[0] if isinstance(diag, str) and diag else ""
                 lines.append(f"- {test_id}: {status.upper() if isinstance(status, str) else status}" + (f" ({diag_first})" if diag_first else ""))
 
         if browser:

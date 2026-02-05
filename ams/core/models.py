@@ -51,6 +51,40 @@ class Finding:
 
 
 @dataclass
+class RuleResult:
+    """Enhanced rule result with LLM-ready evidence fields.
+    
+    This dataclass captures richer evidence for each rule evaluation,
+    preparing for future LLM integration. It includes context and
+    line numbers to support LLM reasoning about partial credit.
+    """
+    rule_id: str
+    passed: bool
+    confidence: float = 1.0  # Static assessor confidence (1.0 unless parsing errors)
+    evidence_snippet: str = ""  # Code snippet showing the match
+    context_before: str = ""  # Lines before the match
+    context_after: str = ""  # Lines after the match
+    line_numbers: list[int] = field(default_factory=list)  # Line numbers of matches
+    category: str = ""  # Rule category (e.g., "Accessibility", "Security")
+    severity: str = "medium"  # Rule severity: "low", "medium", "high"
+    
+    def to_dict(self) -> dict:
+        """Convert to JSON-serialisable dictionary."""
+        return {
+            "rule_id": self.rule_id,
+            "passed": self.passed,
+            "confidence": self.confidence,
+            "evidence_snippet": self.evidence_snippet,
+            "context_before": self.context_before,
+            "context_after": self.context_after,
+            "line_numbers": list(self.line_numbers),
+            "category": self.category,
+            "severity": self.severity,
+        }
+
+
+
+@dataclass
 class ScoreEvidenceBundle:
     profile: str
     generated_at: str
@@ -139,7 +173,9 @@ __all__ = [
     "FindingCategory",
     "SubmissionContext",
     "Finding",
+    "RuleResult",
     "ScoreEvidenceBundle",
     "BehaviouralEvidence",
     "BrowserEvidence",
 ]
+

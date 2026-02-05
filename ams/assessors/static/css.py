@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import List
 
 from ams.assessors.base import Assessor
@@ -159,6 +160,54 @@ class CSSStaticAssessor(Assessor):
                     source=self.source,
                 )
             )
+
+            # Code Quality Checks
+            # 1. Evaluate CSS selector specificity - flag overly specific selectors
+            lines = content.splitlines()
+            overly_specific_selectors = []
+            max_specificity_score = 0
+            
+            for line in lines:
+                # Extract selector part (before {)
+                if "{" in line:
+                    selector_part = line.split("{", 1)[0].strip()
+                    if selector_part and not selector_part.startswith("@"):
+                        # Calculate specificity: count IDs, classes, elements
+                        # Simplified: count #, ., and element names
+                        id_count = selector_part.count("#")
+                        class_count = selector_part.count(".")
+                        # Count element names (simplified - count words that aren't # or .)
+                        element_count = len(re.findall(r'\b[a-z]+\b', selector_part.lower()))
+                        
+                        # Weighted specificity: IDs=100, classes=10, elements=1
+                        specificity = id_count * 100 + class_count * 10 + element_count
+                        max_specificity_score = max(max_specificity_score, specificity)
+                        
+                        # Flag selectors with specificity > 120 (e.g., #id .class .class element)
+                        if specificity > 120:
+                            overly_specific_selectors.append({
+                                "selector": selector_part[:50],  # Truncate for display
+                                "specificity": specificity,
+                            })
+            
+            if overly_specific_selectors:
+                findings.append(
+                    Finding(
+                        id="CSS.QUALITY.OVERLY_SPECIFIC",
+                        category="css",
+                        message=f"Found {len(overly_specific_selectors)} overly specific selector(s). High specificity makes CSS harder to maintain and override.",
+                        severity=Severity.WARN,
+                        evidence={
+                            "path": str(path),
+                            "overly_specific_count": len(overly_specific_selectors),
+                            "max_specificity": max_specificity_score,
+                            "threshold": 120,
+                            "examples": overly_specific_selectors[:5],  # Limit examples
+                        },
+                        source=self.source,
+                        finding_category=FindingCategory.STRUCTURE,
+                    )
+                )
 
         return findings
 

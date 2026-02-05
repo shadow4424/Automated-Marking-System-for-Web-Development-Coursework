@@ -17,15 +17,21 @@ from flask import (
 
 from ams.core.pipeline import AssessmentPipeline
 from ams.core.profiles import PROFILES
+from ams.io.metadata import MetadataValidator, SubmissionMetadata
 from ams.io.web_storage import (
     allowed_download,
     create_run_dir,
     find_submission_root,
     get_runs_root,
     list_runs,
+    load_metadata,
     load_run_info,
     safe_extract_zip,
+    save_metadata,
     save_run_info,
+    store_submission_with_metadata,
+    validate_file_size,
+    validate_file_type,
 )
 from ams.tools.batch import run_batch
 from ams.analytics import build_teacher_analytics
@@ -76,76 +82,230 @@ def _register_routes(app: Flask) -> None:
     def mark():
         if request.method == "GET":
             return render_template("mark.html", profiles=PROFILES.keys())
+        
+        # Get form data
         file = request.files.get("submission")
         profile = request.form.get("profile", "frontend")
-        if not file or not file.filename.lower().endswith(".zip"):
+        student_id = request.form.get("student_id", "").strip()
+        assignment_id = request.form.get("assignment_id", "").strip()
+        
+        # Validate file
+        if not file or not file.filename:
             flash("Please upload a .zip file.")
             return render_template("mark.html", profiles=PROFILES.keys()), 400
-
-        runs_root = get_runs_root(app)
-        run_id, run_dir = create_run_dir(runs_root, mode="mark", profile=profile)
-        upload_zip = run_dir / "submission.zip"
-        file.save(upload_zip)
-        extracted = run_dir / "uploaded_extract"
-        extracted.mkdir(parents=True, exist_ok=True)
-        safe_extract_zip(upload_zip, extracted)  # security: prevent zip-slip/path traversal
-
-        pipeline = AssessmentPipeline()
-        submission_root = find_submission_root(extracted)
-        app.logger.debug(
-            "mark run extract complete",
-            extra={
-                "upload_zip": str(upload_zip),
-                "extracted": str(extracted),
-                "submission_root": str(submission_root),
-                "profile": profile,
+        
+        if not validate_file_type(file.filename):
+            flash("Invalid file type. Please upload a .zip file.")
+            return render_template("mark.html", profiles=PROFILES.keys()), 400
+        
+        # Validate metadata
+        valid_student, student_error = MetadataValidator.validate_student_id(student_id)
+        if not valid_student:
+            flash(f"Invalid Student ID: {student_error}")
+            return render_template("mark.html", profiles=PROFILES.keys()), 400
+        
+        valid_assignment, assignment_error = MetadataValidator.validate_assignment_id(assignment_id)
+        if not valid_assignment:
+            flash(f"Invalid Assignment ID: {assignment_error}")
+            return render_template("mark.html", profiles=PROFILES.keys()), 400
+        
+        # Sanitize identifiers
+        student_id = MetadataValidator.sanitize_identifier(student_id)
+        assignment_id = MetadataValidator.sanitize_identifier(assignment_id)
+        original_filename = MetadataValidator.sanitize_filename(file.filename)
+        
+        # Create metadata
+        metadata = SubmissionMetadata(
+            student_id=student_id,
+            assignment_id=assignment_id,
+            timestamp=datetime.now(timezone.utc),
+            original_filename=original_filename,
+            uploader_metadata={
+                "ip_address": request.remote_addr or "unknown",
+                "user_agent": request.headers.get("User-Agent", "unknown")[:200],
             },
         )
-        report_path = pipeline.run(submission_path=submission_root, workspace_path=run_dir, profile=profile)
-        run_info = {
-            "id": run_id,
-            "mode": "mark",
-            "profile": profile,
-            "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "report": report_path.name,
-            "summary": "summary.txt",
-        }
-        save_run_info(run_dir, run_info)
-        _write_run_index_mark(run_dir, run_info, report_path)
-        return redirect(url_for("run_detail", run_id=run_id))
+        
+        runs_root = get_runs_root(app)
+        
+        # Save uploaded file temporarily
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
+            file.save(tmp_file.name)
+            tmp_zip_path = Path(tmp_file.name)
+        
+        try:
+            # Validate file size
+            valid_size, size_error = validate_file_size(tmp_zip_path, MAX_UPLOAD_MB)
+            if not valid_size:
+                flash(size_error or "File size exceeds maximum limit.")
+                return render_template("mark.html", profiles=PROFILES.keys()), 400
+            
+            # Store submission with metadata
+            run_id, run_dir = store_submission_with_metadata(
+                runs_root=runs_root,
+                mode="mark",
+                profile=profile,
+                metadata=metadata,
+                zip_file=tmp_zip_path,
+                versioned=True,
+            )
+            
+            # Extract for processing
+            upload_zip = run_dir / original_filename
+            extracted = run_dir / "uploaded_extract"
+            extracted.mkdir(parents=True, exist_ok=True)
+            safe_extract_zip(upload_zip, extracted, max_size_mb=MAX_UPLOAD_MB)
+            
+            pipeline = AssessmentPipeline()
+            submission_root = find_submission_root(extracted)
+            
+            # Pass metadata to pipeline via context
+            app.logger.debug(
+                "mark run extract complete",
+                extra={
+                    "upload_zip": str(upload_zip),
+                    "extracted": str(extracted),
+                    "submission_root": str(submission_root),
+                    "profile": profile,
+                    "student_id": student_id,
+                    "assignment_id": assignment_id,
+                },
+            )
+            
+            report_path = pipeline.run(
+                submission_path=submission_root,
+                workspace_path=run_dir,
+                profile=profile,
+                metadata=metadata.to_dict(),
+            )
+            
+            run_info = {
+                "id": run_id,
+                "mode": "mark",
+                "profile": profile,
+                "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "report": report_path.name,
+                "summary": "summary.txt",
+                "student_id": student_id,
+                "assignment_id": assignment_id,
+                "original_filename": original_filename,
+            }
+            save_run_info(run_dir, run_info)
+            _write_run_index_mark(run_dir, run_info, report_path)
+            return redirect(url_for("run_detail", run_id=run_id))
+        finally:
+            # Clean up temporary file
+            try:
+                tmp_zip_path.unlink()
+            except Exception:
+                pass
 
     @app.route("/batch", methods=["GET", "POST"])
     def batch():
         if request.method == "GET":
             return render_template("batch.html", profiles=PROFILES.keys())
+        
+        # Get form data
         file = request.files.get("submission")
         profile = request.form.get("profile", "frontend")
-        if not file or not file.filename.lower().endswith(".zip"):
+        assignment_id = request.form.get("assignment_id", "").strip()
+        
+        # Validate file
+        if not file or not file.filename:
             flash("Please upload a .zip file.")
             return render_template("batch.html", profiles=PROFILES.keys()), 400
-
+        
+        if not validate_file_type(file.filename):
+            flash("Invalid file type. Please upload a .zip file.")
+            return render_template("batch.html", profiles=PROFILES.keys()), 400
+        
+        # Validate assignment ID
+        valid_assignment, assignment_error = MetadataValidator.validate_assignment_id(assignment_id)
+        if not valid_assignment:
+            flash(f"Invalid Assignment ID: {assignment_error}")
+            return render_template("batch.html", profiles=PROFILES.keys()), 400
+        
+        # Sanitize
+        assignment_id = MetadataValidator.sanitize_identifier(assignment_id)
+        original_filename = MetadataValidator.sanitize_filename(file.filename)
+        
         runs_root = get_runs_root(app)
-        run_id, run_dir = create_run_dir(runs_root, mode="batch", profile=profile)
-        upload_zip = run_dir / "batch.zip"
-        file.save(upload_zip)
-        extracted = run_dir / "batch_inputs"
-        extracted.mkdir(parents=True, exist_ok=True)
-        safe_extract_zip(upload_zip, extracted)  # security: prevent zip-slip/path traversal
-
-        summary = run_batch(submissions_dir=extracted, out_root=run_dir, profile=profile, keep_individual_runs=True)
-        run_info = {
-            "id": run_id,
-            "mode": "batch",
-            "profile": profile,
-            "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "summary": "batch_summary.json",
-            "batch_summary": summary,
-        }
-        _write_batch_analytics(run_dir, profile, run_id)
-        _write_batch_reports_zip(run_dir, profile, run_id)
-        _write_run_index_batch(run_dir, run_info)
-        save_run_info(run_dir, run_info)
-        return redirect(url_for("run_detail", run_id=run_id))
+        
+        # Save uploaded file temporarily
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
+            file.save(tmp_file.name)
+            tmp_zip_path = Path(tmp_file.name)
+        
+        try:
+            # Validate file size
+            valid_size, size_error = validate_file_size(tmp_zip_path, MAX_UPLOAD_MB)
+            if not valid_size:
+                flash(size_error or "File size exceeds maximum limit.")
+                return render_template("batch.html", profiles=PROFILES.keys()), 400
+            
+            # Create batch metadata (assignment-level)
+            batch_metadata = SubmissionMetadata(
+                student_id="batch",  # Special identifier for batch runs
+                assignment_id=assignment_id,
+                timestamp=datetime.now(timezone.utc),
+                original_filename=original_filename,
+                uploader_metadata={
+                    "ip_address": request.remote_addr or "unknown",
+                    "user_agent": request.headers.get("User-Agent", "unknown")[:200],
+                },
+            )
+            
+            run_id, run_dir = create_run_dir(
+                runs_root=runs_root,
+                mode="batch",
+                profile=profile,
+                metadata=batch_metadata,
+            )
+            
+            # Store batch zip
+            upload_zip = run_dir / original_filename
+            import shutil
+            shutil.copy2(tmp_zip_path, upload_zip)
+            
+            # Save batch metadata
+            save_metadata(run_dir, batch_metadata)
+            
+            extracted = run_dir / "batch_inputs"
+            extracted.mkdir(parents=True, exist_ok=True)
+            safe_extract_zip(upload_zip, extracted, max_size_mb=MAX_UPLOAD_MB)
+            
+            # Run batch with metadata context
+            summary = run_batch(
+                submissions_dir=extracted,
+                out_root=run_dir,
+                profile=profile,
+                keep_individual_runs=True,
+                assignment_id=assignment_id,
+            )
+            
+            run_info = {
+                "id": run_id,
+                "mode": "batch",
+                "profile": profile,
+                "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "summary": "batch_summary.json",
+                "batch_summary": summary,
+                "assignment_id": assignment_id,
+                "original_filename": original_filename,
+            }
+            _write_batch_analytics(run_dir, profile, run_id)
+            _write_batch_reports_zip(run_dir, profile, run_id)
+            _write_run_index_batch(run_dir, run_info)
+            save_run_info(run_dir, run_info)
+            return redirect(url_for("run_detail", run_id=run_id))
+        finally:
+            # Clean up temporary file
+            try:
+                tmp_zip_path.unlink()
+            except Exception:
+                pass
 
     @app.route("/runs")
     def runs():
@@ -506,14 +666,23 @@ def _write_run_index_mark(run_dir: Path, run_info: dict, report_path: Path) -> N
         report = json.loads(report_path.read_text(encoding="utf-8"))
     except Exception:
         return
+    
+    # Load metadata from file if available
+    metadata = load_metadata(run_dir)
+    
     meta = report.get("metadata", {}) or {}
+    submission_meta = meta.get("submission_metadata") or {}
     ident = meta.get("student_identity", {}) or {}
+    
     sub_entry = {
         "submission_id": meta.get("submission_name"),
         "student_name": ident.get("name_normalized") or ident.get("name_raw"),
-        "student_id": ident.get("student_id"),
-        "original_filename": meta.get("original_filename"),
+        "student_id": submission_meta.get("student_id") or ident.get("student_id") or run_info.get("student_id"),
+        "assignment_id": submission_meta.get("assignment_id") or run_info.get("assignment_id"),
+        "original_filename": submission_meta.get("original_filename") or meta.get("original_filename") or run_info.get("original_filename"),
+        "upload_timestamp": submission_meta.get("timestamp") or run_info.get("created_at"),
     }
+    
     index = {
         "run_id": run_info.get("id"),
         "mode": run_info.get("mode"),
@@ -540,18 +709,23 @@ def _write_run_index_batch(run_dir: Path, run_info: dict) -> None:
         entry = {
             "submission_id": rec.get("id"),
             "student_name": None,
-            "student_id": None,
+            "student_id": rec.get("student_id"),
+            "assignment_id": rec.get("assignment_id"),
             "original_filename": rec.get("original_filename"),
+            "upload_timestamp": rec.get("upload_timestamp"),
         }
         rpath = rec.get("report_path")
         if rpath and Path(rpath).exists():
             try:
                 rep = json.loads(Path(rpath).read_text(encoding="utf-8"))
                 meta = rep.get("metadata", {}) or {}
+                submission_meta = meta.get("submission_metadata") or {}
                 ident = meta.get("student_identity", {}) or {}
                 entry["student_name"] = ident.get("name_normalized") or ident.get("name_raw")
-                entry["student_id"] = ident.get("student_id")
-                entry["original_filename"] = meta.get("original_filename") or entry["original_filename"]
+                entry["student_id"] = submission_meta.get("student_id") or ident.get("student_id") or entry["student_id"]
+                entry["assignment_id"] = submission_meta.get("assignment_id") or entry["assignment_id"]
+                entry["original_filename"] = submission_meta.get("original_filename") or meta.get("original_filename") or entry["original_filename"]
+                entry["upload_timestamp"] = submission_meta.get("timestamp") or entry["upload_timestamp"]
             except Exception:
                 pass
         submissions.append(entry)

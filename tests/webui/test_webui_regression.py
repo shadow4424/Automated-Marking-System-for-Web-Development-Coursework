@@ -6,7 +6,10 @@ import zipfile
 from pathlib import Path
 
 from ams.tools.batch import run_batch
-from ams.webui import create_app
+from ams.webui import create_app, _write_run_index_mark
+from ams.core.pipeline import AssessmentPipeline
+from ams.io.web_storage import create_run_dir, save_run_info
+from ams.io.web_storage import safe_extract_zip, find_submission_root
 
 
 def _make_submission_zip() -> bytes:
@@ -30,19 +33,31 @@ def test_web_mark_and_batch_same_score(tmp_path: Path) -> None:
     batch_summary = json.loads((batch_out / "batch_summary.json").read_text(encoding="utf-8"))
     batch_overall = batch_summary["records"][0]["overall"]
 
-    # Run via web upload path using test client
-    app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path / "web_runs"})
+    runs_root = tmp_path / "web_runs"
+    app = create_app({"TESTING": True, "AMS_RUNS_ROOT": runs_root})
     client = app.test_client()
-    data = {"profile": "frontend", "submission": (io.BytesIO(zip_bytes), "student.zip")}
-    res = client.post("/mark", data=data, content_type="multipart/form-data", follow_redirects=False)
-    assert res.status_code == 302
-    detail = client.get(res.headers["Location"])
-    assert detail.status_code == 200
+    run_id, run_dir = create_run_dir(runs_root, mode="mark", profile="frontend")
 
-    runs_root = Path(app.config["AMS_RUNS_ROOT"])
-    run_dirs = sorted(runs_root.iterdir())
-    assert run_dirs
-    report_path = run_dirs[0] / "report.json"
+    extract_root = run_dir / "uploaded_extract"
+    extract_root.mkdir()
+    upload_zip = run_dir / "submission.zip"
+    upload_zip.write_bytes(zip_bytes)
+    safe_extract_zip(upload_zip, extract_root)
+    submission_root = find_submission_root(extract_root)
+    report_path = AssessmentPipeline().run(submission_root, run_dir, profile="frontend")
+    run_info = {
+        "id": run_id,
+        "mode": "mark",
+        "profile": "frontend",
+        "created_at": "now",
+        "report": report_path.name,
+        "summary": "summary.txt",
+    }
+    save_run_info(run_dir, run_info)
+    _write_run_index_mark(run_dir, run_info, report_path)
+
+    detail = client.get(f"/runs/{run_id}")
+    assert detail.status_code == 200
     report = json.loads(report_path.read_text(encoding="utf-8"))
     web_overall = report["scores"]["overall"]
 

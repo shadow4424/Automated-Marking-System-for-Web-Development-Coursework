@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Mapping, Optional
 
 from ams.assessors.base import Assessor
 from ams.assessors.behavioral import DeterministicTestEngine, HTMLBehavioralAssessor
@@ -39,9 +39,20 @@ class AssessmentPipeline:
         self.assessors: Optional[List[Assessor]] = list(assessors) if assessors is not None else None
         self.scoring_engine = scoring_engine or ScoringEngine()
 
-    def run(self, submission_path: Path, workspace_path: Path, profile: str = "frontend") -> Path:
+    def run(
+        self, 
+        submission_path: Path, 
+        workspace_path: Path, 
+        profile: str = "frontend",
+        metadata: Mapping[str, object] | None = None
+    ) -> Path:
         context = self._prepare_context(submission_path, workspace_path, profile)
         context.metadata["profile"] = profile
+        
+        # Add submission metadata to context
+        if metadata:
+            context.metadata["submission_metadata"] = metadata
+        
         profile_spec = get_profile_spec(profile)
         assessors = self.assessors or _default_assessors(profile_spec)
 
@@ -59,7 +70,7 @@ class AssessmentPipeline:
             browser_evidence=context.browser_evidence,
         )
         report_path = workspace_path / "report.json"
-        ReportWriter(report_path).write(context, findings, scores, score_evidence=score_evidence)
+        ReportWriter(report_path).write(context, findings, scores, score_evidence=score_evidence, metadata=metadata)
         return report_path
 
     def _prepare_context(self, submission_path: Path, workspace_path: Path, profile: str) -> SubmissionContext:

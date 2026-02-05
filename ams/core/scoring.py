@@ -5,7 +5,7 @@ import platform
 import sys
 from typing import Dict, Iterable, List, Mapping, Tuple
 
-from ams.core.models import BrowserEvidence, BehaviouralEvidence, Finding, ScoreEvidenceBundle
+from ams.core.models import BrowserEvidence, BehaviouralEvidence, Finding, ScoreEvidenceBundle, Severity
 from ams.core.profiles import get_relevant_components
 
 
@@ -166,6 +166,49 @@ class ScoringEngine:
         score, rationale, summaries = scorer(findings)
         return score, rationale, summaries
 
+    def _calculate_weighted_rule_score(self, findings: List[Finding], component: str) -> Tuple[float, List[dict]]:
+        """Calculate weighted score from required rule findings (HTML.REQ.PASS/FAIL, etc.)."""
+        req_pass_findings = [f for f in findings if f.id.endswith(".REQ.PASS")]
+        req_fail_findings = [f for f in findings if f.id.endswith(".REQ.FAIL")]
+        
+        if not req_pass_findings and not req_fail_findings:
+            return 0.0, []  # No required rule findings
+        
+        total_weight = 0.0
+        passed_weight = 0.0
+        rule_details = []
+        
+        # Process pass findings
+        for finding in req_pass_findings:
+            weight = float(finding.evidence.get("weight", 1.0))
+            rule_id = finding.evidence.get("rule_id", "unknown")
+            total_weight += weight
+            passed_weight += weight
+            rule_details.append({
+                "rule": rule_id,
+                "status": "pass",
+                "weight": weight,
+                "finding_ids": [finding.id],
+            })
+        
+        # Process fail findings
+        for finding in req_fail_findings:
+            weight = float(finding.evidence.get("weight", 1.0))
+            rule_id = finding.evidence.get("rule_id", "unknown")
+            total_weight += weight
+            rule_details.append({
+                "rule": rule_id,
+                "status": "fail",
+                "weight": weight,
+                "finding_ids": [finding.id],
+            })
+        
+        if total_weight == 0:
+            return 0.0, []
+        
+        weighted_score = passed_weight / total_weight
+        return weighted_score, rule_details
+
     def _score_html(self, findings: List[Finding], browser_evidence: List[BrowserEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
         rationale: List[dict] = []
         summaries: Dict[str, object] = {}
@@ -185,6 +228,12 @@ class ScoringEngine:
 
         browser_view = self._browser_view(browser_evidence)
         summaries["browser_summary"] = browser_view
+
+        # Calculate weighted rule score
+        weighted_rule_score, rule_details = self._calculate_weighted_rule_score(findings, "html")
+        if rule_details:
+            rationale.extend(rule_details)
+            summaries["required_rules_weighted_score"] = weighted_rule_score
 
         base_score = 0.5
         if parse_ok:
@@ -208,6 +257,20 @@ class ScoringEngine:
         else:
             rationale.append({"rule": "html_default_partial", "finding_ids": [fid for fid in ids]})
             base_score = 0.5
+
+        # Use 100% required rules weight - rules now include structure checks
+        if weighted_rule_score > 0:
+            base_score = weighted_rule_score
+
+        # Apply code quality penalties
+        quality_penalty = self._calculate_quality_penalty(findings, "html")
+        if quality_penalty > 0:
+            base_score = max(0.0, base_score - quality_penalty)
+            rationale.append({
+                "rule": "html_quality_penalty",
+                "finding_ids": [f.id for f in findings if "QUALITY" in f.id],
+                "note": f"Code quality issues reduced score by {quality_penalty:.2f}",
+            })
 
         if browser_view:
             if browser_view.get("page_status") in {"fail", "timeout"}:
@@ -249,6 +312,13 @@ class ScoringEngine:
         no_rules = "CSS.NO_RULES" in ids
         selectors_approx = sum(int(f.evidence.get("selectors_approx", 0)) for f in findings if f.id == "CSS.EVIDENCE")
 
+        # Calculate weighted rule score
+        weighted_rule_score, rule_details = self._calculate_weighted_rule_score(findings, "css")
+        if rule_details:
+            rationale.extend(rule_details)
+            summaries["required_rules_weighted_score"] = weighted_rule_score
+
+        base_score = 0.5
         if balanced and selectors_approx >= 1:
             rationale.append(
                 {
@@ -257,9 +327,8 @@ class ScoringEngine:
                     "evidence": {"selectors_approx": selectors_approx},
                 }
             )
-            return 1.0, rationale, summaries
-
-        if unbalanced or no_rules or selectors_approx == 0:
+            base_score = 1.0
+        elif unbalanced or no_rules or selectors_approx == 0:
             rationale.append(
                 {
                     "rule": "css_partial_or_suspect",
@@ -267,10 +336,26 @@ class ScoringEngine:
                     "evidence": {"selectors_approx": selectors_approx},
                 }
             )
-            return 0.5, rationale, summaries
+            base_score = 0.5
+        else:
+            rationale.append({"rule": "css_default_partial", "finding_ids": [fid for fid in ids]})
+            base_score = 0.5
 
-        rationale.append({"rule": "css_default_partial", "finding_ids": [fid for fid in ids]})
-        return 0.5, rationale, summaries
+        # Use 100% required rules weight - rules now include structure checks
+        if weighted_rule_score > 0:
+            base_score = weighted_rule_score
+
+        # Apply code quality penalties
+        quality_penalty = self._calculate_quality_penalty(findings, "css")
+        if quality_penalty > 0:
+            base_score = max(0.0, base_score - quality_penalty)
+            rationale.append({
+                "rule": "css_quality_penalty",
+                "finding_ids": [f.id for f in findings if "QUALITY" in f.id],
+                "note": f"Code quality issues reduced score by {quality_penalty:.2f}",
+            })
+
+        return base_score, rationale, summaries
 
     def _score_js(self, findings: List[Finding], browser_evidence: List[BrowserEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
         rationale: List[dict] = []
@@ -302,6 +387,13 @@ class ScoringEngine:
         has_activity = any(value > 0 for value in evidence_totals.values())
         browser_view = self._browser_view(browser_evidence)
         summaries["browser_summary"] = browser_view
+        
+        # Calculate weighted rule score
+        weighted_rule_score, rule_details = self._calculate_weighted_rule_score(findings, "js")
+        if rule_details:
+            rationale.extend(rule_details)
+            summaries["required_rules_weighted_score"] = weighted_rule_score
+        
         base_score = 0.5
 
         if syntax_ok and has_activity:
@@ -325,6 +417,20 @@ class ScoringEngine:
         else:
             rationale.append({"rule": "js_default_partial", "finding_ids": [fid for fid in ids]})
             base_score = 0.5
+
+        # Use 100% required rules weight - rules now include structure checks
+        if weighted_rule_score > 0:
+            base_score = weighted_rule_score
+
+        # Apply code quality penalties
+        quality_penalty = self._calculate_quality_penalty(findings, "js")
+        if quality_penalty > 0:
+            base_score = max(0.0, base_score - quality_penalty)
+            rationale.append({
+                "rule": "js_quality_penalty",
+                "finding_ids": [f.id for f in findings if "QUALITY" in f.id],
+                "note": f"Code quality issues reduced score by {quality_penalty:.2f}",
+            })
 
         # Browser adjustments
         if browser_view:
@@ -363,6 +469,47 @@ class ScoringEngine:
                 )
             if interacted and page_status in {"fail", "timeout"}:
                 base_score = min(base_score, 0.5)
+        
+        # Functional test adjustments
+        functional_test_score = self._calculate_functional_test_score(findings, browser_evidence)
+        if functional_test_score is not None:
+            # Blend functional test results: 70% base score, 30% functional tests
+            base_score = 0.7 * base_score + 0.3 * functional_test_score
+            rationale.append({
+                "rule": "functional_tests_score",
+                "finding_ids": [f.id for f in findings if "BROWSER.FUNCTIONAL" in f.id],
+                "note": f"Functional tests contributed {functional_test_score:.2f} to score",
+            })
+        
+        # Performance and error penalties
+        performance_penalty = self._calculate_performance_penalty(findings)
+        error_penalty = self._calculate_error_penalty(findings)
+        
+        if performance_penalty > 0:
+            base_score = max(0.0, base_score - performance_penalty)
+            rationale.append({
+                "rule": "performance_penalty",
+                "finding_ids": [f.id for f in findings if "BROWSER.PERFORMANCE" in f.id and f.severity == Severity.FAIL],
+                "note": f"Performance issues reduced score by {performance_penalty:.2f}",
+            })
+        
+        if error_penalty > 0:
+            base_score = max(0.0, base_score - error_penalty)
+            rationale.append({
+                "rule": "error_penalty",
+                "finding_ids": [f.id for f in findings if "BROWSER.ERROR" in f.id and f.severity == Severity.FAIL],
+                "note": f"Runtime errors reduced score by {error_penalty:.2f}",
+            })
+        
+        # Missing required features penalty
+        missing_features = [f for f in findings if "REQUIRED_FEATURES_MISSING" in f.id]
+        if missing_features:
+            base_score = max(0.0, base_score - 0.3)  # 30% penalty for missing required features
+            rationale.append({
+                "rule": "missing_required_features",
+                "finding_ids": [f.id for f in missing_features],
+                "note": "Missing required features reduced score by 0.30",
+            })
 
         return base_score, rationale, summaries
 
@@ -390,6 +537,13 @@ class ScoringEngine:
                 evidence_totals[key] += int(entry.evidence.get(key, 0))
 
         has_usage = any(value > 0 for value in evidence_totals.values())
+        
+        # Calculate weighted rule score
+        weighted_rule_score, rule_details = self._calculate_weighted_rule_score(findings, "php")
+        if rule_details:
+            rationale.extend(rule_details)
+            summaries["required_rules_weighted_score"] = weighted_rule_score
+        
         base_score = 0.5
 
         if tag_ok and (syntax_ok or has_usage):
@@ -413,6 +567,22 @@ class ScoringEngine:
         else:
             rationale.append({"rule": "php_default_partial", "finding_ids": [fid for fid in ids]})
             base_score = 0.5
+
+        # Use 100% required rules weight - rules now include structure checks
+        if weighted_rule_score > 0:
+            base_score = weighted_rule_score
+
+        # Apply code quality and security penalties (security issues are critical for PHP)
+        quality_penalty = self._calculate_quality_penalty(findings, "php")
+        if quality_penalty > 0:
+            base_score = max(0.0, base_score - quality_penalty)
+            security_findings = [f.id for f in findings if "SECURITY" in f.id and f.severity == Severity.FAIL]
+            quality_findings = [f.id for f in findings if "QUALITY" in f.id]
+            rationale.append({
+                "rule": "php_quality_security_penalty",
+                "finding_ids": security_findings + quality_findings,
+                "note": f"Code quality and security issues reduced score by {quality_penalty:.2f}",
+            })
 
         behavioural_view = self._behavioural_view(behavioural_evidence)
         summaries["behavioural_summary"] = behavioural_view
@@ -468,6 +638,13 @@ class ScoringEngine:
                 evidence_totals[key] += int(entry.evidence.get(key, 0))
 
         has_activity = any(value > 0 for value in evidence_totals.values())
+        
+        # Calculate weighted rule score
+        weighted_rule_score, rule_details = self._calculate_weighted_rule_score(findings, "sql")
+        if rule_details:
+            rationale.extend(rule_details)
+            summaries["required_rules_weighted_score"] = weighted_rule_score
+        
         base_score = 0.5
 
         if structure_ok and has_activity:
@@ -491,6 +668,22 @@ class ScoringEngine:
         else:
             rationale.append({"rule": "sql_default_partial", "finding_ids": [fid for fid in ids]})
             base_score = 0.5
+
+        # Use 100% required rules weight - rules now include structure checks
+        if weighted_rule_score > 0:
+            base_score = weighted_rule_score
+
+        # Apply code quality and security penalties
+        quality_penalty = self._calculate_quality_penalty(findings, "sql")
+        if quality_penalty > 0:
+            base_score = max(0.0, base_score - quality_penalty)
+            security_findings = [f.id for f in findings if "SECURITY" in f.id]
+            quality_findings = [f.id for f in findings if "QUALITY" in f.id]
+            rationale.append({
+                "rule": "sql_quality_security_penalty",
+                "finding_ids": security_findings + quality_findings,
+                "note": f"Code quality and security issues reduced score by {quality_penalty:.2f}",
+            })
 
         behavioural_view = self._behavioural_view(behavioural_evidence)
         summaries["behavioural_summary"] = behavioural_view
@@ -551,6 +744,73 @@ class ScoringEngine:
             "console_errors": len(getattr(ev, "console_errors", []) or []),
             "actions": actions,
         }
+
+    def _calculate_quality_penalty(self, findings: List[Finding], component: str) -> float:
+        """Calculate penalty for code quality and security issues."""
+        penalty = 0.0
+        quality_findings = [f for f in findings if "QUALITY" in f.id or "SECURITY" in f.id]
+        
+        for finding in quality_findings:
+            severity = finding.severity
+            # FAIL severity (security issues) = 0.2 penalty
+            # WARN severity (quality issues) = 0.1 penalty
+            if severity == Severity.FAIL:
+                penalty += 0.2
+            elif severity == Severity.WARN:
+                penalty += 0.1
+        
+        # Cap penalty at 0.5 (50% reduction)
+        return min(0.5, penalty)
+
+    def _calculate_functional_test_score(
+        self, 
+        findings: List[Finding], 
+        browser_evidence: List[BrowserEvidence]
+    ) -> float | None:
+        """Calculate score based on functional test results."""
+        functional_findings = [f for f in findings if "BROWSER.FUNCTIONAL" in f.id and not f.id.endswith(".SUMMARY")]
+        
+        if not functional_findings:
+            return None
+        
+        passed = sum(1 for f in functional_findings if f.severity == Severity.INFO and "passed" in f.message.lower())
+        failed = sum(1 for f in functional_findings if f.severity == Severity.WARN and "failed" in f.message.lower())
+        total = len(functional_findings)
+        
+        if total == 0:
+            return None
+        
+        # Score is percentage of passed tests
+        score = passed / total if total > 0 else 0.0
+        return score
+    
+    def _calculate_performance_penalty(self, findings: List[Finding]) -> float:
+        """Calculate penalty for performance issues."""
+        penalty = 0.0
+        performance_findings = [f for f in findings if "BROWSER.PERFORMANCE" in f.id and f.severity == Severity.FAIL]
+        
+        for finding in performance_findings:
+            # Each failed performance check = 0.1 penalty
+            penalty += 0.1
+        
+        # Cap penalty at 0.3 (30% reduction)
+        return min(0.3, penalty)
+    
+    def _calculate_error_penalty(self, findings: List[Finding]) -> float:
+        """Calculate penalty for runtime errors."""
+        penalty = 0.0
+        error_findings = [f for f in findings if "BROWSER.ERROR" in f.id]
+        
+        for finding in error_findings:
+            if finding.severity == Severity.FAIL:
+                # Critical errors = 0.15 penalty each
+                penalty += 0.15
+            elif finding.severity == Severity.WARN:
+                # Warnings = 0.05 penalty each
+                penalty += 0.05
+        
+        # Cap penalty at 0.4 (40% reduction)
+        return min(0.4, penalty)
 
 
 __all__ = ["ScoringEngine"]

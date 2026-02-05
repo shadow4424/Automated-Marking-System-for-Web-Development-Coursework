@@ -5,7 +5,17 @@
     Upload a ZIP file containing multiple student submissions to run batch marking and generate cohort analytics.
     Each submission should be a directory or ZIP file as a direct child of the batch ZIP.
   </p>
-  <form method="post" enctype="multipart/form-data">
+  <form method="post" enctype="multipart/form-data" id="batchForm">
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 6px; margin-bottom: 1rem;">
+      <label>Assignment ID <span style="color: red;">*</span>
+        <input type="text" name="assignment_id" required pattern="[a-zA-Z0-9_-]{2,30}"
+               style="margin-top: 0.5rem; width: 100%; max-width: 300px; padding: 0.5rem;"
+               placeholder="e.g., webdev_001" title="2-30 alphanumeric characters (may include - or _)">
+        <small style="display: block; color: #666; margin-top: 0.25rem; font-size: 0.9em;">
+          Required. Assignment identifier for this batch (2-30 alphanumeric characters).
+        </small>
+      </label>
+    </div>
     <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 6px; margin-bottom: 1rem;">
       <label>Assessment Profile
         <select name="profile" style="margin-top: 0.5rem;">
@@ -19,13 +29,26 @@
       </label>
     </div>
     <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 6px; margin-bottom: 1rem;">
-      <label>Batch ZIP File
+      <label>Batch ZIP File <span style="color: red;">*</span>
         <input type="file" name="submission" accept=".zip" required style="margin-top: 0.5rem;">
         <small style="display: block; color: #666; margin-top: 0.25rem; font-size: 0.9em;">
           Maximum file size: 25 MB. The ZIP should contain multiple submission directories or ZIP files.
+          Individual student IDs will be extracted from submission filenames or metadata.
         </small>
       </label>
     </div>
     <button type="submit" style="width: 100%; max-width: 300px;">📤 Upload &amp; Run Batch</button>
   </form>
+  <script>
+    // Client-side validation
+    document.getElementById('batchForm').addEventListener('submit', function(e) {
+      const assignmentId = document.querySelector('input[name="assignment_id"]').value.trim();
+      
+      if (!assignmentId || !/^[a-zA-Z0-9_-]{2,30}$/.test(assignmentId)) {
+        e.preventDefault();
+        alert('Assignment ID must be 2-30 alphanumeric characters (may include - or _)');
+        return false;
+      }
+    });
+  </script>
 {% endblock %}

@@ -142,6 +142,57 @@ class HTMLStaticAssessor(Assessor):
                 )
             )
 
+            # Code Quality Checks
+            # 1. Detect inline CSS (style attribute)
+            inline_style_count = content.count('style="') + content.count("style='")
+            if inline_style_count > 0:
+                findings.append(
+                    Finding(
+                        id="HTML.QUALITY.INLINE_CSS",
+                        category="html",
+                        message=f"Found {inline_style_count} inline style attribute(s). Consider using external CSS for better maintainability.",
+                        severity=Severity.WARN if inline_style_count <= 3 else Severity.FAIL,
+                        evidence={
+                            "path": str(path),
+                            "inline_style_count": inline_style_count,
+                            "threshold": 3,
+                        },
+                        source=self.name,
+                        finding_category=FindingCategory.STRUCTURE,
+                    )
+                )
+
+            # 2. Detect deprecated HTML tags
+            deprecated_tags = {
+                "<center>": "center",
+                "<font>": "font",
+                "<marquee>": "marquee",
+                "<blink>": "blink",
+                "<applet>": "applet",
+                "<frame>": "frame",
+                "<frameset>": "frameset",
+            }
+            found_deprecated = []
+            for tag_pattern, tag_name in deprecated_tags.items():
+                if tag_pattern.lower() in lowered:
+                    found_deprecated.append(tag_name)
+            
+            if found_deprecated:
+                findings.append(
+                    Finding(
+                        id="HTML.QUALITY.DEPRECATED_TAGS",
+                        category="html",
+                        message=f"Found deprecated HTML tags: {', '.join(found_deprecated)}. Use modern HTML5 alternatives.",
+                        severity=Severity.WARN,
+                        evidence={
+                            "path": str(path),
+                            "deprecated_tags": found_deprecated,
+                        },
+                        source=self.name,
+                        finding_category=FindingCategory.STRUCTURE,
+                    )
+                )
+
         return findings
 
 

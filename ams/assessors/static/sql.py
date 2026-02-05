@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import List
 
 from ams.assessors.base import Assessor
@@ -146,6 +147,80 @@ class SQLStaticAssessor(Assessor):
                         severity=Severity.INFO,
                         evidence=structure_evidence,
                         source=self.name,
+                    )
+                )
+
+            # Security Checks
+            # 1. Detect dynamic SQL without sanitisation (look for string concatenation in queries)
+            # This is a simplified check - look for SELECT/INSERT/UPDATE with + or . (concatenation)
+            dynamic_sql_patterns = [
+                r'select\s+.*[+\'"`]',  # SELECT with concatenation
+                r'insert\s+.*[+\'"`]',  # INSERT with concatenation
+                r'update\s+.*[+\'"`]',  # UPDATE with concatenation
+            ]
+            dynamic_sql_found = False
+            for pattern in dynamic_sql_patterns:
+                if re.search(pattern, content, re.IGNORECASE):
+                    dynamic_sql_found = True
+                    break
+            
+            if dynamic_sql_found:
+                findings.append(
+                    Finding(
+                        id="SQL.SECURITY.DYNAMIC_SQL",
+                        category="sql",
+                        message="Dynamic SQL with string concatenation detected. Use parameterized queries/prepared statements to prevent SQL injection.",
+                        severity=Severity.FAIL,
+                        evidence={
+                            "path": str(path),
+                            "dynamic_sql_detected": True,
+                        },
+                        source=self.name,
+                        finding_category=FindingCategory.STRUCTURE,
+                    )
+                )
+
+            # 2. Flag use of SELECT *
+            select_star_count = lowered.count("select *")
+            if select_star_count > 0:
+                findings.append(
+                    Finding(
+                        id="SQL.QUALITY.SELECT_STAR",
+                        category="sql",
+                        message=f"Found {select_star_count} use(s) of SELECT *. Specify columns explicitly for better performance and maintainability.",
+                        severity=Severity.WARN,
+                        evidence={
+                            "path": str(path),
+                            "select_star_count": select_star_count,
+                        },
+                        source=self.name,
+                        finding_category=FindingCategory.STRUCTURE,
+                    )
+                )
+
+            # 3. Require LIMIT for user-controlled queries
+            # Check for SELECT statements that might be user-controlled (have WHERE with variables)
+            # This is a heuristic - look for SELECT without LIMIT
+            select_statements = re.findall(r'select\s+.*?from\s+.*?(?:where\s+.*?)?(?:order\s+by\s+.*?)?(?:limit\s+.*?)?;', content, re.IGNORECASE | re.DOTALL)
+            selects_without_limit = []
+            for i, stmt in enumerate(select_statements):
+                if "limit" not in stmt.lower() and "where" in stmt.lower():
+                    # Might be user-controlled if it has WHERE
+                    selects_without_limit.append(i + 1)
+            
+            if selects_without_limit:
+                findings.append(
+                    Finding(
+                        id="SQL.SECURITY.MISSING_LIMIT",
+                        category="sql",
+                        message=f"Found {len(selects_without_limit)} SELECT statement(s) with WHERE clause but no LIMIT. Add LIMIT to prevent excessive data retrieval.",
+                        severity=Severity.WARN,
+                        evidence={
+                            "path": str(path),
+                            "selects_without_limit": len(selects_without_limit),
+                        },
+                        source=self.name,
+                        finding_category=FindingCategory.STRUCTURE,
                     )
                 )
 

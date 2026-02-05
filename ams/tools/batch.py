@@ -44,6 +44,7 @@ def run_batch(
     out_root: Path,
     profile: str,
     keep_individual_runs: bool = True,
+    assignment_id: Optional[str] = None,
 ) -> dict:
     out_root.mkdir(parents=True, exist_ok=True)
     runs_root = out_root / "runs"
@@ -76,6 +77,7 @@ def run_batch(
                 keep_individual_runs=keep_individual_runs,
                 finding_counts=finding_counts,
                 failure_reason_counts=failure_reason_counts,
+                assignment_id=assignment_id,
             )
             records.append(record)
 
@@ -254,7 +256,15 @@ def _process_one_submission(
     keep_individual_runs: bool,
     finding_counts: Counter[str],
     failure_reason_counts: Counter[str],
+    assignment_id: Optional[str] = None,
 ) -> dict:
+    # Try to extract student_id from item.id (common patterns: student_id.zip, student_id/, etc.)
+    student_id = item.id
+    # Remove common suffixes
+    for suffix in [".zip", "_submission", "-submission"]:
+        if student_id.lower().endswith(suffix):
+            student_id = student_id[:-len(suffix)]
+    
     record = {
         "id": item.id,
         "path": str(item.path),
@@ -263,6 +273,8 @@ def _process_one_submission(
         "components": _empty_components(),
         "report_path": None,
         "original_filename": item.path.name,
+        "student_id": student_id,
+        "assignment_id": assignment_id,
     }
     temp_ctx: Optional[tempfile.TemporaryDirectory[str]] = None
     try:
@@ -288,9 +300,34 @@ def _process_one_submission(
             shutil.copytree(item.path, target)
             submission_root = find_submission_root(target)
 
-        report_path = pipeline.run(submission_path=submission_root, workspace_path=workspace_path, profile=profile)
+        # Create metadata for this submission
+        from ams.io.metadata import MetadataValidator, SubmissionMetadata
+        from datetime import datetime, timezone
+        
+        submission_metadata = SubmissionMetadata(
+            student_id=MetadataValidator.sanitize_identifier(student_id),
+            assignment_id=MetadataValidator.sanitize_identifier(assignment_id) if assignment_id else "unknown",
+            timestamp=datetime.now(timezone.utc),
+            original_filename=MetadataValidator.sanitize_filename(item.path.name),
+        )
+        
+        report_path = pipeline.run(
+            submission_path=submission_root,
+            workspace_path=workspace_path,
+            profile=profile,
+            metadata=submission_metadata.to_dict(),
+        )
         record["report_path"] = str(report_path)
         report_data = json.loads(report_path.read_text(encoding="utf-8"))
+        
+        # Extract metadata from report if available
+        report_metadata = report_data.get("metadata", {}).get("submission_metadata")
+        if report_metadata:
+            record["student_id"] = report_metadata.get("student_id", student_id)
+            record["assignment_id"] = report_metadata.get("assignment_id", assignment_id)
+            record["original_filename"] = report_metadata.get("original_filename", item.path.name)
+            record["upload_timestamp"] = report_metadata.get("timestamp")
+        
         scores = report_data.get("scores", {})
         record["overall"] = scores.get("overall")
         comps = scores.get("by_component", {}) or {}

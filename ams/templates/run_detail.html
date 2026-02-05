@@ -2,13 +2,24 @@
 {% block content %}
   <div style="margin-bottom: 1.5rem;">
     <h2>Run {{ run_id }}</h2>
-    <div style="display: flex; gap: 1.5rem; margin-top: 0.5rem;">
+    <div style="display: flex; gap: 1.5rem; margin-top: 0.5rem; flex-wrap: wrap;">
       <span><strong>Mode:</strong> {{ run.mode if run.mode is defined else run['mode'] }}</span>
       <span><strong>Profile:</strong> {{ run.profile if run.profile is defined else run['profile'] }}</span>
       {% if run.created_at %}
       <span><strong>Created:</strong> {{ run.created_at }}</span>
       {% endif %}
+      {% if run.student_id %}
+      <span><strong>Student ID:</strong> {{ run.student_id }}</span>
+      {% endif %}
+      {% if run.assignment_id %}
+      <span><strong>Assignment ID:</strong> {{ run.assignment_id }}</span>
+      {% endif %}
     </div>
+    {% if run.original_filename %}
+    <div style="margin-top: 0.5rem; color: #666; font-size: 0.9em;">
+      <strong>Original Filename:</strong> {{ run.original_filename }}
+    </div>
+    {% endif %}
   </div>
 
   {% if run.mode == "mark" or run["mode"] == "mark" %}
