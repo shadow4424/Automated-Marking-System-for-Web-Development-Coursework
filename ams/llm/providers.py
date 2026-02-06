@@ -5,16 +5,21 @@ This module provides a unified interface for different LLM backends:
 - OpenAIProvider: For OpenAI cloud API
 - MockProvider: For testing without a server
 
-Key Feature: JSON repair for "chatty" small models (Llama 3.2 3B).
+Key Features:
+- JSON repair for "chatty" small models (Llama 3.2 3B)
+- Phase 3: Multimodal vision support (Qwen2-VL)
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import mimetypes
 import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -75,8 +80,18 @@ class LLMProvider(ABC):
         temperature: float = 0.0,
         max_tokens: int = 1024,
         json_mode: bool = False,
+        image_path: str | None = None,
     ) -> LLMResponse:
-        """Generate a completion from the LLM."""
+        """Generate a completion from the LLM.
+        
+        Args:
+            prompt: User prompt text.
+            system_prompt: System prompt for behavior control.
+            temperature: Sampling temperature (0.0 = deterministic).
+            max_tokens: Maximum response tokens.
+            json_mode: If True, enforce JSON output.
+            image_path: Optional path to image for vision models.
+        """
         pass
     
     @property
@@ -154,7 +169,7 @@ class LLMProvider(ABC):
 
 
 # =============================================================================
-# Local LM Studio Provider
+# Local LM Studio Provider (Phase 3: Vision Support)
 # =============================================================================
 
 
@@ -162,13 +177,15 @@ class LocalLMStudioProvider(LLMProvider):
     """Provider for LM Studio running locally.
     
     Connects to http://localhost:1234/v1 using the OpenAI SDK.
-    Optimized for Llama 3.2 3B Instruct.
+    Supports:
+    - Text-only models (Llama 3.2 3B)
+    - Vision models (Qwen2-VL-2B-Instruct)
     """
     
     def __init__(
         self,
         base_url: str = "http://localhost:1234/v1",
-        model: str = "llama-3.2-3b-instruct",
+        model: str = "qwen2-vl-2b-instruct",
         timeout: int = 120,
     ):
         """Initialize local provider.
@@ -197,6 +214,39 @@ class LocalLMStudioProvider(LLMProvider):
                 raise ImportError("openai package not installed. Run: pip install openai")
         return self._client
     
+    def _encode_image(self, image_path: str) -> tuple[str, str]:
+        """Encode an image file as Base64.
+        
+        Args:
+            image_path: Path to the image file.
+            
+        Returns:
+            Tuple of (base64_string, mime_type)
+            
+        Raises:
+            FileNotFoundError: If the image doesn't exist.
+            ValueError: If the file type is not supported.
+        """
+        path = Path(image_path)
+        
+        if not path.exists():
+            raise FileNotFoundError(f"Image not found: {image_path}")
+        
+        # Determine MIME type
+        mime_type, _ = mimetypes.guess_type(str(path))
+        if mime_type is None or not mime_type.startswith("image/"):
+            # Default to PNG for unknown types
+            mime_type = "image/png"
+        
+        # Read and encode
+        with open(path, "rb") as f:
+            image_data = f.read()
+        
+        base64_string = base64.b64encode(image_data).decode("utf-8")
+        logger.debug(f"Encoded image: {path.name} ({len(image_data)} bytes, {mime_type})")
+        
+        return base64_string, mime_type
+    
     def health_check(self) -> tuple[bool, str]:
         """Check if LM Studio is running and responsive.
         
@@ -224,8 +274,18 @@ class LocalLMStudioProvider(LLMProvider):
         temperature: float = 0.0,
         max_tokens: int = 1024,
         json_mode: bool = False,
+        image_path: str | None = None,
     ) -> LLMResponse:
-        """Generate a completion from the local LLM."""
+        """Generate a completion from the local LLM.
+        
+        Args:
+            prompt: User prompt text.
+            system_prompt: System prompt for behavior control.
+            temperature: Sampling temperature.
+            max_tokens: Maximum response tokens.
+            json_mode: If True, enforce JSON output.
+            image_path: Optional path to image for vision requests.
+        """
         try:
             client = self._get_client()
         except ImportError as e:
@@ -235,7 +295,7 @@ class LocalLMStudioProvider(LLMProvider):
                 error=str(e),
             )
         
-        messages: list[dict[str, str]] = []
+        messages: list[dict[str, Any]] = []
         
         # Build system prompt for JSON mode
         if json_mode:
@@ -252,7 +312,32 @@ class LocalLMStudioProvider(LLMProvider):
         
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+        
+        # Build user message (text-only or multimodal)
+        if image_path is not None:
+            # Phase 3: Multimodal message with image
+            try:
+                base64_image, mime_type = self._encode_image(image_path)
+                user_content = [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{base64_image}"
+                        }
+                    }
+                ]
+                messages.append({"role": "user", "content": user_content})
+                logger.debug(f"Sending multimodal request with image: {image_path}")
+            except FileNotFoundError as e:
+                return LLMResponse(
+                    content="",
+                    model=self._model,
+                    error=str(e),
+                )
+        else:
+            # Text-only message
+            messages.append({"role": "user", "content": prompt})
         
         start_time = time.time()
         

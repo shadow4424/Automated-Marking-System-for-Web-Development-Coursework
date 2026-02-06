@@ -1,4 +1,4 @@
-"""Configuration for AMS including LLM integration settings (Phase 0)."""
+"""Configuration for AMS including LLM integration settings (Phase 0-3)."""
 from __future__ import annotations
 
 from enum import Enum
@@ -36,7 +36,7 @@ RUBRIC_VERSION = "1.0"
 
 
 # =============================================================================
-# LLM Configuration (Phase 0 - Local Edition)
+# LLM Configuration (Phase 0-3)
 # =============================================================================
 
 # Which LLM provider to use (default to local for demo)
@@ -44,8 +44,12 @@ LLM_PROVIDER = LLMProviderType.LOCAL
 
 # Local LM Studio settings
 LLM_BASE_URL = "http://localhost:1234/v1"
-LLM_MODEL_NAME = "llama-3.2-3b-instruct"  # Model name as shown in LM Studio
-LLM_TIMEOUT = 120  # Seconds to wait for response (3B can be slow)
+LLM_MODEL_NAME = "qwen2-vl-2b-instruct"  # Phase 3: Vision model for multimodal
+LLM_TIMEOUT = 120  # Seconds to wait for response
+
+# Phase 3: Vision Capabilities
+VISION_ENABLED = True  # Enable multimodal image+text requests
+VISION_MAX_IMAGE_SIZE = 1024  # Max dimension for image resizing (pixels)
 
 # OpenAI settings (for cloud fallback)
 LLM_OPENAI_MODEL = "gpt-4o-mini"
@@ -73,6 +77,9 @@ __all__ = [
     "LLM_DAILY_BUDGET_USD",
     "LLM_CACHE_ENABLED",
     "LLM_SANITIZE_PII",
+    "VISION_ENABLED",
+    "VISION_MAX_IMAGE_SIZE",
 ]
+
 
 
