@@ -9,6 +9,10 @@ from .providers import (
     OpenAIProvider,
 )
 from .cache import RequestCache
+from .phase1_feedback import (
+    generate_feedback,
+    scrub_pii,
+)
 
 __all__ = [
     "LLMProvider",
@@ -17,4 +21,6 @@ __all__ = [
     "MockProvider",
     "OpenAIProvider",
     "RequestCache",
+    "generate_feedback",
+    "scrub_pii",
 ]
