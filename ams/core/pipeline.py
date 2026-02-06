@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Iterable, List, Mapping, Optional
 
@@ -24,20 +25,34 @@ from ams.assessors.static import (
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import ProfileSpec, get_profile_spec
 from ams.core.scoring import ScoringEngine
+from ams.core.config import SCORING_MODE, ScoringMode
 from ams.io.reporting import ReportWriter
 from ams.io.submission import SubmissionProcessor
 
+# LLM Integration (Phase 1 & 2)
+from ams.llm.feedback import generate_feedback
+from ams.llm.scoring import evaluate_partial_credit, should_evaluate_partial_credit, HybridScore
+
+logger = logging.getLogger(__name__)
+
 
 class AssessmentPipeline:
-    """Orchestrates assessors, scoring, and reporting."""
+    """Orchestrates assessors, scoring, and reporting.
+    
+    LLM Integration:
+    - If SCORING_MODE includes LLM, failed findings are enriched with LLM feedback
+    - Partial credit is evaluated for rules that allow it
+    """
 
     def __init__(
         self,
         assessors: Optional[Iterable[Assessor]] = None,
         scoring_engine: Optional[ScoringEngine] = None,
+        scoring_mode: ScoringMode = SCORING_MODE,
     ) -> None:
         self.assessors: Optional[List[Assessor]] = list(assessors) if assessors is not None else None
         self.scoring_engine = scoring_engine or ScoringEngine()
+        self.scoring_mode = scoring_mode
 
     def run(
         self, 
@@ -48,6 +63,7 @@ class AssessmentPipeline:
     ) -> Path:
         context = self._prepare_context(submission_path, workspace_path, profile)
         context.metadata["profile"] = profile
+        context.metadata["scoring_mode"] = self.scoring_mode.value
         
         # Add submission metadata to context
         if metadata:
@@ -63,15 +79,149 @@ class AssessmentPipeline:
         # Add CONFIG warnings for required components with no required rules
         findings.extend(self._check_config_warnings(profile_spec, context))
 
+        # =================================================================
+        # LLM Integration Hook (Phase 1 & 2)
+        # =================================================================
+        llm_evidence: dict = {}
+        if self._should_use_llm():
+            findings, llm_evidence = self._enrich_findings_with_llm(
+                findings, profile_spec, context
+            )
+
         scores, score_evidence = self.scoring_engine.score_with_evidence(
             findings,
             profile=profile,
             behavioural_evidence=context.behavioural_evidence,
             browser_evidence=context.browser_evidence,
         )
+        
+        # Merge LLM evidence into score evidence
+        if llm_evidence:
+            score_evidence["llm_analysis"] = llm_evidence
+        
         report_path = workspace_path / "report.json"
-        ReportWriter(report_path).write(context, findings, scores, score_evidence=score_evidence, metadata=metadata)
+        ReportWriter(report_path).write(
+            context, findings, scores, 
+            score_evidence=score_evidence, 
+            metadata=metadata
+        )
         return report_path
+
+    def _should_use_llm(self) -> bool:
+        """Check if LLM should be used based on scoring mode."""
+        return self.scoring_mode in (
+            ScoringMode.STATIC_PLUS_LLM,
+            ScoringMode.LLM_FEEDBACK_ONLY,
+            ScoringMode.LLM_OVERRIDE,
+        )
+
+    def _enrich_findings_with_llm(
+        self,
+        findings: List[Finding],
+        profile_spec: ProfileSpec,
+        context: SubmissionContext,
+    ) -> tuple[List[Finding], dict]:
+        """Enrich findings with LLM feedback and partial credit evaluation.
+        
+        Phase 1: Generate feedback for failed findings
+        Phase 2: Evaluate partial credit for rules that allow it
+        
+        Returns:
+            Tuple of (enriched_findings, llm_evidence_dict)
+        """
+        enriched: List[Finding] = []
+        llm_evidence: dict = {"feedback": [], "partial_credit": []}
+        
+        for finding in findings:
+            # Only process failed findings (severity FAIL or WARN)
+            if finding.severity not in (Severity.FAIL, Severity.WARN):
+                enriched.append(finding)
+                continue
+            
+            # Extract code snippet from evidence if available
+            code_snippet = ""
+            if isinstance(finding.evidence, dict):
+                code_snippet = finding.evidence.get("snippet", "")
+                if not code_snippet:
+                    code_snippet = finding.evidence.get("content", "")[:500]
+            
+            # Phase 1: Generate feedback for failed rules
+            if self.scoring_mode in (ScoringMode.LLM_FEEDBACK_ONLY, ScoringMode.STATIC_PLUS_LLM):
+                try:
+                    feedback = generate_feedback(
+                        rule_name=finding.id,
+                        student_code=code_snippet,
+                        error_context=finding.message,
+                        category=finding.category,
+                    )
+                    
+                    # Attach feedback to finding evidence
+                    if isinstance(finding.evidence, dict):
+                        finding.evidence["llm_feedback"] = feedback
+                    
+                    llm_evidence["feedback"].append({
+                        "finding_id": finding.id,
+                        "feedback": feedback,
+                    })
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to generate LLM feedback for {finding.id}: {e}")
+            
+            # Phase 2: Evaluate partial credit
+            if self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
+                # Check if rule allows partial credit
+                rule_metadata = self._get_rule_metadata(finding.id, profile_spec)
+                partial_allowed = rule_metadata.get("partial_allowed", False)
+                partial_range = rule_metadata.get("partial_range", (0.0, 0.5))
+                
+                if should_evaluate_partial_credit(0.0, partial_allowed):
+                    try:
+                        hybrid_score = evaluate_partial_credit(
+                            rule_name=finding.id,
+                            student_code=code_snippet,
+                            error_context=finding.message,
+                            category=rule_metadata.get("category", "unknown"),
+                            partial_range=partial_range,
+                        )
+                        
+                        # Attach hybrid score to finding evidence
+                        if isinstance(finding.evidence, dict):
+                            finding.evidence["hybrid_score"] = hybrid_score.to_dict()
+                        
+                        llm_evidence["partial_credit"].append({
+                            "finding_id": finding.id,
+                            "hybrid_score": hybrid_score.to_dict(),
+                        })
+                        
+                    except Exception as e:
+                        logger.warning(f"Failed to evaluate partial credit for {finding.id}: {e}")
+            
+            enriched.append(finding)
+        
+        return enriched, llm_evidence
+
+    def _get_rule_metadata(self, rule_id: str, profile_spec: ProfileSpec) -> dict:
+        """Extract metadata for a rule from the profile spec."""
+        # Search through all rule types
+        all_rules = (
+            list(profile_spec.required_html) +
+            list(profile_spec.required_css) +
+            list(profile_spec.required_js) +
+            list(profile_spec.required_php) +
+            list(profile_spec.required_sql)
+        )
+        
+        for rule in all_rules:
+            if rule.id == rule_id:
+                return {
+                    "category": getattr(rule, "category", ""),
+                    "partial_allowed": getattr(rule, "partial_allowed", False),
+                    "partial_range": getattr(rule, "partial_range", (0.0, 0.5)),
+                    "severity": getattr(rule, "severity", "medium"),
+                    "llm_guidance": getattr(rule, "llm_guidance", ""),
+                }
+        
+        return {}
 
     def _prepare_context(self, submission_path: Path, workspace_path: Path, profile: str) -> SubmissionContext:
         return SubmissionProcessor().prepare(submission_path, workspace_path, profile=profile)
@@ -130,3 +280,4 @@ def _default_assessors(profile_spec: ProfileSpec) -> List[Assessor]:
 
 
 __all__ = ["AssessmentPipeline"]
+

@@ -13,6 +13,12 @@ from .feedback import (
     generate_feedback,
     scrub_pii,
 )
+from .scoring import (
+    HybridScore,
+    evaluate_partial_credit,
+    arbitrate_score,
+    should_evaluate_partial_credit,
+)
 
 __all__ = [
     "LLMProvider",
@@ -23,4 +29,9 @@ __all__ = [
     "RequestCache",
     "generate_feedback",
     "scrub_pii",
+    "HybridScore",
+    "evaluate_partial_credit",
+    "arbitrate_score",
+    "should_evaluate_partial_credit",
 ]
+
