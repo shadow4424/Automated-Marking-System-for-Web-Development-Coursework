@@ -1,21 +1,21 @@
-#!/usr/bin/env python3
-"""Phase 4 Integration Test - Pipeline + LLM Scoring End-to-End.
+"""Phase 4 Integration Test - Pipeline + LLM Scoring + Vision End-to-End.
 
 This script verifies that the AssessmentPipeline correctly integrates
-with the LLM scoring and feedback modules:
+with the LLM scoring, feedback, and vision analysis modules:
 
 1. Creates a mock submission with intentionally broken PHP code
-2. Runs the pipeline with STATIC_PLUS_LLM mode
-3. Verifies that:
+2. Creates a screenshot.png for vision analysis
+3. Runs the pipeline with STATIC_PLUS_LLM mode
+4. Verifies that:
    - The LLM feedback hook was triggered
    - Partial credit was evaluated for eligible rules
-   - The score was upgraded (0.0 -> 0.5) when intent was detected
+   - Vision analysis was performed for visual_check rules
 
 Usage:
     python -m ams.tools.test_pipeline_integration
 
 Prerequisites:
-    - LM Studio must be running with a model loaded
+    - LM Studio must be running with a vision model loaded
     - The AMS package must be installed
 """
 from __future__ import annotations
@@ -119,8 +119,8 @@ MINIMAL_HTML_CONTENT = '''<!DOCTYPE html>
 </html>
 '''
 
-# Minimal CSS file
-MINIMAL_CSS_CONTENT = '''/* Test CSS */
+# Minimal CSS file WITHOUT media query (to trigger visual_check)
+MINIMAL_CSS_CONTENT = '''/* Test CSS - intentionally missing responsive queries */
 body {
     font-family: Arial, sans-serif;
     margin: 0;
@@ -135,7 +135,7 @@ body {
 
 
 def create_test_submission(workspace: Path) -> Path:
-    """Create a test submission directory."""
+    """Create a test submission directory with screenshot."""
     submission_dir = workspace / "submission"
     submission_dir.mkdir(parents=True, exist_ok=True)
     
@@ -145,6 +145,20 @@ def create_test_submission(workspace: Path) -> Path:
     (submission_dir / "styles.css").write_text(MINIMAL_CSS_CONTENT, encoding="utf-8")
     
     return submission_dir
+
+
+def create_test_screenshot(output_dir: Path) -> Path:
+    """Create a test screenshot (red square) for vision analysis."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    
+    screenshot_path = output_dir / "screenshot.png"
+    # Create a simple red square (simulating a webpage screenshot)
+    img = Image.new("RGB", (200, 200), color=(255, 50, 50))
+    img.save(screenshot_path)
+    return screenshot_path
 
 
 def check_llm_available() -> bool:
@@ -203,6 +217,13 @@ def run_integration_test() -> bool:
         print_success(f"Created submission at: {submission_dir}")
         print_info(f"Files: {[f.name for f in submission_dir.iterdir()]}")
         
+        # Create screenshot for vision analysis
+        screenshot_path = create_test_screenshot(output_dir)
+        if screenshot_path:
+            print_success(f"Created screenshot for vision test: {screenshot_path.name}")
+        else:
+            print_warning("PIL not installed - skipping screenshot creation")
+        
         # Step 4: Run pipeline with STATIC_PLUS_LLM
         print("\n[Step 4] Running AssessmentPipeline with STATIC_PLUS_LLM...")
         
@@ -231,6 +252,20 @@ def run_integration_test() -> bool:
         print_info(f"Total findings: {len(report.get('findings', []))}")
         print_info(f"LLM feedback items: {len(llm_analysis.get('feedback', []))}")
         print_info(f"Partial credit items: {len(llm_analysis.get('partial_credit', []))}")
+        print_info(f"Vision analysis items: {len(llm_analysis.get('vision_analysis', []))}")
+        
+        # Debug: Show css.has_media_query findings
+        findings_list = report.get("findings", [])
+        css_findings = [
+            f for f in findings_list 
+            if f.get("evidence", {}).get("rule_id", "") == "css.has_media_query"
+        ]
+        if css_findings:
+            print_info(f"CSS media query findings: {len(css_findings)}")
+            for f in css_findings:
+                print_info(f"  - rule_id={f.get('evidence', {}).get('rule_id')}, id={f.get('id')}, severity={f.get('severity')}, score={f.get('score')}")
+        else:
+            print_warning("No css.has_media_query findings found - rule may not be failing")
         
         # Step 6: Assert results
         print("\n[Step 6] Verifying results...")
@@ -260,6 +295,16 @@ def run_integration_test() -> bool:
                         print_success(f"Score upgrade awarded: {item['finding_id']} -> {hybrid['final_score']}")
             else:
                 print_warning("No partial credit evaluations (check rule configurations)")
+            
+            # Check Vision Analysis
+            if llm_analysis.get("vision_analysis"):
+                print_success(f"Vision analysis triggered ({len(llm_analysis['vision_analysis'])} items)")
+                for item in llm_analysis["vision_analysis"]:
+                    result = item.get("result", {})
+                    print_info(f"  - {item['finding_id']}: {result.get('result', 'N/A')}")
+            else:
+                print_error("No vision analysis performed - expected at least 1 item")
+                passed = False
         else:
             print_warning("Skipped LLM assertions (LM Studio offline)")
         

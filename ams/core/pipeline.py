@@ -33,6 +33,9 @@ from ams.io.submission import SubmissionProcessor
 from ams.llm.feedback import generate_feedback
 from ams.llm.scoring import evaluate_partial_credit, should_evaluate_partial_credit, HybridScore
 
+# Vision Integration (Phase 3)
+from ams.core.config import VISION_ENABLED
+
 logger = logging.getLogger(__name__)
 
 
@@ -53,6 +56,23 @@ class AssessmentPipeline:
         self.assessors: Optional[List[Assessor]] = list(assessors) if assessors is not None else None
         self.scoring_engine = scoring_engine or ScoringEngine()
         self.scoring_mode = scoring_mode
+        
+        # Vision Integration: Lazy-load VisionAnalyst only if enabled
+        self._vision_analyst = None
+        self._vision_enabled = VISION_ENABLED
+    
+    @property
+    def vision_analyst(self):
+        """Lazy-load VisionAnalyst to avoid import overhead if not used."""
+        if self._vision_analyst is None and self._vision_enabled:
+            try:
+                from ams.llm.vision import VisionAnalyst
+                self._vision_analyst = VisionAnalyst()
+                logger.info("VisionAnalyst loaded for visual grading.")
+            except ImportError as e:
+                logger.warning(f"VisionAnalyst not available: {e}")
+                self._vision_enabled = False
+        return self._vision_analyst
 
     def run(
         self, 
@@ -118,22 +138,34 @@ class AssessmentPipeline:
         profile_spec: ProfileSpec,
         context: SubmissionContext,
     ) -> tuple[List[Finding], dict]:
-        """Enrich findings with LLM feedback and partial credit evaluation.
+        """Enrich findings with LLM feedback, partial credit, and vision analysis.
         
         Phase 1: Generate feedback for failed findings
         Phase 2: Evaluate partial credit for rules that allow it
+        Phase 3: Run vision analysis for rules with visual_check=True
         
         Returns:
             Tuple of (enriched_findings, llm_evidence_dict)
         """
         enriched: List[Finding] = []
-        llm_evidence: dict = {"feedback": [], "partial_credit": []}
+        llm_evidence: dict = {"feedback": [], "partial_credit": [], "vision_analysis": []}
+        
+        # Locate screenshot for vision analysis
+        screenshot_path = self._find_screenshot(context.workspace_path)
         
         for finding in findings:
             # Only process failed findings (severity FAIL or WARN)
             if finding.severity not in (Severity.FAIL, Severity.WARN):
                 enriched.append(finding)
                 continue
+            
+            # Extract rule ID from finding - may be in evidence["rule_id"] for required checks
+            rule_id = finding.id
+            if isinstance(finding.evidence, dict) and finding.evidence.get("rule_id"):
+                rule_id = finding.evidence["rule_id"]
+            
+            # Extract rule metadata for LLM enrichment (used by Phase 2 and 3)
+            rule_metadata = self._get_rule_metadata(rule_id, profile_spec)
             
             # Extract code snippet from evidence if available
             code_snippet = ""
@@ -166,8 +198,6 @@ class AssessmentPipeline:
             
             # Phase 2: Evaluate partial credit
             if self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
-                # Check if rule allows partial credit
-                rule_metadata = self._get_rule_metadata(finding.id, profile_spec)
                 partial_allowed = rule_metadata.get("partial_allowed", False)
                 partial_range = rule_metadata.get("partial_range", (0.0, 0.5))
                 
@@ -192,6 +222,35 @@ class AssessmentPipeline:
                         
                     except Exception as e:
                         logger.warning(f"Failed to evaluate partial credit for {finding.id}: {e}")
+            
+            # Phase 3: Vision Analysis for visual_check rules
+            if self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
+                visual_check = rule_metadata.get("visual_check", False)
+                
+                if visual_check and screenshot_path and self.vision_analyst:
+                    try:
+                        # Use description-first approach for reliability with small models
+                        requirement = f"Check if this design meets: {finding.message}"
+                        
+                        vision_result = self.vision_analyst.detect_layout_issues(
+                            screenshot_path=str(screenshot_path),
+                            requirement_context=requirement,
+                        )
+                        
+                        # Attach vision result to finding evidence
+                        if isinstance(finding.evidence, dict):
+                            finding.evidence["vision_analysis"] = vision_result
+                        
+                        llm_evidence["vision_analysis"].append({
+                            "finding_id": finding.id,
+                            "screenshot": str(screenshot_path.name),
+                            "result": vision_result,
+                        })
+                        
+                        logger.info(f"Vision analysis for {finding.id}: {vision_result.get('result')}")
+                        
+                    except Exception as e:
+                        logger.warning(f"Failed vision analysis for {finding.id}: {e}")
             
             enriched.append(finding)
         
@@ -223,6 +282,43 @@ class AssessmentPipeline:
 
     def _prepare_context(self, submission_path: Path, workspace_path: Path, profile: str) -> SubmissionContext:
         return SubmissionProcessor().prepare(submission_path, workspace_path, profile=profile)
+    
+    def _find_screenshot(self, workspace_path: Path) -> Optional[Path]:
+        """Find a screenshot file for vision analysis.
+        
+        Looks for common screenshot filenames in the workspace.
+        
+        Args:
+            workspace_path: Path to the assessment workspace.
+            
+        Returns:
+            Path to screenshot if found, None otherwise.
+        """
+        screenshot_names = [
+            "screenshot.png",
+            "screenshot.jpg",
+            "page.png",
+            "page.jpg",
+            "capture.png",
+            "browser_screenshot.png",
+        ]
+        
+        for name in screenshot_names:
+            path = workspace_path / name
+            if path.exists():
+                logger.debug(f"Found screenshot: {path}")
+                return path
+        
+        # Also check in submission subdirectory
+        submission_dir = workspace_path / "submission"
+        if submission_dir.exists():
+            for name in screenshot_names:
+                path = submission_dir / name
+                if path.exists():
+                    logger.debug(f"Found screenshot in submission: {path}")
+                    return path
+        
+        return None
 
     def _check_config_warnings(self, profile_spec: ProfileSpec, context: SubmissionContext) -> List[Finding]:
         """Check for configuration issues: required components with no required rules."""

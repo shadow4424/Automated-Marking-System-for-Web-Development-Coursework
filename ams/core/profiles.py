@@ -478,7 +478,7 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
             id="css.has_media_query",
             description="Uses media queries for responsive design",
             needle="@media",
-            min_count=0,
+            min_count=1,  # Changed from 0 to require at least one media query
             weight=0.16,
             category="Responsiveness",
             partial_allowed=True,
