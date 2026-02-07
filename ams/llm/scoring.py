@@ -6,7 +6,7 @@ This module implements Phase 2 of the LLM integration roadmap:
 - 2.3: Close-call arbitration logic (trust-but-verify)
 - 2.4: Hybrid scoring engine integration
 
-Target: Llama 3.2 3B Instruct via LM Studio at localhost:1234
+Uses the LLMProvider abstraction via ams.llm.feedback.ask_llama.
 """
 from __future__ import annotations
 

@@ -12,6 +12,7 @@ Key Features:
 from __future__ import annotations
 
 import base64
+import io
 import json
 import logging
 import mimetypes
@@ -21,6 +22,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+# Optional PIL import for image resizing
+try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
+
+from ams.core.config import VISION_MAX_IMAGE_SIZE
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +225,10 @@ class LocalLMStudioProvider(LLMProvider):
         return self._client
     
     def _encode_image(self, image_path: str) -> tuple[str, str]:
-        """Encode an image file as Base64.
+        """Encode an image file as Base64, resizing if necessary.
+        
+        Images larger than VISION_MAX_IMAGE_SIZE are resized to prevent
+        LLM context overflow and crashes.
         
         Args:
             image_path: Path to the image file.
@@ -225,7 +238,6 @@ class LocalLMStudioProvider(LLMProvider):
             
         Raises:
             FileNotFoundError: If the image doesn't exist.
-            ValueError: If the file type is not supported.
         """
         path = Path(image_path)
         
@@ -235,12 +247,53 @@ class LocalLMStudioProvider(LLMProvider):
         # Determine MIME type
         mime_type, _ = mimetypes.guess_type(str(path))
         if mime_type is None or not mime_type.startswith("image/"):
-            # Default to PNG for unknown types
             mime_type = "image/png"
         
-        # Read and encode
+        # Determine output format from MIME type
+        format_map = {
+            "image/png": "PNG",
+            "image/jpeg": "JPEG",
+            "image/jpg": "JPEG",
+            "image/gif": "GIF",
+            "image/webp": "WEBP",
+        }
+        output_format = format_map.get(mime_type, "PNG")
+        
+        # Read image data
         with open(path, "rb") as f:
             image_data = f.read()
+        
+        original_size = len(image_data)
+        
+        # Resize if PIL is available and image exceeds max size
+        if HAS_PIL:
+            img = Image.open(io.BytesIO(image_data))
+            original_dims = img.size
+            
+            max_dim = VISION_MAX_IMAGE_SIZE
+            if img.width > max_dim or img.height > max_dim:
+                # Resize maintaining aspect ratio
+                img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+                
+                # Save to buffer
+                buffer = io.BytesIO()
+                # Handle RGBA to RGB conversion for JPEG
+                if output_format == "JPEG" and img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                img.save(buffer, format=output_format)
+                image_data = buffer.getvalue()
+                
+                logger.info(
+                    f"Resized image: {path.name} from {original_dims} to {img.size}, "
+                    f"{original_size} -> {len(image_data)} bytes"
+                )
+            else:
+                logger.debug(f"Image {path.name} within size limits: {original_dims}")
+        else:
+            logger.warning(
+                "PIL not installed. Image will be sent at full resolution. "
+                "Install with: pip install pillow"
+            )
         
         base64_string = base64.b64encode(image_data).decode("utf-8")
         logger.debug(f"Encoded image: {path.name} ({len(image_data)} bytes, {mime_type})")

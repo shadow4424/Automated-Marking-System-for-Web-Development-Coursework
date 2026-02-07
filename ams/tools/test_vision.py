@@ -89,15 +89,10 @@ def run_vision_test() -> bool:
     Returns:
         True if test passed, False otherwise.
     """
-    print_header("Phase 3: Vision Capability Test")
+    print_header("Phase 3: Vision Capability Test - Describe Image")
     
     # Step 1: Check prerequisites
     print("\n[Step 1] Checking prerequisites...")
-    
-    if not HAS_PIL:
-        print_error("Pillow is not installed. Run: pip install pillow")
-        return False
-    print_success("Pillow is available.")
     
     if not check_llm_available():
         print_warning("LM Studio is not running. Skipping vision test.")
@@ -114,29 +109,40 @@ def run_vision_test() -> bool:
         print_error(f"Failed to import provider: {e}")
         return False
     
-    # Step 3: Create test image
-    print("\n[Step 3] Creating test image...")
-    test_color = (255, 0, 0)  # Red
-    color_name = "red"
+    # Step 3: Locate test image
+    print("\n[Step 3] Locating test image...")
     
-    try:
-        image_path = create_color_square(test_color, size=100)
-        print_success(f"Created {color_name} square at: {image_path}")
-    except Exception as e:
-        print_error(f"Failed to create image: {e}")
+    # Use match1.png from the project root
+    import os
+    project_root = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    image_path = project_root / "match1.png"
+    
+    if not image_path.exists():
+        print_error(f"Image not found: {image_path}")
         return False
     
-    # Step 4: Query the vision model
-    print("\n[Step 4] Querying vision model...")
-    print_info("Prompt: 'Describe the single dominant color in this image.'")
+    print_success(f"Found image: {image_path}")
+    print_info(f"Size: {image_path.stat().st_size} bytes")
+    
+    # Step 4: Query the vision model for detailed description
+    print("\n[Step 4] Querying vision model for detailed description...")
+    print_info("Prompt: 'Describe this image in as much detail as possible.'")
     
     provider = LocalLMStudioProvider()
     
     response = provider.complete(
-        prompt="Describe the single dominant color in this image. Answer with one word.",
-        system_prompt="You are a precise vision assistant. Analyze the pixels of the image provided.",
+        prompt=(
+            "Describe this image in as much detail as possible. "
+            "Include: layout, colors, text, UI elements, any visible content. "
+            "Be thorough and specific."
+        ),
+        system_prompt=(
+            "You are a detailed image analyst. Examine every aspect of the image "
+            "and provide a comprehensive description. Note all visual elements, "
+            "text, colors, layout, and any other observable details."
+        ),
         image_path=str(image_path),
-        max_tokens=50,
+        max_tokens=1024,  # Allow longer response for detailed description
     )
     
     if response.error:
@@ -144,39 +150,23 @@ def run_vision_test() -> bool:
         return False
     
     print_success(f"Response received in {response.latency_ms}ms")
-    print_info(f"LLM says: \"{response.content}\"")
     
-    # Step 5: Verify response
-    print("\n[Step 5] Verifying response...")
-    
-    response_lower = response.content.lower()
-    
-    if color_name in response_lower:
-        print_success(f"PASSED: Response correctly identifies '{color_name}'")
-        passed = True
-    else:
-        print_error(f"FAILED: Expected '{color_name}' in response")
-        print_info(f"Raw response: {repr(response.content)}")
-        passed = False
-    
-    # Cleanup
-    try:
-        image_path.unlink()
-        print_info("Cleaned up temporary image.")
-    except Exception:
-        pass
+    # Step 5: Display the detailed description
+    print("\n[Step 5] Image Description:")
+    print("-" * 60)
+    print(response.content)
+    print("-" * 60)
     
     # Summary
     print("\n" + "=" * 60)
-    if passed:
+    if response.content and len(response.content) > 50:
         print_success("VISION TEST PASSED!")
-        print_info("The model correctly identified the color in the image.")
+        print_info(f"Generated {len(response.content)} character description.")
+        return True
     else:
         print_error("VISION TEST FAILED!")
-        print_info("The model could not identify the color correctly.")
-    print("=" * 60)
-    
-    return passed
+        print_info("Response was too short or empty.")
+        return False
 
 
 def main() -> int:

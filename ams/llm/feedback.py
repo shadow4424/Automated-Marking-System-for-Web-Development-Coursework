@@ -6,7 +6,7 @@ This module implements Phase 1 of the LLM integration roadmap:
 - 1.3: PII scrubbing before sending to LLM
 - 1.4: Safety rails (LLM provides feedback only, no scores)
 
-Target: Llama 3.2 3B Instruct via LM Studio at localhost:1234
+Refactored to use the LLMProvider abstraction from ams.core.factory.
 """
 from __future__ import annotations
 
@@ -16,17 +16,14 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-import requests
+from ams.core.factory import get_llm_provider
+from ams.llm.providers import LLMResponse
 
 logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Configuration
 # =============================================================================
-
-CHAT_URL = "http://127.0.0.1:1234/api/v1/chat"
-DEFAULT_MODEL = "llama-3.2-3b-instruct"
-DEFAULT_TIMEOUT = 30
 
 # Phase 1.1: Strict System Prompt to prevent "Chatter"
 SYSTEM_PROMPT = (
@@ -115,7 +112,7 @@ IMPORTANT:
 
 
 # =============================================================================
-# LLM Communication
+# LLM Communication (Refactored to use LLMProvider)
 # =============================================================================
 
 
@@ -149,7 +146,9 @@ def _clean_json_response(text: str) -> str:
 
 
 def ask_llama(prompt: str, system_prompt: str = SYSTEM_PROMPT) -> str:
-    """Send a prompt to the local LLM and return the response.
+    """Send a prompt to the configured LLM provider and return the response.
+
+    This function now uses the LLMProvider abstraction, respecting config.py.
 
     Args:
         prompt: User prompt to send.
@@ -158,31 +157,18 @@ def ask_llama(prompt: str, system_prompt: str = SYSTEM_PROMPT) -> str:
     Returns:
         Raw response content from the LLM.
     """
-    payload = {
-        "model": DEFAULT_MODEL,
-        "input": prompt,
-        "system_prompt": system_prompt,
-    }
-
-    try:
-        resp = requests.post(CHAT_URL, json=payload, timeout=DEFAULT_TIMEOUT)
-        resp.raise_for_status()
-        data = resp.json()
-
-        # LM Studio returns: {"output": [{"type": "message", "content": "..."}], ...}
-        out = data.get("output", [])
-        if isinstance(out, list) and out and isinstance(out[0], dict):
-            return out[0].get("content", "")
-        return "No output returned."
-
-    except requests.exceptions.ConnectionError:
-        return '{"error": "connection_failed", "message": "Cannot connect to LM Studio. Is the server running?"}'
-    except requests.exceptions.Timeout:
-        return '{"error": "timeout", "message": "LLM request timed out."}'
-    except requests.exceptions.RequestException as e:
-        return f'{{"error": "request_failed", "message": "{e}"}}'
-    except ValueError:
-        return '{"error": "invalid_json", "message": "LLM returned invalid JSON."}'
+    provider = get_llm_provider()
+    
+    response: LLMResponse = provider.complete(
+        prompt=prompt,
+        system_prompt=system_prompt,
+        json_mode=True,  # Enable JSON mode for cleaner output
+    )
+    
+    if response.error:
+        return f'{{"error": "llm_error", "message": "{response.error}"}}'
+    
+    return response.content
 
 
 # =============================================================================
