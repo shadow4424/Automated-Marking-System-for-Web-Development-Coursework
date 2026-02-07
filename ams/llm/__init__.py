@@ -19,6 +19,14 @@ from .scoring import (
     arbitrate_score,
     should_evaluate_partial_credit,
 )
+from .schemas import (
+    FeedbackItem,
+    LLMFeedback,
+    create_fallback_feedback,
+)
+from .generators import (
+    FeedbackGenerator,
+)
 
 __all__ = [
     "LLMProvider",
@@ -33,5 +41,8 @@ __all__ = [
     "evaluate_partial_credit",
     "arbitrate_score",
     "should_evaluate_partial_credit",
+    "FeedbackItem",
+    "LLMFeedback",
+    "create_fallback_feedback",
+    "FeedbackGenerator",
 ]
-

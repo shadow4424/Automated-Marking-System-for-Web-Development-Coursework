@@ -185,6 +185,7 @@ def generate_feedback(
     """Generate structured feedback for a failed rule check.
 
     This is the main entry point for Phase 1 feedback generation.
+    Now uses the Phase B FeedbackGenerator with Pydantic validation.
 
     Args:
         rule_name: The identifier of the failed rule (e.g., "html.has_doctype").
@@ -193,39 +194,40 @@ def generate_feedback(
         category: Rule category (e.g., "Structure", "Semantics").
 
     Returns:
-        Parsed JSON feedback as a dictionary, or an error dict if parsing fails.
+        Parsed JSON feedback as a dictionary. Always returns a valid dict,
+        never raises exceptions.
     """
+    from ams.llm.generators import FeedbackGenerator
+    
     # Phase 1.3: Scrub PII before sending
     sanitized_code = scrub_pii(student_code)
     sanitized_context = scrub_pii(error_context)
 
-    # Build the prompt
-    request = FeedbackRequest(
-        rule_name=rule_name,
-        category=category,
-        student_code=sanitized_code,
-        error_context=sanitized_context,
-    )
-    prompt = _build_feedback_prompt(request)
+    # Build evidence dict for the generator
+    evidence = {
+        "rule_id": rule_name,
+        "category": category,
+        "code_snippet": sanitized_code,
+        "error_context": sanitized_context,
+    }
 
-    # Call the LLM
-    logger.debug(f"Sending feedback request for rule: {rule_name}")
-    raw_response = ask_llama(prompt)
-
-    # Clean and parse the response
-    cleaned = _clean_json_response(raw_response)
-
-    try:
-        result = json.loads(cleaned)
-        logger.debug(f"Feedback generated successfully for rule: {rule_name}")
-        return result
-    except json.JSONDecodeError as e:
-        logger.warning(f"Failed to parse LLM response as JSON: {e}")
-        return {
-            "error": "parse_failed",
-            "message": f"Could not parse LLM response: {e}",
-            "raw_response": raw_response[:500],  # Truncate for safety
-        }
+    # Use the new robust generator
+    generator = FeedbackGenerator()
+    feedback = generator.generate(evidence)
+    
+    # Convert to dict for backward compatibility
+    result = feedback.model_dump()
+    
+    # Map to legacy format if needed (keep backward compat)
+    if feedback.items:
+        # Include first item's message as top-level for legacy consumers
+        result["rule"] = rule_name
+        result["category"] = category
+        result["result"] = feedback.items[0].severity if feedback.items else "INFO"
+        result["evidence"] = feedback.summary
+    
+    logger.debug(f"Feedback generated for rule: {rule_name}, fallback={feedback.meta.get('fallback', False)}")
+    return result
 
 
 # =============================================================================

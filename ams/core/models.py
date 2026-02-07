@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Mapping, MutableMapping
+from typing import Dict, List, Mapping, MutableMapping, Optional
 
 
 class Severity(str, Enum):
@@ -21,6 +22,7 @@ class FindingCategory(str, Enum):
     BEHAVIORAL = "behavioral"  # Behavioral/runtime issues
     CONFIG = "config"  # Configuration issues (marker setup problems)
     EVIDENCE = "evidence"  # Informational evidence collected
+    VISUAL = "visual"  # Phase C: Visual/layout issues from vision analysis
     OTHER = "other"  # Other issues
 
 
@@ -38,7 +40,7 @@ class SubmissionContext:
 class Finding:
     """Standardized finding with consistent schema for auditability."""
     id: str  # Unique finding code (e.g., "HTML.MISSING_FILES", "CSS.SYNTAX_ERROR")
-    category: str  # Component category: "html", "css", "js", "php", "sql", "config"
+    category: str  # Component category: "html", "css", "js", "php", "sql", "config", "visual"
     message: str  # Human-readable message
     severity: Severity  # Severity level
     evidence: Mapping[str, object]  # Structured evidence dict
@@ -48,6 +50,11 @@ class Finding:
     finding_category: FindingCategory = field(default=FindingCategory.OTHER)  # Type: missing/syntax/structure/etc
     profile: str | None = None  # Profile name if applicable
     required: bool | None = None  # Whether component is required for profile
+    
+    # Phase A: Baseline Hardening additions
+    score_delta: Optional[float] = None  # Deterministic score impact (e.g., -5.0)
+    tags: List[str] = field(default_factory=list)  # Descriptive tags
+    timestamp: float = field(default_factory=lambda: datetime.now(timezone.utc).timestamp())
 
 
 @dataclass
@@ -81,7 +88,6 @@ class RuleResult:
             "category": self.category,
             "severity": self.severity,
         }
-
 
 
 @dataclass
@@ -168,6 +174,78 @@ class BrowserEvidence:
         }
 
 
+@dataclass
+class ReportMetadata:
+    """Metadata for a report run."""
+    timestamp: str
+    pipeline_version: str = "unknown"  # Placeholder for git hash
+    scoring_mode: str = "unknown"
+    profile: str = "unknown"
+    provider: Optional[str] = None
+    cache_stats: Optional[Dict[str, int]] = None
+    submission_metadata: Optional[Mapping[str, object]] = None
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "timestamp": self.timestamp,
+            "pipeline_version": self.pipeline_version,
+            "scoring_mode": self.scoring_mode,
+            "profile": self.profile,
+            "provider": self.provider,
+            "cache_stats": self.cache_stats,
+            "submission_metadata": dict(self.submission_metadata) if self.submission_metadata else None,
+        }
+
+
+@dataclass
+class Report:
+    """Top-level report structure."""
+    metadata: ReportMetadata
+    submission_path: str
+    workspace_path: str
+    findings: List[Finding]
+    scores: Dict[str, object]
+    score_evidence: Optional[Dict[str, object]]
+    behavioural_evidence: List[Dict[str, object]]
+    browser_evidence: List[Dict[str, object]]
+    environment: Dict[str, bool]
+    marking_policy: Dict[str, object]
+    generated_at: str
+    report_version: str = "1.0"
+    
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "report_version": self.report_version,
+            "generated_at": self.generated_at,
+            "metadata": self.metadata.to_dict(),
+            "submission_path": self.submission_path,
+            "workspace_path": self.workspace_path,
+            "findings": [
+                {
+                    "id": f.id,
+                    "category": f.category,
+                    "message": f.message,
+                    "severity": f.severity.value,
+                    "evidence": dict(f.evidence),
+                    "source": f.source,
+                    "finding_category": f.finding_category.value,
+                    "profile": f.profile,
+                    "required": f.required,
+                    "score_delta": f.score_delta,
+                    "tags": f.tags,
+                    "timestamp": f.timestamp,
+                }
+                for f in self.findings
+            ],
+            "scores": self.scores,
+            "score_evidence": self.score_evidence,
+            "behavioural_evidence": self.behavioural_evidence,
+            "browser_evidence": self.browser_evidence,
+            "environment": self.environment,
+            "marking_policy": self.marking_policy,
+        }
+
+
 __all__ = [
     "Severity",
     "FindingCategory",
@@ -177,5 +255,6 @@ __all__ = [
     "ScoreEvidenceBundle",
     "BehaviouralEvidence",
     "BrowserEvidence",
+    "Report",
+    "ReportMetadata",
 ]
-

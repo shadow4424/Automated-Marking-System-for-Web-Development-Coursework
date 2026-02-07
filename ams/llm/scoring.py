@@ -206,20 +206,70 @@ def arbitrate_score(static_score: float, llm_score: float | None) -> float:
 # =============================================================================
 
 
+def check_attempt_signal(
+    student_code: str,
+    attempt_signal: str | None,
+) -> bool:
+    """Check if student code contains an attempt signal pattern.
+    
+    Phase D: Gate partial credit by requiring evidence of attempt.
+    This prevents LLM from hallucinating credit for empty files.
+    
+    Args:
+        student_code: The student's code to check.
+        attempt_signal: Regex pattern to detect attempt (e.g., r"function\\s+calculate").
+        
+    Returns:
+        True if attempt is detected or no signal is defined.
+    """
+    import re
+    
+    if not attempt_signal:
+        # No signal defined - allow partial credit evaluation
+        return True
+    
+    if not student_code or not student_code.strip():
+        # Empty code - no attempt
+        return False
+    
+    try:
+        return bool(re.search(attempt_signal, student_code, re.IGNORECASE | re.MULTILINE))
+    except re.error as e:
+        logger.warning(f"Invalid attempt_signal regex '{attempt_signal}': {e}")
+        return True  # Allow on regex error to avoid blocking
+
+
 def should_evaluate_partial_credit(
     static_score: float,
     partial_allowed: bool,
+    student_code: str = "",
+    attempt_signal: str | None = None,
 ) -> bool:
     """Determine if partial credit evaluation should run.
+    
+    Phase D update: Now checks attempt signal before allowing partial credit.
     
     Args:
         static_score: Current score from static analysis.
         partial_allowed: Whether the rule allows partial credit.
+        student_code: The student's code (for attempt signal check).
+        attempt_signal: Regex pattern to detect attempt.
     
     Returns:
         True if LLM should evaluate for partial credit.
     """
-    return static_score == 0.0 and partial_allowed
+    if static_score != 0.0:
+        return False  # Only evaluate failed rules
+        
+    if not partial_allowed:
+        return False  # Rule doesn't allow partial credit
+    
+    # Phase D: Check attempt signal (gate on evidence of attempt)
+    if not check_attempt_signal(student_code, attempt_signal):
+        logger.debug(f"Attempt signal not found, denying partial credit")
+        return False
+    
+    return True
 
 
 __all__ = [
@@ -227,4 +277,5 @@ __all__ = [
     "evaluate_partial_credit",
     "arbitrate_score",
     "should_evaluate_partial_credit",
+    "check_attempt_signal",
 ]

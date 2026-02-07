@@ -12,15 +12,14 @@ from .config import (
     LLM_SANITIZE_PII,
 )
 from .evidence_bundle import build_evidence_bundle, sanitize_pii, sanitize_student_files
-from .llm_core import (
+# Redirect LLM imports to ams.llm package
+from ams.llm import (
     LLMResponse,
     LLMProvider,
-    MockLLMProvider,
+    MockProvider,
     OpenAIProvider,
     RequestCache,
-    BudgetGuard,
-    BudgetExceededError,
-    CachedLLMProvider,
+    LocalLMStudioProvider,
 )
 from .models import Finding, RuleResult, Severity, SubmissionContext
 from .profiles import (
@@ -68,15 +67,11 @@ __all__ = [
     "build_evidence_bundle",
     "sanitize_pii",
     "sanitize_student_files",
-    # LLM Core
+    # LLM (redirected from ams.llm)
     "LLMResponse",
     "LLMProvider",
-    "MockLLMProvider",
+    "MockProvider",
     "OpenAIProvider",
     "RequestCache",
-    "BudgetGuard",
-    "BudgetExceededError",
-    "CachedLLMProvider",
+    "LocalLMStudioProvider",
 ]
-
-

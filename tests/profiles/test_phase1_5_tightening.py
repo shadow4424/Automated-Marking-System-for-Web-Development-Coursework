@@ -227,9 +227,9 @@ class TestFindingSchemaConsistency:
             assert finding["finding_category"] in ["missing", "syntax", "structure", "behavioral", "config", "evidence", "other"]
             
             # If profile/required are present, they should be consistent
-            if "profile" in finding:
+            if "profile" in finding and finding["profile"] is not None:
                 assert isinstance(finding["profile"], str)
-            if "required" in finding:
+            if "required" in finding and finding["required"] is not None:
                 assert isinstance(finding["required"], bool)
 
 

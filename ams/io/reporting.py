@@ -7,7 +7,15 @@ from typing import Iterable, Optional
 
 from typing import Mapping
 
-from ams.core.models import BehaviouralEvidence, BrowserEvidence, Finding, SubmissionContext, ScoreEvidenceBundle
+from ams.core.models import (
+    BehaviouralEvidence,
+    BrowserEvidence,
+    Finding,
+    SubmissionContext,
+    ScoreEvidenceBundle,
+    Report,
+    ReportMetadata,
+)
 
 
 class ReportWriter:
@@ -23,31 +31,46 @@ class ReportWriter:
         metadata: Optional[Mapping[str, object]] = None,
         llm_evidence: Optional[dict] = None,
     ) -> Path:
-        profile = context.metadata.get("profile", "unknown")
+        profile = str(context.metadata.get("profile", "unknown"))  # Ensure string
+        scoring_mode = str(context.metadata.get("scoring_mode", "unknown"))
+        
         behavioural = [self._serialize_behavioural(e) for e in getattr(context, "behavioural_evidence", [])]
         browser = [self._serialize_browser(e) for e in getattr(context, "browser_evidence", [])]
         environment = self._environment_summary(context, behavioural, browser, score_evidence)
         
         # Merge metadata
-        report_metadata = dict(context.metadata)
+        merged_metadata = dict(context.metadata)
         if metadata:
-            report_metadata["submission_metadata"] = metadata
+            merged_metadata.update(metadata) # flatten
+            # context.metadata might already have submission_metadata if passed in pipeline.run
+
+        # Create Report Metadata
+        report_meta = ReportMetadata(
+            timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            pipeline_version="1.0-dev",  # TODO: Inject actual version
+            scoring_mode=scoring_mode,
+            profile=profile,
+            provider=None, # TODO: Extract from context if available
+            submission_metadata=metadata, 
+        )
+
+        # Create Report
+        report = Report(
+            metadata=report_meta,
+            submission_path=str(context.submission_path),
+            workspace_path=str(context.workspace_path),
+            findings=list(findings),
+            scores=scores if isinstance(scores, dict) else {},
+            score_evidence=self._merge_score_evidence(score_evidence, llm_evidence),
+            behavioural_evidence=behavioural,
+            browser_evidence=browser,
+            environment=environment,
+            marking_policy=self._policy_notes(profile),
+            generated_at=report_meta.timestamp,
+        )
         
-        report = {
-            "metadata": report_metadata,
-            "submission_path": str(context.submission_path),
-            "workspace_path": str(context.workspace_path),
-            "findings": [self._serialize_finding(f) for f in findings],
-            "scores": scores,
-            "score_evidence": self._merge_score_evidence(score_evidence, llm_evidence),
-            "behavioural_evidence": behavioural,
-            "browser_evidence": browser,
-            "environment": environment,
-            "marking_policy": self._policy_notes(profile),
-            "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        }
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
-        self.output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        self.output_path.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
         self._write_summary(context, scores, profile, behavioural, browser, metadata)
         return self.output_path
 

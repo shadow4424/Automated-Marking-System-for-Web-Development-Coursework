@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, List
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,9 @@ class RequiredHTMLRule:
     llm_guidance: str = ""
     pii_sensitivity: bool = False  # True if evidence may contain student IDs/names
     visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
+    # Phase D: Fair Partial Credit
+    attempt_signal: Optional[str] = None  # Regex pattern to detect attempt
+    related_rules: tuple[str, ...] = ()  # Related rule IDs for conflict resolution
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,9 @@ class RequiredCSSRule:
     llm_guidance: str = ""
     pii_sensitivity: bool = False
     visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
+    # Phase D: Fair Partial Credit
+    attempt_signal: Optional[str] = None
+    related_rules: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -53,6 +59,9 @@ class RequiredJSRule:
     llm_guidance: str = ""
     pii_sensitivity: bool = False
     visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
+    # Phase D: Fair Partial Credit
+    attempt_signal: Optional[str] = None
+    related_rules: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -70,6 +79,9 @@ class RequiredPHPRule:
     llm_guidance: str = ""
     pii_sensitivity: bool = False
     visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
+    # Phase D: Fair Partial Credit
+    attempt_signal: Optional[str] = None
+    related_rules: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -87,6 +99,9 @@ class RequiredSQLRule:
     llm_guidance: str = ""
     pii_sensitivity: bool = False
     visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
+    # Phase D: Fair Partial Credit
+    attempt_signal: Optional[str] = None
+    related_rules: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -105,6 +120,9 @@ class BehavioralRule:
     llm_guidance: str = ""
     pii_sensitivity: bool = False
     visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
+    # Phase D: Fair Partial Credit
+    attempt_signal: Optional[str] = None
+    related_rules: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

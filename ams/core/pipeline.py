@@ -33,8 +33,12 @@ from ams.io.submission import SubmissionProcessor
 from ams.llm.feedback import generate_feedback
 from ams.llm.scoring import evaluate_partial_credit, should_evaluate_partial_credit, HybridScore
 
-# Vision Integration (Phase 3)
+# Vision Integration (Phase 3 & C)
 from ams.core.config import VISION_ENABLED
+from ams.llm.vision_schemas import VisionResult
+
+# Phase D: Conflict Resolution
+from ams.core.arbitration import resolve_conflicts
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +112,12 @@ class AssessmentPipeline:
                 findings, profile_spec, context
             )
 
+        # =================================================================
+        # Phase D: Conflict Resolution
+        # =================================================================
+        # Resolve conflicts between Static and Visual findings before scoring
+        findings = resolve_conflicts(findings)
+
         scores, score_evidence = self.scoring_engine.score_with_evidence(
             findings,
             profile=profile,
@@ -122,6 +132,29 @@ class AssessmentPipeline:
             metadata=metadata,
             llm_evidence=llm_evidence if llm_evidence else None,
         )
+        
+        # Generate HTML report
+        try:
+            from ams.io.html_reporter import HTMLReporter
+            import json
+            
+            # Load the JSON report for HTML generation
+            with open(report_path, "r", encoding="utf-8") as f:
+                report_data = json.load(f)
+            
+            # Find screenshot if available
+            screenshot_path = self._find_screenshot(workspace_path)
+            
+            html_reporter = HTMLReporter()
+            html_path = html_reporter.generate(
+                report_data=report_data,
+                output_path=workspace_path,
+                screenshot_path=screenshot_path,
+            )
+            logger.info(f"Generated HTML report: {html_path}")
+        except Exception as e:
+            logger.warning(f"Failed to generate HTML report: {e}")
+        
         return report_path
 
     def _should_use_llm(self) -> bool:
@@ -223,7 +256,7 @@ class AssessmentPipeline:
                     except Exception as e:
                         logger.warning(f"Failed to evaluate partial credit for {finding.id}: {e}")
             
-            # Phase 3: Vision Analysis for visual_check rules
+            # Phase 3 + C: Vision Analysis for visual_check rules
             if self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
                 visual_check = rule_metadata.get("visual_check", False)
                 
@@ -232,22 +265,42 @@ class AssessmentPipeline:
                         # Use description-first approach for reliability with small models
                         requirement = f"Check if this design meets: {finding.message}"
                         
-                        vision_result = self.vision_analyst.detect_layout_issues(
+                        vision_result: VisionResult = self.vision_analyst.detect_layout_issues(
                             screenshot_path=str(screenshot_path),
                             requirement_context=requirement,
                         )
                         
-                        # Attach vision result to finding evidence
+                        # Attach vision result to finding evidence (as dict)
+                        vision_dict = vision_result.model_dump()
                         if isinstance(finding.evidence, dict):
-                            finding.evidence["vision_analysis"] = vision_result
+                            finding.evidence["vision_analysis"] = vision_dict
                         
                         llm_evidence["vision_analysis"].append({
                             "finding_id": finding.id,
                             "screenshot": str(screenshot_path.name),
-                            "result": vision_result,
+                            "result": vision_dict,
                         })
                         
-                        logger.info(f"Vision analysis for {finding.id}: {vision_result.get('result')}")
+                        # Phase C: Create VISUAL finding if status is FAIL
+                        if vision_result.status == "FAIL":
+                            for issue in vision_result.issues:
+                                visual_finding = Finding(
+                                    id=f"VISUAL.{finding.id}",
+                                    category="visual",
+                                    message=issue.description,
+                                    severity=Severity.FAIL if issue.severity == "FAIL" else Severity.WARN,
+                                    evidence={
+                                        "screenshot": str(screenshot_path),
+                                        "original_rule": finding.id,
+                                        "confidence": vision_result.confidence,
+                                    },
+                                    source="VisionAnalyst",
+                                    finding_category=FindingCategory.VISUAL,
+                                )
+                                enriched.append(visual_finding)
+                                logger.info(f"Created VISUAL finding: {visual_finding.id}")
+                        
+                        logger.info(f"Vision analysis for {finding.id}: {vision_result.status}")
                         
                     except Exception as e:
                         logger.warning(f"Failed vision analysis for {finding.id}: {e}")
