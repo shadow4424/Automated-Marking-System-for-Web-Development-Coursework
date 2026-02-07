@@ -18,6 +18,7 @@ class RequiredHTMLRule:
     severity: str = "medium"  # "low", "medium", "high"
     llm_guidance: str = ""
     pii_sensitivity: bool = False  # True if evidence may contain student IDs/names
+    visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ class RequiredCSSRule:
     severity: str = "medium"
     llm_guidance: str = ""
     pii_sensitivity: bool = False
+    visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,7 @@ class RequiredJSRule:
     severity: str = "medium"
     llm_guidance: str = ""
     pii_sensitivity: bool = False
+    visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
 
 
 @dataclass(frozen=True)
@@ -66,6 +69,7 @@ class RequiredPHPRule:
     severity: str = "medium"
     llm_guidance: str = ""
     pii_sensitivity: bool = False
+    visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
 
 
 @dataclass(frozen=True)
@@ -82,6 +86,7 @@ class RequiredSQLRule:
     severity: str = "medium"
     llm_guidance: str = ""
     pii_sensitivity: bool = False
+    visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
 
 
 @dataclass(frozen=True)
@@ -99,6 +104,7 @@ class BehavioralRule:
     severity: str = "medium"
     llm_guidance: str = ""
     pii_sensitivity: bool = False
+    visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
 
 
 @dataclass(frozen=True)
@@ -479,6 +485,7 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
             partial_range=(0.0, 0.75),
             severity="high",
             llm_guidance="Award partial based on media query coverage. Full credit for multiple breakpoints.",
+            visual_check=True,  # Phase 3: Enable vision-based responsiveness check
         ),
         # === MAINTAINABILITY (0.10 total) ===
         RequiredCSSRule(

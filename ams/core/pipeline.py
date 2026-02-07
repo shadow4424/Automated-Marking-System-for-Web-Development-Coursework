@@ -95,15 +95,12 @@ class AssessmentPipeline:
             browser_evidence=context.browser_evidence,
         )
         
-        # Merge LLM evidence into score evidence
-        if llm_evidence:
-            score_evidence["llm_analysis"] = llm_evidence
-        
         report_path = workspace_path / "report.json"
         ReportWriter(report_path).write(
             context, findings, scores, 
             score_evidence=score_evidence, 
-            metadata=metadata
+            metadata=metadata,
+            llm_evidence=llm_evidence if llm_evidence else None,
         )
         return report_path
 
@@ -219,6 +216,7 @@ class AssessmentPipeline:
                     "partial_range": getattr(rule, "partial_range", (0.0, 0.5)),
                     "severity": getattr(rule, "severity", "medium"),
                     "llm_guidance": getattr(rule, "llm_guidance", ""),
+                    "visual_check": getattr(rule, "visual_check", False),
                 }
         
         return {}

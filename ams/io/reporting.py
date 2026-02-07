@@ -21,6 +21,7 @@ class ReportWriter:
         scores: object,
         score_evidence: Optional[ScoreEvidenceBundle] = None,
         metadata: Optional[Mapping[str, object]] = None,
+        llm_evidence: Optional[dict] = None,
     ) -> Path:
         profile = context.metadata.get("profile", "unknown")
         behavioural = [self._serialize_behavioural(e) for e in getattr(context, "behavioural_evidence", [])]
@@ -38,7 +39,7 @@ class ReportWriter:
             "workspace_path": str(context.workspace_path),
             "findings": [self._serialize_finding(f) for f in findings],
             "scores": scores,
-            "score_evidence": score_evidence.to_dict() if score_evidence else None,
+            "score_evidence": self._merge_score_evidence(score_evidence, llm_evidence),
             "behavioural_evidence": behavioural,
             "browser_evidence": browser,
             "environment": environment,
@@ -93,6 +94,20 @@ class ReportWriter:
                 "present": "Scored based on evidence (1.0, 0.5, or 0.0)",
             },
         }
+
+    def _merge_score_evidence(
+        self, 
+        score_evidence: Optional[ScoreEvidenceBundle], 
+        llm_evidence: Optional[dict]
+    ) -> Optional[dict]:
+        """Merge ScoreEvidenceBundle with LLM evidence into a single dict."""
+        if score_evidence is None:
+            return {"llm_analysis": llm_evidence} if llm_evidence else None
+        
+        result = score_evidence.to_dict()
+        if llm_evidence:
+            result["llm_analysis"] = llm_evidence
+        return result
 
     def _write_summary(
         self,
