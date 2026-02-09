@@ -176,7 +176,7 @@ def list_runs(runs_root: Path) -> list[dict]:
             info["id"] = run_dir.name
             info["_run_dir"] = str(run_dir)  # Store full path for lookups
             
-            # Try to load score from report.json
+            # Try to load score from report.json (single runs)
             report_path = run_dir / "report.json"
             if report_path.exists():
                 try:
@@ -187,6 +187,20 @@ def list_runs(runs_root: Path) -> list[dict]:
                         info["score"] = scores["overall"] * 100
                 except Exception:
                     pass
+            
+            # For batch runs, try to load average score from batch_summary.json
+            if info.get("mode") == "batch" and info.get("score") is None:
+                batch_summary_path = run_dir / "batch_summary.json"
+                if batch_summary_path.exists():
+                    try:
+                        batch_summary = json.loads(batch_summary_path.read_text(encoding="utf-8"))
+                        overall_stats = batch_summary.get("summary", {}).get("overall_stats", {}) or {}
+                        mean_score = overall_stats.get("mean")
+                        if mean_score is not None:
+                            # Store score as percentage (0-100) for dashboard display
+                            info["score"] = mean_score * 100
+                    except Exception:
+                        pass
             
             index_path = run_dir / "run_index.json"
             if index_path.exists():

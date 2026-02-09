@@ -109,11 +109,17 @@ def run_batch(
 
 def aggregate_batch(records: List[dict], finding_counts: Counter[str], failure_reason_counts: Counter[str], profile: str) -> dict:
     total = len(records)
-    succeeded_records = [r for r in records if "error" not in r and r.get("overall") is not None]
-    failed = total - len(succeeded_records)
-    succeeded = len(succeeded_records)
+    # Processing status counts
+    processed_records = [r for r in records if "error" not in r and r.get("overall") is not None]
+    processing_errors = total - len(processed_records)
+    
+    # Score-based pass/fail counts (40% threshold)
+    PASS_THRESHOLD = 0.40
+    passed = sum(1 for r in processed_records if (r.get("overall") or 0) >= PASS_THRESHOLD)
+    failed = len(processed_records) - passed
+    succeeded = passed  # For backward compatibility with template
 
-    overall_scores = [float(r["overall"]) for r in succeeded_records if r.get("overall") is not None]
+    overall_scores = [float(r["overall"]) for r in processed_records if r.get("overall") is not None]
     overall_stats = None
     if overall_scores:
         overall_stats = {
@@ -128,7 +134,7 @@ def aggregate_batch(records: List[dict], finding_counts: Counter[str], failure_r
     for component in profile_components:
         scores = [
             r["components"].get(component)
-            for r in succeeded_records
+            for r in processed_records
             if r.get("components")
             and isinstance(r["components"].get(component), (int, float))
         ]
