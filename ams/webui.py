@@ -113,6 +113,14 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
         app.config["SECRET_KEY"] = "replace-this-secret"
     app.secret_key = app.config["SECRET_KEY"]
     
+    # Cleanup old workspaces on startup (prevents disk bloat)
+    try:
+        from ams.io.workspace import cleanup_old_runs
+        cleanup_old_runs()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Workspace cleanup failed: {e}")
+    
     # Register Jinja filters
     app.jinja_env.filters["artifact_url"] = lambda artifact_path: _artifact_url(request.view_args.get("run_id") or "", artifact_path)
     

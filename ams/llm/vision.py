@@ -4,15 +4,19 @@ This module provides the VisionAnalyst class which uses Vision-capable LLMs
 (e.g., Qwen2-VL) to analyze screenshots and detect layout/visual issues.
 
 Phase C: Updated with Pydantic schemas for reliability.
+Phase D: Added hash-based caching for performance.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from pathlib import Path
 from typing import Optional
 
+from ams.core.config import LLM_CACHE_ENABLED
 from ams.core.factory import get_llm_provider
+from ams.llm.cache import RequestCache
 from ams.llm.vision_schemas import (
     VisionResult,
     VisionIssue,
@@ -58,13 +62,16 @@ Always respond with valid JSON in this exact format:
 
 Do not include any text outside the JSON block."""
 
-    def __init__(self, provider=None):
+    def __init__(self, provider=None, cache_enabled: bool = None):
         """Initialize the VisionAnalyst.
         
         Args:
             provider: Optional LLMProvider instance. If None, uses factory.
+            cache_enabled: Whether to cache results. Defaults to LLM_CACHE_ENABLED.
         """
         self._provider = provider
+        self._cache_enabled = cache_enabled if cache_enabled is not None else LLM_CACHE_ENABLED
+        self._cache = RequestCache() if self._cache_enabled else None
     
     @property
     def provider(self):
@@ -116,6 +123,20 @@ Do not include any text outside the JSON block."""
                 screenshot_found=False,
             )
         
+        # Generate cache key from image hash + requirement
+        cache_key = None
+        if self._cache:
+            image_hash = hashlib.md5(path.read_bytes()).hexdigest()
+            cache_key = f"vision:{image_hash}:{requirement_context[:100]}"
+            
+            cached = self._cache.get(cache_key, system_prompt=self.SYSTEM_PROMPT, model="vision")
+            if cached:
+                logger.info(f"Vision cache HIT for {path.name}")
+                try:
+                    return self._parse_response(cached["content"], str(path))
+                except ValueError:
+                    pass  # Cache corrupted, proceed with LLM call
+        
         user_prompt = f"""Requirement: {requirement_context}
 
 Analyze the provided screenshot and determine if it meets this requirement.
@@ -139,6 +160,15 @@ Respond with JSON: {{"result": "PASS" or "FAIL", "reason": "..."}}"""
                 reason="llm_error",
                 error=response.error,
                 screenshot_found=True,
+            )
+        
+        # Cache the response
+        if self._cache and cache_key:
+            self._cache.set(
+                cache_key,
+                system_prompt=self.SYSTEM_PROMPT,
+                model="vision",
+                response=response.content,
             )
         
         # Parse the JSON response
