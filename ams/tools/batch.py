@@ -11,6 +11,7 @@ import tempfile
 from typing import Dict, List, Optional
 
 from ams.core.pipeline import AssessmentPipeline
+from ams.core.config import ScoringMode
 from ams.io.web_storage import safe_extract_zip, find_submission_root
 
 
@@ -45,13 +46,14 @@ def run_batch(
     profile: str,
     keep_individual_runs: bool = True,
     assignment_id: Optional[str] = None,
+    scoring_mode: ScoringMode = ScoringMode.STATIC_PLUS_LLM,
 ) -> dict:
     out_root.mkdir(parents=True, exist_ok=True)
     runs_root = out_root / "runs"
     if keep_individual_runs:
         runs_root.mkdir(parents=True, exist_ok=True)
 
-    pipeline = AssessmentPipeline()
+    pipeline = AssessmentPipeline(scoring_mode=scoring_mode)
     working_dir = submissions_dir
     temp_ctx: Optional[tempfile.TemporaryDirectory[str]] = None
     try:
@@ -279,26 +281,30 @@ def _process_one_submission(
     temp_ctx: Optional[tempfile.TemporaryDirectory[str]] = None
     try:
         if keep_individual_runs:
-            run_dir = runs_root / item.id
+            run_dir = (runs_root / item.id).resolve()
             run_dir.mkdir(parents=True, exist_ok=True)
             workspace_path = run_dir
         else:
             temp_ctx = tempfile.TemporaryDirectory(prefix="ams-batch-")
             workspace_path = Path(temp_ctx.name)
 
-        submission_root = item.path
+        submission_root = item.path.resolve()
+        
         if item.kind == "zip":
             extracted = workspace_path / "extracted"
             extracted.mkdir(parents=True, exist_ok=True)
-            safe_extract_zip(item.path, extracted)
-            submission_root = find_submission_root(extracted)
+            safe_extract_zip(item.path.resolve(), extracted)
+            submission_root = find_submission_root(extracted).resolve()
         elif item.kind == "dir":
-            # isolate by copying to workspace
-            target = workspace_path / "submission"
+            # isolate by copying to workspace - use 'source_files' to avoid conflict
+            # with SubmissionProcessor which clears 'submission' folder
+            source_path = item.path.resolve()
+            target = workspace_path / "source_files"
             if target.exists():
                 shutil.rmtree(target)
-            shutil.copytree(item.path, target)
-            submission_root = find_submission_root(target)
+            # Copy directory contents to target
+            shutil.copytree(source_path, target, dirs_exist_ok=True)
+            submission_root = find_submission_root(target).resolve()
 
         # Create metadata for this submission
         from ams.io.metadata import MetadataValidator, SubmissionMetadata

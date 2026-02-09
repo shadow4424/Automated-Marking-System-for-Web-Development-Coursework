@@ -131,20 +131,29 @@ class ScoringEngine:
             score = component_results.get(comp, {}).get("score")
             if isinstance(score, (float, int)):
                 numeric_scores.append(float(score))
+        
         all_required_full = bool(numeric_scores) and all(score == 1.0 for score in numeric_scores)
-        meaningful_attempt = any(score >= 0.5 for score in numeric_scores)
+        no_attempt = not any(score > 0 for score in numeric_scores)
+        
         rationale: List[str] = [f"Raw overall average: {overall_raw:.2f}."]
+        
         if all_required_full:
             rationale.append("All required components scored 1.0.")
             return 1.0, rationale
-        if meaningful_attempt:
-            not_full = [comp for comp in relevant_components if component_results.get(comp, {}).get("score") != 1.0]
-            rationale.append("Meaningful attempt evidence detected in required components.")
-            if not_full:
-                rationale.append(f"Components below full: {', '.join(sorted(not_full))}.")
-            return 0.5, rationale
-        rationale.append("No meaningful attempt evidence detected in required components.")
-        return 0.0, rationale
+        
+        if no_attempt:
+            rationale.append("No meaningful attempt evidence detected in required components.")
+            return 0.0, rationale
+        
+        # Use the raw average rounded to 2 decimal places
+        # This gives more granular and accurate overall scores
+        final_score = round(overall_raw, 2)
+        
+        not_full = [comp for comp in relevant_components if component_results.get(comp, {}).get("score") != 1.0]
+        if not_full:
+            rationale.append(f"Components below full: {', '.join(sorted(not_full))}.")
+        
+        return final_score, rationale
 
     def _score_component(
         self,

@@ -1,70 +1,92 @@
 {% extends "base.html" %}
+{% block title %}Mark Submission - AMS{% endblock %}
+
 {% block content %}
-  <h2>Mark Single Submission</h2>
-  <p style="color: #666; margin-bottom: 1.5rem;">
-    Upload a single student submission ZIP file to run automated marking checks.
-    The system will analyze HTML, CSS, JavaScript, and optionally PHP/SQL based on the selected profile.
-  </p>
-  <form method="post" enctype="multipart/form-data" id="markForm">
-    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 6px; margin-bottom: 1rem;">
-      <label>Student ID <span style="color: red;">*</span>
-        <input type="text" name="student_id" required pattern="[a-zA-Z0-9_-]{3,20}" 
-               style="margin-top: 0.5rem; width: 100%; max-width: 300px; padding: 0.5rem;"
-               placeholder="e.g., s1234567" title="3-20 alphanumeric characters (may include - or _)">
-        <small style="display: block; color: #666; margin-top: 0.25rem; font-size: 0.9em;">
-          Required. Student identifier (3-20 alphanumeric characters).
-        </small>
-      </label>
-    </div>
-    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 6px; margin-bottom: 1rem;">
-      <label>Assignment ID <span style="color: red;">*</span>
-        <input type="text" name="assignment_id" required pattern="[a-zA-Z0-9_-]{2,30}"
-               style="margin-top: 0.5rem; width: 100%; max-width: 300px; padding: 0.5rem;"
-               placeholder="e.g., webdev_001" title="2-30 alphanumeric characters (may include - or _)">
-        <small style="display: block; color: #666; margin-top: 0.25rem; font-size: 0.9em;">
-          Required. Assignment identifier (2-30 alphanumeric characters).
-        </small>
-      </label>
-    </div>
-    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 6px; margin-bottom: 1rem;">
-      <label>Assessment Profile
-        <select name="profile" style="margin-top: 0.5rem;">
-          {% for profile in profiles %}
-            <option value="{{ profile }}">{{ profile|capitalize }}</option>
-          {% endfor %}
-        </select>
-        <small style="display: block; color: #666; margin-top: 0.25rem; font-size: 0.9em;">
-          Select the assessment profile (frontend or fullstack) to determine which components are evaluated.
-        </small>
-      </label>
-    </div>
-    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 6px; margin-bottom: 1rem;">
-      <label>Submission ZIP File <span style="color: red;">*</span>
-        <input type="file" name="submission" accept=".zip" required style="margin-top: 0.5rem;">
-        <small style="display: block; color: #666; margin-top: 0.25rem; font-size: 0.9em;">
-          Maximum file size: 25 MB. The ZIP should contain the student's submission files.
-        </small>
-      </label>
-    </div>
-    <button type="submit" style="width: 100%; max-width: 300px;">📤 Upload &amp; Mark</button>
-  </form>
-  <script>
-    // Client-side validation
-    document.getElementById('markForm').addEventListener('submit', function(e) {
-      const studentId = document.querySelector('input[name="student_id"]').value.trim();
-      const assignmentId = document.querySelector('input[name="assignment_id"]').value.trim();
-      
-      if (!studentId || !/^[a-zA-Z0-9_-]{3,20}$/.test(studentId)) {
-        e.preventDefault();
-        alert('Student ID must be 3-20 alphanumeric characters (may include - or _)');
-        return false;
-      }
-      
-      if (!assignmentId || !/^[a-zA-Z0-9_-]{2,30}$/.test(assignmentId)) {
-        e.preventDefault();
-        alert('Assignment ID must be 2-30 alphanumeric characters (may include - or _)');
-        return false;
-      }
+<div class="mb-xl">
+    <h1>Mark Single Submission</h1>
+    <p class="text-secondary">
+        Upload a student submission ZIP file to run automated marking checks.
+        The system analyzes HTML, CSS, JavaScript, and optionally PHP/SQL.
+    </p>
+</div>
+
+<div class="card">
+    <form method="post" enctype="multipart/form-data" id="markForm">
+        <div class="grid grid-2">
+            <div class="form-group">
+                <label class="form-label" for="student_id">
+                    Student ID <span class="required">*</span>
+                </label>
+                <input type="text" id="student_id" name="student_id" class="form-input" required
+                    pattern="[a-zA-Z0-9_-]{3,20}" placeholder="e.g., s1234567" title="3-20 alphanumeric characters">
+                <p class="form-hint">3-20 alphanumeric characters (may include - or _)</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="assignment_id">
+                    Assignment ID <span class="required">*</span>
+                </label>
+                <input type="text" id="assignment_id" name="assignment_id" class="form-input" required
+                    pattern="[a-zA-Z0-9_-]{2,30}" placeholder="e.g., webdev_001" title="2-30 alphanumeric characters">
+                <p class="form-hint">2-30 alphanumeric characters</p>
+            </div>
+        </div>
+
+        <div class="grid grid-2">
+            <div class="form-group">
+                <label class="form-label" for="profile">Assessment Profile</label>
+                <select id="profile" name="profile" class="form-select">
+                    {% for prof in profiles %}
+                    <option value="{{ prof }}">{{ prof|capitalize }}</option>
+                    {% endfor %}
+                </select>
+                <p class="form-hint">Determines which components are evaluated</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="scoring_mode">Scoring Mode</label>
+                <select id="scoring_mode" name="scoring_mode" class="form-select">
+                    <option value="static_only">Static Analysis Only</option>
+                    <option value="static_plus_llm" selected>Static + LLM Feedback (Recommended)</option>
+                    <option value="llm_feedback_only">LLM Feedback Only</option>
+                    <option value="llm_override">LLM Override</option>
+                </select>
+                <p class="form-hint">Static-only is faster; LLM provides detailed feedback</p>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="submission">
+                Submission ZIP <span class="required">*</span>
+            </label>
+            <input type="file" id="submission" name="submission" class="form-file-input" accept=".zip" required>
+            <p class="form-hint">Maximum file size: 25 MB</p>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg btn-block">
+            📤 Upload &amp; Mark
+        </button>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.getElementById('markForm').addEventListener('submit', function (e) {
+        const studentId = this.student_id.value.trim();
+        const assignmentId = this.assignment_id.value.trim();
+
+        if (!/^[a-zA-Z0-9_-]{3,20}$/.test(studentId)) {
+            e.preventDefault();
+            alert('Student ID must be 3-20 alphanumeric characters');
+            return;
+        }
+
+        if (!/^[a-zA-Z0-9_-]{2,30}$/.test(assignmentId)) {
+            e.preventDefault();
+            alert('Assignment ID must be 2-30 alphanumeric characters');
+            return;
+        }
     });
-  </script>
+</script>
 {% endblock %}

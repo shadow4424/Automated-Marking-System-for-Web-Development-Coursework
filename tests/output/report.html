@@ -1,0 +1,1828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assessment Report</title>
+    <style>
+        /* Embedded Design System */
+        /*
+ * AMS Teacher Portal - Design System
+ * A modern, accessible CSS framework for the Automated Marking System.
+ * =============================================================================
+ */
+
+/* =============================================================================
+   1. CSS Custom Properties (Design Tokens)
+   ============================================================================= */
+
+:root {
+    /* Primary palette */
+    --primary-50: #eef2ff;
+    --primary-100: #e0e7ff;
+    --primary-200: #c7d2fe;
+    --primary-300: #a5b4fc;
+    --primary-400: #818cf8;
+    --primary-500: #6366f1;
+    --primary-600: #4f46e5;
+    --primary-700: #4338ca;
+    --primary-800: #3730a3;
+    --primary-900: #312e81;
+
+    /* Semantic colors */
+    --success: #10b981;
+    --success-bg: #d1fae5;
+    --success-text: #065f46;
+
+    --warning: #f59e0b;
+    --warning-bg: #fef3c7;
+    --warning-text: #92400e;
+
+    --danger: #ef4444;
+    --danger-bg: #fee2e2;
+    --danger-text: #991b1b;
+
+    --info: #3b82f6;
+    --info-bg: #dbeafe;
+    --info-text: #1e40af;
+
+    /* Neutral palette */
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-600: #4b5563;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    --gray-900: #111827;
+
+    /* Semantic neutrals */
+    --bg: var(--gray-50);
+    --bg-card: #ffffff;
+    --bg-elevated: #ffffff;
+    --text: var(--gray-900);
+    --text-secondary: var(--gray-600);
+    --text-muted: var(--gray-400);
+    --border: var(--gray-200);
+    --border-focus: var(--primary-500);
+
+    /* Spacing scale (4px base) */
+    --space-1: 0.25rem;   /* 4px */
+    --space-2: 0.5rem;    /* 8px */
+    --space-3: 0.75rem;   /* 12px */
+    --space-4: 1rem;      /* 16px */
+    --space-5: 1.25rem;   /* 20px */
+    --space-6: 1.5rem;    /* 24px */
+    --space-8: 2rem;      /* 32px */
+    --space-10: 2.5rem;   /* 40px */
+    --space-12: 3rem;     /* 48px */
+    --space-16: 4rem;     /* 64px */
+
+    /* Typography */
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace;
+
+    --text-xs: 0.75rem;   /* 12px */
+    --text-sm: 0.875rem;  /* 14px */
+    --text-base: 1rem;    /* 16px */
+    --text-lg: 1.125rem;  /* 18px */
+    --text-xl: 1.25rem;   /* 20px */
+    --text-2xl: 1.5rem;   /* 24px */
+    --text-3xl: 1.875rem; /* 30px */
+    --text-4xl: 2.25rem;  /* 36px */
+
+    --leading-tight: 1.25;
+    --leading-normal: 1.5;
+    --leading-relaxed: 1.625;
+
+    /* Borders & Shadows */
+    --radius-sm: 0.25rem;  /* 4px */
+    --radius-md: 0.5rem;   /* 8px */
+    --radius-lg: 0.75rem;  /* 12px */
+    --radius-xl: 1rem;     /* 16px */
+    --radius-full: 9999px;
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+
+    /* Transitions */
+    --transition-fast: 150ms ease;
+    --transition-base: 200ms ease;
+    --transition-slow: 300ms ease;
+}
+
+/* =============================================================================
+   2. Reset & Base Styles
+   ============================================================================= */
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+    color: var(--text);
+    background: var(--bg);
+    min-height: 100vh;
+}
+
+img, picture, video, canvas, svg {
+    display: block;
+    max-width: 100%;
+}
+
+input, button, textarea, select {
+    font: inherit;
+}
+
+a {
+    color: var(--primary-600);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+}
+
+a:hover {
+    color: var(--primary-700);
+    text-decoration: underline;
+}
+
+/* =============================================================================
+   3. Typography
+   ============================================================================= */
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    line-height: var(--leading-tight);
+    color: var(--text);
+}
+
+h1 { font-size: var(--text-3xl); }
+h2 { font-size: var(--text-2xl); }
+h3 { font-size: var(--text-xl); }
+h4 { font-size: var(--text-lg); }
+
+.text-xs { font-size: var(--text-xs); }
+.text-sm { font-size: var(--text-sm); }
+.text-base { font-size: var(--text-base); }
+.text-lg { font-size: var(--text-lg); }
+.text-xl { font-size: var(--text-xl); }
+.text-2xl { font-size: var(--text-2xl); }
+.text-3xl { font-size: var(--text-3xl); }
+
+.text-muted { color: var(--text-muted); }
+.text-secondary { color: var(--text-secondary); }
+.text-success { color: var(--success); }
+.text-warning { color: var(--warning); }
+.text-danger { color: var(--danger); }
+
+.font-mono { font-family: var(--font-mono); }
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.font-bold { font-weight: 700; }
+
+/* =============================================================================
+   4. Layout & Container
+   ============================================================================= */
+
+.container {
+    width: 100%;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+}
+
+.container-sm { max-width: 640px; }
+.container-md { max-width: 768px; }
+.container-lg { max-width: 1024px; }
+.container-xl { max-width: 1280px; }
+
+/* Flexbox utilities */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.flex-wrap { flex-wrap: wrap; }
+.items-center { align-items: center; }
+.items-start { align-items: flex-start; }
+.items-end { align-items: flex-end; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.justify-end { justify-content: flex-end; }
+.gap-1 { gap: var(--space-1); }
+.gap-2 { gap: var(--space-2); }
+.gap-3 { gap: var(--space-3); }
+.gap-4 { gap: var(--space-4); }
+.gap-6 { gap: var(--space-6); }
+.gap-8 { gap: var(--space-8); }
+
+/* Grid utilities */
+.grid { display: grid; }
+.grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+@media (max-width: 768px) {
+    .grid-cols-2, .grid-cols-3, .grid-cols-4 {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Spacing utilities */
+.m-0 { margin: 0; }
+.m-1 { margin: var(--space-1); }
+.m-2 { margin: var(--space-2); }
+.m-4 { margin: var(--space-4); }
+.mt-2 { margin-top: var(--space-2); }
+.mt-4 { margin-top: var(--space-4); }
+.mt-6 { margin-top: var(--space-6); }
+.mt-8 { margin-top: var(--space-8); }
+.mb-2 { margin-bottom: var(--space-2); }
+.mb-4 { margin-bottom: var(--space-4); }
+.mb-6 { margin-bottom: var(--space-6); }
+.mb-8 { margin-bottom: var(--space-8); }
+.ml-auto { margin-left: auto; }
+
+.p-0 { padding: 0; }
+.p-2 { padding: var(--space-2); }
+.p-3 { padding: var(--space-3); }
+.p-4 { padding: var(--space-4); }
+.p-6 { padding: var(--space-6); }
+.px-2 { padding-left: var(--space-2); padding-right: var(--space-2); }
+.px-4 { padding-left: var(--space-4); padding-right: var(--space-4); }
+.py-2 { padding-top: var(--space-2); padding-bottom: var(--space-2); }
+.py-4 { padding-top: var(--space-4); padding-bottom: var(--space-4); }
+
+/* =============================================================================
+   5. Header & Navigation
+   ============================================================================= */
+
+.header {
+    background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-800) 100%);
+    color: white;
+    padding: var(--space-6) var(--space-4);
+    box-shadow: var(--shadow-lg);
+}
+
+.header h1 {
+    color: white;
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    margin: 0;
+}
+
+.header-nav {
+    display: flex;
+    gap: var(--space-6);
+    margin-top: var(--space-4);
+}
+
+.header-nav a {
+    color: rgba(255, 255, 255, 0.85);
+    font-weight: 500;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+}
+
+.header-nav a:hover,
+.header-nav a.active {
+    color: white;
+    background: rgba(255, 255, 255, 0.15);
+    text-decoration: none;
+}
+
+/* =============================================================================
+   6. Cards
+   ============================================================================= */
+
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow var(--transition-base), transform var(--transition-base);
+}
+
+.card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.card-clickable:hover {
+    transform: translateY(-2px);
+    cursor: pointer;
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--border);
+}
+
+.card-title {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.card-body {
+    color: var(--text-secondary);
+}
+
+.card-footer {
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
+}
+
+/* =============================================================================
+   7. Buttons
+   ============================================================================= */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    line-height: 1.5;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-decoration: none;
+}
+
+.btn:hover {
+    text-decoration: none;
+}
+
+.btn:focus {
+    outline: 2px solid var(--primary-300);
+    outline-offset: 2px;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: var(--primary-600);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: var(--primary-700);
+    color: white;
+}
+
+.btn-secondary {
+    background: white;
+    color: var(--text);
+    border-color: var(--border);
+}
+
+.btn-secondary:hover {
+    background: var(--gray-50);
+    border-color: var(--gray-300);
+    color: var(--text);
+}
+
+.btn-success {
+    background: var(--success);
+    color: white;
+}
+
+.btn-success:hover {
+    background: #059669;
+    color: white;
+}
+
+.btn-danger {
+    background: var(--danger);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+    color: white;
+}
+
+.btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+    background: var(--gray-100);
+    color: var(--text);
+}
+
+.btn-sm {
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+}
+
+.btn-lg {
+    padding: var(--space-3) var(--space-6);
+    font-size: var(--text-base);
+}
+
+/* =============================================================================
+   8. Badges & Pills
+   ============================================================================= */
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    border-radius: var(--radius-full);
+    white-space: nowrap;
+}
+
+.badge-success {
+    background: var(--success-bg);
+    color: var(--success-text);
+}
+
+.badge-warning {
+    background: var(--warning-bg);
+    color: var(--warning-text);
+}
+
+.badge-danger {
+    background: var(--danger-bg);
+    color: var(--danger-text);
+}
+
+.badge-info {
+    background: var(--info-bg);
+    color: var(--info-text);
+}
+
+.badge-neutral {
+    background: var(--gray-100);
+    color: var(--gray-700);
+}
+
+/* Score Badge (circular) */
+.score-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    font-size: var(--text-sm);
+    font-weight: 700;
+    color: white;
+}
+
+.score-badge.high { background: var(--success); }
+.score-badge.medium { background: var(--warning); }
+.score-badge.low { background: var(--danger); }
+
+/* =============================================================================
+   9. Forms & Inputs
+   ============================================================================= */
+
+.form-group {
+    margin-bottom: var(--space-4);
+}
+
+.form-label {
+    display: block;
+    margin-bottom: var(--space-2);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text);
+}
+
+.form-input,
+.form-select {
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    color: var(--text);
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.form-input:focus,
+.form-select:focus {
+    outline: none;
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.form-input::placeholder {
+    color: var(--text-muted);
+}
+
+.form-input-sm {
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-xs);
+}
+
+/* =============================================================================
+   10. Tables
+   ============================================================================= */
+
+.table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+}
+
+th, td {
+    padding: var(--space-3) var(--space-4);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+
+th {
+    background: var(--gray-50);
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+tbody tr {
+    transition: background var(--transition-fast);
+}
+
+tbody tr:hover {
+    background: var(--gray-50);
+}
+
+/* =============================================================================
+   11. Alerts & Flash Messages
+   ============================================================================= */
+
+.alert {
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-4);
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+}
+
+.alert-success {
+    background: var(--success-bg);
+    border: 1px solid #a7f3d0;
+    color: var(--success-text);
+}
+
+.alert-warning {
+    background: var(--warning-bg);
+    border: 1px solid #fcd34d;
+    color: var(--warning-text);
+}
+
+.alert-danger {
+    background: var(--danger-bg);
+    border: 1px solid #fecaca;
+    color: var(--danger-text);
+}
+
+.alert-info {
+    background: var(--info-bg);
+    border: 1px solid #93c5fd;
+    color: var(--info-text);
+}
+
+/* Flash messages (legacy support) */
+.flash {
+    background: var(--warning-bg);
+    border: 1px solid #fcd34d;
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-4);
+    border-radius: var(--radius-md);
+    color: var(--warning-text);
+}
+
+.flash.error {
+    background: var(--danger-bg);
+    border-color: #fecaca;
+    color: var(--danger-text);
+}
+
+/* =============================================================================
+   12. Toolbar (Filter Bar)
+   ============================================================================= */
+
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-4);
+}
+
+.toolbar-search {
+    flex: 1;
+    min-width: 200px;
+}
+
+.toolbar-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.filter-select {
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-sm);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: white;
+    cursor: pointer;
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: var(--primary-500);
+}
+
+/* Toggle buttons for severity filters */
+.toggle-group {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.toggle-btn {
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    background: white;
+    border: none;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border-right: 1px solid var(--border);
+}
+
+.toggle-btn:last-child {
+    border-right: none;
+}
+
+.toggle-btn:hover {
+    background: var(--gray-100);
+}
+
+.toggle-btn.active {
+    background: var(--primary-600);
+    color: white;
+}
+
+.toggle-btn.active-success {
+    background: var(--success);
+    color: white;
+}
+
+.toggle-btn.active-warning {
+    background: var(--warning);
+    color: white;
+}
+
+.toggle-btn.active-danger {
+    background: var(--danger);
+    color: white;
+}
+
+/* =============================================================================
+   13. Collapsible Sections (Details/Summary)
+   ============================================================================= */
+
+details {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-4);
+    background: var(--bg-card);
+}
+
+summary {
+    padding: var(--space-3) var(--space-4);
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: var(--gray-50);
+    border-radius: var(--radius-md);
+    transition: background var(--transition-fast);
+}
+
+summary:hover {
+    background: var(--gray-100);
+}
+
+details[open] summary {
+    border-bottom: 1px solid var(--border);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+details .content {
+    padding: var(--space-4);
+}
+
+/* =============================================================================
+   14. Finding Cards (Issues)
+   ============================================================================= */
+
+.finding-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--gray-400);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    margin-bottom: var(--space-3);
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.finding-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.finding-card.severity-fail {
+    border-left-color: var(--danger);
+}
+
+.finding-card.severity-warn {
+    border-left-color: var(--warning);
+}
+
+.finding-card.severity-pass {
+    border-left-color: var(--success);
+}
+
+.finding-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+}
+
+.finding-rule-id {
+    font-weight: 600;
+    color: var(--primary-700);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+}
+
+.finding-message {
+    color: var(--text);
+    margin-bottom: var(--space-3);
+}
+
+.finding-evidence {
+    background: var(--gray-50);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    overflow-x: auto;
+    color: var(--text-secondary);
+}
+
+/* Hidden state for filtering */
+.finding-card.hidden,
+tr.hidden {
+    display: none !important;
+}
+
+/* =============================================================================
+   15. Utility Classes
+   ============================================================================= */
+
+.hidden { display: none !important; }
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
+.truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+
+.w-full { width: 100%; }
+.h-full { height: 100%; }
+
+/* =============================================================================
+   16. Main Content Area
+   ============================================================================= */
+
+main {
+    padding: var(--space-8) 0;
+    min-height: calc(100vh - 120px);
+}
+
+.page-header {
+    margin-bottom: var(--space-6);
+}
+
+.page-title {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: var(--space-2);
+}
+
+.page-subtitle {
+    color: var(--text-secondary);
+    font-size: var(--text-base);
+}
+
+/* =============================================================================
+   17. Run Cards (Dashboard Items)
+   ============================================================================= */
+
+.run-card {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-4);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-3);
+    transition: all var(--transition-fast);
+}
+
+.run-card:hover {
+    border-color: var(--primary-300);
+    box-shadow: var(--shadow-md);
+    transform: translateX(4px);
+}
+
+.run-card-score {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 60px;
+}
+
+.run-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.run-card-id {
+    font-weight: 600;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+}
+
+.run-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+}
+
+.run-card-actions {
+    display: flex;
+    gap: var(--space-2);
+}
+
+/* =============================================================================
+   18. Empty States
+   ============================================================================= */
+
+.empty-state {
+    text-align: center;
+    padding: var(--space-12);
+    color: var(--text-secondary);
+}
+
+.empty-state-icon {
+    font-size: 3rem;
+    margin-bottom: var(--space-4);
+    opacity: 0.5;
+}
+
+.empty-state-title {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: var(--space-2);
+}
+
+.empty-state-message {
+    font-size: var(--text-sm);
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+/* =============================================================================
+   19. Responsive Adjustments
+   ============================================================================= */
+
+@media (max-width: 768px) {
+    .header {
+        padding: var(--space-4);
+    }
+
+    .header h1 {
+        font-size: var(--text-xl);
+    }
+
+    .header-nav {
+        gap: var(--space-3);
+    }
+
+    .toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .toolbar-search {
+        width: 100%;
+    }
+
+    .run-card {
+        grid-template-columns: 1fr;
+        text-align: center;
+    }
+
+    .run-card-score {
+        flex-direction: row;
+        justify-content: center;
+        gap: var(--space-2);
+    }
+
+    .run-card-actions {
+        justify-content: center;
+    }
+}
+
+/* =============================================================================
+   20. Print Styles
+   ============================================================================= */
+
+@media print {
+    .header,
+    .toolbar,
+    .btn,
+    .run-card-actions {
+        display: none !important;
+    }
+
+    body {
+        background: white;
+        font-size: 12pt;
+    }
+
+    .card {
+        box-shadow: none;
+        border: 1px solid #ccc;
+        page-break-inside: avoid;
+    }
+}
+
+
+        /* Report-Specific Overrides */
+        body {
+            background: var(--bg);
+            padding-bottom: 4rem;
+        }
+
+        .report-header {
+            background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-800) 100%);
+            color: white;
+            padding: 3rem 1rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-md);
+        }
+
+        .report-container {
+            max-width: 1000px;
+            margin: -3rem auto 0;
+            padding: 0 1rem;
+            position: relative;
+            z-index: 10;
+        }
+
+        .score-card {
+            background: white;
+            border-radius: var(--radius-xl);
+            padding: 2rem;
+            box-shadow: var(--shadow-lg);
+            text-align: center;
+            margin-bottom: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Circular Score Chart */
+        .score-circle {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background: conic-gradient(
+                var(--grade-color, var(--primary-500)) calc(var(--score-pct, 0) * 1%),
+                var(--gray-200) 0
+            );
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+            position: relative;
+        }
+
+        .score-inner {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .score-value {
+            font-size: 3rem;
+            font-weight: 800;
+            line-height: 1;
+            color: var(--grade-color, var(--primary-600));
+        }
+
+        .score-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        /* Component Table */
+        .component-table {
+            width: 100%;
+            margin-top: 1rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+        
+        .component-table th { background: var(--gray-50); }
+        .component-table td { background: white; }
+
+        /* Finding Cards */
+        .finding-card {
+            background: white;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            border-left-width: 4px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .finding-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .finding-card.severity-FAIL { border-left-color: var(--danger); }
+        .finding-card.severity-WARN { border-left-color: var(--warning); }
+        .finding-card.severity-PASS { border-left-color: var(--success); }
+
+        .finding-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.75rem;
+        }
+
+        .finding-id {
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            background: var(--gray-100);
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+        }
+
+        .ai-feedback {
+            background: #fdf4ff; /* purple-50 */
+            border: 1px solid #f0abfc; /* purple-300 */
+            border-radius: var(--radius-md);
+            padding: 1rem;
+            margin-top: 1rem;
+            position: relative;
+        }
+
+        .ai-badge {
+            position: absolute;
+            top: -0.75rem;
+            left: 1rem;
+            background: #d8b4fe; /* purple-300 */
+            color: #6b21a8; /* purple-800 */
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.1rem 0.5rem;
+            border-radius: 1rem;
+            border: 1px solid white;
+        }
+
+        /* Vision Section */
+        .vision-item {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .vision-item:last-child {
+            border-bottom: none;
+        }
+
+        .vision-content { flex: 1; }
+        
+        .vision-screenshot {
+            width: 200px;
+            flex-shrink: 0;
+        }
+
+        .vision-screenshot img {
+            width: 100%;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .vision-screenshot img:hover {
+            transform: scale(1.05);
+        }
+
+        @media (max-width: 768px) {
+            .vision-item { flex-direction: column; }
+            .vision-screenshot { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="report-header">
+        <h1>Assessment Report</h1>
+        <div class="mt-2 text-primary-200">
+            frontend | 2024-01-01T12:00:00Z
+        </div>
+    </header>
+
+    <div class="report-container">
+        
+        <!-- Score Overview -->
+        <div class="score-card">
+            
+            
+            
+                
+            
+
+            <div class="score-circle" style="--score-pct: 85.5; --grade-color: #10b981">
+                <div class="score-inner">
+                    <span class="score-value" style="--grade-color: #10b981">86%</span>
+                    <span class="score-label">85.5 / 100.0</span>
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
+                <div class="p-4 bg-gray-50 rounded-lg">
+                    <div class="text-2xl font-bold">2</div>
+                    <div class="text-xs text-gray-500 uppercase">Total Checks</div>
+                </div>
+                <div class="p-4 bg-red-50 text-red-700 rounded-lg">
+                    <div class="text-2xl font-bold">1</div>
+                    <div class="text-xs opacity-75 uppercase">Failed</div>
+                </div>
+                <div class="p-4 bg-yellow-50 text-yellow-700 rounded-lg">
+                    <div class="text-2xl font-bold">1</div>
+                    <div class="text-xs opacity-75 uppercase">Warnings</div>
+                </div>
+                <div class="p-4 bg-purple-50 text-purple-700 rounded-lg">
+                    <div class="text-2xl font-bold">1</div>
+                    <div class="text-xs opacity-75 uppercase">AI Feedback</div>
+                </div>
+            </div>
+
+            <!-- Component Breakdown -->
+             
+             <div class="component-table">
+                 <table>
+                     <thead>
+                         <tr>
+                             <th>Component</th>
+                             <th>Score</th>
+                             <th>Status</th>
+                         </tr>
+                     </thead>
+                     <tbody>
+                         
+                         <tr>
+                             <td class="font-medium capitalize">html</td>
+                             <td>1.0</td>
+                             <td>
+                                 
+                                     <span class="badge badge-success">Perfect</span>
+                                 
+                             </td>
+                         </tr>
+                         
+                         <tr>
+                             <td class="font-medium capitalize">css</td>
+                             <td>0.5</td>
+                             <td>
+                                 
+                                     <span class="badge badge-warning">Partial</span>
+                                 
+                             </td>
+                         </tr>
+                         
+                         <tr>
+                             <td class="font-medium capitalize">js</td>
+                             <td>1.0</td>
+                             <td>
+                                 
+                                     <span class="badge badge-success">Perfect</span>
+                                 
+                             </td>
+                         </tr>
+                         
+                     </tbody>
+                 </table>
+             </div>
+             
+        </div>
+
+        <!-- Findings Section -->
+        <h2 class="text-2xl font-bold mb-4 flex items-center gap-2">
+            <span>🔍 Detailed Findings</span>
+            <span class="text-base font-normal text-muted" id="visible-finding-count"></span>
+        </h2>
+
+        <!-- Filters -->
+        <div class="toolbar sticky top-4 z-20 mb-6">
+            <div class="toolbar-search">
+                <input type="text" id="findings-search" class="form-input" placeholder="Search findings...">
+            </div>
+            <div class="toolbar-filters">
+                <div class="toggle-group">
+                    <button class="toggle-btn active active-danger" data-severity-toggle="FAIL">FAIL</button>
+                    <button class="toggle-btn active active-warning" data-severity-toggle="WARN">WARN</button>
+                    <button class="toggle-btn active active-success" data-severity-toggle="PASS">PASS</button>
+                </div>
+                <button id="show-only-fail" class="btn btn-sm btn-secondary">Show Only Fail</button>
+            </div>
+        </div>
+
+        <div id="findings-list">
+            
+                
+                <div class="finding-card severity-FAIL" 
+                     data-finding-id="HTML.REQ.001"
+                     data-severity="FAIL"
+                     data-message="Missing &lt;header&gt; element."
+                     data-component="html">
+                    
+                    <div class="finding-header">
+                        <div>
+                            <span class="finding-id">HTML.REQ.001</span>
+                            <span class="badge ml-2 badge-danger">
+                                FAIL
+                            </span>
+                        </div>
+                        <span class="text-xs text-muted uppercase tracking-wider">html</span>
+                    </div>
+
+                    <p class="text-gray-800 mb-2">Missing &lt;header&gt; element.</p>
+
+                    <!-- AI Feedback -->
+                    
+                    <div class="ai-feedback">
+                        <span class="ai-badge">✨ AI Feedback</span>
+                        <div class="prose text-sm text-purple-900">
+                            The header tag is missing.
+                        </div>
+                    </div>
+                    
+
+                    <!-- Evidence / Snippet -->
+                    
+                    <details class="mt-3">
+                        <summary class="text-xs text-muted">Show Evidence</summary>
+                        <div class="content bg-gray-50 rounded-b-md border-t border-gray-200 mt-0">
+                            <pre class="text-xs font-mono overflow-x-auto p-2">{
+  "llm_feedback": {
+    "reason": "The header tag is missing."
+  }
+}</pre>
+                        </div>
+                    </details>
+                    
+                </div>
+            
+                
+                <div class="finding-card severity-WARN" 
+                     data-finding-id="CSS.REQ.002"
+                     data-severity="WARN"
+                     data-message="Use a flexbox layout."
+                     data-component="css">
+                    
+                    <div class="finding-header">
+                        <div>
+                            <span class="finding-id">CSS.REQ.002</span>
+                            <span class="badge ml-2 badge-warning">
+                                WARN
+                            </span>
+                        </div>
+                        <span class="text-xs text-muted uppercase tracking-wider">css</span>
+                    </div>
+
+                    <p class="text-gray-800 mb-2">Use a flexbox layout.</p>
+
+                    <!-- AI Feedback -->
+                    
+
+                    <!-- Evidence / Snippet -->
+                    
+                    <details class="mt-3">
+                        <summary class="text-xs text-muted">Show Evidence</summary>
+                        <div class="content bg-gray-50 rounded-b-md border-t border-gray-200 mt-0">
+                            <pre class="text-xs font-mono overflow-x-auto p-2">{
+  "content": "display: block;"
+}</pre>
+                        </div>
+                    </details>
+                    
+                </div>
+            
+        </div>
+        
+        <!-- Vision Analysis (if available) -->
+        
+        <section class="mt-8 mb-8">
+            <h2 class="text-2xl font-bold mb-4">👁️ Vision Analysis</h2>
+            <div class="card">
+                
+                <div class="vision-item">
+                    <div class="vision-screenshot">
+                        
+                             <div class="bg-gray-100 h-32 flex items-center justify-center text-xs text-muted rounded">No Image</div>
+                        
+                    </div>
+                    <div class="vision-content">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-bold">VISUAL.CSS.001</h4>
+                            <span class="badge badge-success">
+                                PASS
+                            </span>
+                        </div>
+                        <p class="text-sm text-gray-700">
+                            No visual issues detected.
+                        </p>
+                    </div>
+                </div>
+                
+            </div>
+        </section>
+        
+
+    </div>
+
+    <footer class="text-center py-8 text-muted text-sm border-t mt-8">
+        <p>Generated by Automated Marking System</p>
+    </footer>
+
+    <script>
+        // Embedded Client Logic
+        /**
+ * AMS Teacher Portal - Client-Side Application Logic
+ * =============================================================================
+ * Provides filtering, search, and interactivity for the Teacher Portal.
+ */
+
+(function() {
+    'use strict';
+
+    // ==========================================================================
+    // Utility Functions
+    // ==========================================================================
+
+    /**
+     * Debounce function to limit rapid-fire events (e.g., search input).
+     */
+    function debounce(func, wait) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+
+    /**
+     * Copy text to clipboard with fallback for older browsers.
+     */
+    function copyToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(text);
+        }
+        // Fallback for older browsers
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+        } catch (e) {
+            console.error('Copy failed:', e);
+        }
+        document.body.removeChild(textarea);
+        return Promise.resolve();
+    }
+
+    /**
+     * Show a temporary toast notification.
+     */
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            background: ${type === 'success' ? '#10b981' : '#3b82f6'};
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 9999;
+            animation: slideIn 0.3s ease;
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease';
+            setTimeout(() => toast.remove(), 300);
+        }, 2000);
+    }
+
+    // ==========================================================================
+    // Dashboard Filtering (Runs List)
+    // ==========================================================================
+
+    function initDashboardFilters() {
+        const searchInput = document.getElementById('dashboard-search');
+        const profileFilter = document.getElementById('filter-profile');
+        const modeFilter = document.getElementById('filter-mode');
+        const statusFilter = document.getElementById('filter-status');
+        const runRows = document.querySelectorAll('[data-run-id]');
+
+        if (!searchInput || runRows.length === 0) return;
+
+        function applyFilters() {
+            const query = searchInput.value.toLowerCase().trim();
+            const profile = profileFilter ? profileFilter.value : '';
+            const mode = modeFilter ? modeFilter.value : '';
+            const status = statusFilter ? statusFilter.value : '';
+
+            let visibleCount = 0;
+
+            runRows.forEach(row => {
+                const runId = (row.dataset.runId || '').toLowerCase();
+                const studentId = (row.dataset.studentId || '').toLowerCase();
+                const runProfile = row.dataset.profile || '';
+                const runMode = row.dataset.mode || '';
+                const runStatus = row.dataset.status || '';
+
+                // Check search query
+                const matchesQuery = !query || 
+                    runId.includes(query) || 
+                    studentId.includes(query);
+
+                // Check filters
+                const matchesProfile = !profile || runProfile === profile;
+                const matchesMode = !mode || runMode === mode;
+                const matchesStatus = !status || runStatus === status;
+
+                const isVisible = matchesQuery && matchesProfile && matchesMode && matchesStatus;
+
+                row.classList.toggle('hidden', !isVisible);
+                if (isVisible) visibleCount++;
+            });
+
+            // Update count display if present
+            const countDisplay = document.getElementById('visible-run-count');
+            if (countDisplay) {
+                countDisplay.textContent = `${visibleCount} run${visibleCount !== 1 ? 's' : ''}`;
+            }
+        }
+
+        // Attach event listeners
+        searchInput.addEventListener('input', debounce(applyFilters, 150));
+        if (profileFilter) profileFilter.addEventListener('change', applyFilters);
+        if (modeFilter) modeFilter.addEventListener('change', applyFilters);
+        if (statusFilter) statusFilter.addEventListener('change', applyFilters);
+
+        // Read initial filter state from URL params
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('q')) searchInput.value = params.get('q');
+        if (params.get('profile') && profileFilter) profileFilter.value = params.get('profile');
+        if (params.get('mode') && modeFilter) modeFilter.value = params.get('mode');
+        if (params.get('status') && statusFilter) statusFilter.value = params.get('status');
+
+        // Apply initial filters
+        applyFilters();
+    }
+
+    // ==========================================================================
+    // Run Detail: Findings Filtering
+    // ==========================================================================
+
+    function initFindingsFilter() {
+        const searchInput = document.getElementById('findings-search');
+        const severityToggles = document.querySelectorAll('[data-severity-toggle]');
+        const componentFilter = document.getElementById('filter-component');
+        const findingCards = document.querySelectorAll('[data-finding-id]');
+        const resetBtn = document.getElementById('reset-filters');
+
+        if (!findingCards.length) return;
+
+        // Track active severity filters (default: all visible)
+        const activeSeverities = new Set(['FAIL', 'WARN', 'PASS', 'INFO']);
+
+        function applyFilters() {
+            const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+            const component = componentFilter ? componentFilter.value : '';
+
+            let visibleCount = 0;
+
+            findingCards.forEach(card => {
+                const findingId = (card.dataset.findingId || '').toLowerCase();
+                const message = (card.dataset.message || '').toLowerCase();
+                const cardSeverity = (card.dataset.severity || '').toUpperCase();
+                const cardComponent = card.dataset.component || '';
+
+                // Check search query
+                const matchesQuery = !query || 
+                    findingId.includes(query) || 
+                    message.includes(query);
+
+                // Check severity
+                const matchesSeverity = activeSeverities.has(cardSeverity);
+
+                // Check component
+                const matchesComponent = !component || cardComponent === component;
+
+                const isVisible = matchesQuery && matchesSeverity && matchesComponent;
+
+                card.classList.toggle('hidden', !isVisible);
+                if (isVisible) visibleCount++;
+            });
+
+            // Update count
+            const countDisplay = document.getElementById('visible-finding-count');
+            if (countDisplay) {
+                countDisplay.textContent = `${visibleCount} finding${visibleCount !== 1 ? 's' : ''}`;
+            }
+        }
+
+        // Severity toggle buttons
+        severityToggles.forEach(btn => {
+            const severity = btn.dataset.severityToggle;
+            
+            // Set initial state
+            btn.classList.add('active');
+
+            btn.addEventListener('click', () => {
+                if (activeSeverities.has(severity)) {
+                    activeSeverities.delete(severity);
+                    btn.classList.remove('active');
+                } else {
+                    activeSeverities.add(severity);
+                    btn.classList.add('active');
+                }
+                applyFilters();
+            });
+        });
+
+        // "Show only FAIL" quick toggle
+        const showOnlyFail = document.getElementById('show-only-fail');
+        if (showOnlyFail) {
+            showOnlyFail.addEventListener('click', () => {
+                activeSeverities.clear();
+                activeSeverities.add('FAIL');
+                severityToggles.forEach(btn => {
+                    const sev = btn.dataset.severityToggle;
+                    btn.classList.toggle('active', sev === 'FAIL');
+                });
+                applyFilters();
+            });
+        }
+
+        // Search input
+        if (searchInput) {
+            searchInput.addEventListener('input', debounce(applyFilters, 150));
+        }
+
+        // Component filter
+        if (componentFilter) {
+            componentFilter.addEventListener('change', applyFilters);
+        }
+
+        // Reset button
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                if (searchInput) searchInput.value = '';
+                if (componentFilter) componentFilter.value = '';
+                activeSeverities.clear();
+                ['FAIL', 'WARN', 'PASS', 'INFO'].forEach(s => activeSeverities.add(s));
+                severityToggles.forEach(btn => btn.classList.add('active'));
+                applyFilters();
+            });
+        }
+
+        // Read initial filter state from URL params
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('q') && searchInput) searchInput.value = params.get('q');
+        if (params.get('severity')) {
+            activeSeverities.clear();
+            params.get('severity').split(',').forEach(s => activeSeverities.add(s.toUpperCase()));
+            severityToggles.forEach(btn => {
+                const sev = btn.dataset.severityToggle;
+                btn.classList.toggle('active', activeSeverities.has(sev));
+            });
+        }
+        if (params.get('component') && componentFilter) {
+            componentFilter.value = params.get('component');
+        }
+
+        // Apply initial filters
+        applyFilters();
+    }
+
+    // ==========================================================================
+    // Collapsible Sections (Expand/Collapse All)
+    // ==========================================================================
+
+    function initCollapsibles() {
+        const expandAllBtn = document.getElementById('expand-all');
+        const collapseAllBtn = document.getElementById('collapse-all');
+        const details = document.querySelectorAll('details');
+
+        if (expandAllBtn) {
+            expandAllBtn.addEventListener('click', () => {
+                details.forEach(d => d.open = true);
+            });
+        }
+
+        if (collapseAllBtn) {
+            collapseAllBtn.addEventListener('click', () => {
+                details.forEach(d => d.open = false);
+            });
+        }
+    }
+
+    // ==========================================================================
+    // Copy to Clipboard Buttons
+    // ==========================================================================
+
+    function initCopyButtons() {
+        const copyButtons = document.querySelectorAll('[data-copy-target]');
+
+        copyButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetId = btn.dataset.copyTarget;
+                const target = document.getElementById(targetId);
+                
+                if (target) {
+                    const text = target.textContent || target.value || '';
+                    copyToClipboard(text).then(() => {
+                        showToast('Copied to clipboard!', 'success');
+                        // Visual feedback
+                        const originalText = btn.textContent;
+                        btn.textContent = '✓ Copied';
+                        setTimeout(() => btn.textContent = originalText, 1500);
+                    });
+                }
+            });
+        });
+
+        // Also handle inline copy buttons with data-copy-text
+        const inlineCopyButtons = document.querySelectorAll('[data-copy-text]');
+        inlineCopyButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const text = btn.dataset.copyText;
+                copyToClipboard(text).then(() => {
+                    showToast('Copied to clipboard!', 'success');
+                });
+            });
+        });
+    }
+
+    // ==========================================================================
+    // Initialization
+    // ==========================================================================
+
+    function init() {
+        initDashboardFilters();
+        initFindingsFilter();
+        initCollapsibles();
+        initCopyButtons();
+
+        console.log('AMS Portal JS initialized');
+    }
+
+    // Run on DOM ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+
+    // Add CSS for toast animations
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+    `;
+    document.head.appendChild(style);
+
+})();
+
+    </script>
+</body>
+</html>

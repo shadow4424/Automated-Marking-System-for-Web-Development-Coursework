@@ -1,222 +1,207 @@
 {% extends "base.html" %}
+{% block title %}Run Detail - AMS{% endblock %}
+
 {% block content %}
-  <div style="margin-bottom: 1.5rem;">
-    <h2>Run {{ run_id }}</h2>
-    <div style="display: flex; gap: 1.5rem; margin-top: 0.5rem; flex-wrap: wrap;">
-      <span><strong>Mode:</strong> {{ run.mode if run.mode is defined else run['mode'] }}</span>
-      <span><strong>Profile:</strong> {{ run.profile if run.profile is defined else run['profile'] }}</span>
-      {% if run.created_at %}
-      <span><strong>Created:</strong> {{ run.created_at }}</span>
-      {% endif %}
-      {% if run.student_id %}
-      <span><strong>Student ID:</strong> {{ run.student_id }}</span>
-      {% endif %}
-      {% if run.assignment_id %}
-      <span><strong>Assignment ID:</strong> {{ run.assignment_id }}</span>
-      {% endif %}
+{# Header #}
+<div class="flex justify-between items-start flex-wrap gap-md mb-xl">
+    <div>
+        <nav class="text-sm text-muted mb-sm">
+            {% if batch_submission_id %}
+            <a href="{{ back_url }}" class="btn btn-ghost btn-sm">← Back to Batch Results</a>
+            {% else %}
+            <a href="{{ url_for('runs') }}">Runs</a> / {{ run_id[:24] }}...
+            {% endif %}
+        </nav>
+        <h1 class="mb-sm">
+            {% if run.mode == 'batch' %}📦{% else %}📝{% endif %}
+            {{ run.profile|default('Unknown')|capitalize }} Assessment
+        </h1>
+        <div class="flex gap-md text-secondary">
+            <span class="badge {% if run.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">
+                {{ run.mode or 'mark' }}
+            </span>
+            {% if run.student_id %}<span>👤 {{ run.student_id }}</span>{% endif %}
+            {% if run.assignment_id %}<span>📁 {{ run.assignment_id }}</span>{% endif %}
+            {% if run.created_at %}<span>📅 {{ run.created_at[:10] }}</span>{% endif %}
+        </div>
     </div>
-    {% if run.original_filename %}
-    <div style="margin-top: 0.5rem; color: #666; font-size: 0.9em;">
-      <strong>Original Filename:</strong> {{ run.original_filename }}
+    <div class="flex gap-sm">
+        {% if run.mode == 'batch' %}
+        <a href="{{ url_for('download', run_id=run_id, filename='batch_summary.json') }}"
+            class="btn btn-secondary btn-sm">⬇️ Download JSON</a>
+        <a href="{{ url_for('download', run_id=run_id, filename='batch_summary.csv') }}"
+            class="btn btn-secondary btn-sm">⬇️ Download Summary</a>
+        <a href="{{ url_for('download', run_id=run_id, filename='batch_reports.zip') }}"
+            class="btn btn-primary btn-sm">⬇️ Download All</a>
+        {% else %}
+        <a href="{{ url_for('download', run_id=run_id, filename='report.json') }}" class="btn btn-secondary btn-sm">⬇️
+            Download JSON</a>
+        <a href="{{ url_for('download', run_id=run_id, filename='summary.txt') }}" class="btn btn-secondary btn-sm">⬇️
+            Download Summary</a>
+        <a href="{{ url_for('download_bundle', run_id=run_id) }}" class="btn btn-primary btn-sm">⬇️ Download All</a>
+        {% endif %}
     </div>
+</div>
+
+{# Single Run Report #}
+{% if report %}
+<div class="grid grid-auto mb-xl">
+    <div class="card stat-card">
+        {% set score = (report.scores.overall|default(0)) * 100 %}
+        {% if score >= 70 %}
+        <div class="stat-value text-success">{{ score|round|int }}%</div>
+        {% elif score >= 40 %}
+        <div class="stat-value text-warning">{{ score|round|int }}%</div>
+        {% else %}
+        <div class="stat-value text-danger">{{ score|round|int }}%</div>
+        {% endif %}
+        <div class="stat-label">Overall Score</div>
+    </div>
+    {% for comp, data in (report.scores.by_component or {}).items() %}
+    <div class="card stat-card">
+        <div class="stat-value">{{ ((data.score|default(0)) * 100)|round|int }}%</div>
+        <div class="stat-label">{{ comp|upper }}</div>
+    </div>
+    {% endfor %}
+</div>
+
+{# Findings Toolbar #}
+{% set findings = report.findings|default([]) %}
+<div class="toolbar findings-toolbar">
+    <div class="toolbar-search">
+        <input type="search" class="form-input" data-findings-search placeholder="Search findings...">
+    </div>
+    <div class="toolbar-filters">
+        <button type="button" class="filter-toggle" data-severity="info">✓ Pass</button>
+        <button type="button" class="filter-toggle" data-severity="warn">⚠ Warn</button>
+        <button type="button" class="filter-toggle" data-severity="fail">✗ Fail</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-reset>Reset</button>
+    </div>
+    <span class="toolbar-count" data-findings-count>{{ findings|length }} findings</span>
+</div>
+
+<div class="flex gap-sm mb-lg">
+    <button type="button" class="btn btn-secondary btn-sm" data-expand-all>Expand All</button>
+    <button type="button" class="btn btn-secondary btn-sm" data-collapse-all>Collapse All</button>
+</div>
+
+{# Findings List #}
+{% for finding in findings %}
+{% set sev = finding.severity|default('WARN')|upper %}
+<div class="finding finding-{{ 'pass' if sev == 'INFO' else ('fail' if sev == 'FAIL' else 'warn') }}"
+    data-severity="{{ sev|lower }}" data-rule-id="{{ finding.id|default('') }}"
+    data-component="{{ finding.category|default('') }}">
+    <div class="finding-header">
+        <span class="finding-id">{{ finding.id|default('unknown') }}</span>
+        <span class="badge badge-{{ 'success' if sev == 'INFO' else ('danger' if sev == 'FAIL' else 'warning') }}">
+            {{ sev }}
+        </span>
+    </div>
+    <p class="finding-message">{{ finding.message|default('No message') }}</p>
+    {% if finding.evidence %}
+    <details>
+        <summary class="text-sm">Evidence</summary>
+        <pre class="finding-evidence details-content">{{ finding.evidence }}</pre>
+    </details>
     {% endif %}
-  </div>
+    {% if finding.llm_feedback %}
+    <details>
+        <summary class="text-sm">💡 AI Feedback</summary>
+        <div class="details-content text-secondary">{{ finding.llm_feedback }}</div>
+    </details>
+    {% endif %}
+</div>
+{% else %}
+<div class="empty-state card">
+    <div class="empty-state-icon">✅</div>
+    <h3 class="empty-state-title">No findings</h3>
+    <p class="empty-state-text">The submission has no specific findings to display.</p>
+</div>
+{% endfor %}
 
-  {% if run.mode == "mark" or run["mode"] == "mark" %}
-      {% if report %}
-        {% if report.environment and (not report.environment.php_available or not report.environment.browser_available or not report.environment.behavioural_tests_run or not report.environment.browser_tests_run) %}
-          <div style="padding: 1rem; background: #fff3cd; border: 1px solid #ffecb5; border-radius: 4px; margin-bottom: 1rem;">
-            <strong>Environment notice:</strong> Some runtime checks were unavailable in this environment. PHP scoring is based on static evidence only; this does not indicate a student fault.
-            <div style="margin-top: 0.5rem; color: #555; font-size: 0.95em;">
-              <div>PHP available: {{ "yes" if report.environment.php_available else "no" }}</div>
-              <div>Browser available: {{ "yes" if report.environment.browser_available else "no" }}</div>
-              <div>Behavioural tests run: {{ "yes" if report.environment.behavioural_tests_run else "no" }}</div>
-            <div>Browser tests run: {{ "yes" if report.environment.browser_tests_run else "no" }}</div>
-          </div>
+{# LLM Feedback Section #}
+{% if report.llm_feedback %}
+<details class="mt-xl">
+    <summary class="text-lg font-semibold">💬 Overall AI Feedback</summary>
+    <div class="details-content card-body">{{ report.llm_feedback }}</div>
+</details>
+{% endif %}
+{% endif %}
+
+{# Batch Summary #}
+{% if batch %}
+<section class="mb-xl">
+    <h2 class="mb-md">Batch Summary</h2>
+    <div class="grid grid-auto mb-lg">
+        <div class="card stat-card">
+            <div class="stat-value">{{ batch.summary.total_submissions|default(0) }}</div>
+            <div class="stat-label">Total</div>
         </div>
-      {% endif %}
-      <div style="margin-bottom: 2rem;">
-        <h3>Overall Score</h3>
-        <div style="font-size: 2rem; font-weight: bold; color: #1b4b8a; margin: 0.5rem 0;">
-          {{ "%.1f"|format(report.scores.overall * 100) }}%
+        <div class="card stat-card">
+            <div class="stat-value text-success">{{ batch.summary.succeeded|default(0) }}</div>
+            <div class="stat-label">Succeeded</div>
         </div>
-        <p style="color: #666; margin-top: 0.5rem;">
-          Based on {{ report.scores.by_component|length }} component(s)
-        </p>
-      </div>
+        <div class="card stat-card">
+            <div class="stat-value text-danger">{{ batch.summary.failed|default(0) }}</div>
+            <div class="stat-label">Failed</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value">{{ ((batch.summary.overall_stats.mean|default(0)) * 100)|round|int }}%</div>
+            <div class="stat-label">Avg Score</div>
+        </div>
+    </div>
 
-      <h3>Component Scores</h3>
-      <table style="margin-bottom: 2rem;">
-        <thead>
-          <tr>
-            <th>Component</th>
-            <th>Score</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for comp, data in report.scores.by_component.items() %}
-            <tr>
-              <td><strong>{{ comp|upper }}</strong></td>
-              <td>
-                {% if data.score == "SKIPPED" %}
-                  <span style="color: #999; font-style: italic;">SKIPPED</span>
-                {% else %}
-                  {{ "%.2f"|format(data.score) }} ({{ "%.0f"|format(data.score * 100) }}%)
-                {% endif %}
-              </td>
-              <td>
-                {% if data.score == "SKIPPED" %}
-                  <span style="background: #f0f0f0; padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.9em;">Not applicable</span>
-                {% elif data.score >= 0.8 %}
-                  <span style="background: #d4edda; color: #155724; padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.9em;">Good</span>
-                {% elif data.score >= 0.5 %}
-                  <span style="background: #fff3cd; color: #856404; padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.9em;">Partial</span>
-                {% else %}
-                  <span style="background: #f8d7da; color: #721c24; padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.9em;">Needs work</span>
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <a href="{{ url_for('batch_analytics', run_id=run_id) }}" class="btn btn-primary">📊 View Analytics</a>
+</section>
 
-      {% if report.behavioural_evidence %}
-      <div style="margin-bottom: 2rem;">
-        <h3>Behavioural Tests</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Test</th>
-              <th>Status</th>
-              <th>Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for ev in report.behavioural_evidence %}
-              {% set status = (ev.status or '')|upper %}
-              {% if status == "PASS" %}
-                {% set badge = "background: #d4edda; color: #155724;" %}
-              {% elif status == "FAIL" %}
-                {% set badge = "background: #f8d7da; color: #721c24;" %}
-              {% elif status == "TIMEOUT" %}
-                {% set badge = "background: #f8d7da; color: #721c24;" %}
-              {% elif status == "SKIPPED" %}
-                {% set badge = "background: #f0f0f0; color: #555;" %}
-              {% else %}
-                {% set badge = "background: #fff3cd; color: #856404;" %}
-              {% endif %}
-              <tr>
-                <td><strong>{{ ev.test_id }}</strong></td>
-                <td><span style="{{ badge }} padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.9em;">{{ status }}</span></td>
-                <td>
-                  {% set diag = (ev.stderr or ev.stdout or "") %}
-                  {% set first_line = diag.splitlines()[0] if diag else "" %}
-                  {{ first_line if first_line else "—" }}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
+{# Submission List #}
+<section>
+    <h2 class="mb-md">Submissions</h2>
+    <div class="table-container">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Score</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sub in batch.records %}
+                <tr>
+                    <td>{{ sub.student_id|default(sub.id) }}</td>
+                    <td>
+                        {% set score = (sub.overall|default(0)) * 100 %}
+                        {% if score is not none %}
+                        <span
+                            class="badge {% if score >= 70 %}badge-success{% elif score >= 40 %}badge-warning{% else %}badge-danger{% endif %}">
+                            {{ score|round|int }}%
+                        </span>
+                        {% else %}–{% endif %}
+                    </td>
+                    <td>
+                        {% if sub.error or sub.status == 'error' %}
+                        <span class="badge badge-danger">Error</span>
+                        {% elif score >= 70 %}
+                        <span class="badge badge-success">Excellent</span>
+                        {% elif score >= 40 %}
+                        <span class="badge badge-warning">Pass</span>
+                        {% else %}
+                        <span class="badge badge-danger">Fail</span>
+                        {% endif %}
+                    </td>
+                    <td class="actions-cell">
+                        <a href="{{ url_for('batch_submission_view', run_id=run_id, submission_id=sub.id) }}"
+                            class="btn btn-primary btn-sm" title="View in browser">👁️ View</a>
+                        <a href="{{ url_for('batch_submission_report', run_id=run_id, submission_id=sub.id) }}"
+                            class="btn btn-ghost btn-sm" title="Download JSON">⬇️ Download</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
         </table>
-      </div>
-      {% endif %}
-
-      {% if report.browser_evidence %}
-      <div style="margin-bottom: 2rem;">
-        <h3>Browser Tests</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Test</th>
-              <th>Status</th>
-              <th>Notes</th>
-              <th>Console errors</th>
-              <th>Screenshots</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for ev in report.browser_evidence %}
-              {% set status = (ev.status or '')|upper %}
-              {% if status == "PASS" %}
-                {% set badge = "background: #d4edda; color: #155724;" %}
-              {% elif status == "FAIL" %}
-                {% set badge = "background: #f8d7da; color: #721c24;" %}
-              {% elif status == "TIMEOUT" %}
-                {% set badge = "background: #f8d7da; color: #721c24;" %}
-              {% elif status == "SKIPPED" %}
-                {% set badge = "background: #f0f0f0; color: #555;" %}
-              {% else %}
-                {% set badge = "background: #fff3cd; color: #856404;" %}
-              {% endif %}
-              <tr>
-                <td><strong>{{ ev.test_id }}</strong></td>
-                <td><span style="{{ badge }} padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.9em;">{{ status }}</span></td>
-                <td>{{ ev.notes if ev.notes else "—" }}</td>
-                <td>{{ ev.console_errors|length if ev.console_errors else 0 }}</td>
-                <td>
-                  {% if ev.screenshot_paths %}
-                    {% for shot in ev.screenshot_paths %}
-                      <div style="font-size: 0.9em;">
-                        <a href="{{ url_for('run_artifact', run_id=run_id, relpath=shot|replace(run_id ~ '\\\\', run_id ~ '/')|replace('\\\\','/')) }}" target="_blank">View screenshot</a>
-                      </div>
-                    {% endfor %}
-                  {% else %}
-                    —
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% endif %}
-
-      <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #ddd;">
-        <h4>Downloads</h4>
-        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-          <a href="{{ url_for('download', run_id=run_id, filename='report.json') }}" style="color: #1b4b8a; text-decoration: none; padding: 0.5rem 1rem; border: 1px solid #1b4b8a; border-radius: 4px; display: inline-block;">Report JSON</a>
-          <a href="{{ url_for('download', run_id=run_id, filename='summary.txt') }}" style="color: #1b4b8a; text-decoration: none; padding: 0.5rem 1rem; border: 1px solid #1b4b8a; border-radius: 4px; display: inline-block;">Summary TXT</a>
-        </div>
-      </div>
-    {% else %}
-      <div style="padding: 1rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
-        <p style="margin: 0;">Report not found.</p>
-      </div>
-    {% endif %}
-  {% else %}
-    {% if batch %}
-      <div style="margin-bottom: 2rem;">
-        <h3>Batch Summary</h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0;">
-          <div style="padding: 1rem; background: #f8f9fa; border-radius: 4px;">
-            <div style="font-size: 1.5rem; font-weight: bold; color: #1b4b8a;">{{ batch.summary.total_submissions }}</div>
-            <div style="color: #666;">Total Submissions</div>
-          </div>
-          <div style="padding: 1rem; background: #d4edda; border-radius: 4px;">
-            <div style="font-size: 1.5rem; font-weight: bold; color: #155724;">{{ batch.summary.succeeded }}</div>
-            <div style="color: #666;">Succeeded</div>
-          </div>
-          <div style="padding: 1rem; background: #f8d7da; border-radius: 4px;">
-            <div style="font-size: 1.5rem; font-weight: bold; color: #721c24;">{{ batch.summary.failed }}</div>
-            <div style="color: #666;">Failed</div>
-          </div>
-        </div>
-      </div>
-
-      <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #ddd;">
-        <h4>Downloads & Analytics</h4>
-        <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem;">
-          <a href="{{ url_for('download', run_id=run_id, filename='batch_summary.json') }}" style="color: #1b4b8a; text-decoration: none; padding: 0.5rem 1rem; border: 1px solid #1b4b8a; border-radius: 4px; display: inline-block;">Batch Summary JSON</a>
-          <a href="{{ url_for('download', run_id=run_id, filename='batch_summary.csv') }}" style="color: #1b4b8a; text-decoration: none; padding: 0.5rem 1rem; border: 1px solid #1b4b8a; border-radius: 4px; display: inline-block;">Batch Summary CSV</a>
-          <a href="{{ url_for('download', run_id=run_id, filename='findings_frequency.csv') }}" style="color: #1b4b8a; text-decoration: none; padding: 0.5rem 1rem; border: 1px solid #1b4b8a; border-radius: 4px; display: inline-block;">Findings Frequency</a>
-          <a href="{{ url_for('batch_analytics', run_id=run_id) }}" style="color: #1b4b8a; text-decoration: none; padding: 0.5rem 1rem; border: 1px solid #1b4b8a; border-radius: 4px; display: inline-block; background: #e7f3ff;">View Analytics</a>
-          <a href="{{ url_for('download', run_id=run_id, filename='batch_reports_' ~ (run.profile if run.profile is defined else run['profile']) ~ '_' ~ run_id ~ '.zip') }}" style="color: #1b4b8a; text-decoration: none; padding: 0.5rem 1rem; border: 1px solid #1b4b8a; border-radius: 4px; display: inline-block;">All Reports (ZIP)</a>
-        </div>
-      </div>
-    {% else %}
-      <div style="padding: 1rem; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
-        <p style="margin: 0;">Batch summary not found.</p>
-      </div>
-    {% endif %}
-  {% endif %}
+    </div>
+</section>
+{% endif %}
 {% endblock %}

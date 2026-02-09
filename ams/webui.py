@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Mapping
 
@@ -16,11 +18,13 @@ from flask import (
 )
 
 from ams.core.pipeline import AssessmentPipeline
+from ams.core.config import ScoringMode
 from ams.core.profiles import PROFILES
 from ams.io.metadata import MetadataValidator, SubmissionMetadata
 from ams.io.web_storage import (
     allowed_download,
     create_run_dir,
+    find_run_by_id,
     find_submission_root,
     get_runs_root,
     list_runs,
@@ -61,6 +65,45 @@ ALLOWED_DOWNLOADS = {
 }
 
 
+def _normalize_artifact_path(run_dir: Path, artifact_path: str | Path) -> str:
+    """Convert absolute or relative artifact paths to a format suitable for /runs/<run_id>/artifacts/<path>
+    
+    Args:
+        run_dir: The run directory path
+        artifact_path: The artifact path (may be absolute or relative)
+    
+    Returns:
+        A relative path string that can be used in the artifact serving URL
+    """
+    artifact_path = Path(artifact_path)
+    
+    # If it's already absolute, make it relative to run_dir
+    try:
+        artifact_path = artifact_path.relative_to(run_dir)
+    except (ValueError, TypeError):
+        # Not a child of run_dir, return as is (try forward slashes)
+        artifact_path = Path(str(artifact_path).replace("\\", "/"))
+    
+    # Normalize to use forward slashes for URL
+    return artifact_path.as_posix()
+
+
+def _artifact_url(run_id: str, artifact_path: str | Path) -> str:
+    """Build a URL for an artifact file.
+    
+    Args:
+        run_id: The run ID
+        artifact_path: The artifact path (absolute or relative to run_dir)
+    
+    Returns:
+        A URL string like '/runs/<run_id>/artifacts/artifacts/screenshot.png'
+    """
+    # Simple forward slash conversion for now - actual path validation
+    # is done in the run_artifact route
+    artifact_str = str(artifact_path).replace("\\", "/")
+    return f"/runs/{run_id}/artifacts/{artifact_str}"
+
+
 def create_app(config: Mapping[str, object] | None = None) -> Flask:
     app = Flask(__name__, template_folder="templates")
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024  # security: limit upload size
@@ -69,6 +112,10 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
     if not app.config.get("SECRET_KEY"):
         app.config["SECRET_KEY"] = "replace-this-secret"
     app.secret_key = app.config["SECRET_KEY"]
+    
+    # Register Jinja filters
+    app.jinja_env.filters["artifact_url"] = lambda artifact_path: _artifact_url(request.view_args.get("run_id") or "", artifact_path)
+    
     _register_routes(app)
     return app
 
@@ -88,6 +135,7 @@ def _register_routes(app: Flask) -> None:
         profile = request.form.get("profile", "frontend")
         student_id = request.form.get("student_id", "").strip()
         assignment_id = request.form.get("assignment_id", "").strip()
+        scoring_mode_str = request.form.get("scoring_mode", "static_plus_llm").strip()
         
         # Validate file
         if not file or not file.filename:
@@ -96,6 +144,13 @@ def _register_routes(app: Flask) -> None:
         
         if not validate_file_type(file.filename):
             flash("Invalid file type. Please upload a .zip file.")
+            return render_template("mark.html", profiles=PROFILES.keys()), 400
+        
+        # Validate and convert scoring mode
+        try:
+            scoring_mode = ScoringMode(scoring_mode_str)
+        except ValueError:
+            flash(f"Invalid scoring mode: {scoring_mode_str}")
             return render_template("mark.html", profiles=PROFILES.keys()), 400
         
         # Validate metadata
@@ -157,7 +212,7 @@ def _register_routes(app: Flask) -> None:
             extracted.mkdir(parents=True, exist_ok=True)
             safe_extract_zip(upload_zip, extracted, max_size_mb=MAX_UPLOAD_MB)
             
-            pipeline = AssessmentPipeline()
+            pipeline = AssessmentPipeline(scoring_mode=scoring_mode)
             submission_root = find_submission_root(extracted)
             
             # Pass metadata to pipeline via context
@@ -184,6 +239,7 @@ def _register_routes(app: Flask) -> None:
                 "id": run_id,
                 "mode": "mark",
                 "profile": profile,
+                "scoring_mode": scoring_mode.value,
                 "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 "report": report_path.name,
                 "summary": "summary.txt",
@@ -210,6 +266,7 @@ def _register_routes(app: Flask) -> None:
         file = request.files.get("submission")
         profile = request.form.get("profile", "frontend")
         assignment_id = request.form.get("assignment_id", "").strip()
+        scoring_mode_str = request.form.get("scoring_mode", "static_plus_llm").strip()
         
         # Validate file
         if not file or not file.filename:
@@ -218,6 +275,13 @@ def _register_routes(app: Flask) -> None:
         
         if not validate_file_type(file.filename):
             flash("Invalid file type. Please upload a .zip file.")
+            return render_template("batch.html", profiles=PROFILES.keys()), 400
+        
+        # Validate and convert scoring mode
+        try:
+            scoring_mode = ScoringMode(scoring_mode_str)
+        except ValueError:
+            flash(f"Invalid scoring mode: {scoring_mode_str}")
             return render_template("batch.html", profiles=PROFILES.keys()), 400
         
         # Validate assignment ID
@@ -283,12 +347,14 @@ def _register_routes(app: Flask) -> None:
                 profile=profile,
                 keep_individual_runs=True,
                 assignment_id=assignment_id,
+                scoring_mode=scoring_mode,
             )
             
             run_info = {
                 "id": run_id,
                 "mode": "batch",
                 "profile": profile,
+                "scoring_mode": scoring_mode.value,
                 "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 "summary": "batch_summary.json",
                 "batch_summary": summary,
@@ -347,10 +413,10 @@ def _register_routes(app: Flask) -> None:
     @app.route("/runs/<run_id>")
     def run_detail(run_id: str):
         runs_root = get_runs_root(app)
-        run_dir = runs_root / run_id
-        run_info = load_run_info(run_dir)
-        if run_info is None:
+        run_dir = find_run_by_id(runs_root, run_id)
+        if run_dir is None:
             return "Run not found", 404
+        run_info = load_run_info(run_dir)
         context = {"run": run_info, "run_id": run_id}
         if run_info.get("mode") == "mark":
             report_path = run_dir / run_info.get("report", "report.json")
@@ -368,10 +434,10 @@ def _register_routes(app: Flask) -> None:
     @app.route("/batch/<run_id>/analytics")
     def batch_analytics(run_id: str):
         runs_root = get_runs_root(app)
-        run_dir = runs_root / run_id
-        run_info = load_run_info(run_dir)
-        if run_info is None:
+        run_dir = find_run_by_id(runs_root, run_id)
+        if run_dir is None:
             return "Run not found", 404
+        run_info = load_run_info(run_dir)
         analytics_info = _ensure_batch_analytics(run_dir, run_id)
         if not analytics_info:
             return "Analytics not found", 404
@@ -390,8 +456,8 @@ def _register_routes(app: Flask) -> None:
     @app.route("/runs/<run_id>/artifacts/<path:relpath>")
     def run_artifact(run_id: str, relpath: str):
         runs_root = get_runs_root(app)
-        run_dir = runs_root / run_id
-        if not run_dir.exists():
+        run_dir = find_run_by_id(runs_root, run_id)
+        if run_dir is None:
             return "Run not found", 404
         allowed_roots = {"artifacts", "analytics", "runs", "reports", "evaluation"}
         rel_parts = Path(relpath).parts
@@ -406,10 +472,53 @@ def _register_routes(app: Flask) -> None:
             return "File not found", 404
         return send_file(candidate, as_attachment=True, download_name=candidate.name)
 
+    @app.route("/batch/<run_id>/submissions/<submission_id>/view")
+    def batch_submission_view(run_id: str, submission_id: str):
+        """View a batch submission's report in the browser (like a single submission)."""
+        runs_root = get_runs_root(app)
+        run_dir = find_run_by_id(runs_root, run_id)
+        if run_dir is None:
+            return "Run not found", 404
+        
+        submission_dir = run_dir / "runs" / submission_id
+        report_path = submission_dir / "report.json"
+        
+        # Security check
+        try:
+            report_path.resolve().relative_to(run_dir.resolve())
+        except Exception:
+            return "Not allowed", 403
+        
+        if not report_path.exists():
+            return "Report not found", 404
+        
+        run_info = load_run_info(run_dir) or {}
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        
+        # Create a pseudo run_info for this submission
+        submission_run_info = {
+            "mode": "mark",
+            "profile": run_info.get("profile", "frontend"),
+            "assignment_id": run_info.get("assignment_id", ""),
+            "student_id": submission_id,
+            "created_at": run_info.get("created_at", ""),
+        }
+        
+        return render_template(
+            "run_detail.html",
+            run=submission_run_info,
+            run_id=run_id,
+            report=report,
+            batch_submission_id=submission_id,  # Flag to show back button
+            back_url=url_for('run_detail', run_id=run_id),
+        )
+
     @app.route("/batch/<run_id>/submissions/<submission_id>/report.json")
     def batch_submission_report(run_id: str, submission_id: str):
         runs_root = get_runs_root(app)
-        run_dir = runs_root / run_id
+        run_dir = find_run_by_id(runs_root, run_id)
+        if run_dir is None:
+            return "Run not found", 404
         report_path = (run_dir / "runs" / submission_id / "report.json").resolve()
         try:
             report_path.relative_to(run_dir.resolve())
@@ -422,21 +531,104 @@ def _register_routes(app: Flask) -> None:
         dl_name = f"report_{submission_id}_{profile}_{run_id}.json"
         return send_file(report_path, as_attachment=True, download_name=dl_name)
 
+    @app.route("/run/<run_id>/bundle")
+    def download_bundle(run_id: str):
+        """Download all artifacts for a run as a ZIP bundle."""
+        runs_root = get_runs_root(app)
+        run_dir = find_run_by_id(runs_root, run_id)
+        
+        if run_dir is None:
+            return "Run not found", 404
+        
+        run_info = load_run_info(run_dir) or {}
+        profile = run_info.get("profile", "")
+        mode = run_info.get("mode", "mark")
+        
+        # Create ZIP in memory
+        zip_buffer = BytesIO()
+        
+        try:
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                # Add report files
+                files_to_include = [
+                    ("report.json", "report.json"),
+                    ("report.html", "report.html"),
+                    ("summary.txt", "summary.txt"),
+                ]
+                
+                # Add batch-specific files if this is a batch run
+                if mode == "batch":
+                    files_to_include.extend([
+                        ("batch_summary.json", "batch_summary.json"),
+                        ("batch_summary.csv", "batch_summary.csv"),
+                        ("findings_frequency.csv", "findings_frequency.csv"),
+                    ])
+                
+                # Add available files to ZIP
+                for filename, arcname in files_to_include:
+                    file_path = run_dir / filename
+                    if file_path.exists() and file_path.is_file():
+                        try:
+                            zf.write(file_path, arcname=arcname)
+                        except Exception:
+                            pass  # Skip files that can't be added
+                
+                # Add screenshots/artifacts subdirectory if it exists
+                artifacts_dir = run_dir / "artifacts"
+                if artifacts_dir.exists():
+                    for artifact_file in artifacts_dir.rglob("*"):
+                        if artifact_file.is_file():
+                            try:
+                                rel_path = artifact_file.relative_to(run_dir)
+                                zf.write(artifact_file, arcname=rel_path)
+                            except Exception:
+                                pass
+                
+                # Add analytics for batch runs
+                if mode == "batch":
+                    analytics_suffixes = ["json", "csv", "component", "needs", "runtime"]
+                    for suffix in analytics_suffixes:
+                        glob_pattern = f"batch_analytics_{run_id}.*" if suffix == "json" else f"*_{suffix}_{run_id}.*"
+                        for analytics_file in run_dir.glob(glob_pattern):
+                            if analytics_file.is_file():
+                                try:
+                                    rel_path = analytics_file.relative_to(run_dir)
+                                    zf.write(analytics_file, arcname=f"analytics/{rel_path}")
+                                except Exception:
+                                    pass
+            
+            # Prepare response
+            zip_buffer.seek(0)
+            dl_name = f"run_{profile}_{run_id}.zip"
+            return send_file(
+                zip_buffer,
+                mimetype="application/zip",
+                as_attachment=True,
+                download_name=dl_name,
+            )
+        
+        except Exception as e:
+            app.logger.error(f"Error creating bundle for run {run_id}: {e}")
+            return "Error creating bundle", 500
+
     @app.route("/download/<run_id>/<filename>")
     def download(run_id: str, filename: str):
         if not allowed_download(filename, allowed=ALLOWED_DOWNLOADS):
             return "Not allowed", 403
         runs_root = get_runs_root(app)
+        run_dir = find_run_by_id(runs_root, run_id)
+        if run_dir is None:
+            return "Run not found", 404
         if filename.startswith(("batch_analytics_", "component_breakdown_", "needs_attention_")):
-            _ensure_batch_analytics(runs_root / run_id, run_id)
-        target = _resolve_download_path(runs_root, run_id, filename)
+            _ensure_batch_analytics(run_dir, run_id)
+        target = _resolve_download_path(run_dir, filename)
         try:
             target.relative_to(runs_root.resolve())
         except Exception:
             return "Not allowed", 403
         if not target.exists() or not target.is_file():
             return "File not found", 404
-        run_info = load_run_info(runs_root / run_id) or {}
+        run_info = load_run_info(run_dir) or {}
         profile = run_info.get("profile", "")
         mode = run_info.get("mode", "batch")
         dl_name = filename
@@ -586,17 +778,41 @@ def _ensure_batch_analytics(run_dir: Path, run_id: str, force: bool = False) -> 
     }
 
 
-def _resolve_download_path(runs_root: Path, run_id: str, filename: str) -> Path:
-    run_dir = runs_root / run_id
+def _resolve_download_path(run_dir: Path, filename: str) -> Path:
+    """Resolve the path to a downloadable file within a run directory."""
+    # Direct match
     candidate = run_dir / filename
     if candidate.exists():
         return candidate.resolve()
+    
+    # Check analytics directory
     analytics_dir = run_dir / "analytics"
     candidate = analytics_dir / filename
     if candidate.exists():
         return candidate.resolve()
+    
+    # Check evaluation directory
     evaluation_dir = run_dir / "evaluation"
-    return (evaluation_dir / filename).resolve()
+    candidate = evaluation_dir / filename
+    if candidate.exists():
+        return candidate.resolve()
+    
+    # For files like "batch_reports.zip", search for matching prefix pattern
+    base_name = filename.rsplit(".", 1)[0]  # e.g., "batch_reports"
+    ext = filename.rsplit(".", 1)[-1] if "." in filename else ""
+    
+    # Search run_dir for files starting with the base name
+    for f in run_dir.glob(f"{base_name}*.{ext}"):
+        if f.is_file():
+            return f.resolve()
+    
+    # Search analytics dir
+    for f in analytics_dir.glob(f"{base_name}*.{ext}"):
+        if f.is_file():
+            return f.resolve()
+    
+    # Fallback to original path
+    return (run_dir / filename).resolve()
 
 
 def _build_batch_readme(run_id: str, profile: str, batch_summary: Mapping[str, object]) -> str:

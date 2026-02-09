@@ -163,14 +163,31 @@ def load_run_info(run_dir: Path):
 
 
 def list_runs(runs_root: Path) -> list[dict]:
+    """List all runs, searching recursively through the nested directory structure."""
     runs: list[dict] = []
     if not runs_root.exists():
         return runs
-    candidates = [p for p in runs_root.iterdir() if p.is_dir()]
-    for run_dir in sorted(candidates, key=lambda p: p.name, reverse=True):
+    
+    # Search recursively for run_info.json files (marker for a run directory)
+    for run_info_path in runs_root.rglob("run_info.json"):
+        run_dir = run_info_path.parent
         info = load_run_info(run_dir)
         if info:
             info["id"] = run_dir.name
+            info["_run_dir"] = str(run_dir)  # Store full path for lookups
+            
+            # Try to load score from report.json
+            report_path = run_dir / "report.json"
+            if report_path.exists():
+                try:
+                    report = json.loads(report_path.read_text(encoding="utf-8"))
+                    scores = report.get("scores", {})
+                    if scores and "overall" in scores:
+                        # Store score as percentage (0-100) for dashboard display
+                        info["score"] = scores["overall"] * 100
+                except Exception:
+                    pass
+            
             index_path = run_dir / "run_index.json"
             if index_path.exists():
                 try:
@@ -179,7 +196,37 @@ def list_runs(runs_root: Path) -> list[dict]:
                 except Exception:
                     info["submissions"] = []
             runs.append(info)
+    
+    # Sort by run id (timestamp-based) descending
+    runs.sort(key=lambda r: r.get("id", ""), reverse=True)
     return runs
+
+
+def find_run_by_id(runs_root: Path, run_id: str) -> Optional[Path]:
+    """Find a run directory by its ID, searching recursively.
+    
+    Args:
+        runs_root: The root directory for runs.
+        run_id: The run ID to find.
+        
+    Returns:
+        The Path to the run directory, or None if not found.
+    """
+    if not runs_root.exists():
+        return None
+    
+    # First, check if it exists directly under runs_root (flat structure)
+    direct_path = runs_root / run_id
+    if direct_path.exists() and (direct_path / "run_info.json").exists():
+        return direct_path
+    
+    # Search recursively for the run_id directory
+    for run_info_path in runs_root.rglob("run_info.json"):
+        run_dir = run_info_path.parent
+        if run_dir.name == run_id:
+            return run_dir
+    
+    return None
 
 
 def allowed_download(filename: str, allowed: Iterable[str]) -> bool:
@@ -261,6 +308,7 @@ __all__ = [
     "save_metadata",
     "load_metadata",
     "list_runs",
+    "find_run_by_id",
     "allowed_download",
     "find_submission_root",
     "store_submission_with_metadata",
