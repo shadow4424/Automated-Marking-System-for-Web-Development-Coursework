@@ -787,9 +787,9 @@ class ScoringEngine:
         }
 
     def _calculate_quality_penalty(self, findings: List[Finding], component: str) -> float:
-        """Calculate penalty for code quality and security issues."""
+        """Calculate penalty for code quality, security, and consistency issues."""
         penalty = 0.0
-        quality_findings = [f for f in findings if "QUALITY" in f.id or "SECURITY" in f.id]
+        quality_findings = [f for f in findings if "QUALITY" in f.id or "SECURITY" in f.id or "CONSISTENCY" in f.id]
         
         for finding in quality_findings:
             severity = finding.severity

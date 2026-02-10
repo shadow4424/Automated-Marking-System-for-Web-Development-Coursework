@@ -13,40 +13,42 @@
 </div>
 
 {# Quick Stats #}
-<div class="grid grid-auto mb-xl">
-    <div class="card stat-card">
+<div class="stat-grid-4 mb-xl">
+    <div class="card stat-card stat-card--default">
         <div class="stat-value">{{ batch_summary.summary.total_submissions|default(0) }}</div>
         <div class="stat-label">Submissions</div>
     </div>
-    <div class="card stat-card">
+    <div class="card stat-card stat-card--success">
         <div class="stat-value text-success">{{ batch_summary.summary.succeeded|default(0) }}</div>
         <div class="stat-label">Succeeded</div>
     </div>
-    <div class="card stat-card">
+    <div class="card stat-card stat-card--danger">
         <div class="stat-value text-danger">{{ batch_summary.summary.failed|default(0) }}</div>
         <div class="stat-label">Failed</div>
     </div>
     <div class="card stat-card">
-        <div class="stat-value">{{ batch_summary.summary.average_score|default(0)|round|int }}%</div>
+        <div class="stat-value">{{ ((batch_summary.summary.overall_stats.mean|default(0)) * 100)|round|int }}%</div>
         <div class="stat-label">Average</div>
     </div>
 </div>
 
 {# Score Distribution #}
-{% if analytics and analytics.score_distribution %}
+{% if analytics and analytics.overall and analytics.overall.buckets %}
+{% set bk = analytics.overall.buckets %}
+{% set total = analytics.overall.total|default(1) %}
 <section class="card mb-xl">
     <div class="card-header">
         <h2 class="card-title">Score Distribution</h2>
     </div>
     <div class="card-body">
         <div class="distribution-bars">
-            {% for bucket in analytics.score_distribution %}
+            {% for label, count in bk.items() %}
             <div class="distribution-row">
-                <span class="distribution-label">{{ bucket.range }}</span>
+                <span class="distribution-label">{{ label }}</span>
                 <div class="distribution-track">
-                    <div class="distribution-fill" data-width="{{ bucket.percentage|default(0) }}"></div>
+                    <div class="distribution-fill" data-width="{{ ((count / total) * 100)|round|int }}"></div>
                 </div>
-                <span class="distribution-count">{{ bucket.count }}</span>
+                <span class="distribution-count">{{ count }}</span>
             </div>
             {% endfor %}
         </div>
@@ -60,7 +62,7 @@
 {% endif %}
 
 {# Component Breakdown #}
-{% if analytics and analytics.component_means %}
+{% if analytics and analytics.components %}
 <section class="card mb-xl">
     <div class="card-header">
         <h2 class="card-title">Component Averages</h2>
@@ -70,21 +72,26 @@
             <thead>
                 <tr>
                     <th>Component</th>
-                    <th>Mean Score</th>
-                    <th>Std Dev</th>
+                    <th>Average Score</th>
+                    <th>% at Zero</th>
+                    <th>% over 50</th>
+                    <th>% Full Marks</th>
                 </tr>
             </thead>
             <tbody>
-                {% for comp in analytics.component_means %}
+                {% for comp_name, comp_data in analytics.components.items() %}
+                {% set avg_pct = (comp_data.average|default(0) * 100)|round|int %}
                 <tr>
-                    <td>{{ comp.component }}</td>
+                    <td><strong>{{ comp_name|upper }}</strong></td>
                     <td>
                         <span
-                            class="badge {% if comp.mean >= 70 %}badge-success{% elif comp.mean >= 40 %}badge-warning{% else %}badge-danger{% endif %}">
-                            {{ comp.mean|round|int }}%
+                            class="badge {% if avg_pct >= 70 %}badge-success{% elif avg_pct >= 40 %}badge-warning{% else %}badge-danger{% endif %}">
+                            {{ avg_pct }}%
                         </span>
                     </td>
-                    <td>{{ comp.std|round(1) }}</td>
+                    <td>{{ comp_data.pct_zero|default(0)|round|int }}%</td>
+                    <td>{{ comp_data.pct_half|default(0)|round|int }}%</td>
+                    <td>{{ comp_data.pct_full|default(0)|round|int }}%</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -93,8 +100,8 @@
 </section>
 {% endif %}
 
-{# Common Findings #}
-{% if analytics and analytics.findings_frequency %}
+{# Common Findings (from batch_summary) #}
+{% if batch_summary and batch_summary.summary.finding_frequency %}
 <section class="card mb-xl">
     <div class="card-header">
         <h2 class="card-title">Top Findings</h2>
@@ -109,11 +116,196 @@
                 </tr>
             </thead>
             <tbody>
-                {% for f in analytics.findings_frequency[:10] %}
+                {% set total_subs = batch_summary.summary.total_submissions|default(1) %}
+                {% for rule_id, count in batch_summary.summary.top_findings[:15] %}
                 <tr>
-                    <td><code>{{ f.rule_id }}</code></td>
-                    <td>{{ f.count }}</td>
-                    <td>{{ f.percentage|round|int }}%</td>
+                    <td><code>{{ rule_id }}</code></td>
+                    <td>{{ count }}</td>
+                    <td>{{ ((count / total_subs) * 100)|round|int }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+{# Student Issues #}
+{% if analytics and analytics.student_issues %}
+<section class="card mb-xl">
+    <div class="card-header">
+        <h2 class="card-title">⚠️ Student Issues</h2>
+    </div>
+    <div class="table-container">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Affected</th>
+                    <th>%</th>
+                    <th>Related Rules</th>
+                    <th>Examples</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for issue in analytics.student_issues %}
+                <tr>
+                    <td>
+                        <span class="badge badge-warning">{{ issue.category|replace('_', ' ')|title }}</span>
+                    </td>
+                    <td>{{ issue.students_affected }}</td>
+                    <td>{{ issue.percent|round|int }}%</td>
+                    <td>
+                        {% for fid in issue.finding_ids[:3] %}
+                        <code class="text-xs">{{ fid }}</code>{% if not loop.last %}, {% endif %}
+                        {% endfor %}
+                        {% if issue.finding_ids|length > 3 %}
+                        <span class="text-muted text-xs">+{{ issue.finding_ids|length - 3 }} more</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-muted text-sm">{{ issue.examples|join(', ') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+{# Runtime Health #}
+{% if analytics and analytics.runtime_health %}
+{% set rt = analytics.runtime_health %}
+<section class="card mb-xl">
+    <div class="card-header">
+        <h2 class="card-title">🏥 Runtime Health</h2>
+    </div>
+    <div class="grid grid-auto mb-md">
+        <div class="card stat-card stat-card--success">
+            <div class="stat-value">{{ rt.console_error_pct|default(0)|round|int }}%</div>
+            <div class="stat-label">Console Errors</div>
+        </div>
+        <div class="card stat-card stat-card--warning">
+            <div class="stat-value">{{ rt.behavioural_skipped_pct|default(0)|round|int }}%</div>
+            <div class="stat-label">Behavioural Skipped</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value">{{ rt.browser_skipped_pct|default(0)|round|int }}%</div>
+            <div class="stat-label">Browser Skipped</div>
+        </div>
+    </div>
+    {% if rt.behavioural or rt.browser %}
+    <div class="table-container">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th>Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if rt.behavioural %}
+                {% for status, count in rt.behavioural.items() %}
+                <tr>
+                    <td>Behavioural</td>
+                    <td>
+                        <span
+                            class="badge badge-{{ 'success' if status == 'pass' else ('danger' if status == 'fail' else 'warning') }}">{{
+                            status }}</span>
+                    </td>
+                    <td>{{ count }}</td>
+                </tr>
+                {% endfor %}
+                {% endif %}
+                {% if rt.browser %}
+                {% for status, count in rt.browser.items() %}
+                <tr>
+                    <td>Browser</td>
+                    <td>
+                        <span
+                            class="badge badge-{{ 'success' if status == 'pass' else ('danger' if status == 'fail' else 'warning') }}">{{
+                            status }}</span>
+                    </td>
+                    <td>{{ count }}</td>
+                </tr>
+                {% endfor %}
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+
+{# Runner Limitations #}
+{% if analytics and analytics.runner_limitations %}
+<section class="card mb-xl">
+    <div class="card-header">
+        <h2 class="card-title">🚧 Runner Limitations</h2>
+    </div>
+    <div class="table-container">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Affected</th>
+                    <th>%</th>
+                    <th>Examples</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lim in analytics.runner_limitations %}
+                <tr>
+                    <td><span class="badge badge-info">{{ lim.category|replace('_', ' ')|title }}</span></td>
+                    <td>{{ lim.students_affected }}</td>
+                    <td>{{ lim.percent|round|int }}%</td>
+                    <td class="text-muted text-sm">{{ lim.examples|join(', ') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+{# Needs Attention #}
+{% if analytics and analytics.needs_attention %}
+<section class="card mb-xl">
+    <div class="card-header">
+        <h2 class="card-title">🔍 Needs Attention</h2>
+    </div>
+    <div class="table-container">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Score</th>
+                    <th>Status</th>
+                    <th>Flags</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stu in analytics.needs_attention %}
+                {% set s_pct = (stu.overall|default(0) * 100)|round|int %}
+                <tr>
+                    <td><strong>{{ stu.submission_id }}</strong></td>
+                    <td>
+                        <span
+                            class="badge {% if s_pct >= 70 %}badge-success{% elif s_pct >= 40 %}badge-warning{% else %}badge-danger{% endif %}">
+                            {{ s_pct }}%
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge badge-{{ 'success' if stu.status == 'ok' else 'danger' }}">{{ stu.status
+                            }}</span>
+                    </td>
+                    <td>
+                        {% for flag in stu.flags %}
+                        <span class="badge badge-warning badge-sm">{{ flag }}</span>
+                        {% endfor %}
+                    </td>
+                    <td class="text-muted text-sm">{{ stu.reason|default('') }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

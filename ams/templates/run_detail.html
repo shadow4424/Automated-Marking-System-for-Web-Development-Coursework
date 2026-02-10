@@ -65,8 +65,68 @@
     {% endfor %}
 </div>
 
-{# Findings Toolbar #}
+{# ── Statistics Section ── #}
 {% set findings = report.findings|default([]) %}
+{% set ns = namespace(total=0, passed=0, failed=0, warnings=0, ai_count=0, vision_count=0, partial_count=0) %}
+{% for f in findings %}
+{% set ns.total = ns.total + 1 %}
+{% if f.severity|default('')|upper == 'INFO' %}
+{% set ns.passed = ns.passed + 1 %}
+{% elif f.severity|default('')|upper == 'FAIL' %}
+{% set ns.failed = ns.failed + 1 %}
+{% elif f.severity|default('')|upper == 'WARN' %}
+{% set ns.warnings = ns.warnings + 1 %}
+{% endif %}
+{% if f.evidence is mapping and f.evidence.llm_feedback %}
+{% set ns.ai_count = ns.ai_count + 1 %}
+{% endif %}
+{% if f.evidence is mapping and f.evidence.vision_analysis %}
+{% set ns.vision_count = ns.vision_count + 1 %}
+{% endif %}
+{% if f.evidence is mapping and f.evidence.hybrid_score %}
+{% set ns.partial_count = ns.partial_count + 1 %}
+{% endif %}
+{% endfor %}
+
+<section class="mb-xl">
+    <h2 class="section-header mb-md">📊 Statistics</h2>
+    <div class="stat-grid-4 mb-md">
+        <div class="card stat-card stat-card--default">
+            <div class="stat-value">{{ ns.total }}</div>
+            <div class="stat-label">Total Checks</div>
+        </div>
+        <div class="card stat-card stat-card--success">
+            <div class="stat-value text-success">{{ ns.passed }}</div>
+            <div class="stat-label">Passed</div>
+        </div>
+        <div class="card stat-card stat-card--danger">
+            <div class="stat-value text-danger">{{ ns.failed }}</div>
+            <div class="stat-label">Failed</div>
+        </div>
+        <div class="card stat-card stat-card--warning">
+            <div class="stat-value text-warning">{{ ns.warnings }}</div>
+            <div class="stat-label">Warnings</div>
+        </div>
+    </div>
+    {% if ns.ai_count > 0 or ns.vision_count > 0 or ns.partial_count > 0 %}
+    <div class="grid grid-auto mb-md">
+        <div class="card stat-card stat-card--ai">
+            <div class="stat-value">{{ ns.ai_count }}</div>
+            <div class="stat-label">🤖 AI Feedback</div>
+        </div>
+        <div class="card stat-card stat-card--ai">
+            <div class="stat-value">{{ ns.vision_count }}</div>
+            <div class="stat-label">👁️ Vision Checks</div>
+        </div>
+        <div class="card stat-card stat-card--ai">
+            <div class="stat-value">{{ ns.partial_count }}</div>
+            <div class="stat-label">💡 Partial Credits</div>
+        </div>
+    </div>
+    {% endif %}
+</section>
+
+{# Findings Toolbar #}
 <div class="toolbar findings-toolbar">
     <div class="toolbar-search">
         <input type="search" class="form-input" data-findings-search placeholder="Search findings...">
@@ -93,21 +153,50 @@
     data-component="{{ finding.category|default('') }}">
     <div class="finding-header">
         <span class="finding-id">{{ finding.id|default('unknown') }}</span>
+        {% if finding.category %}
+        <span class="badge badge-info">{{ finding.category|upper }}</span>
+        {% endif %}
         <span class="badge badge-{{ 'success' if sev == 'INFO' else ('danger' if sev == 'FAIL' else 'warning') }}">
             {{ sev }}
         </span>
+        {% if finding.evidence and finding.evidence.weight %}
+        <span class="badge badge-secondary" title="Max Mark">Weight: {{ finding.evidence.weight }}</span>
+        {% endif %}
     </div>
     <p class="finding-message">{{ finding.message|default('No message') }}</p>
+
+    {# AI Feedback (from evidence.llm_feedback) — skip if hybrid_score present (Partial Credit card covers it) #}
+    {% if finding.evidence is mapping and finding.evidence.llm_feedback is mapping and not
+    (finding.evidence.hybrid_score is mapping) %}
+    {% set fb = finding.evidence.llm_feedback %}
+    {% set fb_text = fb.summary or fb.evidence or (fb['items'][0].message if fb['items'] else '') %}
+    {# Filter out feedback that just echoes the finding ID #}
+    {% if fb_text and fb_text != finding.id %}
+    <div class="ai-feedback-card">
+        <span class="ai-badge">🤖 AI Feedback</span>
+        <p>{{ fb_text }}</p>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {# Hybrid Score / Partial Credit #}
+    {% if finding.evidence is mapping and finding.evidence.hybrid_score is mapping %}
+    {% set hs = finding.evidence.hybrid_score %}
+    <div class="ai-feedback-card ai-feedback-card--partial">
+        <span class="ai-badge ai-badge--partial">💡 Partial Credit</span>
+        {% set weight = finding.evidence.weight|float|default(1.0) %}
+        {% set score_pct = (hs.final_score|default(0) * 100)|round|int %}
+        {% set earned = (hs.final_score|default(0) * weight)|round(2) %}
+        <p><strong>Score: {{ score_pct }}% ({{ earned }} / {{ weight }} marks)</strong>
+            {% if hs.reasoning %} — {{ hs.reasoning }}{% endif %}</p>
+    </div>
+    {% endif %}
+
+    {# Evidence (collapsible) #}
     {% if finding.evidence %}
     <details>
         <summary class="text-sm">Evidence</summary>
         <pre class="finding-evidence details-content">{{ finding.evidence }}</pre>
-    </details>
-    {% endif %}
-    {% if finding.llm_feedback %}
-    <details>
-        <summary class="text-sm">💡 AI Feedback</summary>
-        <div class="details-content text-secondary">{{ finding.llm_feedback }}</div>
     </details>
     {% endif %}
 </div>
@@ -118,6 +207,51 @@
     <p class="empty-state-text">The submission has no specific findings to display.</p>
 </div>
 {% endfor %}
+
+{# ── Vision Analysis Section ── #}
+{% set vision_findings = [] %}
+{% for finding in findings %}
+{% if finding.evidence is mapping and finding.evidence.vision_analysis is mapping %}
+{% if vision_findings.append(finding) %}{% endif %}
+{% endif %}
+{% endfor %}
+
+{% if vision_findings %}
+<section class="mt-xl mb-xl">
+    <h2 class="section-header mb-md">👁️ Vision Analysis</h2>
+    {% for finding in vision_findings %}
+    {% set va = finding.evidence.vision_analysis %}
+    <div class="vision-card card mb-md">
+        <div class="vision-card-header">
+            <div>
+                <span class="finding-id">{{ finding.id|default('unknown') }}</span>
+                <span class="badge badge-info">{{ finding.category|default('visual')|upper }}</span>
+            </div>
+            <span class="vision-status vision-status--{{ va.status|default('UNKNOWN')|lower }}">
+                {{ va.status|default('UNKNOWN') }}
+            </span>
+        </div>
+        {% if va.reason %}
+        <p class="vision-reason">{{ va.reason }}</p>
+        {% endif %}
+        {% if va.issues %}
+        <ul class="vision-issues">
+            {% for issue in va.issues %}
+            <li>
+                <span class="badge badge-{{ 'danger' if issue.severity == 'FAIL' else 'warning' }} badge-sm">{{
+                    issue.severity }}</span>
+                {{ issue.description }}
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if va.meta and va.meta.screenshot %}
+        <img src="{{ va.meta.screenshot|replace('\\', '/') }}" alt="Page Screenshot" class="vision-screenshot">
+        {% endif %}
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
 
 {# LLM Feedback Section #}
 {% if report.llm_feedback %}

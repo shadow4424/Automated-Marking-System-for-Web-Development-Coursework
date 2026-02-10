@@ -165,6 +165,10 @@ class LLMProvider(ABC):
             
             if json_end:
                 text = text[json_start:json_end]
+                
+                # Strip trailing commas (common LLM error)
+                text = re.sub(r",\s*}", "}", text)
+                text = re.sub(r",\s*]", "]", text)
         
         # Validate it's actually JSON
         try:
