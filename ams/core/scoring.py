@@ -176,7 +176,12 @@ class ScoringEngine:
         return score, rationale, summaries
 
     def _calculate_weighted_rule_score(self, findings: List[Finding], component: str) -> Tuple[float, List[dict]]:
-        """Calculate weighted score from required rule findings (HTML.REQ.PASS/FAIL, etc.)."""
+        """Calculate weighted score from required rule findings (HTML.REQ.PASS/FAIL, etc.).
+        
+        LLM Integration:
+        - Reads `hybrid_score` from finding evidence for partial credit
+        - Reads `vision_analysis` for visual check overrides
+        """
         req_pass_findings = [f for f in findings if f.id.endswith(".REQ.PASS")]
         req_fail_findings = [f for f in findings if f.id.endswith(".REQ.FAIL")]
         
@@ -200,15 +205,42 @@ class ScoringEngine:
                 "finding_ids": [finding.id],
             })
         
-        # Process fail findings
+        # Process fail findings with LLM enrichment support
         for finding in req_fail_findings:
             weight = float(finding.evidence.get("weight", 1.0))
             rule_id = finding.evidence.get("rule_id", "unknown")
             total_weight += weight
+            
+            # Default: failed rule gets 0 credit
+            partial_credit = 0.0
+            status = "fail"
+            llm_adjusted = False
+            
+            # Check for vision analysis override (Phase 3)
+            vision = finding.evidence.get("vision_analysis", {})
+            if isinstance(vision, dict) and vision.get("status") == "PASS":
+                # Vision says it's fine, override static FAIL
+                partial_credit = weight
+                status = "pass_vision"
+                llm_adjusted = True
+            
+            # Check for LLM hybrid_score partial credit (Phase 2)
+            elif isinstance(finding.evidence, dict):
+                hybrid = finding.evidence.get("hybrid_score", {})
+                if isinstance(hybrid, dict) and hybrid.get("partial_score") is not None:
+                    partial_score = float(hybrid["partial_score"])
+                    partial_credit = weight * partial_score
+                    status = f"partial_{int(partial_score * 100)}%"
+                    llm_adjusted = True
+            
+            passed_weight += partial_credit
+            
             rule_details.append({
                 "rule": rule_id,
-                "status": "fail",
+                "status": status,
                 "weight": weight,
+                "partial_credit": partial_credit,
+                "llm_adjusted": llm_adjusted,
                 "finding_ids": [finding.id],
             })
         
