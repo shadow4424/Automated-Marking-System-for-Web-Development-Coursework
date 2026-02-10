@@ -160,7 +160,16 @@
             {{ sev }}
         </span>
         {% if finding.evidence and finding.evidence.weight %}
-        <span class="badge badge-secondary" title="Max Mark">Weight: {{ finding.evidence.weight }}</span>
+        {% set weight = finding.evidence.weight|float %}
+        {% set earned = 0.0 %}
+        {% if sev == 'INFO' %}
+        {% set earned = weight %}
+        {% elif finding.evidence.hybrid_score %}
+        {% set earned = (finding.evidence.hybrid_score.final_score|default(0) * weight)|round(2) %}
+        {% endif %}
+        <span class="badge badge-secondary" title="Marks Earned / Max Marks">
+            {{ earned }} / {{ weight }}
+        </span>
         {% endif %}
     </div>
     <p class="finding-message">{{ finding.message|default('No message') }}</p>

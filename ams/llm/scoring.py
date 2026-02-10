@@ -91,6 +91,10 @@ Criteria for "Intent Detected":
 Generate a JSON object with this exact structure:
 {{"intent": "yes" or "no", "reasoning": "<one sentence explanation>", "suggested_score": 0.5 or 0.0}}
 
+CRITICAL: 
+- If the code shows ANY logical attempt (even with syntax errors), set "intent": "yes" and "suggested_score": 0.5.
+- Only set "intent": "no" if the code is completely unrelated, empty, or placeholder.
+
 RULES:
 - Output ONLY the JSON object. No markdown, no code fences.
 - "suggested_score" must be 0.5 if intent="yes", else 0.0.
@@ -146,10 +150,22 @@ def evaluate_partial_credit(
         result.intent_detected = intent == "yes"
         result.reasoning = parsed.get("reasoning", "")
         
+        # Fallback: Check reasoning for keywords if intent is strict "no"
+        if not result.intent_detected and result.reasoning:
+            lower_reasoning = result.reasoning.lower()
+            if "attempted" in lower_reasoning or "minor syntax" in lower_reasoning or "typo" in lower_reasoning:
+                logger.info(f"Overriding intent to YES based on reasoning keywords: {result.reasoning}")
+                result.intent_detected = True
+        
         suggested = float(parsed.get("suggested_score", 0.0))
         
         # Enforce partial_range constraints (Phase 2.2)
         min_partial, max_partial = partial_range
+        
+        # Robustness: If intent detected but score 0, default to max_partial (usually 0.5)
+        if result.intent_detected and suggested == 0.0:
+            suggested = max_partial
+            
         if result.intent_detected:
             result.llm_score = min(max(suggested, min_partial), max_partial)
         else:

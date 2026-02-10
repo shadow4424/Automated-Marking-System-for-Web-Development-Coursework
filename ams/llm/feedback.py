@@ -140,8 +140,15 @@ def _clean_json_response(text: str) -> str:
             elif text[i] == "}":
                 depth -= 1
                 if depth == 0:
-                    return text[json_start : i + 1]
+                    candidate = text[json_start : i + 1]
+                    # Strip trailing commas
+                    candidate = re.sub(r",\s*}", "}", candidate)
+                    candidate = re.sub(r",\s*]", "]", candidate)
+                    return candidate
 
+    # Fallback: try cleaning the whole text if no outer braces found
+    text = re.sub(r",\s*}", "}", text)
+    text = re.sub(r",\s*]", "]", text)
     return text
 
 
