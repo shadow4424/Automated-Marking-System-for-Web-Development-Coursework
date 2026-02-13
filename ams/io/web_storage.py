@@ -156,6 +156,14 @@ def _compute_metadata_hash(metadata_dict: dict) -> str:
 
 
 def load_run_info(run_dir: Path):
+    """Load run metadata from run_info.json file.
+    
+    Args:
+        run_dir: Path to the run directory containing run_info.json
+        
+    Returns:
+        Dictionary containing run metadata, or None if file doesn't exist
+    """
     info_path = run_dir / "run_info.json"
     if not info_path.exists():
         return None

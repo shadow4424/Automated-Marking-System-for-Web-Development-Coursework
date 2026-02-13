@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import time
 from pathlib import Path
-from typing import List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from ams.assessors.base import Assessor
 from ams.assessors.browser.coursework_spec import (

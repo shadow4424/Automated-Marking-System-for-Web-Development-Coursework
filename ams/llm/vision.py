@@ -11,8 +11,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from pathlib import Path
-from typing import Optional
 
 from ams.core.config import LLM_CACHE_ENABLED
 from ams.core.factory import get_llm_provider
@@ -220,7 +220,6 @@ Respond with JSON: {{"result": "PASS" or "FAIL", "reason": "..."}}"""
         Raises:
             ValueError: If parsing fails.
         """
-        import re
         content = content.strip()
         
         # Try direct JSON parse

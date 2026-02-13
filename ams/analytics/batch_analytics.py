@@ -126,7 +126,6 @@ def _needs_attention(records: List[Mapping[str, object]], profile: str) -> List[
                     "report_path": rec.get("report_path"),
                 }
             )
-        rec["primary_reason"] = reason
     return attention
 
 

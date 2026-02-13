@@ -227,8 +227,8 @@ class ScoringEngine:
             # Check for LLM hybrid_score partial credit (Phase 2)
             elif isinstance(finding.evidence, dict):
                 hybrid = finding.evidence.get("hybrid_score", {})
-                if isinstance(hybrid, dict) and hybrid.get("partial_score") is not None:
-                    partial_score = float(hybrid["partial_score"])
+                if isinstance(hybrid, dict) and hybrid.get("final_score") is not None:
+                    partial_score = float(hybrid["final_score"])
                     partial_credit = weight * partial_score
                     status = f"partial_{int(partial_score * 100)}%"
                     llm_adjusted = True

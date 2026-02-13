@@ -9,13 +9,14 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from pydantic import ValidationError
 
 from ams.core.factory import get_llm_provider
 from ams.llm.providers import LLMResponse
 from ams.llm.schemas import FeedbackItem, LLMFeedback, create_fallback_feedback
+from ams.llm.utils import clean_json_response
 
 logger = logging.getLogger(__name__)
 
@@ -28,44 +29,6 @@ FEEDBACK_SYSTEM_PROMPT = (
     '"message": "<feedback message>", "evidence_refs": ["file.ext:line"]}]}. '
     "No markdown, no code fences, no explanations. Use only the keys shown."
 )
-
-
-def _clean_json_response(text: str) -> str:
-    """Extract valid JSON from potentially wrapped LLM response.
-    
-    Handles common LLM quirks like markdown fences and preambles.
-    """
-    if not text:
-        return "{}"
-
-    # Strip markdown code fences
-    fence_pattern = r"```(?:json)?\s*\n?([\s\S]*?)\n?```"
-    match = re.search(fence_pattern, text, re.IGNORECASE)
-    if match:
-        text = match.group(1).strip()
-
-
-    # Find JSON object boundaries
-    json_start = text.find("{")
-    if json_start != -1:
-        depth = 0
-        for i in range(json_start, len(text)):
-            if text[i] == "{":
-                depth += 1
-            elif text[i] == "}":
-                depth -= 1
-                if depth == 0:
-                    candidate = text[json_start : i + 1]
-                    # Strip trailing commas (common LLM error)
-                    candidate = re.sub(r",\s*}", "}", candidate)
-                    candidate = re.sub(r",\s*]", "]", candidate)
-                    return candidate
-
-    # Fallback: try cleaning the whole text if no outer braces found
-    text = re.sub(r",\s*}", "}", text)
-    text = re.sub(r",\s*]", "]", text)
-    return text
-
 
 
 class FeedbackGenerator:
@@ -133,7 +96,7 @@ class FeedbackGenerator:
             raise RuntimeError(f"LLM provider error: {response.error}")
         
         # Step 3: Clean and parse JSON
-        cleaned = _clean_json_response(response.content)
+        cleaned = clean_json_response(response.content)
         raw_data = json.loads(cleaned)
         
         # Step 4: Validate through Pydantic schema

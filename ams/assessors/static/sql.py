@@ -87,6 +87,9 @@ class SQLStaticAssessor(Assessor):
                 continue
 
             lowered = content.lower()
+            # For SQL evidence, show the first 500 chars as a snippet
+            evidence_snippet = content[:500] + ("..." if len(content) > 500 else "")
+            
             evidence_finding = Finding(
                 id="SQL.EVIDENCE",
                 category="sql",
@@ -103,6 +106,7 @@ class SQLStaticAssessor(Assessor):
                     "where": lowered.count(" where "),
                     "semicolons": content.count(";"),
                     "non_empty_lines": sum(1 for line in content.splitlines() if line.strip()),
+                    "snippet": evidence_snippet,
                 },
                 source=self.name,
             )
@@ -114,6 +118,7 @@ class SQLStaticAssessor(Assessor):
                 "path": str(path),
                 "semicolons": semicolons,
                 "non_empty_lines": non_empty_lines,
+                "snippet": evidence_snippet,
             }
 
             if non_empty_lines == 0:
@@ -159,9 +164,12 @@ class SQLStaticAssessor(Assessor):
                 r'update\s+.*[+\'"`]',  # UPDATE with concatenation
             ]
             dynamic_sql_found = False
+            dynamic_snippet = ""
             for pattern in dynamic_sql_patterns:
-                if re.search(pattern, content, re.IGNORECASE):
+                match = re.search(pattern, content, re.IGNORECASE)
+                if match:
                     dynamic_sql_found = True
+                    dynamic_snippet = self._extract_snippet(content, match.group(0))
                     break
             
             if dynamic_sql_found:
@@ -174,6 +182,7 @@ class SQLStaticAssessor(Assessor):
                         evidence={
                             "path": str(path),
                             "dynamic_sql_detected": True,
+                            "snippet": dynamic_snippet,
                         },
                         source=self.name,
                         finding_category=FindingCategory.STRUCTURE,
@@ -183,6 +192,7 @@ class SQLStaticAssessor(Assessor):
             # 2. Flag use of SELECT *
             select_star_count = lowered.count("select *")
             if select_star_count > 0:
+                star_snippet = self._extract_snippet(content, "select *")
                 findings.append(
                     Finding(
                         id="SQL.QUALITY.SELECT_STAR",
@@ -192,6 +202,7 @@ class SQLStaticAssessor(Assessor):
                         evidence={
                             "path": str(path),
                             "select_star_count": select_star_count,
+                            "snippet": star_snippet,
                         },
                         source=self.name,
                         finding_category=FindingCategory.STRUCTURE,
@@ -203,10 +214,12 @@ class SQLStaticAssessor(Assessor):
             # This is a heuristic - look for SELECT without LIMIT
             select_statements = re.findall(r'select\s+.*?from\s+.*?(?:where\s+.*?)?(?:order\s+by\s+.*?)?(?:limit\s+.*?)?;', content, re.IGNORECASE | re.DOTALL)
             selects_without_limit = []
+            limit_snippets = []
             for i, stmt in enumerate(select_statements):
                 if "limit" not in stmt.lower() and "where" in stmt.lower():
                     # Might be user-controlled if it has WHERE
                     selects_without_limit.append(i + 1)
+                    limit_snippets.append(stmt.strip())
             
             if selects_without_limit:
                 findings.append(
@@ -218,6 +231,7 @@ class SQLStaticAssessor(Assessor):
                         evidence={
                             "path": str(path),
                             "selects_without_limit": len(selects_without_limit),
+                            "snippet": limit_snippets[0] if limit_snippets else "",
                         },
                         source=self.name,
                         finding_category=FindingCategory.STRUCTURE,
@@ -225,6 +239,40 @@ class SQLStaticAssessor(Assessor):
                 )
 
         return findings
+
+    def _extract_snippet(self, content: str, needle: str, context_lines: int = 2) -> str:
+        """Extract a snippet of code surrounding the needle."""
+        try:
+            lines = content.splitlines()
+            lower_needle = needle.lower()
+            if not lower_needle:
+                 # If needle is regex match, use it directly to find line
+                 pass 
+
+            # Simple line-based search
+            for i, line in enumerate(lines):
+                # We do loose matching because needle might be a multiline string from regex
+                if needle in line or needle.lower() in line.lower() or (len(needle) > 20 and line.strip() in needle):
+                    start = max(0, i - context_lines)
+                    end = min(len(lines), i + context_lines + 1)
+                    
+                    snippet = []
+                    for j in range(start, end):
+                        prefix = "> " if j == i else "  "
+                        snippet.append(f"{j+1:3d} | {lines[j]}")
+                    return "\n".join(snippet)
+            
+            # Fallback for multiline match that wasn't found line-by-line
+            if needle in content:
+                # Find index
+                idx = content.find(needle)
+                # Find line number...
+                # This is sufficient for now
+                return needle
+                
+            return ""
+        except Exception:
+            return ""
 
 
 __all__ = ["SQLStaticAssessor"]

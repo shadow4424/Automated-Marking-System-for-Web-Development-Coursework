@@ -3,9 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Optional
-
-from typing import Mapping
+from typing import Iterable, Mapping, Optional
 
 from ams.core.models import (
     BehaviouralEvidence,

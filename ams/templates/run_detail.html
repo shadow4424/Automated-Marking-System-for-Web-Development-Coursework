@@ -59,7 +59,7 @@
     </div>
     {% for comp, data in (report.scores.by_component or {}).items() %}
     <div class="card stat-card">
-        <div class="stat-value">{{ ((data.score|default(0)) * 100)|round|int }}%</div>
+        <div class="stat-value">{{ ((data.score|default(0, true))|float * 100)|round|int }}%</div>
         <div class="stat-label">{{ comp|upper }}</div>
     </div>
     {% endfor %}
@@ -67,16 +67,18 @@
 
 {# ── Statistics Section ── #}
 {% set findings = report.findings|default([]) %}
-{% set ns = namespace(total=0, passed=0, failed=0, warnings=0, ai_count=0, vision_count=0, partial_count=0) %}
+{% set checks = report.checks|default([]) %}
+{% set diagnostics = report.diagnostics|default([]) %}
+{% set cs = report.check_stats|default({}) %}
+{% set ns = namespace(
+    total=cs.total|default(0),
+    passed=cs.passed|default(0),
+    failed=cs.failed|default(0),
+    warnings=cs.warnings|default(0),
+    skipped=cs.skipped|default(0),
+    ai_count=0, vision_count=0, partial_count=0
+) %}
 {% for f in findings %}
-{% set ns.total = ns.total + 1 %}
-{% if f.severity|default('')|upper == 'INFO' %}
-{% set ns.passed = ns.passed + 1 %}
-{% elif f.severity|default('')|upper == 'FAIL' %}
-{% set ns.failed = ns.failed + 1 %}
-{% elif f.severity|default('')|upper == 'WARN' %}
-{% set ns.warnings = ns.warnings + 1 %}
-{% endif %}
 {% if f.evidence is mapping and f.evidence.llm_feedback %}
 {% set ns.ai_count = ns.ai_count + 1 %}
 {% endif %}
@@ -107,6 +109,16 @@
             <div class="stat-value text-warning">{{ ns.warnings }}</div>
             <div class="stat-label">Warnings</div>
         </div>
+        {% if ns.skipped > 0 %}
+        <div class="card stat-card" style="border-left: 3px solid #6b7280;">
+            <div class="stat-value" style="color: #6b7280;">{{ ns.skipped }}</div>
+            <div class="stat-label">Skipped</div>
+        </div>
+        {% endif %}
+        <div class="card stat-card" style="border-left: 3px solid #8b5cf6;">
+            <div class="stat-value" style="color: #8b5cf6;">{{ findings|length }}</div>
+            <div class="stat-label">Total Events</div>
+        </div>
     </div>
     {% if ns.ai_count > 0 or ns.vision_count > 0 or ns.partial_count > 0 %}
     <div class="grid grid-auto mb-md">
@@ -126,18 +138,19 @@
     {% endif %}
 </section>
 
-{# Findings Toolbar #}
+{# Findings Detail #}
 <div class="toolbar findings-toolbar">
     <div class="toolbar-search">
-        <input type="search" class="form-input" data-findings-search placeholder="Search findings...">
+        <input type="search" class="form-input" data-findings-search placeholder="Search events...">
     </div>
     <div class="toolbar-filters">
         <button type="button" class="filter-toggle" data-severity="info">✓ Pass</button>
         <button type="button" class="filter-toggle" data-severity="warn">⚠ Warn</button>
         <button type="button" class="filter-toggle" data-severity="fail">✗ Fail</button>
+        <button type="button" class="filter-toggle" data-severity="skipped">⊘ Skipped</button>
         <button type="button" class="btn btn-ghost btn-sm" data-reset>Reset</button>
     </div>
-    <span class="toolbar-count" data-findings-count>{{ findings|length }} findings</span>
+    <span class="toolbar-count" data-findings-count>{{ findings|length }} events</span>
 </div>
 
 <div class="flex gap-sm mb-lg">
@@ -148,35 +161,56 @@
 {# Findings List #}
 {% for finding in findings %}
 {% set sev = finding.severity|default('WARN')|upper %}
-<div class="finding finding-{{ 'pass' if sev == 'INFO' else ('fail' if sev == 'FAIL' else 'warn') }}"
+<div class="finding finding-{{ 'pass' if sev == 'INFO' else ('fail' if sev == 'FAIL' else ('skipped' if sev == 'SKIPPED' else 'warn')) }}"
     data-severity="{{ sev|lower }}" data-rule-id="{{ finding.id|default('') }}"
-    data-component="{{ finding.category|default('') }}">
+    data-component="{{ finding.category|default('') }}" {% if sev=='SKIPPED'
+    %}style="opacity: 0.5; border-left-color: #6b7280;" {% endif %}>
     <div class="finding-header">
         <span class="finding-id">{{ finding.id|default('unknown') }}</span>
         {% if finding.category %}
         <span class="badge badge-info">{{ finding.category|upper }}</span>
         {% endif %}
-        <span class="badge badge-{{ 'success' if sev == 'INFO' else ('danger' if sev == 'FAIL' else 'warning') }}">
+        <span
+            class="badge badge-{{ 'success' if sev == 'INFO' else ('danger' if sev == 'FAIL' else ('secondary' if sev == 'SKIPPED' else 'warning')) }}"
+            {% if sev=='SKIPPED' %}style="background: #374151; color: #9ca3af;" {% endif %}>
             {{ sev }}
         </span>
-        {% if finding.evidence and finding.evidence.weight %}
-        {% set weight = finding.evidence.weight|float %}
+        {# Universal Scoring Badge Logic #}
+        {% set weight = finding.evidence.weight|float if (finding.evidence and finding.evidence.weight) else 1.0 %}
         {% set earned = 0.0 %}
         {% if sev == 'INFO' %}
         {% set earned = weight %}
-        {% elif finding.evidence.hybrid_score %}
+        {% elif sev == 'WARN' %}
+        {# WARN from failed required rules: only award credit if LLM partial credit was given #}
+        {% if finding.evidence and finding.evidence.hybrid_score and
+        finding.evidence.hybrid_score.final_score|default(0) > 0 %}
         {% set earned = (finding.evidence.hybrid_score.final_score|default(0) * weight)|round(2) %}
+        {% else %}
+        {% set earned = 0.0 %}
         {% endif %}
+        {% elif sev == 'FAIL' %}
+        {# Check hybrid_score for partial credit first #}
+        {% if finding.evidence and finding.evidence.hybrid_score and
+        finding.evidence.hybrid_score.final_score|default(0) > 0 %}
+        {% set earned = (finding.evidence.hybrid_score.final_score|default(0) * weight)|round(2) %}
+        {# Then check vision override #}
+        {% elif finding.evidence and finding.evidence.vision_analysis and finding.evidence.vision_analysis.status ==
+        'PASS' %}
+        {% set earned = weight %}
+        {% else %}
+        {% set earned = 0.0 %}
+        {% endif %}
+        {% endif %}
+
         <span class="badge badge-secondary" title="Marks Earned / Max Marks">
-            {{ earned }} / {{ weight }}
+            {{ "%.2f"|format(earned) }} / {{ "%.2f"|format(weight) }}
         </span>
-        {% endif %}
+
     </div>
     <p class="finding-message">{{ finding.message|default('No message') }}</p>
 
-    {# AI Feedback (from evidence.llm_feedback) — skip if hybrid_score present (Partial Credit card covers it) #}
-    {% if finding.evidence is mapping and finding.evidence.llm_feedback is mapping and not
-    (finding.evidence.hybrid_score is mapping) %}
+    {# AI Feedback (from evidence.llm_feedback) #}
+    {% if finding.evidence is mapping and finding.evidence.llm_feedback is mapping %}
     {% set fb = finding.evidence.llm_feedback %}
     {% set fb_text = fb.summary or fb.evidence or (fb['items'][0].message if fb['items'] else '') %}
     {# Filter out feedback that just echoes the finding ID #}
@@ -201,10 +235,29 @@
     </div>
     {% endif %}
 
-    {# Evidence (collapsible) #}
+    {# Evidence (collapsible) — includes snippet, screenshot, and raw evidence #}
     {% if finding.evidence %}
     <details>
         <summary class="text-sm">Evidence</summary>
+
+        {# Code Snippet inside evidence #}
+        {% if finding.evidence.snippet %}
+        <div class="mt-sm mb-sm p-sm bg-gray-900 rounded border border-gray-700">
+            <div class="text-xs text-muted mb-xs uppercase tracking-wide">Code Snippet</div>
+            <pre
+                class="text-xs font-mono text-gray-300 overflow-x-auto p-0 m-0 bg-transparent border-0">{{ finding.evidence.snippet }}</pre>
+        </div>
+        {% endif %}
+
+        {# Screenshot inside evidence #}
+        {% if finding.evidence.screenshot %}
+        <div class="mt-sm mb-sm">
+            <div class="text-xs text-muted mb-xs uppercase tracking-wide">Screenshot</div>
+            <img src="{{ finding.evidence.screenshot }}" class="max-w-full rounded border border-gray-700 shadow-sm"
+                alt="Evidence Screenshot">
+        </div>
+        {% endif %}
+
         <pre class="finding-evidence details-content">{{ finding.evidence }}</pre>
     </details>
     {% endif %}

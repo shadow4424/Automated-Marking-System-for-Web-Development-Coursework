@@ -142,6 +142,12 @@
 
         if (!findings.length) return;
 
+        // Initialize: make all severity filters active by default (including skipped)
+        // This ensures all findings are visible on page load
+        severityBtns.forEach(btn => {
+            btn.classList.add('active');
+        });
+
         function applyFilters() {
             const term = searchInput?.value.toLowerCase().trim() || '';
             const activeSeverities = new Set();
@@ -182,7 +188,7 @@
             });
 
             if (countDisplay) {
-                countDisplay.textContent = `${visible} findings`;
+                countDisplay.textContent = `${visible} events`;
             }
         }
 
@@ -199,7 +205,8 @@
 
         resetBtn?.addEventListener('click', () => {
             if (searchInput) searchInput.value = '';
-            severityBtns.forEach(b => b.classList.remove('active'));
+            // On reset, make all filters active again (show everything)
+            severityBtns.forEach(b => b.classList.add('active'));
             if (componentSelect) componentSelect.value = '';
             applyFilters();
         });

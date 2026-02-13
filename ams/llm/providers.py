@@ -112,74 +112,11 @@ class LLMProvider(ABC):
     
     def _clean_json_response(self, text: str) -> str:
         """Clean JSON response from chatty small models.
-        
-        Llama 3.2 3B often wraps JSON in markdown or adds preambles like
-        "Here is the JSON:" before the actual content. This method strips:
-        - Markdown code fences (```json ... ```)
-        - Common preambles before JSON
-        - Trailing text after JSON
-        
-        Args:
-            text: Raw LLM output that may contain wrapped JSON
-            
-        Returns:
-            Clean JSON string ready for parsing
+
+        Delegates to the shared utility in ams.llm.utils.
         """
-        if not text:
-            return text
-        
-        original = text
-        
-        # Pattern 1: Strip markdown code fences
-        # Matches ```json\n{...}\n``` or ```{...}```
-        fence_pattern = r"```(?:json)?\s*\n?([\s\S]*?)\n?```"
-        match = re.search(fence_pattern, text, re.IGNORECASE)
-        if match:
-            text = match.group(1).strip()
-            logger.debug("Stripped markdown fences from LLM response")
-        
-        # Pattern 2: Find JSON object/array in text
-        # Look for the first { or [ and find its matching closing bracket
-        json_start = None
-        for i, char in enumerate(text):
-            if char in "{[":
-                json_start = i
-                break
-        
-        if json_start is not None:
-            # Find the matching closing bracket
-            bracket_map = {"{": "}", "[": "]"}
-            open_bracket = text[json_start]
-            close_bracket = bracket_map[open_bracket]
-            depth = 0
-            json_end = None
-            
-            for i in range(json_start, len(text)):
-                if text[i] == open_bracket:
-                    depth += 1
-                elif text[i] == close_bracket:
-                    depth -= 1
-                    if depth == 0:
-                        json_end = i + 1
-                        break
-            
-            if json_end:
-                text = text[json_start:json_end]
-                
-                # Strip trailing commas (common LLM error)
-                text = re.sub(r",\s*}", "}", text)
-                text = re.sub(r",\s*]", "]", text)
-        
-        # Validate it's actually JSON
-        try:
-            json.loads(text)
-            if text != original:
-                logger.debug(f"Cleaned JSON: removed {len(original) - len(text)} chars")
-            return text
-        except json.JSONDecodeError:
-            # Return original if cleaning broke something
-            logger.warning("JSON cleaning failed, returning original")
-            return original
+        from ams.llm.utils import clean_json_response
+        return clean_json_response(text)
 
 
 # =============================================================================
@@ -477,6 +414,7 @@ class OpenAIProvider(LLMProvider):
         temperature: float = 0.0,
         max_tokens: int = 1024,
         json_mode: bool = False,
+        image_path: str | None = None,
     ) -> LLMResponse:
         try:
             client = self._get_client()
@@ -546,6 +484,7 @@ class MockProvider(LLMProvider):
         temperature: float = 0.0,
         max_tokens: int = 1024,
         json_mode: bool = False,
+        image_path: str | None = None,
     ) -> LLMResponse:
         self._call_count += 1
         

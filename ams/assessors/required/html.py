@@ -110,48 +110,101 @@ class HTMLRequiredElementsAssessor(Assessor):
         is_required = self.profile_spec.is_component_required("html")
         has_required_rules = self.profile_spec.has_required_rules("html")
 
-        if not html_files:
-            if is_required and has_required_rules:
-                # Required for profile but missing
-                findings.append(
-                    Finding(
-                        id="HTML.REQ.MISSING_FILES",
-                        category="html",
-                        message="No HTML files found; HTML is required for this profile.",
-                        severity=Severity.FAIL,
-                        evidence={
-                            "expected_selectors": [rule.selector for rule in self.profile_spec.required_html],
-                            "rule_ids": [rule.id for rule in self.profile_spec.required_html],
-                            "profile": self.profile_spec.name,
-                            "required": True,
-                        },
-                        source=self.name,
-                        finding_category=FindingCategory.MISSING,
-                        profile=self.profile_spec.name,
-                        required=True,
-                    )
+        # If no rules are defined for this component, still generate a SKIPPED finding to show it wasn't checked
+        if not has_required_rules:
+            findings.append(
+                Finding(
+                    id="HTML.REQ.SKIPPED",
+                    category="html",
+                    message="No HTML checks defined for this profile.",
+                    severity=Severity.SKIPPED,
+                    evidence={
+                        "profile": self.profile_spec.name,
+                        "skip_reason": "no_rules_defined",
+                    },
+                    source=self.name,
+                    finding_category=FindingCategory.OTHER,
+                    profile=self.profile_spec.name,
+                    required=is_required,
                 )
-            else:
-                # Not required or no rules defined, skip
+            )
+            return findings
+
+        # If HTML is not required for this profile, generate per-rule SKIPPED findings
+        if not is_required:
+            for rule in self.profile_spec.required_html:
                 findings.append(
                     Finding(
                         id="HTML.REQ.SKIPPED",
                         category="html",
-                        message="No HTML files found; HTML required element checks not applicable.",
+                        message=f"Rule '{rule.id}' skipped: HTML not required for this profile.",
                         severity=Severity.SKIPPED,
                         evidence={
-                            "expected_selectors": [rule.selector for rule in self.profile_spec.required_html],
-                            "rule_ids": [rule.id for rule in self.profile_spec.required_html],
-                            "profile": self.profile_spec.name,
-                            "required": is_required,
-                            "has_required_rules": has_required_rules,
+                            "rule_id": rule.id,
+                            "description": rule.description,
+                            "selector": rule.selector,
+                            "weight": rule.weight,
+                            "skip_reason": "component_not_required",
                         },
                         source=self.name,
                         finding_category=FindingCategory.OTHER,
                         profile=self.profile_spec.name,
-                        required=is_required,
+                        required=False,
                     )
                 )
+            return findings
+
+        if not html_files:
+            if is_required and has_required_rules:
+                # Required for profile but missing - generate per-rule FAIL findings
+                for rule in self.profile_spec.required_html:
+                    findings.append(
+                        Finding(
+                            id="HTML.REQ.FAIL",
+                            category="html",
+                            message=f"Rule '{rule.id}' not evaluated: No HTML files found in submission.",
+                            severity=Severity.FAIL,
+                            evidence={
+                                "rule_id": rule.id,
+                                "description": rule.description,
+                                "selector": rule.selector,
+                                "weight": rule.weight,
+                                "skip_reason": "no_html_files_found",
+                                "expected_selectors": [rule.selector],
+                                "profile": self.profile_spec.name,
+                                "required": True,
+                            },
+                            source=self.name,
+                            finding_category=FindingCategory.MISSING,
+                            profile=self.profile_spec.name,
+                            required=True,
+                        )
+                    )
+            else:
+                # Not required or no rules defined - generate per-rule SKIPPED findings
+                for rule in self.profile_spec.required_html:
+                    findings.append(
+                        Finding(
+                            id="HTML.REQ.SKIPPED",
+                            category="html",
+                            message=f"Rule '{rule.id}' not evaluated: {rule.description}. HTML not required for this profile or no files found.",
+                            severity=Severity.SKIPPED,
+                            evidence={
+                                "rule_id": rule.id,
+                                "description": rule.description,
+                                "selector": rule.selector,
+                                "weight": rule.weight,
+                                "skip_reason": "component_not_required" if not is_required else "no_files_found",
+                                "profile": self.profile_spec.name,
+                                "required": is_required,
+                                "has_required_rules": has_required_rules,
+                            },
+                            source=self.name,
+                            finding_category=FindingCategory.OTHER,
+                            profile=self.profile_spec.name,
+                            required=is_required,
+                        )
+                    )
             return findings
 
         for path in html_files:
@@ -160,6 +213,8 @@ class HTMLRequiredElementsAssessor(Assessor):
             parser.feed(content)
             for rule in self.profile_spec.required_html:
                 count, passed = self._evaluate_rule(rule, parser)
+                # Extract snippet for evidence
+                snippet = self._extract_snippet(content, rule.selector, rule.id)
                 
                 finding_id = "HTML.REQ.PASS" if passed else "HTML.REQ.FAIL"
                 severity = Severity.INFO if passed else Severity.WARN
@@ -176,6 +231,8 @@ class HTMLRequiredElementsAssessor(Assessor):
                             "min_count": rule.min_count,
                             "count": count,
                             "weight": rule.weight,
+                            "snippet": snippet,
+                            "content": content[:500],
                         },
                         source=self.name,
                     )
@@ -187,6 +244,35 @@ class HTMLRequiredElementsAssessor(Assessor):
             return path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             return ""
+
+    def _extract_snippet(self, content: str, selector: str, rule_id: str) -> str:
+        """Extract a relevant HTML snippet around the matched selector."""
+        if not content or not content.strip():
+            return "(file is empty)"
+        
+        lines = content.splitlines()
+        selector_lower = selector.lower()
+        
+        # Build search terms from the selector
+        # e.g., "form" -> "<form", "input[type=text]" -> "<input"
+        tag_name = selector_lower.split("[")[0].split(".")[0].split("#")[0].strip()
+        search_term = f"<{tag_name}" if tag_name else selector_lower
+        
+        # Find first matching line
+        for i, line in enumerate(lines):
+            if search_term in line.lower():
+                start = max(0, i - 2)
+                end = min(len(lines), i + 3)
+                snippet_lines = []
+                for j in range(start, end):
+                    snippet_lines.append(f"{j + 1:>4} | {lines[j]}")
+                return "\n".join(snippet_lines)
+        
+        # No match — show first 10 lines as context
+        preview_lines = []
+        for j in range(min(10, len(lines))):
+            preview_lines.append(f"{j + 1:>4} | {lines[j]}")
+        return "\n".join(preview_lines)
 
     def _evaluate_rule(
         self, rule: RequiredHTMLRule, parser: _TagCountingParser

@@ -214,29 +214,39 @@ class Report:
     report_version: str = "1.0"
     
     def to_dict(self) -> Dict[str, object]:
+        from ams.core.aggregation import aggregate_findings_to_checks, compute_check_stats
+
+        serialized_findings = [
+            {
+                "id": f.id,
+                "category": f.category,
+                "message": f.message,
+                "severity": f.severity.value,
+                "evidence": dict(f.evidence),
+                "source": f.source,
+                "finding_category": f.finding_category.value,
+                "profile": f.profile,
+                "required": f.required,
+                "score_delta": f.score_delta,
+                "tags": f.tags,
+                "timestamp": f.timestamp,
+            }
+            for f in self.findings
+        ]
+
+        checks, diagnostics = aggregate_findings_to_checks(serialized_findings)
+        check_stats = compute_check_stats(checks)
+
         return {
             "report_version": self.report_version,
             "generated_at": self.generated_at,
             "metadata": self.metadata.to_dict(),
             "submission_path": self.submission_path,
             "workspace_path": self.workspace_path,
-            "findings": [
-                {
-                    "id": f.id,
-                    "category": f.category,
-                    "message": f.message,
-                    "severity": f.severity.value,
-                    "evidence": dict(f.evidence),
-                    "source": f.source,
-                    "finding_category": f.finding_category.value,
-                    "profile": f.profile,
-                    "required": f.required,
-                    "score_delta": f.score_delta,
-                    "tags": f.tags,
-                    "timestamp": f.timestamp,
-                }
-                for f in self.findings
-            ],
+            "findings": serialized_findings,
+            "checks": [c.to_dict() for c in checks],
+            "check_stats": check_stats,
+            "diagnostics": [d for d in diagnostics],
             "scores": self.scores,
             "score_evidence": self.score_evidence,
             "behavioural_evidence": self.behavioural_evidence,

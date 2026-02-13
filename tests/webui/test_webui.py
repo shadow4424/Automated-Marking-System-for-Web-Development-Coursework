@@ -66,7 +66,7 @@ def test_webui_mark_zip_happy_path_creates_run_and_shows_scores(tmp_path: Path):
 
     detail = client.get(f"/runs/{run_id}")
     assert detail.status_code == 200
-    assert b"Scores" in detail.data
+    assert b"Overall Score" in detail.data
     assert any(runs_root.iterdir())
 
 

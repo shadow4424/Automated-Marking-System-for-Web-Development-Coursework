@@ -11,7 +11,7 @@ from ams.core.profiles import get_profile_spec
 class CSSStaticAssessor(Assessor):
     """Deterministic CSS static checks."""
 
-    source = "css_static"
+    name = "css_static"
 
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
@@ -42,7 +42,7 @@ class CSSStaticAssessor(Assessor):
                             "profile": profile_name,
                             "required": True,
                         },
-                        source=self.source,
+                        source=self.name,
                         finding_category=FindingCategory.MISSING,
                         profile=profile_name,
                         required=True,
@@ -62,7 +62,7 @@ class CSSStaticAssessor(Assessor):
                             "profile": profile_name,
                             "required": False,
                         },
-                        source=self.source,
+                        source=self.name,
                         finding_category=FindingCategory.OTHER,
                         profile=profile_name,
                         required=False,
@@ -81,7 +81,7 @@ class CSSStaticAssessor(Assessor):
                         message="Failed to read CSS file.",
                         severity=Severity.FAIL,
                         evidence={"path": str(path), "error": str(exc)},
-                        source=self.source,
+                        source=self.name,
                     )
                 )
                 continue
@@ -118,7 +118,7 @@ class CSSStaticAssessor(Assessor):
                         message="CSS braces appear balanced.",
                         severity=Severity.INFO,
                         evidence=structure_evidence,
-                        source=self.source,
+                        source=self.name,
                     )
                 )
             elif open_braces == 0 and close_braces == 0:
@@ -129,7 +129,7 @@ class CSSStaticAssessor(Assessor):
                         message="No CSS rules detected.",
                         severity=Severity.WARN,
                         evidence=structure_evidence,
-                        source=self.source,
+                        source=self.name,
                     )
                 )
             else:
@@ -140,7 +140,7 @@ class CSSStaticAssessor(Assessor):
                         message="CSS braces appear unbalanced.",
                         severity=Severity.WARN,
                         evidence=structure_evidence,
-                        source=self.source,
+                        source=self.name,
                     )
                 )
 
@@ -157,7 +157,7 @@ class CSSStaticAssessor(Assessor):
                         "keyframes": lowered.count("@keyframes"),
                         "important": lowered.count("!important"),
                     },
-                    source=self.source,
+                    source=self.name,
                 )
             )
 
@@ -204,7 +204,7 @@ class CSSStaticAssessor(Assessor):
                             "threshold": 120,
                             "examples": overly_specific_selectors[:5],  # Limit examples
                         },
-                        source=self.source,
+                        source=self.name,
                         finding_category=FindingCategory.STRUCTURE,
                     )
                 )

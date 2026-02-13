@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 from ams.core.models import Finding, FindingCategory, Severity
 
@@ -40,7 +40,7 @@ def resolve_conflicts(findings: List[Finding]) -> List[Finding]:
     
     # Separate visual and static findings
     visual_findings: Dict[str, List[Finding]] = defaultdict(list)
-    static_findings: Dict[str, Finding] = {}
+    static_findings: List[Finding] = []
     other_findings: List[Finding] = []
     
     for finding in findings:
@@ -58,54 +58,50 @@ def resolve_conflicts(findings: List[Finding]) -> List[Finding]:
             else:
                 other_findings.append(finding)
         else:
-            # Static finding - key by ID
-            if finding.id not in static_findings:
-                static_findings[finding.id] = finding
-            else:
-                # Keep the more severe finding
-                existing = static_findings[finding.id]
-                if _severity_rank(finding.severity) > _severity_rank(existing.severity):
-                    static_findings[finding.id] = finding
+            # Static finding - preserve ALL findings, don't deduplicate by ID
+            # Multiple findings can share the same ID but represent different rules
+            # (e.g., HTML.REQ.PASS is used for all passing HTML rules)
+            static_findings.append(finding)
     
     # Resolve conflicts
     resolved: List[Finding] = []
-    overridden_static: set = set()
+    overridden_static_ids: set = set()
     
+    # Process visual findings and check for conflicts with static findings
     for base_rule_id, v_findings in visual_findings.items():
-        # Check if there's a corresponding static finding
-        static_finding = static_findings.get(base_rule_id)
+        # Check if there are corresponding static findings with this base rule ID
+        matching_static = [f for f in static_findings if f.id == base_rule_id]
         
-        if static_finding:
-            # Conflict detected: both static and visual findings exist
-            static_passed = static_finding.severity == Severity.INFO
-            visual_failed = any(f.severity in (Severity.FAIL, Severity.WARN) for f in v_findings)
+        if matching_static:
+            # Check for actual conflict: static PASS vs visual FAIL
+            for static_finding in matching_static:
+                static_passed = static_finding.severity == Severity.INFO
+                visual_failed = any(f.severity in (Severity.FAIL, Severity.WARN) for f in v_findings)
+                
+                if static_passed and visual_failed:
+                    # Visual OVERRIDES static: code exists but doesn't work visually
+                    logger.info(
+                        f"Conflict resolution: VISUAL.{base_rule_id} overrides static pass. "
+                        f"Code exists but visual check failed."
+                    )
+                    # Mark this specific static finding as overridden using its identity
+                    overridden_static_ids.add(id(static_finding))
             
-            if static_passed and visual_failed:
-                # Visual OVERRIDES static: code exists but doesn't work visually
-                logger.info(
-                    f"Conflict resolution: VISUAL.{base_rule_id} overrides static pass. "
-                    f"Code exists but visual check failed."
-                )
-                # Mark static as overridden
-                overridden_static.add(base_rule_id)
-                # Add visual findings as the authoritative result
-                resolved.extend(v_findings)
-            else:
-                # No overriding conflict - keep both
-                resolved.extend(v_findings)
+            # Add all visual findings for this rule
+            resolved.extend(v_findings)
         else:
             # No static finding - just keep visual findings
             resolved.extend(v_findings)
     
     # Add static findings that weren't overridden
-    for rule_id, static_finding in static_findings.items():
-        if rule_id not in overridden_static:
+    for static_finding in static_findings:
+        if id(static_finding) not in overridden_static_ids:
             resolved.append(static_finding)
     
     # Add other findings that don't fit the pattern
     resolved.extend(other_findings)
     
-    logger.debug(f"Conflict resolution: {len(findings)} input → {len(resolved)} output, {len(overridden_static)} overrides")
+    logger.debug(f"Conflict resolution: {len(findings)} input → {len(resolved)} output, {len(overridden_static_ids)} overrides")
     
     return resolved
 

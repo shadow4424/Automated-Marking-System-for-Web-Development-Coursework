@@ -187,7 +187,21 @@ class AssessmentPipeline:
         screenshot_path = self._find_screenshot(context.workspace_path)
         
         for finding in findings:
-            # Only process failed findings (severity FAIL or WARN)
+            # Handle SKIPPED findings for required components (provide deterministic feedback)
+            if finding.severity == Severity.SKIPPED:
+                if finding.required:
+                    skip_reason = finding.evidence.get("skip_reason", "component was skipped")
+                    fallback_feedback = {
+                        "summary": f"This check was not executed because {skip_reason}.",
+                        "items": [],
+                        "meta": {"fallback": True, "reason": "skipped_required"},
+                    }
+                    if isinstance(finding.evidence, dict):
+                        finding.evidence["llm_feedback"] = fallback_feedback
+                enriched.append(finding)
+                continue
+            
+            # Only process actual failures (FAIL or WARN) for LLM processing
             if finding.severity not in (Severity.FAIL, Severity.WARN):
                 enriched.append(finding)
                 continue
@@ -198,7 +212,8 @@ class AssessmentPipeline:
                 rule_id = finding.evidence["rule_id"]
             
             # Extract rule metadata for LLM enrichment (used by Phase 2 and 3)
-            rule_metadata = self._get_rule_metadata(rule_id, profile_spec)
+            # Pass finding for fallback category if rule not found in required rules
+            rule_metadata = self._get_rule_metadata(rule_id, profile_spec, finding)
             
             # Extract code snippet from evidence if available
             code_snippet = ""
@@ -206,6 +221,33 @@ class AssessmentPipeline:
                 code_snippet = finding.evidence.get("snippet", "")
                 if not code_snippet:
                     code_snippet = finding.evidence.get("content", "")[:500]
+            
+            # Log warning for findings with no code evidence ONLY if from required assessors where code is expected
+            # Skip warning for findings from Quality, Consistency, Behavior, Browser assessors which may not have code
+            is_required_assessor = any(
+                finding.id.upper().startswith(prefix) 
+                for prefix in ["HTML.REQ", "CSS.REQ", "JS.REQ", "PHP.REQ", "SQL.REQ"]
+            )
+            if not code_snippet.strip() and is_required_assessor:
+                logger.warning(f"Finding {finding.id} has no code evidence for LLM enrichment (MISSING_FILES or read error)")
+            
+            # Skip LLM enrichment for non-required findings without code evidence
+            # These findings (Quality, Consistency, Browser, etc.) don't require code context
+            if not code_snippet.strip() and not is_required_assessor:
+                enriched.append(finding)
+                continue
+            
+            # Handle empty code (MISSING_FILES) with deterministic message for required assessors
+            if not code_snippet.strip() and is_required_assessor:
+                fallback_feedback = {
+                    "summary": f"No code was found for this check. Ensure you include the required files and format.",
+                    "items": [],
+                    "meta": {"fallback": True, "reason": "no_code"},
+                }
+                if isinstance(finding.evidence, dict):
+                    finding.evidence["llm_feedback"] = fallback_feedback
+                enriched.append(finding)
+                continue
             
             # Phase 1: Generate feedback for failed rules
             if self.scoring_mode in (ScoringMode.LLM_FEEDBACK_ONLY, ScoringMode.STATIC_PLUS_LLM):
@@ -228,6 +270,14 @@ class AssessmentPipeline:
                     
                 except Exception as e:
                     logger.warning(f"Failed to generate LLM feedback for {finding.id}: {e}")
+                    # Attach fallback feedback on error
+                    fallback_feedback = {
+                        "summary": f"This check failed: {finding.message}",
+                        "items": [],
+                        "meta": {"fallback": True, "reason": "llm_error"},
+                    }
+                    if isinstance(finding.evidence, dict):
+                        finding.evidence["llm_feedback"] = fallback_feedback
             
             # Phase 2: Evaluate partial credit
             if self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
@@ -255,6 +305,17 @@ class AssessmentPipeline:
                         
                     except Exception as e:
                         logger.warning(f"Failed to evaluate partial credit for {finding.id}: {e}")
+                        # Attach fallback hybrid_score on error
+                        fallback_score = {
+                            "static_score": 0.0,
+                            "llm_score": None,
+                            "final_score": 0.0,
+                            "reasoning": f"Partial credit evaluation failed: {str(e)[:100]}",
+                            "intent_detected": False,
+                            "error": True,
+                        }
+                        if isinstance(finding.evidence, dict):
+                            finding.evidence["hybrid_score"] = fallback_score
             
             # Phase 3 + C: Vision Analysis for visual_check rules
             if self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
@@ -309,8 +370,17 @@ class AssessmentPipeline:
         
         return enriched, llm_evidence
 
-    def _get_rule_metadata(self, rule_id: str, profile_spec: ProfileSpec) -> dict:
-        """Extract metadata for a rule from the profile spec."""
+    def _get_rule_metadata(self, rule_id: str, profile_spec: ProfileSpec, finding: Finding | None = None) -> dict:
+        """Extract metadata for a rule from the profile spec.
+        
+        Args:
+            rule_id: The rule identifier to look up
+            profile_spec: The profile specification
+            finding: Optional Finding object to use for fallback metadata
+            
+        Returns:
+            Dictionary with rule metadata, or minimal metadata using finding.category as fallback
+        """
         # Search through all rule types
         all_rules = (
             list(profile_spec.required_html) +
@@ -330,6 +400,17 @@ class AssessmentPipeline:
                     "llm_guidance": getattr(rule, "llm_guidance", ""),
                     "visual_check": getattr(rule, "visual_check", False),
                 }
+        
+        # Fallback: construct minimal metadata from finding's category if available
+        if finding:
+            return {
+                "category": getattr(finding, "category", "unknown") or "unknown",
+                "partial_allowed": False,
+                "partial_range": (0.0, 0.5),
+                "severity": "medium",
+                "llm_guidance": "",
+                "visual_check": False,
+            }
         
         return {}
 

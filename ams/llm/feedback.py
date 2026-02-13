@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass
 from typing import Any
 
 from ams.core.factory import get_llm_provider
@@ -75,81 +74,12 @@ def scrub_pii(text: str) -> str:
 # =============================================================================
 
 
-@dataclass
-class FeedbackRequest:
-    """Structured request for feedback generation."""
-
-    rule_name: str
-    category: str
-    student_code: str
-    error_context: str
-
-
-def _build_feedback_prompt(request: FeedbackRequest) -> str:
-    """Build the user prompt for feedback generation.
-
-    Phase 1.4 Safety Rail: The prompt explicitly states no scoring.
-    """
-    return f"""Analyze the following student code for a failed rule check.
-
-Rule: {request.rule_name}
-Category: {request.category}
-Error Context: {request.error_context}
-
-Student Code (sanitized):
-```
-{request.student_code}
-```
-
-Based ONLY on the evidence provided, generate a JSON object with the following structure:
-{{"rule": "<rule_name>", "category": "<category>", "result": "FAIL", "evidence": "<brief explanation of why the rule failed>"}}
-
-IMPORTANT:
-- Output ONLY the JSON object. No markdown, no code fences, no explanations.
-- The "evidence" field should explain what is missing or incorrect.
-- Do NOT assign a numerical score. You are providing feedback only.
-- Base your analysis strictly on the code and context provided."""
-
-
 # =============================================================================
 # LLM Communication (Refactored to use LLMProvider)
 # =============================================================================
 
-
-def _clean_json_response(text: str) -> str:
-    """Clean LLM response to extract valid JSON.
-
-    Small models often wrap JSON in markdown or add preambles.
-    """
-    if not text:
-        return text
-
-    # Strip markdown code fences
-    fence_pattern = r"```(?:json)?\s*\n?([\s\S]*?)\n?```"
-    match = re.search(fence_pattern, text, re.IGNORECASE)
-    if match:
-        text = match.group(1).strip()
-
-    # Find JSON object boundaries
-    json_start = text.find("{")
-    if json_start != -1:
-        depth = 0
-        for i in range(json_start, len(text)):
-            if text[i] == "{":
-                depth += 1
-            elif text[i] == "}":
-                depth -= 1
-                if depth == 0:
-                    candidate = text[json_start : i + 1]
-                    # Strip trailing commas
-                    candidate = re.sub(r",\s*}", "}", candidate)
-                    candidate = re.sub(r",\s*]", "]", candidate)
-                    return candidate
-
-    # Fallback: try cleaning the whole text if no outer braces found
-    text = re.sub(r",\s*}", "}", text)
-    text = re.sub(r",\s*]", "]", text)
-    return text
+# Re-export from shared utility for backward compatibility
+from ams.llm.utils import clean_json_response as _clean_json_response  # noqa: F401
 
 
 def ask_llama(prompt: str, system_prompt: str = SYSTEM_PROMPT) -> str:

@@ -110,51 +110,49 @@ class HTMLReporter:
         llm_analysis: Dict,
     ) -> str:
         """Build the findings/feedback cards section."""
-        # Get feedback lookup
-        feedback_lookup = {}
-        for item in llm_analysis.get("feedback", []):
-            feedback_lookup[item.get("finding_id", "")] = item.get("feedback", "")
-        
-        # Filter to failed findings
-        failed_findings = [
+        # Filter to failed findings (include SKIPPED for completeness)
+        shown_findings = [
             f for f in findings 
-            if f.get("severity") in ("FAIL", "WARN", "fail", "warn")
+            if f.get("severity") in ("FAIL", "WARN", "SKIPPED", "fail", "warn", "skipped")
         ]
         
-        if not failed_findings:
+        if not shown_findings:
             return '<p class="no-issues">✅ No issues found! Great work!</p>'
         
         cards_html = []
-        for finding in failed_findings[:10]:  # Limit to 10
+        for finding in shown_findings:  # Show all findings, no 10-finding cap
             finding_id = finding.get("id", "Unknown")
             category = finding.get("category", "Unknown")
             message = finding.get("message", "No details")
             severity = finding.get("severity", "WARN")
+            evidence = finding.get("evidence", {})
             
-            # Check for LLM feedback
-            rule_id = finding.get("evidence", {}).get("rule_id", finding_id)
-            feedback = feedback_lookup.get(finding_id) or feedback_lookup.get(rule_id)
+            # Read LLM feedback from inline evidence (new approach)
+            llm_feedback = evidence.get("llm_feedback", {})
             
-            # Format feedback
+            # Format feedback from inline evidence
             feedback_html = ""
-            if feedback:
-                if isinstance(feedback, dict):
-                    feedback_text = feedback.get("evidence", feedback.get("reason", str(feedback)))
-                else:
-                    feedback_text = str(feedback)
-                feedback_html = f'''
-                <div class="ai-feedback">
-                    <span class="ai-badge">🤖 AI Feedback</span>
-                    <p>{html.escape(feedback_text[:500])}</p>
-                </div>
-                '''
+            if isinstance(llm_feedback, dict) and llm_feedback:
+                feedback_text = (
+                    llm_feedback.get("summary") or 
+                    llm_feedback.get("evidence") or 
+                    llm_feedback.get("reason") or 
+                    str(llm_feedback)
+                )
+                if feedback_text:
+                    feedback_html = f'''
+                    <div class="ai-feedback">
+                        <span class="ai-badge">🤖 AI Feedback</span>
+                        <p>{html.escape(str(feedback_text)[:500])}</p>
+                    </div>
+                    '''
             
-            severity_class = "severe" if severity.upper() == "FAIL" else "warning"
+            severity_class = "severe" if severity.upper() == "FAIL" else ("skipped" if severity.upper() == "SKIPPED" else "warning")
             
             card = f'''
             <div class="finding-card {severity_class}">
                 <div class="finding-header">
-                    <span class="finding-id">{html.escape(rule_id)}</span>
+                    <span class="finding-id">{html.escape(finding_id)}</span>
                     <span class="finding-category">{html.escape(category.upper())}</span>
                     <span class="severity-badge {severity_class}">{html.escape(severity.upper())}</span>
                 </div>
@@ -213,11 +211,16 @@ class HTMLReporter:
         findings: List[Dict],
         llm_analysis: Dict,
     ) -> str:
-        """Build the statistics section."""
-        total = len(findings)
-        passed = len([f for f in findings if f.get("severity") in ("INFO", "PASS", "info", "pass")])
-        failed = len([f for f in findings if f.get("severity") in ("FAIL", "fail")])
-        warnings = len([f for f in findings if f.get("severity") in ("WARN", "warn")])
+        """Build the statistics section using aggregated checks."""
+        from ams.core.aggregation import aggregate_findings_to_checks, compute_check_stats
+
+        checks, diagnostics = aggregate_findings_to_checks(findings)
+        stats = compute_check_stats(checks)
+
+        total = stats["total"]
+        passed = stats["passed"]
+        failed = stats["failed"]
+        warnings = stats["warnings"]
         
         feedback_count = len(llm_analysis.get("feedback", []))
         vision_count = len(llm_analysis.get("vision_analysis", []))

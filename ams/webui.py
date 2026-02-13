@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import tempfile
 import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
@@ -20,6 +22,7 @@ from flask import (
 from ams.core.pipeline import AssessmentPipeline
 from ams.core.config import ScoringMode
 from ams.core.profiles import PROFILES
+from ams.core.aggregation import aggregate_findings_to_checks, compute_check_stats
 from ams.io.metadata import MetadataValidator, SubmissionMetadata
 from ams.io.web_storage import (
     allowed_download,
@@ -39,7 +42,6 @@ from ams.io.web_storage import (
 )
 from ams.tools.batch import run_batch
 from ams.analytics import build_teacher_analytics
-from ams.io.submission import SubmissionProcessor
 
 MAX_UPLOAD_MB = 25
 ALLOWED_DOWNLOADS = {
@@ -65,29 +67,6 @@ ALLOWED_DOWNLOADS = {
 }
 
 
-def _normalize_artifact_path(run_dir: Path, artifact_path: str | Path) -> str:
-    """Convert absolute or relative artifact paths to a format suitable for /runs/<run_id>/artifacts/<path>
-    
-    Args:
-        run_dir: The run directory path
-        artifact_path: The artifact path (may be absolute or relative)
-    
-    Returns:
-        A relative path string that can be used in the artifact serving URL
-    """
-    artifact_path = Path(artifact_path)
-    
-    # If it's already absolute, make it relative to run_dir
-    try:
-        artifact_path = artifact_path.relative_to(run_dir)
-    except (ValueError, TypeError):
-        # Not a child of run_dir, return as is (try forward slashes)
-        artifact_path = Path(str(artifact_path).replace("\\", "/"))
-    
-    # Normalize to use forward slashes for URL
-    return artifact_path.as_posix()
-
-
 def _artifact_url(run_id: str, artifact_path: str | Path) -> str:
     """Build a URL for an artifact file.
     
@@ -104,13 +83,29 @@ def _artifact_url(run_id: str, artifact_path: str | Path) -> str:
     return f"/runs/{run_id}/artifacts/{artifact_str}"
 
 
+def _ensure_check_stats(report: dict) -> dict:
+    """Enrich a loaded report dict with aggregated check stats if missing.
+
+    Backward-compatible: reports generated before the aggregation layer was
+    added will be enriched on load so the template always has the data.
+    """
+    if "checks" not in report or "check_stats" not in report:
+        findings = report.get("findings", [])
+        checks, diagnostics = aggregate_findings_to_checks(findings)
+        report["checks"] = [c.to_dict() for c in checks]
+        report["check_stats"] = compute_check_stats(checks)
+        report["diagnostics"] = diagnostics
+    return report
+
+
 def create_app(config: Mapping[str, object] | None = None) -> Flask:
     app = Flask(__name__, template_folder="templates")
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024  # security: limit upload size
     if config:
         app.config.update(config)
     if not app.config.get("SECRET_KEY"):
-        app.config["SECRET_KEY"] = "replace-this-secret"
+        import secrets
+        app.config["SECRET_KEY"] = secrets.token_hex(32)
     app.secret_key = app.config["SECRET_KEY"]
     
     # Cleanup old workspaces on startup (prevents disk bloat)
@@ -192,7 +187,6 @@ def _register_routes(app: Flask) -> None:
         runs_root = get_runs_root(app)
         
         # Save uploaded file temporarily
-        import tempfile
         with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
             file.save(tmp_file.name)
             tmp_zip_path = Path(tmp_file.name)
@@ -305,7 +299,6 @@ def _register_routes(app: Flask) -> None:
         runs_root = get_runs_root(app)
         
         # Save uploaded file temporarily
-        import tempfile
         with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
             file.save(tmp_file.name)
             tmp_zip_path = Path(tmp_file.name)
@@ -338,7 +331,6 @@ def _register_routes(app: Flask) -> None:
             
             # Store batch zip
             upload_zip = run_dir / original_filename
-            import shutil
             shutil.copy2(tmp_zip_path, upload_zip)
             
             # Save batch metadata
@@ -429,7 +421,9 @@ def _register_routes(app: Flask) -> None:
         if run_info.get("mode") == "mark":
             report_path = run_dir / run_info.get("report", "report.json")
             if report_path.exists():
-                context["report"] = json.loads(report_path.read_text(encoding="utf-8"))
+                context["report"] = _ensure_check_stats(
+                    json.loads(report_path.read_text(encoding="utf-8"))
+                )
         else:
             summary_path = run_dir / run_info.get("summary", "batch_summary.json")
             if summary_path.exists():
@@ -501,7 +495,9 @@ def _register_routes(app: Flask) -> None:
             return "Report not found", 404
         
         run_info = load_run_info(run_dir) or {}
-        report = json.loads(report_path.read_text(encoding="utf-8"))
+        report = _ensure_check_stats(
+            json.loads(report_path.read_text(encoding="utf-8"))
+        )
         
         # Create a pseudo run_info for this submission
         submission_run_info = {
@@ -631,14 +627,13 @@ def _register_routes(app: Flask) -> None:
             _ensure_batch_analytics(run_dir, run_id)
         target = _resolve_download_path(run_dir, filename)
         try:
-            target.relative_to(runs_root.resolve())
+            target.resolve().relative_to(run_dir.resolve())
         except Exception:
             return "Not allowed", 403
         if not target.exists() or not target.is_file():
             return "File not found", 404
         run_info = load_run_info(run_dir) or {}
         profile = run_info.get("profile", "")
-        mode = run_info.get("mode", "batch")
         dl_name = filename
         if filename.startswith("report"):
             dl_name = f"report_{profile}_{run_id}.json"
@@ -662,8 +657,6 @@ def _register_routes(app: Flask) -> None:
             dl_name = f"failure_reasons_{profile}_{run_id}.csv"
         elif filename.startswith("score_buckets"):
             dl_name = f"score_buckets_{profile}_{run_id}.csv"
-        elif filename.startswith("component_means"):
-            dl_name = f"component_means_{profile}_{run_id}.csv"
         return send_file(target, as_attachment=True, download_name=dl_name)
 
 
@@ -858,7 +851,6 @@ def _write_batch_reports_zip(run_dir: Path, profile: str, run_id: str) -> None:
     records = batch_summary.get("records", []) or []
     _ensure_batch_analytics(run_dir, run_id)
     zip_path = run_dir / f"batch_reports_{profile}_{run_id}.zip"
-    import zipfile
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(summary_path, f"{run_id}/batch_summary.json")

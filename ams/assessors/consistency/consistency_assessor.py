@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -10,6 +11,8 @@ from typing import Dict, List, Set
 from ams.assessors.base import Assessor
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec
+
+logger = logging.getLogger(__name__)
 
 
 class _HTMLElementExtractor(HTMLParser):
@@ -124,9 +127,8 @@ class ConsistencyAssessor(Assessor):
                     all_links.append((href, html_file_str))
                 for action, _ in parser.form_actions:
                     all_form_actions.append((action, html_file_str))
-            except Exception:
-                # Ignore parse errors, continue with other files
-                pass
+            except Exception as e:
+                logger.debug("Failed to parse HTML file %s: %s", html_file, e)
         
         return {
             "ids": all_ids,
@@ -216,9 +218,8 @@ class ConsistencyAssessor(Assessor):
                                     profile=profile_name,
                                 )
                             )
-            except Exception:
-                # Ignore parse errors
-                pass
+            except Exception as e:
+                logger.debug("Error checking JS-HTML consistency for %s: %s", js_file, e)
         
         return findings
 
@@ -286,9 +287,8 @@ class ConsistencyAssessor(Assessor):
                                 profile=profile_name,
                             )
                         )
-            except Exception:
-                # Ignore parse errors
-                pass
+            except Exception as e:
+                logger.debug("Error checking JS-HTML consistency for %s: %s", js_file, e)
         
         return findings
 
@@ -318,9 +318,8 @@ class ConsistencyAssessor(Assessor):
                         if key:
                             php_accessed_keys.add(key)
                             php_file_map[key] = str(php_file)
-            except Exception:
-                # Ignore parse errors
-                pass
+            except Exception as e:
+                logger.debug("Error reading PHP file %s: %s", php_file, e)
         
         # Check: PHP expects key that doesn't exist in HTML
         for key in php_accessed_keys:

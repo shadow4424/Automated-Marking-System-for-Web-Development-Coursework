@@ -56,9 +56,6 @@ def _create_parser() -> argparse.ArgumentParser:
     export_parser.add_argument("--out", "-o", type=Path, default=Path("figures"), help="Output directory for figures/tables")
 
     demo_parser = subparsers.add_parser("demo", help="Build and run a full demo (batch, analytics, figures, evaluation)")
-    demo_parser.add_argument("--profile", choices=["frontend", "fullstack"], default="fullstack")
-    demo_parser.add_argument("--runs-root", type=Path, default=Path("demo_out"), help="Where to store the demo run outputs")
-    demo_parser.add_argument("--demo-root", type=Path, default=Path("demo"), help="Root folder containing demo scaffold")
 
     return parser
 
@@ -139,17 +136,10 @@ def main(argv: list[str] | None = None) -> None:
         print(f"Figures exported to {args.out}")
         return
     elif args.command == "demo":
-        from .tools.demo_runner import run_demo
+        from .tools.demo_full_system import run_demo
 
-        info = run_demo(profile=args.profile, runs_root=Path(args.runs_root), demo_root=Path(args.demo_root))
-        run_url = f"http://localhost:5000/runs/{info['run_id']}"
-        print("Demo run complete.")
-        print(f"- run_id: {info['run_id']}")
-        print(f"- run directory: {info['run_dir']}")
-        print(f"- web UI (set AMS_RUNS_ROOT={Path(args.runs_root).resolve()}): {run_url}")
-        print(f"- evaluation summary: {info['evaluation_dir'] / 'evaluation_summary.json'}")
-        print(f"- figures: {info['figures_dir']}")
-        return
+        success = run_demo()
+        raise SystemExit(0 if success else 1)
     else:
         raise SystemExit(1)
 

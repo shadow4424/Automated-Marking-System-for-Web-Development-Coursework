@@ -283,6 +283,12 @@
     color: var(--color-text-muted);
 }
 
+.badge-secondary {
+    background: var(--color-surface-hover);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+}
+
 /* Score Badge */
 .score-badge {
     display: inline-flex;
@@ -480,6 +486,11 @@ details[open] summary {
 
 .finding-fail {
     border-left-color: var(--color-danger);
+}
+
+.finding-skipped {
+    border-left-color: var(--color-border);
+    opacity: 0.7;
 }
 
 .finding-header {
@@ -747,4 +758,157 @@ details[open] summary {
     font-size: var(--text-sm);
     color: var(--color-text-muted);
     text-align: right;
+}
+
+/* ----------------------------------------------------------------------------
+   13. AI Feedback Cards
+   ---------------------------------------------------------------------------- */
+.ai-feedback-card {
+    background: rgba(156, 39, 176, 0.08);
+    border: 1px solid rgba(156, 39, 176, 0.2);
+    padding: var(--space-md) var(--space-lg);
+    border-radius: var(--radius-md);
+    margin-top: var(--space-sm);
+}
+
+.ai-feedback-card p {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    margin-top: var(--space-xs);
+    line-height: 1.5;
+}
+
+.ai-feedback-card--partial {
+    background: rgba(255, 152, 0, 0.08);
+    border-color: rgba(255, 152, 0, 0.2);
+}
+
+.ai-badge {
+    display: inline-block;
+    background: #9c27b0;
+    color: white;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-sm);
+}
+
+.ai-badge--partial {
+    background: #e65100;
+}
+
+/* ----------------------------------------------------------------------------
+   14. Stat Card Variants (colored left borders)
+   ---------------------------------------------------------------------------- */
+.stat-card--default {
+    border-left: 3px solid var(--color-text-muted);
+}
+
+.stat-card--success {
+    border-left: 3px solid var(--color-success);
+}
+
+.stat-card--danger {
+    border-left: 3px solid var(--color-danger);
+}
+
+.stat-card--warning {
+    border-left: 3px solid var(--color-warning);
+}
+
+.stat-card--ai {
+    border-left: 3px solid var(--color-primary);
+}
+
+.stat-grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-md);
+}
+
+@media (max-width: 768px) {
+    .stat-grid-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* ----------------------------------------------------------------------------
+   15. Section Headers
+   ---------------------------------------------------------------------------- */
+.section-header {
+    font-size: var(--text-xl);
+    padding-bottom: var(--space-sm);
+    border-bottom: 2px solid var(--color-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+/* ----------------------------------------------------------------------------
+   16. Vision Analysis Cards
+   ---------------------------------------------------------------------------- */
+.vision-card {
+    padding: var(--space-lg);
+}
+
+.vision-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-md);
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.vision-status {
+    font-size: var(--text-sm);
+    font-weight: 700;
+    padding: 0.25rem 1rem;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.vision-status--pass {
+    background: rgba(76, 175, 80, 0.15);
+    color: var(--color-success);
+}
+
+.vision-status--fail {
+    background: rgba(244, 67, 54, 0.15);
+    color: var(--color-danger);
+}
+
+.vision-status--unknown {
+    background: rgba(158, 158, 158, 0.15);
+    color: var(--color-text-muted);
+}
+
+.vision-reason {
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-md);
+    font-size: var(--text-sm);
+}
+
+.vision-issues {
+    list-style: none;
+    padding: 0;
+    margin-bottom: var(--space-md);
+}
+
+.vision-issues li {
+    padding: var(--space-xs) 0;
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.vision-screenshot {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    margin-top: var(--space-sm);
 }

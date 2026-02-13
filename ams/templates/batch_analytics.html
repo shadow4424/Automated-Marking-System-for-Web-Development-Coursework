@@ -80,7 +80,7 @@
             </thead>
             <tbody>
                 {% for comp_name, comp_data in analytics.components.items() %}
-                {% set avg_pct = (comp_data.average|default(0) * 100)|round|int %}
+                {% set avg_pct = ((comp_data.average|default(0, true))|float * 100)|round|int %}
                 <tr>
                     <td><strong>{{ comp_name|upper }}</strong></td>
                     <td>
@@ -89,9 +89,9 @@
                             {{ avg_pct }}%
                         </span>
                     </td>
-                    <td>{{ comp_data.pct_zero|default(0)|round|int }}%</td>
-                    <td>{{ comp_data.pct_half|default(0)|round|int }}%</td>
-                    <td>{{ comp_data.pct_full|default(0)|round|int }}%</td>
+                    <td>{{ (comp_data.pct_zero|default(0, true))|float|round|int }}%</td>
+                    <td>{{ (comp_data.pct_half|default(0, true))|float|round|int }}%</td>
+                    <td>{{ (comp_data.pct_full|default(0, true))|float|round|int }}%</td>
                 </tr>
                 {% endfor %}
             </tbody>

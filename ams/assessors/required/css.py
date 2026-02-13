@@ -39,50 +39,81 @@ class CSSRequiredRulesAssessor(Assessor):
         is_required = self.profile_spec.is_component_required("css")
         has_required_rules = self.profile_spec.has_required_rules("css")
 
-        if not css_files:
-            if is_required and has_required_rules:
-                # Required for profile but missing
-                findings.append(
-                    Finding(
-                        id="CSS.REQ.MISSING_FILES",
-                        category="css",
-                        message="No CSS files found; CSS is required for this profile.",
-                        severity=Severity.FAIL,
-                        evidence={
-                            "rule_ids": [r.id for r in self.profile_spec.required_css],
-                            "expected_needles": [r.needle for r in self.profile_spec.required_css],
-                            "discovered_count": 0,
-                            "profile": self.profile_spec.name,
-                            "required": True,
-                        },
-                        source=self.name,
-                        finding_category=FindingCategory.MISSING,
-                        profile=self.profile_spec.name,
-                        required=True,
-                    )
-                )
-            else:
-                # Not required or no rules defined, skip
+        # If CSS is not required for this profile, generate per-rule SKIPPED findings
+        if not is_required:
+            for rule in self.profile_spec.required_css:
                 findings.append(
                     Finding(
                         id="CSS.REQ.SKIPPED",
                         category="css",
-                        message="No CSS files found; CSS required checks not applicable.",
+                        message=f"Rule '{rule.id}' skipped: CSS not required for this profile.",
                         severity=Severity.SKIPPED,
                         evidence={
-                            "rule_ids": [r.id for r in self.profile_spec.required_css],
-                            "expected_needles": [r.needle for r in self.profile_spec.required_css],
-                            "discovered_count": 0,
-                            "profile": self.profile_spec.name,
-                            "required": is_required,
-                            "has_required_rules": has_required_rules,
+                            "rule_id": rule.id,
+                            "description": rule.description,
+                            "needle": rule.needle,
+                            "weight": rule.weight,
+                            "skip_reason": "component_not_required",
                         },
                         source=self.name,
                         finding_category=FindingCategory.OTHER,
                         profile=self.profile_spec.name,
-                        required=is_required,
+                        required=False,
                     )
                 )
+            return findings
+
+        if not css_files:
+            if is_required and has_required_rules:
+                # Required for profile but missing - generate per-rule FAIL findings
+                for rule in self.profile_spec.required_css:
+                    findings.append(
+                        Finding(
+                            id="CSS.REQ.FAIL",
+                            category="css",
+                            message=f"Rule '{rule.id}' not evaluated: No CSS files found in submission.",
+                            severity=Severity.FAIL,
+                            evidence={
+                                "rule_id": rule.id,
+                                "description": rule.description,
+                                "needle": rule.needle,
+                                "weight": rule.weight,
+                                "skip_reason": "no_css_files_found",
+                                "expected_needles": [rule.needle],
+                                "profile": self.profile_spec.name,
+                                "required": True,
+                            },
+                            source=self.name,
+                            finding_category=FindingCategory.MISSING,
+                            profile=self.profile_spec.name,
+                            required=True,
+                        )
+                    )
+            else:
+                # Not required or no rules defined - generate per-rule SKIPPED findings
+                for rule in self.profile_spec.required_css:
+                    findings.append(
+                        Finding(
+                            id="CSS.REQ.SKIPPED",
+                            category="css",
+                            message=f"Rule '{rule.id}' not evaluated: {rule.description}. CSS not required for this profile or no files found.",
+                            severity=Severity.SKIPPED,
+                            evidence={
+                                "rule_id": rule.id,
+                                "description": rule.description,
+                                "needle": rule.needle,
+                                "weight": rule.weight,
+                                "skip_reason": "component_not_required" if not is_required else "no_files_found",
+                                "profile": self.profile_spec.name,
+                                "required": is_required,
+                                "has_required_rules": has_required_rules,
+                            },
+                            source=self.name,
+                            finding_category=FindingCategory.OTHER,
+                            profile=self.profile_spec.name,
+                            required=is_required,
+                        )
+                    )
             return findings
 
         for path in css_files:
@@ -104,6 +135,8 @@ class CSSRequiredRulesAssessor(Assessor):
             content_lower = content.lower()
             for rule in self.profile_spec.required_css:
                 count, passed = self._evaluate_rule(rule, content, content_lower, brace_count)
+                # Extract a relevant snippet for evidence
+                snippet = self._extract_snippet(content, rule.needle, rule.id)
                 findings.append(
                     Finding(
                         id="CSS.REQ.PASS" if passed else "CSS.REQ.FAIL",
@@ -117,11 +150,56 @@ class CSSRequiredRulesAssessor(Assessor):
                             "min_count": rule.min_count,
                             "count": count,
                             "weight": rule.weight,
+                            "snippet": snippet,
+                            "content": content[:500],
                         },
                         source=self.name,
                     )
                 )
         return findings
+
+    def _extract_snippet(self, content: str, needle: str, rule_id: str) -> str:
+        """Extract a relevant CSS snippet around the matched rule needle.
+        
+        Returns up to 5 context lines around the first match, or the first
+        10 lines of the file if no match is found.
+        """
+        if not content or not content.strip():
+            return "(file is empty)"
+        
+        lines = content.splitlines()
+        needle_lower = needle.lower()
+        
+        # Map special rule IDs to search terms
+        search_terms = {
+            "css.has_flexbox": ["display: flex", "display:flex"],
+            "css.has_grid": ["display: grid", "display:grid"],
+            "css.has_layout": ["margin", "padding", "display", "position"],
+            "css.has_typography": ["font-family", "font-size", "line-height"],
+            "css.has_element_selector": ["body", "h1", "p", "div", "header"],
+            "css.has_custom_properties": ["--"],
+            "css.has_comments": ["/*"],
+            "css.has_multiple_rules": ["{"],
+        }
+        
+        terms = search_terms.get(rule_id.lower(), [needle_lower])
+        
+        # Find first matching line
+        for i, line in enumerate(lines):
+            line_lower = line.lower()
+            if any(term in line_lower for term in terms):
+                start = max(0, i - 2)
+                end = min(len(lines), i + 3)
+                snippet_lines = []
+                for j in range(start, end):
+                    snippet_lines.append(f"{j + 1:>4} | {lines[j]}")
+                return "\n".join(snippet_lines)
+        
+        # No match found — show first 10 lines as context
+        preview_lines = []
+        for j in range(min(10, len(lines))):
+            preview_lines.append(f"{j + 1:>4} | {lines[j]}")
+        return "\n".join(preview_lines)
 
     def _evaluate_rule(
         self, rule, content: str, content_lower: str, brace_count: int

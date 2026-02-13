@@ -226,8 +226,9 @@ class JSStaticAssessor(Assessor):
             
             # Check for very short function/variable names (1-2 chars, excluding common ones)
             short_names = re.findall(r'\b([a-z]{1,2})\b', content.lower())
+            js_keywords = {"if", "in", "do", "of", "or", "is", "no", "on", "up", "at", "to", "as", "an"}
             common_short = {"id", "el", "fn", "cb", "x", "y", "z", "i", "j", "k"}
-            suspicious_short = [n for n in set(short_names) if n not in common_short and len(n) == 1]
+            suspicious_short = [n for n in set(short_names) if n not in common_short and n not in js_keywords and len(n) == 1]
             
             if len(suspicious_vars) > 5 or len(suspicious_short) > 3:
                 findings.append(
@@ -246,22 +247,21 @@ class JSStaticAssessor(Assessor):
                     )
                 )
 
-            # 3. Detect unused variables (heuristic - variables declared but never referenced)
-            # This is simplified - look for var/let/const declarations
-            declared_vars = set()
-            used_vars = set()
+            # 3. Detect unused variables (heuristic - variables declared but never referenced elsewhere)
+            declared_vars: dict[str, int] = {}  # var_name -> declaration position
             
             # Find declarations
-            for match in re.finditer(r'\b(var|let|const)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)', content):
-                declared_vars.add(match.group(2))
+            for match in re.finditer(r'\b(?:var|let|const)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)', content):
+                declared_vars[match.group(1)] = match.end()
             
-            # Find usages (excluding declarations)
-            for match in re.finditer(r'\b([a-zA-Z_$][a-zA-Z0-9_$]*)\b', content):
-                var_name = match.group(1)
-                if var_name in declared_vars:
-                    used_vars.add(var_name)
-            
-            unused_vars = declared_vars - used_vars
+            # Check for usages AFTER declaration (excluding the declaration itself)
+            unused_vars = set()
+            for var_name, decl_end in declared_vars.items():
+                # Search for usage of this variable name anywhere after its declaration
+                usage_pattern = re.compile(r'\b' + re.escape(var_name) + r'\b')
+                rest_of_content = content[decl_end:]
+                if not usage_pattern.search(rest_of_content):
+                    unused_vars.add(var_name)
             # Filter out common patterns that might be false positives
             unused_vars = {v for v in unused_vars if not v.startswith("_")}  # Private vars convention
             

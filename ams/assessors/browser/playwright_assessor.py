@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import contextlib
-import shutil
-import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Mapping, Sequence
+from typing import List, Mapping
 
 from ams.assessors.base import Assessor
 from ams.core.models import BrowserEvidence, Finding, FindingCategory, Severity, SubmissionContext
