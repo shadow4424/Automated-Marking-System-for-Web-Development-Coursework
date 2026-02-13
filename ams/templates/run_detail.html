@@ -92,7 +92,7 @@
 
 <section class="mb-xl">
     <h2 class="section-header mb-md">📊 Statistics</h2>
-    <div class="stat-grid-4 mb-md">
+    <div class="stat-grid-4 mb-lg">
         <div class="card stat-card stat-card--default">
             <div class="stat-value">{{ ns.total }}</div>
             <div class="stat-label">Total Checks</div>
@@ -109,31 +109,27 @@
             <div class="stat-value text-warning">{{ ns.warnings }}</div>
             <div class="stat-label">Warnings</div>
         </div>
-        {% if ns.skipped > 0 %}
-        <div class="card stat-card" style="border-left: 3px solid #6b7280;">
-            <div class="stat-value" style="color: #6b7280;">{{ ns.skipped }}</div>
-            <div class="stat-label">Skipped</div>
-        </div>
-        {% endif %}
-        <div class="card stat-card" style="border-left: 3px solid #8b5cf6;">
-            <div class="stat-value" style="color: #8b5cf6;">{{ findings|length }}</div>
-            <div class="stat-label">Total Events</div>
-        </div>
     </div>
     {% if ns.ai_count > 0 or ns.vision_count > 0 or ns.partial_count > 0 %}
-    <div class="grid grid-auto mb-md">
+    <div class="grid grid-auto">
+        {% if ns.ai_count > 0 %}
         <div class="card stat-card stat-card--ai">
             <div class="stat-value">{{ ns.ai_count }}</div>
             <div class="stat-label">🤖 AI Feedback</div>
         </div>
+        {% endif %}
+        {% if ns.vision_count > 0 %}
         <div class="card stat-card stat-card--ai">
             <div class="stat-value">{{ ns.vision_count }}</div>
             <div class="stat-label">👁️ Vision Checks</div>
         </div>
+        {% endif %}
+        {% if ns.partial_count > 0 %}
         <div class="card stat-card stat-card--ai">
             <div class="stat-value">{{ ns.partial_count }}</div>
             <div class="stat-label">💡 Partial Credits</div>
         </div>
+        {% endif %}
     </div>
     {% endif %}
 </section>
@@ -147,7 +143,6 @@
         <button type="button" class="filter-toggle" data-severity="info">✓ Pass</button>
         <button type="button" class="filter-toggle" data-severity="warn">⚠ Warn</button>
         <button type="button" class="filter-toggle" data-severity="fail">✗ Fail</button>
-        <button type="button" class="filter-toggle" data-severity="skipped">⊘ Skipped</button>
         <button type="button" class="btn btn-ghost btn-sm" data-reset>Reset</button>
     </div>
     <span class="toolbar-count" data-findings-count>{{ findings|length }} events</span>
