@@ -42,6 +42,9 @@ class _TagCountingParser(HTMLParser):
         # Label tracking
         self.label_count = 0
 
+        # DOCTYPE tracking
+        self.has_doctype = False
+
     def handle_starttag(self, tag: str, attrs) -> None:  # type: ignore[override]
         lowered = tag.lower()
         self.counts[lowered] = self.counts.get(lowered, 0) + 1
@@ -89,6 +92,11 @@ class _TagCountingParser(HTMLParser):
 
     def handle_startendtag(self, tag: str, attrs) -> None:  # type: ignore[override]
         self.handle_starttag(tag, attrs)
+
+    def handle_decl(self, decl: str) -> None:
+        """Handle declarations like <!DOCTYPE html>."""
+        if decl.lower().startswith("doctype"):
+            self.has_doctype = True
 
 
 class HTMLRequiredElementsAssessor(Assessor):
@@ -284,7 +292,12 @@ class HTMLRequiredElementsAssessor(Assessor):
             and passed indicates whether the rule requirement is satisfied.
         """
         selector = rule.selector.lower()
-        
+
+        # === DOCTYPE ===
+        if selector == "!doctype" or rule.id == "html.has_doctype":
+            count = 1 if parser.has_doctype else 0
+            return count, count >= rule.min_count
+
         # === SEMANTIC STRUCTURE ===
         if selector == "semantic" or rule.id == "html.has_semantic_structure":
             count = 1 if parser.has_semantic else 0
