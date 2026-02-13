@@ -117,7 +117,7 @@ class HTMLReporter:
         ]
         
         if not shown_findings:
-            return '<p class="no-issues">✅ No issues found! Great work!</p>'
+            return '<p class="no-issues">No issues found! Great work!</p>'
         
         cards_html = []
         for finding in shown_findings:  # Show all findings, no 10-finding cap
@@ -593,11 +593,11 @@ class HTMLReporter:
 <body>
     <div class="container">
         <header>
-            <h1>🎓 Assessment Report</h1>
+            <h1>Assessment Report</h1>
             <div class="metadata">
-                <span>📋 Profile: {profile}</span>
-                <span>⚙️ Mode: {scoring_mode}</span>
-                <span>🕒 {timestamp}</span>
+                <span>Profile: {profile}</span>
+                <span>Mode: {scoring_mode}</span>
+                <span>{timestamp}</span>
             </div>
         </header>
         
@@ -611,12 +611,12 @@ class HTMLReporter:
         </section>
         
         <section>
-            <h2 class="section-header">📊 Statistics</h2>
+            <h2 class="section-header">Statistics</h2>
             {stats_section}
         </section>
         
         <section>
-            <h2 class="section-header">⚠️ Issues & Feedback</h2>
+            <h2 class="section-header">Issues & Feedback</h2>
             {findings_section}
         </section>
         

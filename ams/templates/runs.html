@@ -2,11 +2,12 @@
 {% block title %}Run History - AMS{% endblock %}
 
 {% block content %}
-<div class="flex justify-between items-center mb-lg">
+<div class="page-header">
     <h1>Run History</h1>
-    <div class="flex gap-sm">
-        <a href="{{ url_for('mark') }}" class="btn btn-primary">+ New Mark</a>
-        <a href="{{ url_for('batch') }}" class="btn btn-secondary">+ New Batch</a>
+    <p class="text-secondary">Track single submissions and batch cohorts in one place.</p>
+    <div class="page-header-actions">
+        <a href="{{ url_for('mark') }}" class="btn btn-primary">New Mark</a>
+        <a href="{{ url_for('batch') }}" class="btn btn-secondary">New Batch</a>
     </div>
 </div>
 
@@ -69,7 +70,7 @@
 </div>
 {% else %}
 <div class="empty-state card">
-    <div class="empty-state-icon">📭</div>
+    <div class="empty-state-icon"></div>
     <h3 class="empty-state-title">No runs yet</h3>
     <p class="empty-state-text">Start by uploading a submission to mark.</p>
     <a href="{{ url_for('mark') }}" class="btn btn-primary">Upload Submission</a>

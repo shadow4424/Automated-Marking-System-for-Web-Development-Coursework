@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
@@ -52,12 +52,7 @@
         </div>
     </main>
 
-    <footer class="footer">
-        <div class="container footer-inner">
-            <p class="footer-text">&copy; 2026 Automated Marking System</p>
-            <p class="footer-text hide-mobile">Built with Flask + Vanilla JS</p>
-        </div>
-    </footer>
+    <footer class="footer"></footer>
 
     <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
     {% block scripts %}{% endblock %}

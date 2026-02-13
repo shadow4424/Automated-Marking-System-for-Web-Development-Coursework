@@ -3,42 +3,40 @@
 
 {% block content %}
 {# Header #}
-<div class="flex justify-between items-start flex-wrap gap-md mb-xl">
-    <div>
-        <nav class="text-sm text-muted mb-sm">
-            {% if batch_submission_id %}
-            <a href="{{ back_url }}" class="btn btn-ghost btn-sm">← Back to Batch Results</a>
-            {% else %}
-            <a href="{{ url_for('runs') }}">Runs</a> / {{ run_id[:24] }}...
-            {% endif %}
-        </nav>
-        <h1 class="mb-sm">
-            {% if run.mode == 'batch' %}📦{% else %}📝{% endif %}
-            {{ run.profile|default('Unknown')|capitalize }} Assessment
-        </h1>
-        <div class="flex gap-md text-secondary">
-            <span class="badge {% if run.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">
-                {{ run.mode or 'mark' }}
-            </span>
-            {% if run.student_id %}<span>👤 {{ run.student_id }}</span>{% endif %}
-            {% if run.assignment_id %}<span>📁 {{ run.assignment_id }}</span>{% endif %}
-            {% if run.created_at %}<span>📅 {{ run.created_at[:10] }}</span>{% endif %}
-        </div>
+<div class="page-header">
+    <nav class="text-sm text-muted">
+        {% if batch_submission_id %}
+        <a href="{{ back_url }}" class="btn btn-ghost btn-sm">Back to Batch Results</a>
+        {% else %}
+        <a href="{{ url_for('runs') }}">Runs</a> / {{ run_id[:24] }}...
+        {% endif %}
+    </nav>
+    <h1>
+        {% if run.mode == 'batch' %}📦{% else %}📝{% endif %}
+        {{ run.profile|default('Unknown')|capitalize }} Assessment
+    </h1>
+    <div class="flex gap-md text-secondary flex-wrap">
+        <span class="badge {% if run.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">
+            {{ run.mode or 'mark' }}
+        </span>
+        {% if run.student_id %}<span>👤 {{ run.student_id }}</span>{% endif %}
+        {% if run.assignment_id %}<span>📁 {{ run.assignment_id }}</span>{% endif %}
+        {% if run.created_at %}<span>📅 {{ run.created_at[:10] }}</span>{% endif %}
     </div>
-    <div class="flex gap-sm">
+    <div class="page-header-actions">
         {% if run.mode == 'batch' %}
         <a href="{{ url_for('download', run_id=run_id, filename='batch_summary.json') }}"
-            class="btn btn-secondary btn-sm">⬇️ Download JSON</a>
+            class="btn btn-secondary btn-sm">Download JSON</a>
         <a href="{{ url_for('download', run_id=run_id, filename='batch_summary.csv') }}"
-            class="btn btn-secondary btn-sm">⬇️ Download Summary</a>
+            class="btn btn-secondary btn-sm">Download Summary</a>
         <a href="{{ url_for('download', run_id=run_id, filename='batch_reports.zip') }}"
-            class="btn btn-primary btn-sm">⬇️ Download All</a>
+            class="btn btn-primary btn-sm">Download All</a>
         {% else %}
-        <a href="{{ url_for('download', run_id=run_id, filename='report.json') }}" class="btn btn-secondary btn-sm">⬇️
+        <a href="{{ url_for('download', run_id=run_id, filename='report.json') }}" class="btn btn-secondary btn-sm">
             Download JSON</a>
-        <a href="{{ url_for('download', run_id=run_id, filename='summary.txt') }}" class="btn btn-secondary btn-sm">⬇️
+        <a href="{{ url_for('download', run_id=run_id, filename='summary.txt') }}" class="btn btn-secondary btn-sm">
             Download Summary</a>
-        <a href="{{ url_for('download_bundle', run_id=run_id) }}" class="btn btn-primary btn-sm">⬇️ Download All</a>
+        <a href="{{ url_for('download_bundle', run_id=run_id) }}" class="btn btn-primary btn-sm">Download All</a>
         {% endif %}
     </div>
 </div>
@@ -115,7 +113,7 @@
         {% if ns.ai_count > 0 %}
         <div class="card stat-card stat-card--ai">
             <div class="stat-value">{{ ns.ai_count }}</div>
-            <div class="stat-label">🤖 AI Feedback</div>
+            <div class="stat-label">AI Feedback</div>
         </div>
         {% endif %}
         {% if ns.vision_count > 0 %}
@@ -259,7 +257,6 @@
 </div>
 {% else %}
 <div class="empty-state card">
-    <div class="empty-state-icon">✅</div>
     <h3 class="empty-state-title">No findings</h3>
     <p class="empty-state-text">The submission has no specific findings to display.</p>
 </div>
@@ -275,7 +272,7 @@
 
 {% if vision_findings %}
 <section class="mt-xl mb-xl">
-    <h2 class="section-header mb-md">👁️ Vision Analysis</h2>
+    <h2 class="section-header mb-md">Vision Analysis</h2>
     {% for finding in vision_findings %}
     {% set va = finding.evidence.vision_analysis %}
     <div class="vision-card card mb-md">

@@ -2,13 +2,13 @@
 {% block title %}Batch Analytics - AMS{% endblock %}
 
 {% block content %}
-<div class="mb-xl">
-    <nav class="text-sm text-muted mb-sm">
+<div class="page-header">
+    <nav class="text-sm text-muted">
         <a href="{{ url_for('runs') }}">Runs</a> /
         <a href="{{ url_for('run_detail', run_id=run_id) }}">{{ run_id[:24] }}...</a> /
         Analytics
     </nav>
-    <h1>📊 Batch Analytics</h1>
+    <h1>Batch Analytics</h1>
     <p class="text-secondary">{{ run.profile|default('Unknown')|capitalize }} Profile</p>
 </div>
 
@@ -133,7 +133,7 @@
 {% if analytics and analytics.student_issues %}
 <section class="card mb-xl">
     <div class="card-header">
-        <h2 class="card-title">⚠️ Student Issues</h2>
+        <h2 class="card-title">Student Issues</h2>
     </div>
     <div class="table-container">
         <table class="table">

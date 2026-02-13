@@ -2,38 +2,98 @@
 {% block title %}Home - AMS{% endblock %}
 
 {% block content %}
-<section class="hero animate-fadeIn">
-    <h1 class="hero-title">Automated Marking System</h1>
-    <p class="hero-subtitle">
-        Intelligent, fair, and transparent assessment of web development coursework.
-        Rule-based scoring with AI-assisted feedback.
-    </p>
-    <div class="hero-actions">
-        <a href="{{ url_for('mark') }}" class="btn btn-primary btn-lg">Mark Submission</a>
-        <a href="{{ url_for('runs') }}" class="btn btn-secondary btn-lg">View Runs</a>
+<section class="hero hero-split animate-fadeIn">
+    <div class="hero-copy">
+        <span class="hero-pill">Automated Marking System</span>
+        <h1 class="hero-title">Clarity-first marking for modern web coursework</h1>
+        <p class="hero-subtitle">
+            Run consistent checks across HTML, CSS, JavaScript, and optional backend stacks.
+            Generate reports, analytics, and evidence bundles without the spreadsheet chaos.
+        </p>
+        <div class="hero-actions">
+            <a href="{{ url_for('mark') }}" class="btn btn-primary btn-lg">Start a Marking Run</a>
+            <a href="{{ url_for('runs') }}" class="btn btn-secondary btn-lg">View Recent Runs</a>
+        </div>
+        <p class="hero-trust">Built for lecturers, markers, and teaching teams.</p>
+    </div>
+    <div class="hero-panel">
+        <div class="hero-panel-header">Live Run Snapshot</div>
+        <div class="hero-panel-grid">
+            <div class="mini-stat">
+                <span class="mini-stat-label">Overall score</span>
+                <span class="mini-stat-value">78%</span>
+            </div>
+            <div class="mini-stat">
+                <span class="mini-stat-label">Checks passed</span>
+                <span class="mini-stat-value">142 / 156</span>
+            </div>
+            <div class="mini-stat">
+                <span class="mini-stat-label">Evidence captured</span>
+                <span class="mini-stat-value">24 screenshots</span>
+            </div>
+        </div>
     </div>
 </section>
 
-<section class="grid grid-auto mt-xl">
-    <div class="card card-glow">
-        <div class="stat-value">📝</div>
-        <h3 class="card-title mt-md">Mark Single</h3>
-        <p class="card-body">Upload a single student submission ZIP and run automated checks.</p>
-        <a href="{{ url_for('mark') }}" class="btn btn-secondary mt-md">Get Started</a>
+<section class="section">
+    <div class="section-heading">
+        <h2 class="section-title">UI overview</h2>
+        <p class="section-subtitle">A clear flow from upload to evidence, with reporting at every step.</p>
     </div>
-
-    <div class="card card-glow">
-        <div class="stat-value">📦</div>
-        <h3 class="card-title mt-md">Batch Processing</h3>
-        <p class="card-body">Process multiple submissions at once and generate cohort analytics.</p>
-        <a href="{{ url_for('batch') }}" class="btn btn-secondary mt-md">Upload Batch</a>
+    <div class="grid grid-auto">
+        <div class="card">
+            <span class="badge badge-primary">Mark</span>
+            <h3 class="card-title mt-md">Mark Single</h3>
+            <p class="card-body">Upload a student ZIP, choose a profile, and run automated checks.</p>
+            <a href="{{ url_for('mark') }}" class="btn btn-secondary mt-md">Start Single Mark</a>
+        </div>
+        <div class="card">
+            <span class="badge badge-info">Batch</span>
+            <h3 class="card-title mt-md">Batch Runs</h3>
+            <p class="card-body">Process cohorts in one upload and export summaries for staff.</p>
+            <a href="{{ url_for('batch') }}" class="btn btn-secondary mt-md">Upload Batch</a>
+        </div>
+        <div class="card">
+            <span class="badge badge-success">Detail</span>
+            <h3 class="card-title mt-md">Run Detail</h3>
+            <p class="card-body">Inspect findings, evidence, AI feedback, and per-component scores.</p>
+            <a href="{{ url_for('runs') }}" class="btn btn-secondary mt-md">Open Runs</a>
+        </div>
+        <div class="card">
+            <span class="badge badge-warning">Analytics</span>
+            <h3 class="card-title mt-md">Cohort Analytics</h3>
+            <p class="card-body">Review distribution, top findings, and areas to revisit in teaching.</p>
+            <a href="{{ url_for('runs') }}" class="btn btn-secondary mt-md">Explore Analytics</a>
+        </div>
     </div>
+</section>
 
-    <div class="card card-glow">
-        <div class="stat-value">📊</div>
-        <h3 class="card-title mt-md">Run History</h3>
-        <p class="card-body">View past marking runs, download reports, and analyze results.</p>
-        <a href="{{ url_for('runs') }}" class="btn btn-secondary mt-md">Browse Runs</a>
+<section class="section">
+    <div class="section-heading">
+        <h2 class="section-title">Project structure</h2>
+        <p class="section-subtitle">Organized around pipelines, assessors, and reporting outputs.</p>
+    </div>
+    <div class="grid grid-auto">
+        <div class="card">
+            <span class="badge badge-secondary">core</span>
+            <h3 class="card-title mt-md">Pipeline engine</h3>
+            <p class="card-body">Orchestration, scoring, aggregation, and profile configuration.</p>
+        </div>
+        <div class="card">
+            <span class="badge badge-secondary">assessors</span>
+            <h3 class="card-title mt-md">Assessment suite</h3>
+            <p class="card-body">Static checks, browser automation, consistency, and required rules.</p>
+        </div>
+        <div class="card">
+            <span class="badge badge-secondary">io</span>
+            <h3 class="card-title mt-md">Reporting + evidence</h3>
+            <p class="card-body">HTML reports, evidence bundles, and workspace metadata.</p>
+        </div>
+        <div class="card">
+            <span class="badge badge-secondary">llm + tools</span>
+            <h3 class="card-title mt-md">AI helpers</h3>
+            <p class="card-body">LLM feedback, vision analysis, and verification utilities.</p>
+        </div>
     </div>
 </section>
 {% endblock %}
