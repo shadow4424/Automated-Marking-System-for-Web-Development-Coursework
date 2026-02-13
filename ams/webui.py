@@ -447,6 +447,24 @@ def _register_routes(app: Flask) -> None:
         analytics = json.loads(analytics_path.read_text(encoding="utf-8"))
         batch_summary_path = run_dir / run_info.get("summary", "batch_summary.json")
         batch_summary = json.loads(batch_summary_path.read_text(encoding="utf-8")) if batch_summary_path.exists() else {}
+        # Normalise old 2-tuple top_findings to 4-tuple format
+        summary = batch_summary.get("summary", {})
+        raw_findings = summary.get("top_findings", [])
+        total_subs = summary.get("total_submissions", 1) or 1
+        normalised = []
+        for entry in raw_findings:
+            if isinstance(entry, (list, tuple)):
+                if len(entry) == 4:
+                    normalised.append(entry)
+                elif len(entry) == 2:
+                    fid, count = entry
+                    pct = min(100, round(count / total_subs * 100))
+                    normalised.append([fid, count, count, pct])
+                else:
+                    normalised.append(entry)
+            else:
+                normalised.append(entry)
+        summary["top_findings"] = normalised
         return render_template(
             "batch_analytics.html",
             run=run_info,

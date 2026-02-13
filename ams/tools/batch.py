@@ -67,7 +67,8 @@ def run_batch(
 
         items = discover_batch_items(working_dir)
         records: List[dict] = []
-        finding_counts: Counter[str] = Counter()
+        # Track both event count and which submissions contain each finding
+        finding_stats: Dict[str, Dict[str, object]] = {}  # {finding_id: {"event_count": int, "affected_submissions": set}}
         failure_reason_counts: Counter[str] = Counter()
 
         for item in items:
@@ -77,14 +78,14 @@ def run_batch(
                 pipeline=pipeline,
                 profile=profile,
                 keep_individual_runs=keep_individual_runs,
-                finding_counts=finding_counts,
+                finding_stats=finding_stats,
                 failure_reason_counts=failure_reason_counts,
                 assignment_id=assignment_id,
             )
             records.append(record)
 
-        summary = aggregate_batch(records, finding_counts, failure_reason_counts, profile=profile)
-        write_outputs(out_root, records, summary, finding_counts, profile=profile)
+        summary = aggregate_batch(records, finding_stats, failure_reason_counts, profile=profile)
+        write_outputs(out_root, records, summary, finding_stats, profile=profile)
 
         total = summary["total_submissions"]
         succeeded = summary["succeeded"]
@@ -98,7 +99,9 @@ def run_batch(
         top_findings = summary.get("top_findings", [])[:5]
         if top_findings:
             print("Top findings:")
-            for fid, count in top_findings:
+            for entry in top_findings:
+                fid = entry[0]
+                count = entry[1]
                 print(f"- {fid}: {count}")
 
         return {"records": records, "summary": summary}
@@ -107,7 +110,7 @@ def run_batch(
             temp_ctx.cleanup()
 
 
-def aggregate_batch(records: List[dict], finding_counts: Counter[str], failure_reason_counts: Counter[str], profile: str) -> dict:
+def aggregate_batch(records: List[dict], finding_stats: Dict[str, Dict[str, object]], failure_reason_counts: Counter[str], profile: str) -> dict:
     total = len(records)
     # Processing status counts
     processed_records = [r for r in records if "error" not in r and r.get("overall") is not None]
@@ -159,7 +162,17 @@ def aggregate_batch(records: List[dict], finding_counts: Counter[str], failure_r
         elif score == 1.0:
             buckets["one"] += 1
 
-    top_findings = sorted(finding_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:20]
+    top_findings = []
+    total = len(records)
+    for finding_id, stats in finding_stats.items():
+        event_count = stats.get("event_count", 0)
+        affected_count = len(stats.get("affected_submissions", set()))
+        percent_affected = (affected_count / total * 100) if total > 0 else 0
+        top_findings.append((finding_id, event_count, affected_count, min(100, round(percent_affected))))
+    # Sort by event count (descending), then by finding_id
+    top_findings = sorted(top_findings, key=lambda x: (-x[1], x[0]))[:20]
+    
+    finding_counts = {fid: count for fid, count, _, _ in top_findings}  # For backward compatibility
     top_failure_reasons = sorted(failure_reason_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:10]
 
     return {
@@ -169,7 +182,7 @@ def aggregate_batch(records: List[dict], finding_counts: Counter[str], failure_r
         "overall_stats": overall_stats,
         "component_stats": component_stats,
         "buckets": buckets,
-        "finding_frequency": dict(finding_counts),
+        "finding_frequency": {fid: stats.get("event_count", 0) for fid, stats in finding_stats.items()},
         "top_findings": top_findings,
         "failure_reason_frequency": dict(failure_reason_counts),
         "top_failure_reasons": top_failure_reasons,
@@ -181,8 +194,8 @@ def write_outputs(
     out_root: Path,
     records: List[dict],
     summary: dict,
-    finding_counts: Counter[str],
-    profile: str,
+    finding_stats: Dict[str, Dict[str, object]],
+    profile: str = "frontend",
 ) -> None:
     batch_summary = {
         "records": records,
@@ -214,9 +227,13 @@ def write_outputs(
     freq_path = out_root / "findings_frequency.csv"
     with freq_path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["finding_id", "count"])
-        for fid, count in sorted(finding_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:50]:
-            writer.writerow([fid, count])
+        writer.writerow(["finding_id", "event_count", "affected_submissions", "percent_affected"])
+        total = summary.get("total_submissions", 1)
+        for finding_id, stats in sorted(finding_stats.items(), key=lambda kv: (-kv[1].get("event_count", 0), kv[0]))[:50]:
+            event_count = stats.get("event_count", 0)
+            affected_count = len(stats.get("affected_submissions", set()))
+            percent_affected = (affected_count / total * 100) if total > 0 else 0
+            writer.writerow([finding_id, event_count, affected_count, f"{min(100, round(percent_affected))}%"])
 
     failure_freq = summary.get("failure_reason_frequency") or {}
     failure_path = out_root / "failure_reasons_frequency.csv"
@@ -262,7 +279,7 @@ def _process_one_submission(
     pipeline: AssessmentPipeline,
     profile: str,
     keep_individual_runs: bool,
-    finding_counts: Counter[str],
+    finding_stats: Dict[str, Dict[str, object]],
     failure_reason_counts: Counter[str],
     assignment_id: Optional[str] = None,
 ) -> dict:
@@ -332,6 +349,9 @@ def _process_one_submission(
         record["report_path"] = str(report_path)
         report_data = json.loads(report_path.read_text(encoding="utf-8"))
         
+        # Track which findings appear in this submission
+        submission_finding_ids = set()
+        
         # Extract metadata from report if available
         report_metadata = report_data.get("metadata", {}).get("submission_metadata")
         if report_metadata:
@@ -348,7 +368,18 @@ def _process_one_submission(
         for f in findings:
             fid = f.get("id")
             if fid:
-                finding_counts[fid] += 1
+                # Initialize if not seen before
+                if fid not in finding_stats:
+                    finding_stats[fid] = {"event_count": 0, "affected_submissions": set()}
+                # Increment event count
+                finding_stats[fid]["event_count"] += 1
+                # Track that this submission has this finding
+                submission_finding_ids.add(fid)
+        
+        # Record which submissions this finding appears in
+        for fid in submission_finding_ids:
+            if fid in finding_stats:
+                finding_stats[fid]["affected_submissions"].add(item.id)
         record["status"] = "ok"
     except Exception as exc:  # pragma: no cover - defensive
         record["error"] = str(exc)

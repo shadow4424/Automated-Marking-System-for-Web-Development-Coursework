@@ -116,12 +116,11 @@
                 </tr>
             </thead>
             <tbody>
-                {% set total_subs = batch_summary.summary.total_submissions|default(1) %}
-                {% for rule_id, count in batch_summary.summary.top_findings[:15] %}
+                {% for rule_id, event_count, affected_count, percent_affected in batch_summary.summary.top_findings[:15] %}
                 <tr>
                     <td><code>{{ rule_id }}</code></td>
-                    <td>{{ count }}</td>
-                    <td>{{ ((count / total_subs) * 100)|round|int }}%</td>
+                    <td>{{ event_count }}</td>
+                    <td>{{ percent_affected }}%</td>
                 </tr>
                 {% endfor %}
             </tbody>
