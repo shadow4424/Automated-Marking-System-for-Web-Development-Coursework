@@ -490,7 +490,7 @@ def _register_routes(app: Flask) -> None:
         run_dir = find_run_by_id(runs_root, run_id)
         if run_dir is None:
             return "Run not found", 404
-        allowed_roots = {"artifacts", "analytics", "runs", "reports", "evaluation"}
+        allowed_roots = {"artifacts", "analytics", "runs", "reports", "evaluation", "submission"}
         rel_parts = Path(relpath).parts
         if not rel_parts or rel_parts[0] not in allowed_roots:
             return "Not allowed", 403
@@ -501,7 +501,10 @@ def _register_routes(app: Flask) -> None:
             return "Not allowed", 403
         if not candidate.exists() or not candidate.is_file():
             return "File not found", 404
-        return send_file(candidate, as_attachment=True, download_name=candidate.name)
+        # Serve images inline for vision analysis screenshots; download others
+        image_exts = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
+        as_download = candidate.suffix.lower() not in image_exts
+        return send_file(candidate, as_attachment=as_download, download_name=candidate.name)
 
     @app.route("/batch/<run_id>/submissions/<submission_id>/view")
     def batch_submission_view(run_id: str, submission_id: str):

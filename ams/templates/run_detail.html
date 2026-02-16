@@ -242,12 +242,19 @@
         </div>
         {% endif %}
 
-        {# Screenshot inside evidence #}
+        {# Screenshot inside evidence — serve through run_artifact route #}
         {% if finding.evidence.screenshot %}
         <div class="mt-sm mb-sm">
             <div class="text-xs text-muted mb-xs uppercase tracking-wide">Screenshot</div>
-            <img src="{{ finding.evidence.screenshot }}" class="max-w-full rounded border border-gray-700 shadow-sm"
-                alt="Evidence Screenshot">
+            {% set ev_ss = finding.evidence.screenshot|replace('\\', '/') %}
+            {% if batch_submission_id is defined and batch_submission_id %}
+            {% set ev_ss_url = url_for('run_artifact', run_id=run_id, relpath='runs/' ~ batch_submission_id ~ '/' ~ ev_ss) %}
+            {% else %}
+            {% set ev_ss_url = url_for('run_artifact', run_id=run_id, relpath=ev_ss) %}
+            {% endif %}
+            <img src="{{ ev_ss_url }}" class="max-w-full rounded border border-gray-700 shadow-sm"
+                alt="Evidence Screenshot"
+                onerror="this.parentElement.innerHTML='<p class=\'text-muted text-sm\'>Screenshot unavailable</p>'">
         </div>
         {% endif %}
 
@@ -288,6 +295,17 @@
         {% if va.reason %}
         <p class="vision-reason">{{ va.reason }}</p>
         {% endif %}
+
+        {# Confidence indicator #}
+        {% if va.confidence is defined and va.confidence is not none %}
+        <div class="text-sm text-muted mt-xs mb-sm">
+            Confidence: <strong>{{ (va.confidence * 100)|round|int }}%</strong>
+            {% if va.meta and va.meta.model %}
+            &middot; Model: {{ va.meta.model }}
+            {% endif %}
+        </div>
+        {% endif %}
+
         {% if va.issues %}
         <ul class="vision-issues">
             {% for issue in va.issues %}
@@ -300,7 +318,17 @@
         </ul>
         {% endif %}
         {% if va.meta and va.meta.screenshot %}
-        <img src="{{ va.meta.screenshot|replace('\\', '/') }}" alt="Page Screenshot" class="vision-screenshot">
+        {# Serve screenshot through run_artifact route — path is workspace-relative #}
+        {% set raw_ss = va.meta.screenshot|replace('\\', '/') %}
+        {% if batch_submission_id is defined and batch_submission_id %}
+        {% set ss_url = url_for('run_artifact', run_id=run_id, relpath='runs/' ~ batch_submission_id ~ '/' ~ raw_ss) %}
+        {% else %}
+        {% set ss_url = url_for('run_artifact', run_id=run_id, relpath=raw_ss) %}
+        {% endif %}
+        <div class="vision-screenshot-wrap">
+            <img src="{{ ss_url }}" alt="Page Screenshot" class="vision-screenshot"
+                 onerror="this.parentElement.innerHTML='<p class=\'text-muted text-sm\'>Screenshot unavailable</p>'">
+        </div>
         {% endif %}
     </div>
     {% endfor %}

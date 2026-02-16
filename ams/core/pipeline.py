@@ -109,7 +109,7 @@ class AssessmentPipeline:
         llm_evidence: dict = {}
         if self._should_use_llm():
             findings, llm_evidence = self._enrich_findings_with_llm(
-                findings, profile_spec, context
+                findings, profile_spec, context,
             )
 
         # =================================================================
@@ -142,8 +142,8 @@ class AssessmentPipeline:
             with open(report_path, "r", encoding="utf-8") as f:
                 report_data = json.load(f)
             
-            # Find screenshot if available
-            screenshot_path = self._find_screenshot(workspace_path)
+            # Find screenshot if available (pass context for Playwright captures)
+            screenshot_path = self._find_screenshot(workspace_path, context)
             
             html_reporter = HTMLReporter()
             html_path = html_reporter.generate(
@@ -183,8 +183,8 @@ class AssessmentPipeline:
         enriched: List[Finding] = []
         llm_evidence: dict = {"feedback": [], "partial_credit": [], "vision_analysis": []}
         
-        # Locate screenshot for vision analysis
-        screenshot_path = self._find_screenshot(context.workspace_path)
+        # Locate screenshot for vision analysis — prefer real Playwright capture
+        screenshot_path = self._find_screenshot(context.workspace_path, context)
         
         for finding in findings:
             # Handle SKIPPED findings for required components (provide deterministic feedback)
@@ -321,7 +321,24 @@ class AssessmentPipeline:
             if self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
                 visual_check = rule_metadata.get("visual_check", False)
                 
-                if visual_check and screenshot_path and self.vision_analyst:
+                if visual_check and not screenshot_path:
+                    # No usable screenshot — mark as NOT_EVALUATED so the
+                    # report makes it clear vision was not silently skipped.
+                    not_eval = create_not_evaluated(
+                        reason="No browser screenshot available (Playwright may have crashed or timed out).",
+                        screenshot_found=False,
+                    )
+                    ne_dict = not_eval.model_dump()
+                    if isinstance(finding.evidence, dict):
+                        finding.evidence["vision_analysis"] = ne_dict
+                    llm_evidence["vision_analysis"].append({
+                        "finding_id": finding.id,
+                        "screenshot": None,
+                        "result": ne_dict,
+                    })
+                    logger.info(f"Vision analysis for {finding.id}: NOT_EVALUATED (no screenshot)")
+
+                elif visual_check and screenshot_path and self.vision_analyst:
                     try:
                         # Use description-first approach for reliability with small models
                         requirement = f"Check if this design meets: {finding.message}"
@@ -333,12 +350,20 @@ class AssessmentPipeline:
                         
                         # Attach vision result to finding evidence (as dict)
                         vision_dict = vision_result.model_dump()
+                        # Store the workspace-relative path so the web UI can
+                        # build a correct /artifacts/<relpath> URL.
+                        try:
+                            rel_screenshot = screenshot_path.relative_to(context.workspace_path)
+                        except ValueError:
+                            rel_screenshot = Path(screenshot_path.name)
+                        if "meta" in vision_dict and isinstance(vision_dict["meta"], dict):
+                            vision_dict["meta"]["screenshot"] = str(rel_screenshot)
                         if isinstance(finding.evidence, dict):
                             finding.evidence["vision_analysis"] = vision_dict
                         
                         llm_evidence["vision_analysis"].append({
                             "finding_id": finding.id,
-                            "screenshot": str(screenshot_path.name),
+                            "screenshot": str(rel_screenshot),
                             "result": vision_dict,
                         })
                         
@@ -351,7 +376,7 @@ class AssessmentPipeline:
                                     message=issue.description,
                                     severity=Severity.FAIL if issue.severity == "FAIL" else Severity.WARN,
                                     evidence={
-                                        "screenshot": str(screenshot_path),
+                                        "screenshot": str(rel_screenshot),
                                         "original_rule": finding.id,
                                         "confidence": vision_result.confidence,
                                     },
@@ -417,27 +442,55 @@ class AssessmentPipeline:
     def _prepare_context(self, submission_path: Path, workspace_path: Path, profile: str) -> SubmissionContext:
         return SubmissionProcessor().prepare(submission_path, workspace_path, profile=profile)
     
-    def _find_screenshot(self, workspace_path: Path) -> Optional[Path]:
-        """Find a screenshot file for vision analysis.
-        
-        Uses glob patterns to discover common image files across the
-        workspace and any ``submission`` subdirectory.  Preferred
-        filenames (e.g. ``screenshot.*``, ``page.*``) are returned
-        first; if none match, any ``.png`` / ``.jpg`` / ``.jpeg`` file
-        found in the search directories is accepted as a fallback.
-        
+    def _find_screenshot(
+        self,
+        workspace_path: Path,
+        context: Optional[SubmissionContext] = None,
+    ) -> Optional[Path]:
+        """Find the best screenshot for vision analysis.
+
+        Priority order:
+        1. Real Playwright screenshots from ``context.browser_evidence``
+           (stored under ``artifacts/browser/``).  The *newest* capture
+           is preferred so we evaluate what the browser actually rendered.
+        2. Common filenames in the workspace / submission directory
+           (``screenshot.*``, ``page.*``, …).
+        3. Any image file found via glob.
+
         Args:
             workspace_path: Path to the assessment workspace.
-            
+            context: The current :class:`SubmissionContext` (optional).
+                     When provided the method inspects ``browser_evidence``
+                     for real Playwright captures.
+
         Returns:
-            Path to screenshot if found, None otherwise.
+            Absolute path to the screenshot, or *None* if nothing usable
+            was found.
         """
+        # ---------------------------------------------------------
+        # Pass 0 — real Playwright captures (highest priority)
+        # ---------------------------------------------------------
+        if context is not None:
+            playwright_shots: list[Path] = []
+            for be in context.browser_evidence:
+                for sp in (be.screenshot_paths or []):
+                    p = Path(sp)
+                    if p.exists() and p.stat().st_size > 500:
+                        playwright_shots.append(p)
+            if playwright_shots:
+                # Pick the newest capture
+                best = max(playwright_shots, key=lambda p: p.stat().st_mtime)
+                logger.info(f"Using Playwright screenshot for vision: {best}")
+                return best
+
+        # ---------------------------------------------------------
+        # Pass 1 — preferred filenames in workspace / submission
+        # ---------------------------------------------------------
         search_dirs = [workspace_path]
         submission_dir = workspace_path / "submission"
         if submission_dir.exists():
             search_dirs.append(submission_dir)
 
-        # Preferred stems in priority order
         preferred_stems = [
             "screenshot",
             "browser_screenshot",
@@ -447,7 +500,6 @@ class AssessmentPipeline:
         ]
         image_extensions = (".png", ".jpg", ".jpeg", ".webp")
 
-        # Pass 1 — preferred filenames
         for directory in search_dirs:
             for stem in preferred_stems:
                 for ext in image_extensions:
@@ -456,7 +508,9 @@ class AssessmentPipeline:
                         logger.debug(f"Found screenshot: {path}")
                         return path
 
-        # Pass 2 — any image file via glob
+        # ---------------------------------------------------------
+        # Pass 2 — any image file via glob (last resort)
+        # ---------------------------------------------------------
         for directory in search_dirs:
             for ext in image_extensions:
                 matches = sorted(directory.glob(f"*{ext}"))

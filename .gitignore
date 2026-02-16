@@ -12,6 +12,9 @@ ams_runs/
 ams_eval_runs/
 ams_batch_runs/
 ams_web_runs/
+
+# LLM cache
+cache.db
 demo_out/
 tmp_phase5/
 scratch_sql_test/

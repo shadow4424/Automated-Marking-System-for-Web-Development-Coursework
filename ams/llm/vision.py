@@ -53,14 +53,19 @@ class VisionAnalyst:
         >>> print(result.status)  # "PASS", "FAIL", or "NOT_EVALUATED"
     """
     
-    SYSTEM_PROMPT = """You are a UI/UX QA expert. Your job is to analyze screenshots of web pages and determine if they meet specific visual requirements.
+    SYSTEM_PROMPT = """You are a strict web-design grading assistant.
+Your ONLY job is to verify whether ONE specific visual requirement is met in the provided screenshot.
 
-Be strict and objective in your analysis. Focus on what is actually visible in the screenshot, not assumptions.
+Decision rules (follow these EXACTLY):
+- Output "PASS" ONLY if the requirement is clearly, visibly present AND functioning correctly in the screenshot.
+- Output "FAIL" if the requirement is missing, broken, unstyled, partially implemented, or you cannot see evidence of it.
+- If the page appears completely blank, white, unstyled, or lacks any CSS styling, output "FAIL" for ANY layout or styling requirement.
+- If your reasoning describes the feature as "missing", "not present", "not found", "does not have", or any negation, you MUST output "FAIL". Never output "PASS" with a negative reason.
 
-Always respond with valid JSON in this exact format:
-{"result": "PASS" or "FAIL", "reason": "Brief explanation of your assessment"}
+Response format — valid JSON, nothing else:
+{"result": "PASS" or "FAIL", "reason": "One-sentence explanation"}
 
-Do not include any text outside the JSON block."""
+Do NOT include any text outside the JSON object."""
 
     def __init__(self, provider=None, cache_enabled: bool = None):
         """Initialize the VisionAnalyst.
@@ -137,11 +142,14 @@ Do not include any text outside the JSON block."""
                 except ValueError:
                     pass  # Cache corrupted, proceed with LLM call
         
-        user_prompt = f"""Requirement: {requirement_context}
+        user_prompt = f"""Requirement to verify:
+{requirement_context}
 
-Analyze the provided screenshot and determine if it meets this requirement.
+Look at the screenshot carefully. Is this specific requirement visibly met?
+- If YES and you can see clear evidence of it → {{"result": "PASS", "reason": "..."}}
+- If NO, missing, broken, or unstyled → {{"result": "FAIL", "reason": "..."}}
 
-Respond with JSON: {{"result": "PASS" or "FAIL", "reason": "..."}}"""
+Respond with JSON only."""
 
         logger.info(f"Analyzing screenshot: {path.name}")
         logger.debug(f"Requirement: {requirement_context}")
@@ -239,6 +247,15 @@ Respond with JSON: {{"result": "PASS" or "FAIL", "reason": "..."}}"""
         if data and "result" in data and "reason" in data:
             result_str = str(data["result"]).upper()
             reason = str(data["reason"])
+
+            # Contradiction guard: if the reason text indicates a failure
+            # but the model hallucinated "PASS", override to FAIL.
+            if result_str == "PASS" and self._reason_contradicts_pass(reason):
+                logger.warning(
+                    "Vision status/reason contradiction detected — "
+                    "overriding PASS → FAIL  (reason: %s)", reason,
+                )
+                result_str = "FAIL"
             
             if result_str == "PASS":
                 return create_pass(
@@ -255,6 +272,30 @@ Respond with JSON: {{"result": "PASS" or "FAIL", "reason": "..."}}"""
                 )
         
         raise ValueError(f"Could not parse response: {content[:200]}")
+
+    # ------------------------------------------------------------------
+    # Contradiction detection
+    # ------------------------------------------------------------------
+    _NEGATIVE_PATTERNS = re.compile(
+        r"\b(?:"
+        r"(?:does\s+not|doesn'?t|do\s+not|don'?t|is\s+not|isn'?t|are\s+not|aren'?t)"
+        r"|not\s+(?:present|found|visible|implemented|applied|styled|detected|used|included)"
+        r"|missing|absent|lacking|no\s+(?:media|style|layout|responsive|css)"
+        r"|unstyled|broken|empty|blank"
+        r")\b",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _reason_contradicts_pass(cls, reason: str) -> bool:
+        """Return *True* if the reason text contains negative language that
+        contradicts a PASS verdict.
+
+        This is a safety net: even with a hardened prompt, small local
+        models sometimes output PASS alongside a reason that clearly
+        describes a missing or broken feature.
+        """
+        return bool(cls._NEGATIVE_PATTERNS.search(reason))
 
 
 # =============================================================================
