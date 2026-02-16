@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List
 
 from ams.assessors.base import Assessor
+from ams.core.finding_ids import CSS as CID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import ProfileSpec, get_profile_spec
 
@@ -25,7 +26,7 @@ class CSSRequiredRulesAssessor(Assessor):
         if not self.profile_spec.required_css:
             findings.append(
                 Finding(
-                    id="CSS.REQ.SKIPPED",
+                    id=CID.REQ_SKIPPED,
                     category="css",
                     message="No required CSS rules defined for this profile; skipped.",
                     severity=Severity.SKIPPED,
@@ -44,7 +45,7 @@ class CSSRequiredRulesAssessor(Assessor):
             for rule in self.profile_spec.required_css:
                 findings.append(
                     Finding(
-                        id="CSS.REQ.SKIPPED",
+                        id=CID.REQ_SKIPPED,
                         category="css",
                         message=f"Rule '{rule.id}' skipped: CSS not required for this profile.",
                         severity=Severity.SKIPPED,
@@ -69,7 +70,7 @@ class CSSRequiredRulesAssessor(Assessor):
                 for rule in self.profile_spec.required_css:
                     findings.append(
                         Finding(
-                            id="CSS.REQ.FAIL",
+                            id=CID.REQ_MISSING_FILES,
                             category="css",
                             message=f"Rule '{rule.id}' not evaluated: No CSS files found in submission.",
                             severity=Severity.FAIL,
@@ -94,7 +95,7 @@ class CSSRequiredRulesAssessor(Assessor):
                 for rule in self.profile_spec.required_css:
                     findings.append(
                         Finding(
-                            id="CSS.REQ.SKIPPED",
+                            id=CID.REQ_SKIPPED,
                             category="css",
                             message=f"Rule '{rule.id}' not evaluated: {rule.description}. CSS not required for this profile or no files found.",
                             severity=Severity.SKIPPED,
@@ -122,7 +123,7 @@ class CSSRequiredRulesAssessor(Assessor):
             except OSError as exc:
                 findings.append(
                     Finding(
-                        id="CSS.REQ.READ_ERROR",
+                        id=CID.REQ_READ_ERROR,
                         category="css",
                         message="Failed to read CSS file.",
                         severity=Severity.FAIL,
@@ -139,7 +140,7 @@ class CSSRequiredRulesAssessor(Assessor):
                 snippet = self._extract_snippet(content, rule.needle, rule.id)
                 findings.append(
                     Finding(
-                        id="CSS.REQ.PASS" if passed else "CSS.REQ.FAIL",
+                        id=CID.REQ_PASS if passed else CID.REQ_FAIL,
                         category="css",
                         message=self._message(rule.id, passed, count, rule.min_count),
                         severity=Severity.INFO if passed else Severity.WARN,

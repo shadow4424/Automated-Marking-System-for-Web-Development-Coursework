@@ -4,6 +4,7 @@ import re
 from typing import List
 
 from ams.assessors.base import Assessor
+from ams.core.finding_ids import CSS as CID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec
 
@@ -32,7 +33,7 @@ class CSSStaticAssessor(Assessor):
                 # Required for profile but missing
                 findings.append(
                     Finding(
-                        id="CSS.MISSING_FILES",
+                        id=CID.MISSING_FILES,
                         category="css",
                         message="No CSS files found; CSS is required for this profile.",
                         severity=Severity.FAIL,
@@ -52,7 +53,7 @@ class CSSStaticAssessor(Assessor):
                 # Not required for profile, skip
                 findings.append(
                     Finding(
-                        id="CSS.SKIPPED",
+                        id=CID.SKIPPED,
                         category="css",
                         message="No CSS files found; CSS is not required for this profile.",
                         severity=Severity.SKIPPED,
@@ -76,7 +77,7 @@ class CSSStaticAssessor(Assessor):
             except OSError as exc:
                 findings.append(
                     Finding(
-                        id="CSS.READ_ERROR",
+                        id=CID.READ_ERROR,
                         category="css",
                         message="Failed to read CSS file.",
                         severity=Severity.FAIL,
@@ -113,7 +114,7 @@ class CSSStaticAssessor(Assessor):
             if balanced:
                 findings.append(
                     Finding(
-                        id="CSS.BRACES_BALANCED",
+                        id=CID.BRACES_BALANCED,
                         category="css",
                         message="CSS braces appear balanced.",
                         severity=Severity.INFO,
@@ -124,7 +125,7 @@ class CSSStaticAssessor(Assessor):
             elif open_braces == 0 and close_braces == 0:
                 findings.append(
                     Finding(
-                        id="CSS.NO_RULES",
+                        id=CID.NO_RULES,
                         category="css",
                         message="No CSS rules detected.",
                         severity=Severity.WARN,
@@ -135,7 +136,7 @@ class CSSStaticAssessor(Assessor):
             else:
                 findings.append(
                     Finding(
-                        id="CSS.BRACES_UNBALANCED",
+                        id=CID.BRACES_UNBALANCED,
                         category="css",
                         message="CSS braces appear unbalanced.",
                         severity=Severity.WARN,
@@ -146,7 +147,7 @@ class CSSStaticAssessor(Assessor):
 
             findings.append(
                 Finding(
-                    id="CSS.EVIDENCE",
+                    id=CID.EVIDENCE,
                     category="css",
                     message="CSS evidence collected.",
                     severity=Severity.INFO,
@@ -193,7 +194,7 @@ class CSSStaticAssessor(Assessor):
             if overly_specific_selectors:
                 findings.append(
                     Finding(
-                        id="CSS.QUALITY.OVERLY_SPECIFIC",
+                        id=CID.QUALITY_OVERLY_SPECIFIC,
                         category="css",
                         message=f"Found {len(overly_specific_selectors)} overly specific selector(s). High specificity makes CSS harder to maintain and override.",
                         severity=Severity.WARN,

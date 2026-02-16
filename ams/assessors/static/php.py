@@ -4,6 +4,7 @@ import re
 from typing import List
 
 from ams.assessors.base import Assessor
+from ams.core.finding_ids import PHP as PID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec
 
@@ -32,7 +33,7 @@ class PHPStaticAssessor(Assessor):
                 # Required for profile but missing
                 findings.append(
                     Finding(
-                        id="PHP.MISSING_FILES",
+                        id=PID.MISSING_FILES,
                         category="php",
                         message="No PHP files found; PHP is required for this profile.",
                         severity=Severity.FAIL,
@@ -52,7 +53,7 @@ class PHPStaticAssessor(Assessor):
                 # Not required for profile, skip
                 findings.append(
                     Finding(
-                        id="PHP.SKIPPED",
+                        id=PID.SKIPPED,
                         category="php",
                         message="No PHP files found; PHP is not required for this profile.",
                         severity=Severity.SKIPPED,
@@ -76,7 +77,7 @@ class PHPStaticAssessor(Assessor):
             except OSError as exc:
                 findings.append(
                     Finding(
-                        id="PHP.READ_ERROR",
+                        id=PID.READ_ERROR,
                         category="php",
                         message="Failed to read PHP file.",
                         severity=Severity.FAIL,
@@ -92,7 +93,7 @@ class PHPStaticAssessor(Assessor):
 
             findings.append(
                 Finding(
-                    id="PHP.TAG_OK" if has_open_tag else "PHP.TAG_MISSING",
+                    id=PID.TAG_OK if has_open_tag else PID.TAG_MISSING,
                     category="php",
                     message=(
                         "PHP opening tag found." if has_open_tag else "PHP opening tag not found; file may not be valid PHP."
@@ -128,7 +129,7 @@ class PHPStaticAssessor(Assessor):
             if braces_balanced and parens_balanced and (open_braces + open_parens) > 0:
                 findings.append(
                     Finding(
-                        id="PHP.SYNTAX_OK",
+                        id=PID.SYNTAX_OK,
                         category="php",
                         message="PHP syntax heuristics look OK.",
                         severity=Severity.INFO,
@@ -139,7 +140,7 @@ class PHPStaticAssessor(Assessor):
             elif len(stripped_content) < 5 or only_tags:
                 findings.append(
                     Finding(
-                        id="PHP.NO_CODE",
+                        id=PID.NO_CODE,
                         category="php",
                         message="PHP file appears to contain little or no executable code.",
                         severity=Severity.WARN,
@@ -150,7 +151,7 @@ class PHPStaticAssessor(Assessor):
             else:
                 findings.append(
                     Finding(
-                        id="PHP.SYNTAX_SUSPECT",
+                        id=PID.SYNTAX_SUSPECT,
                         category="php",
                         message="PHP syntax heuristics look suspect.",
                         severity=Severity.WARN,
@@ -168,7 +169,7 @@ class PHPStaticAssessor(Assessor):
 
             findings.append(
                 Finding(
-                    id="PHP.EVIDENCE",
+                    id=PID.EVIDENCE,
                     category="php",
                     message="PHP evidence collected.",
                     severity=Severity.INFO,
@@ -194,7 +195,7 @@ class PHPStaticAssessor(Assessor):
             if html_tags_in_php > 20 and php_tags > 5:
                 findings.append(
                     Finding(
-                        id="PHP.QUALITY.MIXED_MARKUP",
+                        id=PID.QUALITY_MIXED_MARKUP,
                         category="php",
                         message="Code appears to mix PHP logic with HTML markup extensively. Consider separating concerns (MVC pattern).",
                         severity=Severity.WARN,
@@ -220,7 +221,7 @@ class PHPStaticAssessor(Assessor):
             if sql_in_echo:
                 findings.append(
                     Finding(
-                        id="PHP.QUALITY.SQL_IN_OUTPUT",
+                        id=PID.QUALITY_SQL_IN_OUTPUT,
                         category="php",
                         message=f"Found SQL queries embedded in echo/print statements on {len(sql_in_echo)} line(s). Separate database logic from output.",
                         severity=Severity.WARN,
@@ -245,7 +246,7 @@ class PHPStaticAssessor(Assessor):
             if request_usage > 0 and not has_sanitization:
                 findings.append(
                     Finding(
-                        id="PHP.SECURITY.UNSANITIZED_INPUT",
+                        id=PID.SECURITY_UNSANITIZED_INPUT,
                         category="php",
                         message="$_GET/$_POST used without apparent input sanitization. Always sanitize user input to prevent XSS and injection attacks.",
                         severity=Severity.FAIL,
@@ -270,7 +271,7 @@ class PHPStaticAssessor(Assessor):
             if echo_usage > 3 and not escaped_output:
                 findings.append(
                     Finding(
-                        id="PHP.SECURITY.UNESCAPED_OUTPUT",
+                        id=PID.SECURITY_UNESCAPED_OUTPUT,
                         category="php",
                         message="Output statements (echo/print) may not be properly escaped. Use htmlspecialchars() or htmlentities() to prevent XSS.",
                         severity=Severity.FAIL,
@@ -293,7 +294,7 @@ class PHPStaticAssessor(Assessor):
                 if old_style_queries > 0 and prepared_statements == 0:
                     findings.append(
                         Finding(
-                            id="PHP.SECURITY.NO_PREPARED_STATEMENTS",
+                            id=PID.SECURITY_NO_PREPARED_STATEMENTS,
                             category="php",
                             message="Database queries found but no prepared statements detected. Use prepared statements (mysqli_prepare/PDO) to prevent SQL injection.",
                             severity=Severity.FAIL,
@@ -309,7 +310,7 @@ class PHPStaticAssessor(Assessor):
                 elif prepared_statements > 0:
                     findings.append(
                         Finding(
-                            id="PHP.SECURITY.PREPARED_STATEMENTS_USED",
+                            id=PID.SECURITY_PREPARED_STATEMENTS_USED,
                             category="php",
                             message="Prepared statements detected. Good security practice.",
                             severity=Severity.INFO,
@@ -331,7 +332,7 @@ class PHPStaticAssessor(Assessor):
                 if not session_start_found:
                     findings.append(
                         Finding(
-                            id="PHP.SECURITY.SESSION_NOT_STARTED",
+                            id=PID.SECURITY_SESSION_NOT_STARTED,
                             category="php",
                             message="Session variables used but session_start() not found. Always start sessions before using session variables.",
                             severity=Severity.WARN,
@@ -346,7 +347,7 @@ class PHPStaticAssessor(Assessor):
                 elif not session_regenerate:
                     findings.append(
                         Finding(
-                            id="PHP.SECURITY.SESSION_NOT_REGENERATED",
+                            id=PID.SECURITY_SESSION_NOT_REGENERATED,
                             category="php",
                             message="Sessions used but session_regenerate_id() not found. Regenerate session ID on login to prevent session fixation.",
                             severity=Severity.WARN,

@@ -11,7 +11,7 @@ from .config import (
     LLM_OPENAI_MODEL,
     LLM_SANITIZE_PII,
 )
-from .evidence_bundle import build_evidence_bundle, sanitize_pii, sanitize_student_files
+from .sanitize import sanitize_pii, sanitize_student_files
 # Redirect LLM imports to ams.llm package
 from ams.llm import (
     LLMResponse,
@@ -21,9 +21,10 @@ from ams.llm import (
     RequestCache,
     LocalLMStudioProvider,
 )
-from .models import Finding, RuleResult, Severity, SubmissionContext
+from .models import Finding, Severity, SubmissionContext
 from .profiles import (
     ProfileSpec,
+    RequiredRule,
     RequiredCSSRule,
     RequiredHTMLRule,
     RequiredJSRule,
@@ -38,11 +39,11 @@ from .pipeline import AssessmentPipeline
 __all__ = [
     # Models
     "Finding",
-    "RuleResult",
     "Severity",
     "SubmissionContext",
     # Profiles
     "ProfileSpec",
+    "RequiredRule",
     "RequiredCSSRule",
     "RequiredHTMLRule",
     "RequiredJSRule",
@@ -63,8 +64,7 @@ __all__ = [
     "LLM_CACHE_ENABLED",
     "LLM_OPENAI_MODEL",
     "LLM_SANITIZE_PII",
-    # Evidence
-    "build_evidence_bundle",
+    # Sanitization
     "sanitize_pii",
     "sanitize_student_files",
     # LLM (redirected from ams.llm)

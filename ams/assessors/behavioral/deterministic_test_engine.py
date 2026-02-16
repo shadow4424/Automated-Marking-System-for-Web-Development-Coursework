@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Iterable, List, Mapping, Sequence
 
 from ams.assessors.base import Assessor
+from ams.core.finding_ids import BEHAVIOUR as BID
 from ams.core.models import BehaviouralEvidence, Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec
 
@@ -115,7 +116,7 @@ class DeterministicTestEngine(Assessor):
         if not profile_spec or profile_spec.name != "fullstack":
             findings.append(
                 self._finding(
-                    code="BEHAVIOUR.SKIPPED_PROFILE",
+                    code=BID.SKIPPED_PROFILE,
                     message="Behavioural tests skipped for non-fullstack profile.",
                     severity=Severity.SKIPPED,
                     profile=profile,
@@ -132,7 +133,7 @@ class DeterministicTestEngine(Assessor):
         except Exception as exc:  # pragma: no cover - defensive guard
             findings.append(
                 self._finding(
-                    code="BEHAVIOUR.UNEXPECTED_ERROR",
+                    code=BID.UNEXPECTED_ERROR,
                     message="Behavioural engine encountered an unexpected error.",
                     severity=Severity.WARN,
                     profile=profile,
@@ -162,7 +163,7 @@ class DeterministicTestEngine(Assessor):
             self._record_evidence(context, evidence)
             return [
                 self._finding(
-                    code="BEHAVIOUR.PHP_SMOKE_SKIPPED",
+                    code=BID.PHP_SMOKE_SKIPPED,
                     message="PHP smoke test skipped (no PHP files found).",
                     severity=Severity.SKIPPED,
                     profile=profile,
@@ -186,7 +187,7 @@ class DeterministicTestEngine(Assessor):
             self._record_evidence(context, evidence)
             return [
                 self._finding(
-                    code="BEHAVIOUR.PHP_SMOKE_SKIPPED",
+                    code=BID.PHP_SMOKE_SKIPPED,
                     message="PHP smoke test skipped; php binary not available.",
                     severity=Severity.SKIPPED,
                     profile=profile,
@@ -210,7 +211,7 @@ class DeterministicTestEngine(Assessor):
             self._record_evidence(context, evidence)
             return [
                 self._finding(
-                    code="BEHAVIOUR.PHP_SMOKE_TIMEOUT",
+                    code=BID.PHP_SMOKE_TIMEOUT,
                     message="PHP smoke test timed out (stage timeout).",
                     severity=Severity.FAIL,
                     profile=profile,
@@ -241,7 +242,7 @@ class DeterministicTestEngine(Assessor):
         if result.timed_out:
             return [
                 self._finding(
-                    code="BEHAVIOUR.PHP_SMOKE_TIMEOUT",
+                    code=BID.PHP_SMOKE_TIMEOUT,
                     message="PHP smoke test timed out.",
                     severity=Severity.FAIL,
                     profile=profile,
@@ -252,7 +253,7 @@ class DeterministicTestEngine(Assessor):
         if result.exit_code == 0:
             return [
                 self._finding(
-                    code="BEHAVIOUR.PHP_SMOKE_PASS",
+                    code=BID.PHP_SMOKE_PASS,
                     message="PHP entrypoint executed without fatal errors.",
                     severity=Severity.INFO,
                     profile=profile,
@@ -266,7 +267,7 @@ class DeterministicTestEngine(Assessor):
             ]
         return [
             self._finding(
-                code="BEHAVIOUR.PHP_SMOKE_FAIL",
+                code=BID.PHP_SMOKE_FAIL,
                 message="PHP entrypoint execution failed.",
                 severity=Severity.FAIL,
                 profile=profile,
@@ -300,7 +301,7 @@ class DeterministicTestEngine(Assessor):
             self._record_evidence(context, evidence)
             return [
                 self._finding(
-                    code="BEHAVIOUR.PHP_FORM_RUN_SKIPPED",
+                    code=BID.PHP_FORM_RUN_SKIPPED,
                     message="PHP form injection test skipped.",
                     severity=Severity.SKIPPED,
                     profile=profile,
@@ -324,7 +325,7 @@ class DeterministicTestEngine(Assessor):
             self._record_evidence(context, evidence)
             return [
                 self._finding(
-                    code="BEHAVIOUR.PHP_FORM_RUN_TIMEOUT",
+                    code=BID.PHP_FORM_RUN_TIMEOUT,
                     message="PHP form injection test timed out (stage timeout).",
                     severity=Severity.FAIL,
                     profile=profile,
@@ -367,7 +368,7 @@ class DeterministicTestEngine(Assessor):
         if result.timed_out:
             return [
                 self._finding(
-                    code="BEHAVIOUR.PHP_FORM_RUN_TIMEOUT",
+                    code=BID.PHP_FORM_RUN_TIMEOUT,
                     message="PHP form injection test timed out.",
                     severity=Severity.FAIL,
                     profile=profile,
@@ -378,7 +379,7 @@ class DeterministicTestEngine(Assessor):
         if passed:
             return [
                 self._finding(
-                    code="BEHAVIOUR.PHP_FORM_RUN_PASS",
+                    code=BID.PHP_FORM_RUN_PASS,
                     message="PHP form injection executed with request variables injected.",
                     severity=Severity.INFO,
                     profile=profile,
@@ -388,7 +389,7 @@ class DeterministicTestEngine(Assessor):
             ]
         return [
             self._finding(
-                code="BEHAVIOUR.PHP_FORM_RUN_FAIL",
+                code=BID.PHP_FORM_RUN_FAIL,
                 message="PHP form injection execution failed.",
                 severity=Severity.WARN,
                 profile=profile,
@@ -420,7 +421,7 @@ class DeterministicTestEngine(Assessor):
             self._record_evidence(context, evidence)
             return [
                 self._finding(
-                    code="BEHAVIOUR.SQL_EXEC_SKIPPED",
+                    code=BID.SQL_EXEC_SKIPPED,
                     message="SQLite execution skipped (no SQL files).",
                     severity=Severity.SKIPPED,
                     profile=profile,
@@ -444,7 +445,7 @@ class DeterministicTestEngine(Assessor):
             self._record_evidence(context, evidence)
             return [
                 self._finding(
-                    code="BEHAVIOUR.SQL_EXEC_TIMEOUT",
+                    code=BID.SQL_EXEC_TIMEOUT,
                     message="SQLite execution timed out (stage timeout).",
                     severity=Severity.FAIL,
                     profile=profile,
@@ -492,7 +493,7 @@ class DeterministicTestEngine(Assessor):
             self._record_evidence(context, evidence)
             return [
                 self._finding(
-                    code="BEHAVIOUR.SQL_EXEC_FAIL",
+                    code=BID.SQL_EXEC_FAIL,
                     message="SQLite execution failed.",
                     severity=Severity.FAIL,
                     profile=profile,
@@ -508,7 +509,7 @@ class DeterministicTestEngine(Assessor):
                 message = "SQLite execution failed."
             return [
                 self._finding(
-                    code="BEHAVIOUR.SQL_EXEC_FAIL",
+                    code=BID.SQL_EXEC_FAIL,
                     message=message,
                     severity=Severity.FAIL,
                     profile=profile,
@@ -518,7 +519,7 @@ class DeterministicTestEngine(Assessor):
             ]
         return [
             self._finding(
-                code="BEHAVIOUR.SQL_EXEC_PASS",
+                code=BID.SQL_EXEC_PASS,
                 message="SQLite execution completed.",
                 severity=Severity.INFO,
                 profile=profile,

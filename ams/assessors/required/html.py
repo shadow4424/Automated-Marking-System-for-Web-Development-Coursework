@@ -1,102 +1,13 @@
 from __future__ import annotations
 
-from html.parser import HTMLParser
 from pathlib import Path
 from typing import Dict, List
 
 from ams.assessors.base import Assessor
+from ams.assessors.shared.html_parser import TagCountingParser
+from ams.core.finding_ids import HTML as HID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import ProfileSpec, RequiredHTMLRule, get_profile_spec
-
-
-class _TagCountingParser(HTMLParser):
-    """HTML parser that counts tags and tracks specific attributes for rule checking."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.counts: Dict[str, int] = {}
-        
-        # Semantic structure detection
-        self.semantic_tags = {"header", "nav", "main", "section", "article", "aside", "footer"}
-        self.has_semantic = False
-        
-        # Heading hierarchy detection (h1-h6)
-        self.heading_tags = {"h1", "h2", "h3", "h4", "h5", "h6"}
-        self.has_heading = False
-        
-        # List detection (ul, ol, dl)
-        self.list_tags = {"ul", "ol", "dl"}
-        self.has_list = False
-        
-        # Image alt attribute tracking
-        self.img_count = 0
-        self.img_with_alt = 0
-        
-        # Meta tag tracking
-        self.has_meta_charset = False
-        self.has_meta_viewport = False
-        
-        # HTML lang attribute tracking
-        self.has_html_lang = False
-        
-        # Label tracking
-        self.label_count = 0
-
-        # DOCTYPE tracking
-        self.has_doctype = False
-
-    def handle_starttag(self, tag: str, attrs) -> None:  # type: ignore[override]
-        lowered = tag.lower()
-        self.counts[lowered] = self.counts.get(lowered, 0) + 1
-        attrs_dict = dict(attrs)
-        
-        # Check for semantic elements
-        if lowered in self.semantic_tags:
-            self.has_semantic = True
-        
-        # Check for heading elements
-        if lowered in self.heading_tags:
-            self.has_heading = True
-        
-        # Check for list elements
-        if lowered in self.list_tags:
-            self.has_list = True
-        
-        # Check for img tags with alt attributes
-        if lowered == "img":
-            self.img_count += 1
-            if "alt" in attrs_dict and attrs_dict["alt"]:
-                self.img_with_alt += 1
-        
-        # Check for meta charset
-        if lowered == "meta":
-            if "charset" in attrs_dict:
-                self.has_meta_charset = True
-            # Also check http-equiv="Content-Type" with charset in content
-            if attrs_dict.get("http-equiv", "").lower() == "content-type":
-                content = attrs_dict.get("content", "")
-                if "charset" in content.lower():
-                    self.has_meta_charset = True
-        
-        # Check for meta viewport
-        if lowered == "meta" and attrs_dict.get("name", "").lower() == "viewport":
-            self.has_meta_viewport = True
-        
-        # Check for html lang attribute
-        if lowered == "html" and "lang" in attrs_dict and attrs_dict["lang"]:
-            self.has_html_lang = True
-        
-        # Count labels
-        if lowered == "label":
-            self.label_count += 1
-
-    def handle_startendtag(self, tag: str, attrs) -> None:  # type: ignore[override]
-        self.handle_starttag(tag, attrs)
-
-    def handle_decl(self, decl: str) -> None:
-        """Handle declarations like <!DOCTYPE html>."""
-        if decl.lower().startswith("doctype"):
-            self.has_doctype = True
 
 
 class HTMLRequiredElementsAssessor(Assessor):
@@ -122,7 +33,7 @@ class HTMLRequiredElementsAssessor(Assessor):
         if not has_required_rules:
             findings.append(
                 Finding(
-                    id="HTML.REQ.SKIPPED",
+                    id=HID.REQ_SKIPPED,
                     category="html",
                     message="No HTML checks defined for this profile.",
                     severity=Severity.SKIPPED,
@@ -143,7 +54,7 @@ class HTMLRequiredElementsAssessor(Assessor):
             for rule in self.profile_spec.required_html:
                 findings.append(
                     Finding(
-                        id="HTML.REQ.SKIPPED",
+                        id=HID.REQ_SKIPPED,
                         category="html",
                         message=f"Rule '{rule.id}' skipped: HTML not required for this profile.",
                         severity=Severity.SKIPPED,
@@ -168,7 +79,7 @@ class HTMLRequiredElementsAssessor(Assessor):
                 for rule in self.profile_spec.required_html:
                     findings.append(
                         Finding(
-                            id="HTML.REQ.FAIL",
+                            id=HID.REQ_MISSING_FILES,
                             category="html",
                             message=f"Rule '{rule.id}' not evaluated: No HTML files found in submission.",
                             severity=Severity.FAIL,
@@ -193,7 +104,7 @@ class HTMLRequiredElementsAssessor(Assessor):
                 for rule in self.profile_spec.required_html:
                     findings.append(
                         Finding(
-                            id="HTML.REQ.SKIPPED",
+                            id=HID.REQ_SKIPPED,
                             category="html",
                             message=f"Rule '{rule.id}' not evaluated: {rule.description}. HTML not required for this profile or no files found.",
                             severity=Severity.SKIPPED,
@@ -217,14 +128,14 @@ class HTMLRequiredElementsAssessor(Assessor):
 
         for path in html_files:
             content = self._read_file(path)
-            parser = _TagCountingParser()
+            parser = TagCountingParser()
             parser.feed(content)
             for rule in self.profile_spec.required_html:
                 count, passed = self._evaluate_rule(rule, parser)
                 # Extract snippet for evidence
                 snippet = self._extract_snippet(content, rule.selector, rule.id)
                 
-                finding_id = "HTML.REQ.PASS" if passed else "HTML.REQ.FAIL"
+                finding_id = HID.REQ_PASS if passed else HID.REQ_FAIL
                 severity = Severity.INFO if passed else Severity.WARN
                 findings.append(
                     Finding(
@@ -283,7 +194,7 @@ class HTMLRequiredElementsAssessor(Assessor):
         return "\n".join(preview_lines)
 
     def _evaluate_rule(
-        self, rule: RequiredHTMLRule, parser: _TagCountingParser
+        self, rule: RequiredHTMLRule, parser: TagCountingParser
     ) -> tuple[int, bool]:
         """Evaluate a single rule against the parsed HTML content.
         

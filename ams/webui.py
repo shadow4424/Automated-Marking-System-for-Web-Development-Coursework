@@ -1,3 +1,14 @@
+"""AMS Web Interface — primary Flask application for the marking system.
+
+Provides routes for:
+- Single-submission marking (``/mark``)
+- Batch processing multiple submissions (``/batch``)
+- Run history and report viewing (``/runs``, ``/runs/<run_id>``)
+- Batch analytics dashboards (``/batch/<run_id>/analytics``)
+- Artifact and report downloads
+
+Start locally with: ``python -m flask --app ams.webui run --debug``
+"""
 from __future__ import annotations
 
 import json

@@ -5,10 +5,18 @@ from typing import Dict, List, Optional
 
 
 @dataclass(frozen=True)
-class RequiredHTMLRule:
+class RequiredRule:
+    """Unified rule definition for all assessable components.
+
+    The ``pattern`` field holds the match string used by assessors — this
+    replaces the former ``selector`` (HTML) and ``needle`` (CSS/JS/PHP/SQL)
+    fields.  Backward-compatible factory functions are provided below so
+    that existing code using ``RequiredHTMLRule(selector=…)`` or
+    ``RequiredCSSRule(needle=…)`` continues to work without changes.
+    """
     id: str
     description: str
-    selector: str
+    pattern: str
     min_count: int = 1
     weight: float = 1.0  # Weight for scoring (higher = more important)
     # LLM Metadata (Phase 0)
@@ -23,85 +31,35 @@ class RequiredHTMLRule:
     attempt_signal: Optional[str] = None  # Regex pattern to detect attempt
     related_rules: tuple[str, ...] = ()  # Related rule IDs for conflict resolution
 
+    # ------------------------------------------------------------------
+    # Backward-compatible property aliases so that existing assessor code
+    # using ``rule.selector`` or ``rule.needle`` keeps working.
+    # ------------------------------------------------------------------
+    @property
+    def selector(self) -> str:  # used by HTML assessors
+        return self.pattern
 
-@dataclass(frozen=True)
-class RequiredCSSRule:
-    id: str
-    description: str
-    needle: str
-    min_count: int = 1
-    weight: float = 1.0  # Weight for scoring (higher = more important)
-    # LLM Metadata (Phase 0)
-    category: str = ""
-    partial_allowed: bool = False
-    partial_range: tuple[float, float] = (0.0, 0.0)
-    severity: str = "medium"
-    llm_guidance: str = ""
-    pii_sensitivity: bool = False
-    visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
-    # Phase D: Fair Partial Credit
-    attempt_signal: Optional[str] = None
-    related_rules: tuple[str, ...] = ()
+    @property
+    def needle(self) -> str:  # used by CSS / JS / PHP / SQL assessors
+        return self.pattern
 
 
-@dataclass(frozen=True)
-class RequiredJSRule:
-    id: str
-    description: str
-    needle: str
-    min_count: int = 1
-    weight: float = 1.0  # Weight for scoring (higher = more important)
-    # LLM Metadata (Phase 0)
-    category: str = ""
-    partial_allowed: bool = False
-    partial_range: tuple[float, float] = (0.0, 0.0)
-    severity: str = "medium"
-    llm_guidance: str = ""
-    pii_sensitivity: bool = False
-    visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
-    # Phase D: Fair Partial Credit
-    attempt_signal: Optional[str] = None
-    related_rules: tuple[str, ...] = ()
+def _make_rule_factory(legacy_kwarg: str):
+    """Return a factory that accepts *legacy_kwarg* and maps it to ``pattern``."""
+    def _factory(*args, **kwargs):
+        if legacy_kwarg in kwargs:
+            kwargs["pattern"] = kwargs.pop(legacy_kwarg)
+        return RequiredRule(*args, **kwargs)
+    _factory.__qualname__ = _factory.__name__ = f"Required{legacy_kwarg.title().replace('_','')}Rule"
+    return _factory
 
 
-@dataclass(frozen=True)
-class RequiredPHPRule:
-    id: str
-    description: str
-    needle: str
-    min_count: int = 1
-    weight: float = 1.0  # Weight for scoring (higher = more important)
-    # LLM Metadata (Phase 0)
-    category: str = ""
-    partial_allowed: bool = False
-    partial_range: tuple[float, float] = (0.0, 0.0)
-    severity: str = "medium"
-    llm_guidance: str = ""
-    pii_sensitivity: bool = False
-    visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
-    # Phase D: Fair Partial Credit
-    attempt_signal: Optional[str] = None
-    related_rules: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class RequiredSQLRule:
-    id: str
-    description: str
-    needle: str
-    min_count: int = 1
-    weight: float = 1.0  # Weight for scoring (higher = more important)
-    # LLM Metadata (Phase 0)
-    category: str = ""
-    partial_allowed: bool = False
-    partial_range: tuple[float, float] = (0.0, 0.0)
-    severity: str = "medium"
-    llm_guidance: str = ""
-    pii_sensitivity: bool = False
-    visual_check: bool = False  # Phase 3: True if rule requires vision capabilities
-    # Phase D: Fair Partial Credit
-    attempt_signal: Optional[str] = None
-    related_rules: tuple[str, ...] = ()
+# Backward-compatible constructors: accept the old keyword names.
+RequiredHTMLRule = _make_rule_factory("selector")
+RequiredCSSRule  = _make_rule_factory("needle")
+RequiredJSRule   = _make_rule_factory("needle")
+RequiredPHPRule  = _make_rule_factory("needle")
+RequiredSQLRule  = _make_rule_factory("needle")
 
 
 @dataclass(frozen=True)
@@ -128,11 +86,11 @@ class BehavioralRule:
 @dataclass(frozen=True)
 class ProfileSpec:
     name: str
-    required_html: List[RequiredHTMLRule]
-    required_css: List[RequiredCSSRule]
-    required_js: List[RequiredJSRule]
-    required_php: List[RequiredPHPRule]
-    required_sql: List[RequiredSQLRule]
+    required_html: List[RequiredRule]
+    required_css: List[RequiredRule]
+    required_js: List[RequiredRule]
+    required_php: List[RequiredRule]
+    required_sql: List[RequiredRule]
     behavioral_rules: List[BehavioralRule]
     required_files: List[str]
     relevant_artefacts: List[str]
@@ -1105,6 +1063,7 @@ PROFILES = {name: {"relevant_artefacts": spec.relevant_artefacts} for name, spec
 
 
 __all__ = [
+    "RequiredRule",
     "RequiredHTMLRule",
     "RequiredCSSRule",
     "RequiredJSRule",

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Set
 
 from ams.assessors.base import Assessor
+from ams.core.finding_ids import CONSISTENCY as COID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec
 
@@ -175,7 +176,7 @@ class ConsistencyAssessor(Assessor):
                             
                             findings.append(
                                 Finding(
-                                    id="CONSISTENCY.JS_MISSING_HTML_ID",
+                                    id=COID.JS_MISSING_HTML_ID,
                                     category="consistency",
                                     message=f"JS references HTML ID '{selector_value}' that does not exist in HTML.",
                                     severity=Severity.WARN,
@@ -203,7 +204,7 @@ class ConsistencyAssessor(Assessor):
                             
                             findings.append(
                                 Finding(
-                                    id="CONSISTENCY.JS_MISSING_HTML_CLASS",
+                                    id=COID.JS_MISSING_HTML_CLASS,
                                     category="consistency",
                                     message=f"JS references HTML class '{selector_value}' that does not exist in HTML.",
                                     severity=Severity.WARN,
@@ -249,7 +250,7 @@ class ConsistencyAssessor(Assessor):
                         
                         findings.append(
                             Finding(
-                                id="CONSISTENCY.CSS_MISSING_HTML_ID",
+                                id=COID.CSS_MISSING_HTML_ID,
                                 category="consistency",
                                 message=f"CSS references HTML ID '#{selector_value}' that does not exist in HTML.",
                                 severity=Severity.WARN,
@@ -273,7 +274,7 @@ class ConsistencyAssessor(Assessor):
                         
                         findings.append(
                             Finding(
-                                id="CONSISTENCY.CSS_MISSING_HTML_CLASS",
+                                id=COID.CSS_MISSING_HTML_CLASS,
                                 category="consistency",
                                 message=f"CSS references HTML class '.{selector_value}' that does not exist in HTML.",
                                 severity=Severity.WARN,
@@ -326,7 +327,7 @@ class ConsistencyAssessor(Assessor):
             if key not in html_form_fields:
                 findings.append(
                     Finding(
-                        id="CONSISTENCY.PHP_EXPECTS_MISSING_FORM_FIELD",
+                        id=COID.PHP_EXPECTS_MISSING_FORM_FIELD,
                         category="consistency",
                         message=f"PHP accesses form field '{key}' that is not defined in HTML forms.",
                         severity=Severity.WARN,
@@ -345,7 +346,7 @@ class ConsistencyAssessor(Assessor):
             if field_name not in php_accessed_keys:
                 findings.append(
                     Finding(
-                        id="CONSISTENCY.FORM_FIELD_UNUSED_IN_PHP",
+                        id=COID.FORM_FIELD_UNUSED_IN_PHP,
                         category="consistency",
                         message=f"HTML form field '{field_name}' is not accessed in PHP code.",
                         severity=Severity.INFO,
@@ -395,7 +396,7 @@ class ConsistencyAssessor(Assessor):
                 if not target_path.exists() or not str(target_path).startswith(str(submission_root.resolve())):
                     findings.append(
                         Finding(
-                            id="CONSISTENCY.MISSING_LINK_TARGET",
+                            id=COID.MISSING_LINK_TARGET,
                             category="consistency",
                             message=f"Link target '{href}' does not exist.",
                             severity=Severity.WARN,
@@ -447,7 +448,7 @@ class ConsistencyAssessor(Assessor):
                 if not target_path.exists() or not str(target_path).startswith(str(submission_root.resolve())):
                     findings.append(
                         Finding(
-                            id="CONSISTENCY.MISSING_FORM_ACTION_TARGET",
+                            id=COID.MISSING_FORM_ACTION_TARGET,
                             category="consistency",
                             message=f"Form action target '{action}' does not exist.",
                             severity=Severity.WARN,

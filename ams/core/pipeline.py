@@ -420,7 +420,11 @@ class AssessmentPipeline:
     def _find_screenshot(self, workspace_path: Path) -> Optional[Path]:
         """Find a screenshot file for vision analysis.
         
-        Looks for common screenshot filenames in the workspace.
+        Uses glob patterns to discover common image files across the
+        workspace and any ``submission`` subdirectory.  Preferred
+        filenames (e.g. ``screenshot.*``, ``page.*``) are returned
+        first; if none match, any ``.png`` / ``.jpg`` / ``.jpeg`` file
+        found in the search directories is accepted as a fallback.
         
         Args:
             workspace_path: Path to the assessment workspace.
@@ -428,30 +432,38 @@ class AssessmentPipeline:
         Returns:
             Path to screenshot if found, None otherwise.
         """
-        screenshot_names = [
-            "screenshot.png",
-            "screenshot.jpg",
-            "page.png",
-            "page.jpg",
-            "capture.png",
-            "browser_screenshot.png",
-        ]
-        
-        for name in screenshot_names:
-            path = workspace_path / name
-            if path.exists():
-                logger.debug(f"Found screenshot: {path}")
-                return path
-        
-        # Also check in submission subdirectory
+        search_dirs = [workspace_path]
         submission_dir = workspace_path / "submission"
         if submission_dir.exists():
-            for name in screenshot_names:
-                path = submission_dir / name
-                if path.exists():
-                    logger.debug(f"Found screenshot in submission: {path}")
-                    return path
-        
+            search_dirs.append(submission_dir)
+
+        # Preferred stems in priority order
+        preferred_stems = [
+            "screenshot",
+            "browser_screenshot",
+            "page",
+            "capture",
+            "preview",
+        ]
+        image_extensions = (".png", ".jpg", ".jpeg", ".webp")
+
+        # Pass 1 — preferred filenames
+        for directory in search_dirs:
+            for stem in preferred_stems:
+                for ext in image_extensions:
+                    path = directory / f"{stem}{ext}"
+                    if path.exists():
+                        logger.debug(f"Found screenshot: {path}")
+                        return path
+
+        # Pass 2 — any image file via glob
+        for directory in search_dirs:
+            for ext in image_extensions:
+                matches = sorted(directory.glob(f"*{ext}"))
+                if matches:
+                    logger.debug(f"Found screenshot (glob fallback): {matches[0]}")
+                    return matches[0]
+
         return None
 
     def _check_config_warnings(self, profile_spec: ProfileSpec, context: SubmissionContext) -> List[Finding]:

@@ -4,6 +4,7 @@ from html.parser import HTMLParser
 from typing import List
 
 from ams.assessors.base import Assessor
+from ams.core.finding_ids import HTML as HID
 from ams.core.models import Finding, Severity, SubmissionContext
 
 
@@ -50,7 +51,7 @@ class HTMLBehavioralAssessor(Assessor):
         if not html_files:
             findings.append(
                 Finding(
-                    id="HTML.BEHAVIORAL.SKIPPED",
+                    id=HID.BEHAVIORAL_SKIPPED,
                     category="html",
                     message="No HTML files found; behavioral checks skipped.",
                     severity=Severity.SKIPPED,
@@ -66,7 +67,7 @@ class HTMLBehavioralAssessor(Assessor):
             except OSError as exc:
                 findings.append(
                     Finding(
-                        id="HTML.BEHAVIORAL.READ_ERROR",
+                        id=HID.BEHAVIORAL_READ_ERROR,
                         category="html",
                         message="Failed to read HTML file for behavioral check.",
                         severity=Severity.FAIL,
@@ -83,7 +84,7 @@ class HTMLBehavioralAssessor(Assessor):
             except Exception as exc:
                 findings.append(
                     Finding(
-                        id="HTML.BEHAVIORAL.PARSE_ERROR",
+                        id=HID.BEHAVIORAL_PARSE_ERROR,
                         category="html",
                         message="HTML parsing failed during behavioral check.",
                         severity=Severity.WARN,
@@ -97,7 +98,7 @@ class HTMLBehavioralAssessor(Assessor):
             if parser.has_body:
                 findings.append(
                     Finding(
-                        id="HTML.BEHAVIORAL.PAGE_LOADS",
+                        id=HID.BEHAVIORAL_PAGE_LOADS,
                         category="html",
                         message="HTML page structure valid (body tag found).",
                         severity=Severity.INFO,
@@ -108,7 +109,7 @@ class HTMLBehavioralAssessor(Assessor):
             else:
                 findings.append(
                     Finding(
-                        id="HTML.BEHAVIORAL.NO_BODY",
+                        id=HID.BEHAVIORAL_NO_BODY,
                         category="html",
                         message="HTML page missing body tag.",
                         severity=Severity.WARN,
@@ -121,7 +122,7 @@ class HTMLBehavioralAssessor(Assessor):
             if parser.has_form:
                 findings.append(
                     Finding(
-                        id="HTML.BEHAVIORAL.FORM_EXISTS",
+                        id=HID.BEHAVIORAL_FORM_EXISTS,
                         category="html",
                         message="Form element found in HTML.",
                         severity=Severity.INFO,
@@ -136,7 +137,7 @@ class HTMLBehavioralAssessor(Assessor):
             else:
                 findings.append(
                     Finding(
-                        id="HTML.BEHAVIORAL.NO_FORM",
+                        id=HID.BEHAVIORAL_NO_FORM,
                         category="html",
                         message="No form element found in HTML.",
                         severity=Severity.WARN,

@@ -4,6 +4,7 @@ import re
 from typing import List
 
 from ams.assessors.base import Assessor
+from ams.core.finding_ids import SQL as SID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec
 
@@ -32,7 +33,7 @@ class SQLStaticAssessor(Assessor):
                 # Required for profile but missing
                 findings.append(
                     Finding(
-                        id="SQL.MISSING_FILES",
+                        id=SID.MISSING_FILES,
                         category="sql",
                         message="No SQL files found; SQL is required for this profile.",
                         severity=Severity.FAIL,
@@ -52,7 +53,7 @@ class SQLStaticAssessor(Assessor):
                 # Not required for profile, skip
                 findings.append(
                     Finding(
-                        id="SQL.SKIPPED",
+                        id=SID.SKIPPED,
                         category="sql",
                         message="No SQL files found; SQL is not required for this profile.",
                         severity=Severity.SKIPPED,
@@ -76,7 +77,7 @@ class SQLStaticAssessor(Assessor):
             except OSError as exc:
                 findings.append(
                     Finding(
-                        id="SQL.READ_ERROR",
+                        id=SID.READ_ERROR,
                         category="sql",
                         message="Failed to read SQL file.",
                         severity=Severity.FAIL,
@@ -91,7 +92,7 @@ class SQLStaticAssessor(Assessor):
             evidence_snippet = content[:500] + ("..." if len(content) > 500 else "")
             
             evidence_finding = Finding(
-                id="SQL.EVIDENCE",
+                id=SID.EVIDENCE,
                 category="sql",
                 message="SQL evidence collected.",
                 severity=Severity.INFO,
@@ -124,7 +125,7 @@ class SQLStaticAssessor(Assessor):
             if non_empty_lines == 0:
                 findings.append(
                     Finding(
-                        id="SQL.EMPTY",
+                        id=SID.EMPTY,
                         category="sql",
                         message="SQL file appears empty.",
                         severity=Severity.WARN,
@@ -135,7 +136,7 @@ class SQLStaticAssessor(Assessor):
             elif semicolons == 0 and non_empty_lines > 0:
                 findings.append(
                     Finding(
-                        id="SQL.NO_SEMICOLONS",
+                        id=SID.NO_SEMICOLONS,
                         category="sql",
                         message="No semicolons found; SQL may be incomplete.",
                         severity=Severity.WARN,
@@ -146,7 +147,7 @@ class SQLStaticAssessor(Assessor):
             else:
                 findings.append(
                     Finding(
-                        id="SQL.STRUCTURE_OK",
+                        id=SID.STRUCTURE_OK,
                         category="sql",
                         message="SQL structure heuristics look OK.",
                         severity=Severity.INFO,
@@ -175,7 +176,7 @@ class SQLStaticAssessor(Assessor):
             if dynamic_sql_found:
                 findings.append(
                     Finding(
-                        id="SQL.SECURITY.DYNAMIC_SQL",
+                        id=SID.SECURITY_DYNAMIC_SQL,
                         category="sql",
                         message="Dynamic SQL with string concatenation detected. Use parameterized queries/prepared statements to prevent SQL injection.",
                         severity=Severity.FAIL,
@@ -195,7 +196,7 @@ class SQLStaticAssessor(Assessor):
                 star_snippet = self._extract_snippet(content, "select *")
                 findings.append(
                     Finding(
-                        id="SQL.QUALITY.SELECT_STAR",
+                        id=SID.QUALITY_SELECT_STAR,
                         category="sql",
                         message=f"Found {select_star_count} use(s) of SELECT *. Specify columns explicitly for better performance and maintainability.",
                         severity=Severity.WARN,
@@ -224,7 +225,7 @@ class SQLStaticAssessor(Assessor):
             if selects_without_limit:
                 findings.append(
                     Finding(
-                        id="SQL.SECURITY.MISSING_LIMIT",
+                        id=SID.SECURITY_MISSING_LIMIT,
                         category="sql",
                         message=f"Found {len(selects_without_limit)} SELECT statement(s) with WHERE clause but no LIMIT. Add LIMIT to prevent excessive data retrieval.",
                         severity=Severity.WARN,

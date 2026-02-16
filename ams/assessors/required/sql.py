@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List
 
 from ams.assessors.base import Assessor
+from ams.core.finding_ids import SQL as SID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import ProfileSpec, get_profile_spec
 
@@ -25,7 +26,7 @@ class SQLRequiredFeaturesAssessor(Assessor):
         if not self.profile_spec.required_sql:
             findings.append(
                 Finding(
-                    id="SQL.REQ.SKIPPED",
+                    id=SID.REQ_SKIPPED,
                     category="sql",
                     message="No required SQL rules defined for this profile; skipped.",
                     severity=Severity.SKIPPED,
@@ -44,7 +45,7 @@ class SQLRequiredFeaturesAssessor(Assessor):
             for rule in self.profile_spec.required_sql:
                 findings.append(
                     Finding(
-                        id="SQL.REQ.SKIPPED",
+                        id=SID.REQ_SKIPPED,
                         category="sql",
                         message=f"Rule '{rule.id}' skipped: SQL not required for this profile.",
                         severity=Severity.SKIPPED,
@@ -69,7 +70,7 @@ class SQLRequiredFeaturesAssessor(Assessor):
                 for rule in self.profile_spec.required_sql:
                     findings.append(
                         Finding(
-                            id="SQL.REQ.FAIL",
+                            id=SID.REQ_MISSING_FILES,
                             category="sql",
                             message=f"Rule '{rule.id}' not evaluated: No SQL files found.",
                             severity=Severity.FAIL,
@@ -80,6 +81,8 @@ class SQLRequiredFeaturesAssessor(Assessor):
                                 "min_count": rule.min_count,
                                 "weight": rule.weight,
                                 "skip_reason": "no_sql_files_found",
+                                "profile": self.profile_spec.name,
+                                "required": True,
                             },
                             source=self.name,
                             finding_category=FindingCategory.MISSING,
@@ -92,7 +95,7 @@ class SQLRequiredFeaturesAssessor(Assessor):
                 for rule in self.profile_spec.required_sql:
                     findings.append(
                         Finding(
-                            id="SQL.REQ.SKIPPED",
+                            id=SID.REQ_SKIPPED,
                             category="sql",
                             message=f"Rule '{rule.id}' skipped: {rule.description}",
                             severity=Severity.SKIPPED,
@@ -117,7 +120,7 @@ class SQLRequiredFeaturesAssessor(Assessor):
             except OSError as exc:
                 findings.append(
                     Finding(
-                        id="SQL.REQ.READ_ERROR",
+                        id=SID.REQ_READ_ERROR,
                         category="sql",
                         message="Failed to read SQL file.",
                         severity=Severity.FAIL,
@@ -132,7 +135,7 @@ class SQLRequiredFeaturesAssessor(Assessor):
                 snippet = self._extract_snippet(rule, content, content_lower)
                 findings.append(
                     Finding(
-                        id="SQL.REQ.PASS" if passed else "SQL.REQ.FAIL",
+                        id=SID.REQ_PASS if passed else SID.REQ_FAIL,
                         category="sql",
                         message=self._message(rule.id, passed, count, rule.min_count),
                         severity=Severity.INFO if passed else Severity.WARN,

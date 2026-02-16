@@ -19,7 +19,8 @@ def _run(tmp_path: Path, files: dict[str, str], profile: str = "frontend") -> fl
     return float(data["scores"]["overall"])
 
 
-def test_overall_score_is_quantized(tmp_path: Path) -> None:
+def test_overall_score_is_continuous(tmp_path: Path) -> None:
+    """Scores are continuous values in [0.0, 1.0] (no longer quantized)."""
     scores = [
         _run(tmp_path / "full", {
             "index.html": "<!doctype html><html><body><form><input><a href='#'>x</a></form></body></html>",
@@ -31,7 +32,7 @@ def test_overall_score_is_quantized(tmp_path: Path) -> None:
         }),
         _run(tmp_path / "none", {}),
     ]
-    assert all(score in {1.0, 0.5, 0.0} for score in scores)
+    assert all(0.0 <= score <= 1.0 for score in scores)
 
 
 def test_overall_full_marks(tmp_path: Path) -> None:
@@ -43,12 +44,12 @@ def test_overall_full_marks(tmp_path: Path) -> None:
             "app.js": "document.body.addEventListener('click', ()=>{});",
         },
     )
-    assert score in {0.5, 1.0}
+    assert score >= 0.5
 
 
 def test_overall_partial_marks(tmp_path: Path) -> None:
     score = _run(tmp_path, {"index.html": "<div>hi</div>"})
-    assert score in {0.0, 0.5}
+    assert 0.0 <= score <= 0.5
 
 
 def test_overall_no_attempt(tmp_path: Path) -> None:

@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import List
 
 from ams.assessors.base import Assessor
+from ams.assessors.shared.html_parser import TagCountingParser
+from ams.core.finding_ids import HTML as HID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec
 
@@ -31,7 +33,7 @@ class HTMLStaticAssessor(Assessor):
                 # Required for profile but missing
                 findings.append(
                     Finding(
-                        id="HTML.MISSING_FILES",
+                        id=HID.MISSING_FILES,
                         category="html",
                         message="No HTML files found; HTML is required for this profile.",
                         severity=Severity.FAIL,
@@ -51,7 +53,7 @@ class HTMLStaticAssessor(Assessor):
                 # Not required for profile, skip
                 findings.append(
                     Finding(
-                        id="HTML.SKIPPED",
+                        id=HID.SKIPPED,
                         category="html",
                         message="No HTML files found; HTML is not required for this profile.",
                         severity=Severity.SKIPPED,
@@ -75,7 +77,7 @@ class HTMLStaticAssessor(Assessor):
             except OSError as exc:
                 findings.append(
                     Finding(
-                        id="HTML.READ_ERROR",
+                        id=HID.READ_ERROR,
                         category="html",
                         message="Failed to read HTML file.",
                         severity=Severity.FAIL,
@@ -86,10 +88,15 @@ class HTMLStaticAssessor(Assessor):
                 continue
 
             lowered = content.lower()
-            has_doctype = "<!doctype html" in lowered
-            has_html_tag = "<html" in lowered and "</html" in lowered
-            has_head = "<head" in lowered
-            has_body = "<body" in lowered
+
+            # Use the shared parser for structure detection
+            parser = TagCountingParser()
+            parser.feed(content)
+
+            has_doctype = parser.has_doctype or "<!doctype html" in lowered
+            has_html_tag = parser.has_html_tag
+            has_head = parser.has_head
+            has_body = parser.has_body
 
             structure_evidence = {
                 "path": str(path),
@@ -102,7 +109,7 @@ class HTMLStaticAssessor(Assessor):
             if (has_doctype or has_html_tag) and has_head and has_body:
                 findings.append(
                     Finding(
-                        id="HTML.PARSE_OK",
+                        id=HID.PARSE_OK,
                         category="html",
                         message="HTML structure appears valid.",
                         severity=Severity.INFO,
@@ -113,7 +120,7 @@ class HTMLStaticAssessor(Assessor):
             else:
                 findings.append(
                     Finding(
-                        id="HTML.PARSE_SUSPECT",
+                        id=HID.PARSE_SUSPECT,
                         category="html",
                         message="HTML structure incomplete or missing expected elements.",
                         severity=Severity.WARN,
@@ -122,13 +129,13 @@ class HTMLStaticAssessor(Assessor):
                     )
                 )
 
-            forms = lowered.count("<form")
-            inputs = lowered.count("<input")
-            links = lowered.count("<a ")
+            forms = parser.form_count
+            inputs = parser.input_count
+            links = parser.link_count
 
             findings.append(
                 Finding(
-                    id="HTML.ELEMENT_EVIDENCE",
+                    id=HID.ELEMENT_EVIDENCE,
                     category="html",
                     message="HTML element evidence collected.",
                     severity=Severity.INFO,
@@ -148,7 +155,7 @@ class HTMLStaticAssessor(Assessor):
             if inline_style_count > 0:
                 findings.append(
                     Finding(
-                        id="HTML.QUALITY.INLINE_CSS",
+                        id=HID.QUALITY_INLINE_CSS,
                         category="html",
                         message=f"Found {inline_style_count} inline style attribute(s). Consider using external CSS for better maintainability.",
                         severity=Severity.WARN if inline_style_count <= 3 else Severity.FAIL,
@@ -180,7 +187,7 @@ class HTMLStaticAssessor(Assessor):
             if found_deprecated:
                 findings.append(
                     Finding(
-                        id="HTML.QUALITY.DEPRECATED_TAGS",
+                        id=HID.QUALITY_DEPRECATED_TAGS,
                         category="html",
                         message=f"Found deprecated HTML tags: {', '.join(found_deprecated)}. Use modern HTML5 alternatives.",
                         severity=Severity.WARN,

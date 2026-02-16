@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List
 
 from ams.assessors.base import Assessor
+from ams.core.finding_ids import JS as JID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import ProfileSpec, get_profile_spec
 
@@ -25,7 +26,7 @@ class JSRequiredFeaturesAssessor(Assessor):
         if not self.profile_spec.required_js:
             findings.append(
                 Finding(
-                    id="JS.REQ.SKIPPED",
+                    id=JID.REQ_SKIPPED,
                     category="js",
                     message="No required JS rules defined for this profile; skipped.",
                     severity=Severity.SKIPPED,
@@ -44,7 +45,7 @@ class JSRequiredFeaturesAssessor(Assessor):
             for rule in self.profile_spec.required_js:
                 findings.append(
                     Finding(
-                        id="JS.REQ.SKIPPED",
+                        id=JID.REQ_SKIPPED,
                         category="js",
                         message=f"Rule '{rule.id}' skipped: JS not required for this profile.",
                         severity=Severity.SKIPPED,
@@ -69,7 +70,7 @@ class JSRequiredFeaturesAssessor(Assessor):
                 for rule in self.profile_spec.required_js:
                     findings.append(
                         Finding(
-                            id="JS.REQ.FAIL",
+                            id=JID.REQ_MISSING_FILES,
                             category="js",
                             message=f"Rule '{rule.id}' not evaluated: No JS files found in submission.",
                             severity=Severity.FAIL,
@@ -93,7 +94,7 @@ class JSRequiredFeaturesAssessor(Assessor):
                 for rule in self.profile_spec.required_js:
                     findings.append(
                         Finding(
-                            id="JS.REQ.SKIPPED",
+                            id=JID.REQ_SKIPPED,
                             category="js",
                             message=f"Rule '{rule.id}' not evaluated: {rule.description}. JS not required for this profile or no files found.",
                             severity=Severity.SKIPPED,
@@ -121,7 +122,7 @@ class JSRequiredFeaturesAssessor(Assessor):
             except OSError as exc:
                 findings.append(
                     Finding(
-                        id="JS.REQ.READ_ERROR",
+                        id=JID.REQ_READ_ERROR,
                         category="js",
                         message="Failed to read JS file.",
                         severity=Severity.FAIL,
@@ -136,7 +137,7 @@ class JSRequiredFeaturesAssessor(Assessor):
                 count, passed, snippet = self._evaluate_rule(rule, content_lower, content_raw)
                 findings.append(
                     Finding(
-                        id="JS.REQ.PASS" if passed else "JS.REQ.FAIL",
+                        id=JID.REQ_PASS if passed else JID.REQ_FAIL,
                         category="js",
                         message=self._message(rule.id, passed, count, rule.min_count),
                         severity=Severity.INFO if passed else Severity.WARN,

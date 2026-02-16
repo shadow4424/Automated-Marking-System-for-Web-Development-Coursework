@@ -4,6 +4,7 @@ import re
 from typing import List
 
 from ams.assessors.base import Assessor
+from ams.core.finding_ids import JS as JID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec
 
@@ -32,7 +33,7 @@ class JSStaticAssessor(Assessor):
                 # Required for profile but missing
                 findings.append(
                     Finding(
-                        id="JS.MISSING_FILES",
+                        id=JID.MISSING_FILES,
                         category="js",
                         message="No JavaScript files found; JS is required for this profile.",
                         severity=Severity.FAIL,
@@ -52,7 +53,7 @@ class JSStaticAssessor(Assessor):
                 # Not required for profile, skip
                 findings.append(
                     Finding(
-                        id="JS.SKIPPED",
+                        id=JID.SKIPPED,
                         category="js",
                         message="No JavaScript files found; JS is not required for this profile.",
                         severity=Severity.SKIPPED,
@@ -76,7 +77,7 @@ class JSStaticAssessor(Assessor):
             except OSError as exc:
                 findings.append(
                     Finding(
-                        id="JS.READ_ERROR",
+                        id=JID.READ_ERROR,
                         category="js",
                         message="Failed to read JS file.",
                         severity=Severity.FAIL,
@@ -108,7 +109,7 @@ class JSStaticAssessor(Assessor):
             if braces_balanced and parens_balanced and (open_braces + open_parens) > 0:
                 findings.append(
                     Finding(
-                        id="JS.SYNTAX_OK",
+                        id=JID.SYNTAX_OK,
                         category="js",
                         message="JS syntax heuristics look OK.",
                         severity=Severity.INFO,
@@ -119,7 +120,7 @@ class JSStaticAssessor(Assessor):
             elif (open_braces + close_braces + open_parens + close_parens) == 0:
                 findings.append(
                     Finding(
-                        id="JS.NO_CODE",
+                        id=JID.NO_CODE,
                         category="js",
                         message="JS file appears to contain no code-like tokens.",
                         severity=Severity.WARN,
@@ -130,7 +131,7 @@ class JSStaticAssessor(Assessor):
             else:
                 findings.append(
                     Finding(
-                        id="JS.SYNTAX_SUSPECT",
+                        id=JID.SYNTAX_SUSPECT,
                         category="js",
                         message="JS syntax heuristics look suspect.",
                         severity=Severity.WARN,
@@ -150,7 +151,7 @@ class JSStaticAssessor(Assessor):
 
             findings.append(
                 Finding(
-                    id="JS.EVIDENCE",
+                    id=JID.EVIDENCE,
                     category="js",
                     message="JS evidence collected.",
                     severity=Severity.INFO,
@@ -204,7 +205,7 @@ class JSStaticAssessor(Assessor):
             if potential_globals:
                 findings.append(
                     Finding(
-                        id="JS.QUALITY.GLOBAL_VARIABLES",
+                        id=JID.QUALITY_GLOBAL_VARIABLES,
                         category="js",
                         message=f"Found {len(potential_globals)} potential global variable(s). Use var/let/const to avoid polluting global scope.",
                         severity=Severity.WARN,
@@ -233,7 +234,7 @@ class JSStaticAssessor(Assessor):
             if len(suspicious_vars) > 5 or len(suspicious_short) > 3:
                 findings.append(
                     Finding(
-                        id="JS.QUALITY.POOR_NAMING",
+                        id=JID.QUALITY_POOR_NAMING,
                         category="js",
                         message="Found potentially unclear variable/function names. Use descriptive names for better code maintainability.",
                         severity=Severity.WARN,
@@ -268,7 +269,7 @@ class JSStaticAssessor(Assessor):
             if len(unused_vars) > 2:
                 findings.append(
                     Finding(
-                        id="JS.QUALITY.UNUSED_VARIABLES",
+                        id=JID.QUALITY_UNUSED_VARIABLES,
                         category="js",
                         message=f"Found {len(unused_vars)} potentially unused variable(s). Remove unused code to improve maintainability.",
                         severity=Severity.WARN,
@@ -301,7 +302,7 @@ class JSStaticAssessor(Assessor):
             if lines_after_return:
                 findings.append(
                     Finding(
-                        id="JS.QUALITY.UNREACHABLE_CODE",
+                        id=JID.QUALITY_UNREACHABLE_CODE,
                         category="js",
                         message=f"Found potentially unreachable code after return/throw/break/continue statements.",
                         severity=Severity.WARN,
@@ -321,7 +322,7 @@ class JSStaticAssessor(Assessor):
             if code_lines > 50 and function_declarations < 3:
                 findings.append(
                     Finding(
-                        id="JS.QUALITY.LACK_OF_MODULARITY",
+                        id=JID.QUALITY_LACK_OF_MODULARITY,
                         category="js",
                         message="Code appears to lack modular structure. Consider breaking code into reusable functions.",
                         severity=Severity.WARN,

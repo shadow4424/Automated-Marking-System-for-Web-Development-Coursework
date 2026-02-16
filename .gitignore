@@ -16,3 +16,6 @@ demo_out/
 tmp_phase5/
 scratch_sql_test/
 manual_submissions/
+
+# Documentation
+docs/

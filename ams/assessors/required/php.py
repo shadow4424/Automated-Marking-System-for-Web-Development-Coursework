@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List
 
 from ams.assessors.base import Assessor
+from ams.core.finding_ids import PHP as PID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import ProfileSpec, get_profile_spec
 
@@ -25,7 +26,7 @@ class PHPRequiredFeaturesAssessor(Assessor):
         if not self.profile_spec.required_php:
             findings.append(
                 Finding(
-                    id="PHP.REQ.SKIPPED",
+                    id=PID.REQ_SKIPPED,
                     category="php",
                     message="No required PHP rules defined for this profile; skipped.",
                     severity=Severity.SKIPPED,
@@ -44,7 +45,7 @@ class PHPRequiredFeaturesAssessor(Assessor):
             for rule in self.profile_spec.required_php:
                 findings.append(
                     Finding(
-                        id="PHP.REQ.SKIPPED",
+                        id=PID.REQ_SKIPPED,
                         category="php",
                         message=f"Rule '{rule.id}' skipped: PHP not required for this profile.",
                         severity=Severity.SKIPPED,
@@ -69,7 +70,7 @@ class PHPRequiredFeaturesAssessor(Assessor):
                 for rule in self.profile_spec.required_php:
                     findings.append(
                         Finding(
-                            id="PHP.REQ.FAIL",
+                            id=PID.REQ_MISSING_FILES,
                             category="php",
                             message=f"Rule '{rule.id}' not evaluated: No PHP files found.",
                             severity=Severity.FAIL,
@@ -80,6 +81,8 @@ class PHPRequiredFeaturesAssessor(Assessor):
                                 "min_count": rule.min_count,
                                 "weight": rule.weight,
                                 "skip_reason": "no_php_files_found",
+                                "profile": self.profile_spec.name,
+                                "required": True,
                             },
                             source=self.name,
                             finding_category=FindingCategory.MISSING,
@@ -92,7 +95,7 @@ class PHPRequiredFeaturesAssessor(Assessor):
                 for rule in self.profile_spec.required_php:
                     findings.append(
                         Finding(
-                            id="PHP.REQ.SKIPPED",
+                            id=PID.REQ_SKIPPED,
                             category="php",
                             message=f"Rule '{rule.id}' skipped: {rule.description}",
                             severity=Severity.SKIPPED,
@@ -117,7 +120,7 @@ class PHPRequiredFeaturesAssessor(Assessor):
             except OSError as exc:
                 findings.append(
                     Finding(
-                        id="PHP.REQ.READ_ERROR",
+                        id=PID.REQ_READ_ERROR,
                         category="php",
                         message="Failed to read PHP file.",
                         severity=Severity.FAIL,
@@ -132,7 +135,7 @@ class PHPRequiredFeaturesAssessor(Assessor):
                 count, passed, snippet = self._evaluate_rule(rule, content_lower, content_raw)
                 findings.append(
                     Finding(
-                        id="PHP.REQ.PASS" if passed else "PHP.REQ.FAIL",
+                        id=PID.REQ_PASS if passed else PID.REQ_FAIL,
                         category="php",
                         message=self._message(rule.id, passed, count, rule.min_count),
                         severity=Severity.INFO if passed else Severity.WARN,
