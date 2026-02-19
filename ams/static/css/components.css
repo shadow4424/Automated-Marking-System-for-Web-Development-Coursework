@@ -550,6 +550,64 @@ details[open] summary {
     overflow-x: auto;
 }
 
+/* Evidence structured key-value display */
+.evidence-dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 2px var(--space-md);
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+.evidence-row {
+    display: contents;          /* lets dt/dd participate in parent grid */
+}
+
+.evidence-row dt {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    padding: 3px 0;
+    white-space: nowrap;
+    font-weight: 600;
+    user-select: all;
+}
+
+.evidence-row dd {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-text);
+    margin: 0;
+    padding: 3px 0;
+    word-break: break-all;
+    overflow-wrap: anywhere;
+}
+
+.evidence-dl--nested {
+    margin-left: var(--space-sm);
+    padding-left: var(--space-sm);
+    border-left: 2px solid var(--color-border);
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 2px var(--space-sm);
+}
+
+.evidence-list {
+    list-style: disc;
+    margin: 0;
+    padding-left: var(--space-lg);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-text);
+}
+
+.evidence-list li {
+    padding: 1px 0;
+}
+
+/* Boolean evidence values use utility classes from main.css (.text-success / .text-danger) */
+
 /* ----------------------------------------------------------------------------
    9. Toolbar
    ---------------------------------------------------------------------------- */

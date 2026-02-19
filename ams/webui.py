@@ -94,6 +94,64 @@ def _artifact_url(run_id: str, artifact_path: str | Path) -> str:
     return f"/runs/{run_id}/artifacts/{artifact_str}"
 
 
+# --- Jinja helpers -----------------------------------------------------------
+
+import re as _re
+
+_PATH_RE = _re.compile(
+    r"(?:[A-Za-z]:)?[\\/](?:[\w .~@#$%&()\-]+[\\/]){2,}[\w .~@#$%&()\-]+\.\w{1,10}$"
+)
+
+# Keys already rendered in dedicated UI blocks — hide from the raw evidence table
+_HIDDEN_EVIDENCE_KEYS = frozenset({
+    "snippet", "content", "llm_feedback", "hybrid_score",
+    "vision_analysis", "screenshot",
+})
+
+
+def _clean_path(value: object) -> str:
+    """Jinja filter: shorten absolute file paths to ``submission/file.ext``.
+
+    E.g. ``E:\\Users\\…\\submission\\index.php`` → ``submission/index.php``
+    """
+    s = str(value).replace("\\", "/")
+    # Try to cut at a well-known folder boundary
+    for marker in ("submission/", "artifacts/", "fixtures/", "test_coursework/"):
+        idx = s.find(marker)
+        if idx != -1:
+            return s[idx:]
+    # Fallback: if it looks like a path, show only the last two segments
+    if _PATH_RE.match(s):
+        parts = s.rsplit("/", 2)
+        return "/".join(parts[-2:]) if len(parts) >= 2 else parts[-1]
+    return s
+
+
+def _render_evidence_value(val: object) -> str:
+    """Return an HTML-safe string for a single evidence value.
+
+    * Paths are shortened via ``_clean_path``
+    * Booleans become ✓ / ✗
+    * Lists become comma-separated
+    * Everything else is stringified
+    """
+    from markupsafe import Markup, escape
+
+    if isinstance(val, bool):
+        return Markup('<span class="text-success">✓</span>') if val else Markup('<span class="text-danger">✗</span>')
+    if isinstance(val, (int, float)):
+        return str(val)
+    if isinstance(val, list):
+        if not val:
+            return "—"
+        items = ", ".join(escape(_clean_path(v)) for v in val)
+        return Markup(items)
+    s = str(val)
+    if _PATH_RE.match(s.replace("\\", "/")):
+        return _clean_path(s)
+    return s
+
+
 def _ensure_check_stats(report: dict) -> dict:
     """Enrich a loaded report dict with aggregated check stats if missing.
 
@@ -129,6 +187,8 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
     
     # Register Jinja filters
     app.jinja_env.filters["artifact_url"] = lambda artifact_path: _artifact_url(request.view_args.get("run_id") or "", artifact_path)
+    app.jinja_env.filters["clean_path"] = _clean_path
+    app.jinja_env.globals["render_evidence_value"] = _render_evidence_value
     
     _register_routes(app)
     return app

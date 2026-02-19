@@ -258,7 +258,54 @@
         </div>
         {% endif %}
 
+        {# ── Structured evidence rendering ── #}
+        {% if finding.evidence is mapping %}
+        <div class="finding-evidence details-content">
+            <dl class="evidence-dl">
+            {% for key, val in finding.evidence.items() %}
+                {% if key not in ('snippet', 'content', 'llm_feedback', 'hybrid_score', 'vision_analysis', 'screenshot') %}
+                <div class="evidence-row">
+                    <dt>{{ key }}</dt>
+                    <dd>
+                    {% if val is mapping %}
+                        <dl class="evidence-dl evidence-dl--nested">
+                        {% for k2, v2 in val.items() %}
+                            <div class="evidence-row">
+                                <dt>{{ k2 }}</dt>
+                                <dd>{{ render_evidence_value(v2) }}</dd>
+                            </div>
+                        {% endfor %}
+                        </dl>
+                    {% elif val is iterable and val is not string %}
+                        {% if val %}
+                        <ul class="evidence-list">
+                            {% for item in val %}
+                            <li>{{ render_evidence_value(item) }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    {% else %}
+                        {{ render_evidence_value(val) }}
+                    {% endif %}
+                    </dd>
+                </div>
+                {% endif %}
+            {% endfor %}
+            </dl>
+        </div>
+        {% elif finding.evidence is iterable and finding.evidence is not string %}
+        <div class="finding-evidence details-content">
+            <ul class="evidence-list">
+                {% for item in finding.evidence %}
+                <li>{{ render_evidence_value(item) }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% else %}
         <pre class="finding-evidence details-content">{{ finding.evidence }}</pre>
+        {% endif %}
     </details>
     {% endif %}
 </div>
