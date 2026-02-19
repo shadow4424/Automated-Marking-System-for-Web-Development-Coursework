@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 from typing import Iterable, List, Mapping, Optional
 
@@ -154,8 +155,43 @@ class AssessmentPipeline:
             logger.info(f"Generated HTML report: {html_path}")
         except Exception as e:
             logger.warning(f"Failed to generate HTML report: {e}")
-        
+
+        # ── Cleanup: remove redundant uploaded_extract/ ──
+        self._cleanup_uploaded_extract(workspace_path)
+
         return report_path
+
+    # ------------------------------------------------------------------
+    # Post-run cleanup
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _cleanup_uploaded_extract(workspace_path: Path) -> None:
+        """Remove ``uploaded_extract/`` once ``submission/`` is confirmed.
+
+        ``uploaded_extract`` is the raw unzip of the student upload and is
+        fully superseded by the sanitised ``submission/`` tree.  Deleting it
+        after assessment halves per-student disk usage.
+        """
+        extracted = workspace_path / "uploaded_extract"
+        submission = workspace_path / "submission"
+
+        if not extracted.is_dir():
+            return
+
+        if not submission.is_dir():
+            logger.warning(
+                "Skipping uploaded_extract cleanup — submission/ not found "
+                "in %s",
+                workspace_path,
+            )
+            return
+
+        try:
+            shutil.rmtree(extracted)
+            logger.info("Removed redundant uploaded_extract/ from %s", workspace_path)
+        except Exception as exc:
+            logger.warning("Failed to remove uploaded_extract/: %s", exc)
 
     def _should_use_llm(self) -> bool:
         """Check if LLM should be used based on scoring mode."""

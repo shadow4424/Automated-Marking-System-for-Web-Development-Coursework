@@ -629,58 +629,83 @@ def _register_routes(app: Flask) -> None:
 
     @app.route("/run/<run_id>/bundle")
     def download_bundle(run_id: str):
-        """Download all artifacts for a run as a ZIP bundle."""
+        """Download grading-relevant artifacts for a run as a ZIP bundle.
+
+        Included:
+          - report.html, report.json, summary.txt (top-level reports)
+          - submission/  (student code, full tree)
+          - artifacts/   (screenshots only — .png, .jpg, .jpeg, .gif, .webp)
+          - batch files  (batch_summary.*, findings_frequency.*, analytics)
+
+        Excluded:
+          - uploaded_extract/  (duplicate of submission)
+          - *.zip              (original upload archive)
+          - run_*.json, metadata.json  (system bookkeeping)
+          - .trace / .log files inside artifacts
+        """
         runs_root = get_runs_root(app)
         run_dir = find_run_by_id(runs_root, run_id)
-        
+
         if run_dir is None:
             return "Run not found", 404
-        
+
         run_info = load_run_info(run_dir) or {}
         profile = run_info.get("profile", "")
         mode = run_info.get("mode", "mark")
-        
+
+        # Image extensions kept from artifacts/
+        _ARTIFACT_IMAGE_EXTS: frozenset[str] = frozenset(
+            {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+        )
+
         # Create ZIP in memory
         zip_buffer = BytesIO()
-        
+
         try:
             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-                # Add report files
-                files_to_include = [
-                    ("report.json", "report.json"),
-                    ("report.html", "report.html"),
-                    ("summary.txt", "summary.txt"),
+                # ── 1. Top-level report files ──
+                top_level_files = [
+                    "report.json",
+                    "summary.txt",
                 ]
-                
-                # Add batch-specific files if this is a batch run
+
+                # Add batch-specific top-level files
                 if mode == "batch":
-                    files_to_include.extend([
-                        ("batch_summary.json", "batch_summary.json"),
-                        ("batch_summary.csv", "batch_summary.csv"),
-                        ("findings_frequency.csv", "findings_frequency.csv"),
+                    top_level_files.extend([
+                        "batch_summary.json",
+                        "batch_summary.csv",
+                        "findings_frequency.csv",
                     ])
-                
-                # Add available files to ZIP
-                for filename, arcname in files_to_include:
+
+                for filename in top_level_files:
                     file_path = run_dir / filename
-                    if file_path.exists() and file_path.is_file():
+                    if file_path.is_file():
                         try:
-                            zf.write(file_path, arcname=arcname)
+                            zf.write(file_path, arcname=filename)
                         except Exception:
-                            pass  # Skip files that can't be added
-                
-                # Add screenshots/artifacts subdirectory if it exists
-                artifacts_dir = run_dir / "artifacts"
-                if artifacts_dir.exists():
-                    for artifact_file in artifacts_dir.rglob("*"):
-                        if artifact_file.is_file():
+                            pass
+
+                # ── 2. submission/ (full tree — student code) ──
+                submission_dir = run_dir / "submission"
+                if submission_dir.is_dir():
+                    for fpath in submission_dir.rglob("*"):
+                        if fpath.is_file():
                             try:
-                                rel_path = artifact_file.relative_to(run_dir)
-                                zf.write(artifact_file, arcname=rel_path)
+                                zf.write(fpath, arcname=fpath.relative_to(run_dir))
                             except Exception:
                                 pass
-                
-                # Add analytics for batch runs
+
+                # ── 3. artifacts/ (images only, skip .trace / .log) ──
+                artifacts_dir = run_dir / "artifacts"
+                if artifacts_dir.is_dir():
+                    for fpath in artifacts_dir.rglob("*"):
+                        if fpath.is_file() and fpath.suffix.lower() in _ARTIFACT_IMAGE_EXTS:
+                            try:
+                                zf.write(fpath, arcname=fpath.relative_to(run_dir))
+                            except Exception:
+                                pass
+
+                # ── 4. Batch analytics (if applicable) ──
                 if mode == "batch":
                     analytics_suffixes = ["json", "csv", "component", "needs", "runtime"]
                     for suffix in analytics_suffixes:
@@ -692,7 +717,7 @@ def _register_routes(app: Flask) -> None:
                                     zf.write(analytics_file, arcname=f"analytics/{rel_path}")
                                 except Exception:
                                     pass
-            
+
             # Prepare response
             zip_buffer.seek(0)
             dl_name = f"run_{profile}_{run_id}.zip"
@@ -702,7 +727,7 @@ def _register_routes(app: Flask) -> None:
                 as_attachment=True,
                 download_name=dl_name,
             )
-        
+
         except Exception as e:
             app.logger.error(f"Error creating bundle for run {run_id}: {e}")
             return "Error creating bundle", 500

@@ -67,16 +67,19 @@
 {% set findings = report.findings|default([]) %}
 {% set checks = report.checks|default([]) %}
 {% set diagnostics = report.diagnostics|default([]) %}
-{% set cs = report.check_stats|default({}) %}
+{# Count directly from findings so stat cards match the visible event list #}
 {% set ns = namespace(
-    total=cs.total|default(0),
-    passed=cs.passed|default(0),
-    failed=cs.failed|default(0),
-    warnings=cs.warnings|default(0),
-    skipped=cs.skipped|default(0),
+    total=0, passed=0, failed=0, warnings=0, skipped=0,
     ai_count=0, vision_count=0, partial_count=0
 ) %}
 {% for f in findings %}
+{% set sev = f.severity|default('WARN')|upper %}
+{% set ns.total = ns.total + 1 %}
+{% if sev == 'INFO' %}{% set ns.passed = ns.passed + 1 %}
+{% elif sev == 'FAIL' %}{% set ns.failed = ns.failed + 1 %}
+{% elif sev == 'WARN' %}{% set ns.warnings = ns.warnings + 1 %}
+{% elif sev == 'SKIPPED' %}{% set ns.skipped = ns.skipped + 1 %}
+{% endif %}
 {% if f.evidence is mapping and f.evidence.llm_feedback %}
 {% set ns.ai_count = ns.ai_count + 1 %}
 {% endif %}
