@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import List
 
-from ams.assessors.base import Assessor
+from ams.assessors import Assessor
 from ams.core.finding_ids import CSS as CID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec

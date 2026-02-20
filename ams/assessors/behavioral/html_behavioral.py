@@ -3,7 +3,7 @@ from __future__ import annotations
 from html.parser import HTMLParser
 from typing import List
 
-from ams.assessors.base import Assessor
+from ams.assessors import Assessor
 from ams.core.finding_ids import HTML as HID
 from ams.core.models import Finding, Severity, SubmissionContext
 

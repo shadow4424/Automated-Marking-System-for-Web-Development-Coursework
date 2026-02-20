@@ -4,7 +4,7 @@ from ams.core.models import SubmissionContext, Finding, Severity  # re-export ca
 from ams.core.pipeline import AssessmentPipeline
 from ams.core.scoring import ScoringEngine
 from ams.io.reporting import ReportWriter
-from ams.assessors.base import Assessor
+from ams.assessors import Assessor
 
 __all__ = [
     "SubmissionContext",

@@ -11,16 +11,6 @@ from .config import (
     LLM_OPENAI_MODEL,
     LLM_SANITIZE_PII,
 )
-from .sanitize import sanitize_pii, sanitize_student_files
-# Redirect LLM imports to ams.llm package
-from ams.llm import (
-    LLMResponse,
-    LLMProvider,
-    MockProvider,
-    OpenAIProvider,
-    RequestCache,
-    LocalLMStudioProvider,
-)
 from .models import Finding, Severity, SubmissionContext
 from .profiles import (
     ProfileSpec,
@@ -64,14 +54,4 @@ __all__ = [
     "LLM_CACHE_ENABLED",
     "LLM_OPENAI_MODEL",
     "LLM_SANITIZE_PII",
-    # Sanitization
-    "sanitize_pii",
-    "sanitize_student_files",
-    # LLM (redirected from ams.llm)
-    "LLMResponse",
-    "LLMProvider",
-    "MockProvider",
-    "OpenAIProvider",
-    "RequestCache",
-    "LocalLMStudioProvider",
 ]

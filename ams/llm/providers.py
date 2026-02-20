@@ -13,10 +13,8 @@ from __future__ import annotations
 
 import base64
 import io
-import json
 import logging
 import mimetypes
-import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -416,6 +414,11 @@ class OpenAIProvider(LLMProvider):
         json_mode: bool = False,
         image_path: str | None = None,
     ) -> LLMResponse:
+        if image_path:
+            return LLMResponse(
+                content="", model=self._model,
+                error="OpenAIProvider does not support vision/image_path",
+            )
         try:
             client = self._get_client()
         except ImportError as e:

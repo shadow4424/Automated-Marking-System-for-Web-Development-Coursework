@@ -15,7 +15,7 @@ def test_export_figures_creates_outputs(tmp_path: Path) -> None:
     run_dir = tmp_path / run_id / "analytics"
     run_dir.mkdir(parents=True, exist_ok=True)
     analytics = {
-        "overall": {"buckets": {"No attempt (0)": 1, "Partial (0-0.5]": 0, "Good partial (0.5-1)": 0, "Full marks (1)": 1}},
+        "overall": {"buckets": {"No attempt (0%)": 1, "Partial (1–50%)": 0, "Good partial (51–99%)": 0, "Full marks (100%)": 1}},
         "components": {
             "html": {"average": 1, "pct_zero": 0, "pct_half": 0, "pct_full": 100, "skipped": 0},
             "css": {"average": 0.5, "pct_zero": 50, "pct_half": 50, "pct_full": 0, "skipped": 0},

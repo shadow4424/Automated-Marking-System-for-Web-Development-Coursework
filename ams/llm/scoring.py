@@ -16,7 +16,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from ams.llm.feedback import ask_llama, scrub_pii, _clean_json_response, SYSTEM_PROMPT
+from ams.llm.feedback import ask_llama, scrub_pii, _clean_json_response
+from ams.llm.prompts import PARTIAL_CREDIT_SYSTEM_PROMPT, PARTIAL_CREDIT_USER_PROMPT_TEMPLATE
 
 logger = logging.getLogger(__name__)
 
@@ -54,18 +55,6 @@ class HybridScore:
             "intent_detected": self.intent_detected,
         }
 
-# Dedicated system prompt for partial credit — keeps the small model on-track
-PARTIAL_CREDIT_SYSTEM_PROMPT = (
-    "You are a scoring engine. You receive student code that FAILED a check. "
-    "You MUST respond with ONLY a JSON object containing exactly three keys: "
-    '"intent" (string: "yes" or "no"), '
-    '"reasoning" (string: one sentence), '
-    '"suggested_score" (number: 0.0 to 0.5). '
-    "Do NOT use any other keys. Do NOT use summary, items, severity, or message keys. "
-    "Output ONLY the JSON object, nothing else."
-)
-
-
 def _build_partial_credit_prompt(
     rule_name: str,
     category: str,
@@ -76,26 +65,12 @@ def _build_partial_credit_prompt(
     
     Asks the LLM to detect implementation intent despite syntax errors.
     """
-    return f"""Student code FAILED rule "{rule_name}" (category: {category}).
-Failure reason: {error_context}
-
-Code:
-```
-{student_code}
-```
-
-Decide if this code shows effort toward "{rule_name}". Scoring guide:
-- 0.4 to 0.5: student clearly tried to implement this feature but has bugs or syntax errors
-- 0.2 to 0.4: student wrote related code but did not fully address the rule
-- 0.1 to 0.2: student wrote code in this language showing general effort, even if the specific feature is missing
-- 0.0: file is empty, contains only comments, or is completely unrelated
-
-You may choose ANY value from 0.0 to 0.5 (e.g. 0.15, 0.25, 0.35, 0.45).
-
-Respond with a JSON object containing exactly three keys:
-  "intent" — set to "yes" if ANY code effort exists, "no" only if the file is empty or unrelated
-  "reasoning" — one sentence describing what code the student wrote
-  "suggested_score" — a number between 0.0 and 0.5"""
+    return PARTIAL_CREDIT_USER_PROMPT_TEMPLATE.format(
+        rule_name=rule_name,
+        category=category,
+        student_code=student_code,
+        error_context=error_context,
+    )
 
 
 def _parse_partial_credit_response(raw_response: str, cleaned: str) -> dict:
@@ -128,10 +103,8 @@ def _parse_partial_credit_response(raw_response: str, cleaned: str) -> dict:
     if items and isinstance(items, list) and len(items) > 0:
         item = items[0] if isinstance(items[0], dict) else {}
         message = item.get("message", "")
-        severity = item.get("severity", "").upper()
     else:
         message = ""
-        severity = ""
     
     reasoning_text = summary or message or raw_response
     result["reasoning"] = reasoning_text[:200]

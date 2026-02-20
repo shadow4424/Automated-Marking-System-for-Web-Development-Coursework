@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import List
 
-from ams.assessors.base import Assessor
-from ams.assessors.shared.html_parser import TagCountingParser
+from ams.assessors import Assessor
+from ams.assessors.html_parser import TagCountingParser
 from ams.core.finding_ids import HTML as HID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec

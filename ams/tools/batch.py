@@ -114,7 +114,6 @@ def aggregate_batch(records: List[dict], finding_stats: Dict[str, Dict[str, obje
     total = len(records)
     # Processing status counts
     processed_records = [r for r in records if "error" not in r and r.get("overall") is not None]
-    processing_errors = total - len(processed_records)
     
     # Score-based pass/fail counts (40% threshold)
     PASS_THRESHOLD = 0.40
@@ -172,7 +171,6 @@ def aggregate_batch(records: List[dict], finding_stats: Dict[str, Dict[str, obje
     # Sort by event count (descending), then by finding_id
     top_findings = sorted(top_findings, key=lambda x: (-x[1], x[0]))[:20]
     
-    finding_counts = {fid: count for fid, count, _, _ in top_findings}  # For backward compatibility
     top_failure_reasons = sorted(failure_reason_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:10]
 
     return {

@@ -87,4 +87,67 @@ __all__ = [
     "FeedbackItem",
     "LLMFeedback", 
     "create_fallback_feedback",
+    # Vision schemas
+    "VisionIssue",
+    "VisionResult",
+    "create_not_evaluated",
+    "create_pass",
+    "create_fail",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Vision analysis schemas (formerly ams.llm.vision_schemas)
+# ---------------------------------------------------------------------------
+
+class VisionIssue(BaseModel):
+    """A single visual issue detected in a screenshot."""
+
+    description: str = Field(..., min_length=1, description="Description of the visual issue")
+    severity: Literal["FAIL", "WARN", "INFO"] = Field(default="WARN", description="Severity level")
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("description cannot be empty")
+        return v.strip()
+
+
+class VisionResult(BaseModel):
+    """Result of a vision analysis check with strict validation."""
+
+    status: Literal["PASS", "FAIL", "NOT_EVALUATED"] = Field(..., description="Overall result status")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence score 0.0–1.0")
+    issues: List[VisionIssue] = Field(default_factory=list, description="Detected issues")
+    meta: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    reason: str = Field(default="", description="Brief explanation of the result")
+
+    @field_validator("confidence")
+    @classmethod
+    def clamp_confidence(cls, v: float) -> float:
+        return max(0.0, min(1.0, v))
+
+
+def create_not_evaluated(reason: str, **extra_meta: Any) -> VisionResult:
+    """Create a NOT_EVALUATED result for missing screenshots or errors."""
+    return VisionResult(
+        status="NOT_EVALUATED", confidence=0.0, issues=[], reason=reason,
+        meta={"reason": reason, **extra_meta},
+    )
+
+
+def create_pass(reason: str = "Visual check passed", **extra_meta: Any) -> VisionResult:
+    """Create a PASS result."""
+    return VisionResult(status="PASS", confidence=1.0, issues=[], reason=reason, meta=extra_meta)
+
+
+def create_fail(
+    reason: str, issues: List[VisionIssue] | None = None,
+    confidence: float = 1.0, **extra_meta: Any,
+) -> VisionResult:
+    """Create a FAIL result with detected issues."""
+    return VisionResult(
+        status="FAIL", confidence=confidence, issues=issues or [],
+        reason=reason, meta=extra_meta,
+    )

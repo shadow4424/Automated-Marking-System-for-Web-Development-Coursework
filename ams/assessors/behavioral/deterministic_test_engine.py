@@ -10,7 +10,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Iterable, List, Mapping, Sequence
 
-from ams.assessors.base import Assessor
+from ams.assessors import Assessor
 from ams.core.finding_ids import BEHAVIOUR as BID
 from ams.core.models import BehaviouralEvidence, Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec

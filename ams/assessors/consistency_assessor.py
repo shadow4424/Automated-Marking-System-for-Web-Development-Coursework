@@ -8,7 +8,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Dict, List, Set
 
-from ams.assessors.base import Assessor
+from ams.assessors import Assessor
 from ams.core.finding_ids import CONSISTENCY as COID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec
@@ -236,6 +236,8 @@ class ConsistencyAssessor(Assessor):
         # Simple patterns: #id and .class (at start of selector or after space/comma)
         id_pattern = r'(?:^|[\s,])#([a-zA-Z_][a-zA-Z0-9_-]*)'
         class_pattern = r'(?:^|[\s,])\.([a-zA-Z_][a-zA-Z0-9_-]*)'
+        # Hex colour codes look like valid IDs but aren't selectors (e.g. #fff, #f4f4f4)
+        _HEX_COLOR = re.compile(r'^[0-9a-fA-F]{3,8}$')
         
         for css_file in css_files:
             try:
@@ -244,26 +246,30 @@ class ConsistencyAssessor(Assessor):
                 # Check IDs
                 for match in re.finditer(id_pattern, content):
                     selector_value = match.group(1)
-                    if selector_value and selector_value not in html_ids:
-                        # Count occurrences
-                        count = content.count(f"#{selector_value}")
-                        
-                        findings.append(
-                            Finding(
-                                id=COID.CSS_MISSING_HTML_ID,
-                                category="consistency",
-                                message=f"CSS references HTML ID '#{selector_value}' that does not exist in HTML.",
-                                severity=Severity.WARN,
-                                evidence={
-                                    "selector_value": selector_value,
-                                    "css_file": str(css_file),
-                                    "count_occurrences": count,
-                                },
-                                source=self.name,
-                                finding_category=FindingCategory.STRUCTURE,
-                                profile=profile_name,
-                            )
+                    if not selector_value or selector_value in html_ids:
+                        continue
+                    # Skip CSS hex colour values (e.g. #fff, #f4f4f4, #aabbcc)
+                    if _HEX_COLOR.match(selector_value):
+                        continue
+                    # Count occurrences
+                    count = content.count(f"#{selector_value}")
+                    
+                    findings.append(
+                        Finding(
+                            id=COID.CSS_MISSING_HTML_ID,
+                            category="consistency",
+                            message=f"CSS references HTML ID '#{selector_value}' that does not exist in HTML.",
+                            severity=Severity.WARN,
+                            evidence={
+                                "selector_value": selector_value,
+                                "css_file": str(css_file),
+                                "count_occurrences": count,
+                            },
+                            source=self.name,
+                            finding_category=FindingCategory.STRUCTURE,
+                            profile=profile_name,
                         )
+                    )
                 
                 # Check classes
                 for match in re.finditer(class_pattern, content):
@@ -289,7 +295,7 @@ class ConsistencyAssessor(Assessor):
                             )
                         )
             except Exception as e:
-                logger.debug("Error checking JS-HTML consistency for %s: %s", js_file, e)
+                logger.debug("Error checking CSS-HTML consistency for %s: %s", css_file, e)
         
         return findings
 

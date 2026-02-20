@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import defaultdict
 from typing import Dict, List, Mapping, Sequence
 
 
@@ -45,7 +45,6 @@ def build_teacher_analytics(batch_summary: Mapping[str, object]) -> Dict[str, ob
     total = summary.get("total_submissions", len(records)) or 1
 
     component_readiness = _component_readiness(records)
-    runtime_health = _runtime_health(records)
     student_issues, runner_limits = _student_and_runner_issues(records, total)
     needs_attention = _needs_attention(records, profile)
 
@@ -58,14 +57,13 @@ def build_teacher_analytics(batch_summary: Mapping[str, object]) -> Dict[str, ob
             "max": overall_stats.get("max"),
             "total": total,
             "buckets": {
-                "No attempt (0)": buckets.get("zero", 0),
-                "Partial (0–0.5]": buckets.get("gt_0_to_0_5", 0),
-                "Good partial (0.5–1)": buckets.get("gt_0_5_to_1", 0),
-                "Full marks (1)": buckets.get("one", 0),
+                "No attempt (0%)": buckets.get("zero", 0),
+                "Partial (1–50%)": buckets.get("gt_0_to_0_5", 0),
+                "Good partial (51–99%)": buckets.get("gt_0_5_to_1", 0),
+                "Full marks (100%)": buckets.get("one", 0),
             },
         },
         "components": component_readiness,
-        "runtime_health": runtime_health,
         "student_issues": student_issues,
         "runner_limitations": runner_limits,
         "needs_attention": needs_attention,
@@ -102,25 +100,57 @@ def _component_readiness(records: List[Mapping[str, object]]) -> Dict[str, dict]
 def _needs_attention(records: List[Mapping[str, object]], profile: str) -> List[dict]:
     attention: List[dict] = []
     for rec in sorted(records, key=lambda r: r.get("id", "")):
-        status = rec.get("status", "ok")
+        pipeline_status = rec.get("status", "ok")
         overall = rec.get("overall")
         comps = rec.get("components", {})
         flags: List[str] = []
-        if status != "ok":
-            flags.append("error")
-        if overall == 0 or overall is None:
+
+        # Pipeline-level problems
+        if pipeline_status != "ok":
+            flags.append("pipeline error")
+
+        # Score-based flags
+        if overall is None or overall == 0:
             flags.append("no score")
+        elif isinstance(overall, (int, float)) and overall < 0.5:
+            flags.append("low score")
+
+        # Missing backend components
         if profile == "fullstack":
             for comp in ["php", "sql"]:
                 if comps.get(comp) == 0:
                     flags.append(f"{comp} missing")
+
+        # Findings-based flags
+        findings = rec.get("findings", []) or []
+        fail_ids = {f.get("id", "") for f in findings if f.get("severity") in ("FAIL", "WARN")}
+        if any(fid.startswith("BEHAVIOUR.") and "SKIPPED" not in fid for fid in fail_ids):
+            flags.append("runtime failure")
+        if any(fid.startswith("CONSISTENCY.") for fid in fail_ids):
+            flags.append("consistency issues")
+
         reason = _primary_reason(rec)
+
+        # Derive academic grade from score
+        if overall is None:
+            grade = "unknown"
+        elif overall == 0:
+            grade = "failing"
+        elif overall < 0.5:
+            grade = "poor"
+        elif overall < 0.7:
+            grade = "partial"
+        elif overall < 1.0:
+            grade = "good"
+        else:
+            grade = "full marks"
+
         if flags or reason != "other":
             attention.append(
                 {
                     "submission_id": rec.get("id"),
                     "overall": overall,
-                    "status": status,
+                    "grade": grade,
                     "flags": flags,
                     "reason": reason,
                     "report_path": rec.get("report_path"),
@@ -145,45 +175,6 @@ def _primary_reason(rec: Mapping[str, object]) -> str:
             if prefix in f.get("id", ""):
                 return label
     return "other"
-
-
-def _runtime_health(records: List[Mapping[str, object]]) -> dict:
-    behavioural_counts = Counter()
-    browser_counts = Counter()
-    console_errors = 0
-    total = len(records) or 1
-    for rec in records:
-        findings = rec.get("findings", []) or []
-        for status in _status_flags(findings, prefix="BEHAVIOUR."):
-            behavioural_counts[status] += 1
-        for status in _status_flags(findings, prefix="BROWSER.PAGE_LOAD"):
-            browser_counts[status] += 1
-        if any(f.get("id") == "BROWSER.CONSOLE_ERRORS_PRESENT" for f in findings):
-            console_errors += 1
-    return {
-        "behavioural": dict(behavioural_counts),
-        "browser": dict(browser_counts),
-        "console_error_pct": (console_errors / total * 100) if total else 0,
-        "behavioural_skipped_pct": (behavioural_counts.get("skipped", 0) / total * 100) if total else 0,
-        "browser_skipped_pct": (browser_counts.get("skipped", 0) / total * 100) if total else 0,
-    }
-
-
-def _status_flags(findings: List[Mapping[str, object]], prefix: str) -> set[str]:
-    flags: set[str] = set()
-    for f in findings:
-        fid = f.get("id", "")
-        if not fid.startswith(prefix):
-            continue
-        if fid.endswith("PASS"):
-            flags.add("pass")
-        elif fid.endswith("TIMEOUT"):
-            flags.add("timeout")
-        elif fid.endswith("SKIPPED"):
-            flags.add("skipped")
-        else:
-            flags.add("fail")
-    return flags
 
 
 def _student_and_runner_issues(records: List[Mapping[str, object]], total: int) -> tuple[List[dict], List[dict]]:

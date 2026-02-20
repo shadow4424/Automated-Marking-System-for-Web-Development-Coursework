@@ -3,7 +3,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from ams.assessors.browser.playwright_assessor import (
+from ams.assessors.playwright_assessor import (
     BrowserRunResult,
     BrowserRunner,
     PlaywrightAssessor,

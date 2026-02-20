@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import Any, Dict
 
 from pydantic import ValidationError
@@ -17,18 +16,9 @@ from ams.core.factory import get_llm_provider
 from ams.llm.providers import LLMResponse
 from ams.llm.schemas import FeedbackItem, LLMFeedback, create_fallback_feedback
 from ams.llm.utils import clean_json_response
+from ams.llm.prompts import FEEDBACK_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
-
-
-# System prompt for structured feedback generation
-FEEDBACK_SYSTEM_PROMPT = (
-    "You are a backend service in an automated marking system. Follow formatting rules exactly. "
-    "Output ONLY a raw JSON object with these keys: "
-    '{"summary": "<brief 1-sentence summary>", "items": [{"severity": "FAIL|WARN|INFO", '
-    '"message": "<feedback message>", "evidence_refs": ["file.ext:line"]}]}. '
-    "No markdown, no code fences, no explanations. Use only the keys shown."
-)
 
 
 class FeedbackGenerator:

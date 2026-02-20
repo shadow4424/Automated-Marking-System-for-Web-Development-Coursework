@@ -17,13 +17,14 @@ from pathlib import Path
 from ams.core.config import LLM_CACHE_ENABLED
 from ams.core.factory import get_llm_provider
 from ams.llm.cache import RequestCache
-from ams.llm.vision_schemas import (
+from ams.llm.schemas import (
     VisionResult,
     VisionIssue,
     create_not_evaluated,
     create_pass,
     create_fail,
 )
+from ams.llm.prompts import VISION_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -53,19 +54,7 @@ class VisionAnalyst:
         >>> print(result.status)  # "PASS", "FAIL", or "NOT_EVALUATED"
     """
     
-    SYSTEM_PROMPT = """You are a strict web-design grading assistant.
-Your ONLY job is to verify whether ONE specific visual requirement is met in the provided screenshot.
-
-Decision rules (follow these EXACTLY):
-- Output "PASS" ONLY if the requirement is clearly, visibly present AND functioning correctly in the screenshot.
-- Output "FAIL" if the requirement is missing, broken, unstyled, partially implemented, or you cannot see evidence of it.
-- If the page appears completely blank, white, unstyled, or lacks any CSS styling, output "FAIL" for ANY layout or styling requirement.
-- If your reasoning describes the feature as "missing", "not present", "not found", "does not have", or any negation, you MUST output "FAIL". Never output "PASS" with a negative reason.
-
-Response format — valid JSON, nothing else:
-{"result": "PASS" or "FAIL", "reason": "One-sentence explanation"}
-
-Do NOT include any text outside the JSON object."""
+    SYSTEM_PROMPT = VISION_SYSTEM_PROMPT
 
     def __init__(self, provider=None, cache_enabled: bool = None):
         """Initialize the VisionAnalyst.

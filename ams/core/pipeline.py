@@ -5,10 +5,10 @@ import shutil
 from pathlib import Path
 from typing import Iterable, List, Mapping, Optional
 
-from ams.assessors.base import Assessor
+from ams.assessors import Assessor
 from ams.assessors.behavioral import DeterministicTestEngine, HTMLBehavioralAssessor
-from ams.assessors.browser import PlaywrightAssessor
-from ams.assessors.consistency import ConsistencyAssessor
+from ams.assessors.playwright_assessor import PlaywrightAssessor
+from ams.assessors.consistency_assessor import ConsistencyAssessor
 from ams.assessors.required import (
     CSSRequiredRulesAssessor,
     HTMLRequiredElementsAssessor,
@@ -32,14 +32,14 @@ from ams.io.submission import SubmissionProcessor
 
 # LLM Integration (Phase 1 & 2)
 from ams.llm.feedback import generate_feedback
-from ams.llm.scoring import evaluate_partial_credit, should_evaluate_partial_credit, HybridScore
+from ams.llm.scoring import evaluate_partial_credit, should_evaluate_partial_credit
 
 # Vision Integration (Phase 3 & C)
 from ams.core.config import VISION_ENABLED
-from ams.llm.vision_schemas import VisionResult
+from ams.llm.schemas import VisionResult, create_not_evaluated
 
 # Phase D: Conflict Resolution
-from ams.core.arbitration import resolve_conflicts
+from ams.core.aggregation import resolve_conflicts
 
 logger = logging.getLogger(__name__)
 
@@ -195,11 +195,7 @@ class AssessmentPipeline:
 
     def _should_use_llm(self) -> bool:
         """Check if LLM should be used based on scoring mode."""
-        return self.scoring_mode in (
-            ScoringMode.STATIC_PLUS_LLM,
-            ScoringMode.LLM_FEEDBACK_ONLY,
-            ScoringMode.LLM_OVERRIDE,
-        )
+        return self.scoring_mode == ScoringMode.STATIC_PLUS_LLM
 
     def _enrich_findings_with_llm(
         self,
@@ -286,7 +282,7 @@ class AssessmentPipeline:
                 continue
             
             # Phase 1: Generate feedback for failed rules
-            if self.scoring_mode in (ScoringMode.LLM_FEEDBACK_ONLY, ScoringMode.STATIC_PLUS_LLM):
+            if self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
                 try:
                     feedback = generate_feedback(
                         rule_name=finding.id,

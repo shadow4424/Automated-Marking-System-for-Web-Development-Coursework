@@ -100,35 +100,6 @@
 </section>
 {% endif %}
 
-{# Common Findings (from batch_summary) #}
-{% if batch_summary and batch_summary.summary.finding_frequency %}
-<section class="card mb-xl">
-    <div class="card-header">
-        <h2 class="card-title">Top Findings</h2>
-    </div>
-    <div class="table-container">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Rule ID</th>
-                    <th>Count</th>
-                    <th>% Affected</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for rule_id, event_count, affected_count, percent_affected in batch_summary.summary.top_findings[:15] %}
-                <tr>
-                    <td><code>{{ rule_id }}</code></td>
-                    <td>{{ event_count }}</td>
-                    <td>{{ percent_affected }}%</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</section>
-{% endif %}
-
 {# Student Issues #}
 {% if analytics and analytics.student_issues %}
 <section class="card mb-xl">
@@ -159,7 +130,12 @@
                         <code class="text-xs">{{ fid }}</code>{% if not loop.last %}, {% endif %}
                         {% endfor %}
                         {% if issue.finding_ids|length > 3 %}
-                        <span class="text-muted text-xs">+{{ issue.finding_ids|length - 3 }} more</span>
+                        <span class="rules-extra" hidden>
+                            {% for fid in issue.finding_ids[3:] %}
+                            , <code class="text-xs">{{ fid }}</code>
+                            {% endfor %}
+                        </span>
+                        <a href="#" class="text-xs toggle-rules" style="cursor:pointer;text-decoration:underline">+{{ issue.finding_ids|length - 3 }} more</a>
                         {% endif %}
                     </td>
                     <td class="text-muted text-sm">{{ issue.examples|join(', ') }}</td>
@@ -169,71 +145,21 @@
         </table>
     </div>
 </section>
-{% endif %}
-
-{# Runtime Health #}
-{% if analytics and analytics.runtime_health %}
-{% set rt = analytics.runtime_health %}
-<section class="card mb-xl">
-    <div class="card-header">
-        <h2 class="card-title">🏥 Runtime Health</h2>
-    </div>
-    <div class="grid grid-auto mb-md">
-        <div class="card stat-card stat-card--success">
-            <div class="stat-value">{{ rt.console_error_pct|default(0)|round|int }}%</div>
-            <div class="stat-label">Console Errors</div>
-        </div>
-        <div class="card stat-card stat-card--warning">
-            <div class="stat-value">{{ rt.behavioural_skipped_pct|default(0)|round|int }}%</div>
-            <div class="stat-label">Behavioural Skipped</div>
-        </div>
-        <div class="card stat-card">
-            <div class="stat-value">{{ rt.browser_skipped_pct|default(0)|round|int }}%</div>
-            <div class="stat-label">Browser Skipped</div>
-        </div>
-    </div>
-    {% if rt.behavioural or rt.browser %}
-    <div class="table-container">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Category</th>
-                    <th>Status</th>
-                    <th>Count</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% if rt.behavioural %}
-                {% for status, count in rt.behavioural.items() %}
-                <tr>
-                    <td>Behavioural</td>
-                    <td>
-                        <span
-                            class="badge badge-{{ 'success' if status == 'pass' else ('danger' if status == 'fail' else 'warning') }}">{{
-                            status }}</span>
-                    </td>
-                    <td>{{ count }}</td>
-                </tr>
-                {% endfor %}
-                {% endif %}
-                {% if rt.browser %}
-                {% for status, count in rt.browser.items() %}
-                <tr>
-                    <td>Browser</td>
-                    <td>
-                        <span
-                            class="badge badge-{{ 'success' if status == 'pass' else ('danger' if status == 'fail' else 'warning') }}">{{
-                            status }}</span>
-                    </td>
-                    <td>{{ count }}</td>
-                </tr>
-                {% endfor %}
-                {% endif %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
-</section>
+<script>
+    document.querySelectorAll('.toggle-rules').forEach(function (link) {
+        link.addEventListener('click', function (e) {
+            e.preventDefault();
+            var extra = this.previousElementSibling;
+            if (extra.hidden) {
+                extra.hidden = false;
+                this.textContent = '(collapse)';
+            } else {
+                extra.hidden = true;
+                this.textContent = '+' + extra.querySelectorAll('code').length + ' more';
+            }
+        });
+    });
+</script>
 {% endif %}
 
 {# Runner Limitations #}
@@ -279,7 +205,7 @@
                 <tr>
                     <th>Student</th>
                     <th>Score</th>
-                    <th>Status</th>
+                    <th>Grade</th>
                     <th>Flags</th>
                     <th>Reason</th>
                 </tr>
@@ -287,6 +213,7 @@
             <tbody>
                 {% for stu in analytics.needs_attention %}
                 {% set s_pct = (stu.overall|default(0) * 100)|round|int %}
+                {% set grade = stu.grade|default('unknown') %}
                 <tr>
                     <td><strong>{{ stu.submission_id }}</strong></td>
                     <td>
@@ -296,8 +223,9 @@
                         </span>
                     </td>
                     <td>
-                        <span class="badge badge-{{ 'success' if stu.status == 'ok' else 'danger' }}">{{ stu.status
-                            }}</span>
+                        <span class="badge {% if grade in ('full marks', 'good') %}badge-success{% elif grade == 'partial' %}badge-warning{% elif grade in ('poor', 'failing') %}badge-danger{% else %}badge-info{% endif %}">
+                            {{ grade|title }}
+                        </span>
                     </td>
                     <td>
                         {% for flag in stu.flags %}

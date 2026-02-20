@@ -22,21 +22,6 @@ def _create_parser() -> argparse.ArgumentParser:
         help="Profile to score against",
     )
 
-    eval_parser = subparsers.add_parser("eval", help="Run evaluation harness across fixtures")
-    eval_parser.add_argument("--fixtures", type=Path, default=Path("fixtures"), help="Path to fixtures root")
-    eval_parser.add_argument(
-        "--out",
-        "-o",
-        type=Path,
-        help="Path to write evaluation outputs to (default ams_eval_runs/<timestamp>)",
-    )
-    eval_parser.add_argument(
-        "--profile",
-        choices=["frontend", "fullstack", "all"],
-        default="all",
-        help="Limit evaluation to a profile",
-    )
-
     batch_parser = subparsers.add_parser(
         "batch",
         help="Run marking over a folder of submissions and produce cohort analytics",
@@ -55,7 +40,7 @@ def _create_parser() -> argparse.ArgumentParser:
     export_parser.add_argument("--runs-root", type=Path, default=Path("ams_batch_runs"), help="Root directory containing batch runs")
     export_parser.add_argument("--out", "-o", type=Path, default=Path("figures"), help="Output directory for figures/tables")
 
-    demo_parser = subparsers.add_parser("demo", help="Build and run a full demo (batch, analytics, figures, evaluation)")
+    subparsers.add_parser("demo", help="Build and run a full demo (batch, analytics, figures, evaluation)")
 
     return parser
 
@@ -88,27 +73,6 @@ def main(argv: list[str] | None = None) -> None:
 
         print(f"Report written to {report_path}")
         return
-    elif args.command == "eval":
-        from ams.tools.evaluation import evaluate
-
-        if args.out:
-            out_root = Path(args.out)
-            out_root.mkdir(parents=True, exist_ok=True)
-        else:
-            base = Path.cwd() / "ams_eval_runs"
-            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-            out_root = base / timestamp
-            out_root.mkdir(parents=True, exist_ok=True)
-
-        summary = evaluate(fixtures_root=Path(args.fixtures), out_root=out_root, profile=args.profile)
-        total, passed, failed = summary["total"], summary["passed"], summary["failed"]
-        print(f"Evaluation complete. Total: {total}, Passed: {passed}, Failed: {failed}")
-        if failed:
-            print("Failing cases:")
-            for entry in summary["failing_cases"]:
-                reasons = "; ".join(entry["reasons"])
-                print(f"- {entry['profile']}/{entry['case']}: {reasons}")
-        raise SystemExit(0 if failed == 0 else 1)
     elif args.command == "batch":
         from ams.tools.batch import run_batch
 

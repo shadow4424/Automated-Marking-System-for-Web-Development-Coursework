@@ -23,8 +23,8 @@ def test_build_teacher_analytics_fields():
     assert len(analytics["needs_attention"]) >= 1
     comp_html = analytics["components"]["html"]
     assert comp_html["average"] == 0.5
-    assert analytics["overall"]["buckets"]["No attempt (0)"] == 1
-    assert analytics["overall"]["buckets"]["Partial (0–0.5]"] == 0
+    assert analytics["overall"]["buckets"]["No attempt (0%)"] == 1
+    assert analytics["overall"]["buckets"]["Partial (1–50%)"] == 0
 
 
 def test_student_issues_excludes_pass_and_dedups_missing():
@@ -40,7 +40,7 @@ def test_student_issues_excludes_pass_and_dedups_missing():
     assert not any(i for i in issues if "parse ok" in str(i).lower())
 
 
-def test_runtime_health_counts_submissions_not_findings():
+def test_runner_limitations_from_skipped_findings():
     records = [
         {
             "id": "s1",
@@ -62,8 +62,6 @@ def test_runtime_health_counts_submissions_not_findings():
     ]
     batch_summary = {"records": records, "summary": {"profile": "fullstack", "overall_stats": {}, "buckets": {"zero": 0, "gt_0_to_0_5": 1, "gt_0_5_to_1": 1, "one": 0}, "finding_frequency": {}}}
     analytics = build_teacher_analytics(batch_summary)
-    runtime = analytics["runtime_health"]
-    assert runtime["behavioural"].get("skipped") == 1  # counted per submission, not per finding
-    assert runtime["behavioural_skipped_pct"] <= 100
+    assert "runtime_health" not in analytics
     runner_limits = analytics["runner_limitations"]
     assert any(r["category"] == "behavioural_skipped" for r in runner_limits)

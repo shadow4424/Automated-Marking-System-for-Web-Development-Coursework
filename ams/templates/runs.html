@@ -52,12 +52,12 @@
                 <span>{{ r.profile or 'unknown' }}</span>
             </div>
             <div class="run-card-meta">
-                <span>🆔 {{ r.id[:24] }}...</span>
+                <span>ID {{ r.id[:24] }}...</span>
                 {% if r.student_id %}
-                <span>👤 {{ r.student_id }}</span>
+                <span>{{ r.student_id }}</span>
                 {% endif %}
                 {% if r.created_at %}
-                <span>📅 {{ r.created_at[:10] }}</span>
+                <span>{{ r.created_at[:10] }}</span>
                 {% endif %}
             </div>
         </div>

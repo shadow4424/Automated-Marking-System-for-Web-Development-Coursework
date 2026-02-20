@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 
@@ -110,10 +110,6 @@ class ProfileSpec:
         }
         rules = rule_map.get(component, [])
         return len(rules) > 0
-
-    def get_required_file_extensions(self) -> List[str]:
-        """Get list of required file extensions for this profile."""
-        return self.required_files.copy()
 
 
 def _build_profile_specs() -> Dict[str, ProfileSpec]:
@@ -650,7 +646,6 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
     ]
 
     
-    # PHP Rules - Expanded with course-specific requirements
     # PHP Rules - Expanded with comprehensive web development criteria
     # Weights are normalized so that the total = 1.0 for the PHP component.
     # Categories: Structure, Input, Output, Database, Sessions, Functions, Control Flow, Error Handling, Includes

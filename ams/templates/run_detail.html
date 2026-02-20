@@ -12,16 +12,15 @@
         {% endif %}
     </nav>
     <h1>
-        {% if run.mode == 'batch' %}📦{% else %}📝{% endif %}
         {{ run.profile|default('Unknown')|capitalize }} Assessment
     </h1>
     <div class="flex gap-md text-secondary flex-wrap">
         <span class="badge {% if run.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">
             {{ run.mode or 'mark' }}
         </span>
-        {% if run.student_id %}<span>👤 {{ run.student_id }}</span>{% endif %}
-        {% if run.assignment_id %}<span>📁 {{ run.assignment_id }}</span>{% endif %}
-        {% if run.created_at %}<span>📅 {{ run.created_at[:10] }}</span>{% endif %}
+        {% if run.student_id %}<span>{{ run.student_id }}</span>{% endif %}
+        {% if run.assignment_id %}<span>{{ run.assignment_id }}</span>{% endif %}
+        {% if run.created_at %}<span>{{ run.created_at[:10] }}</span>{% endif %}
     </div>
     <div class="page-header-actions">
         {% if run.mode == 'batch' %}

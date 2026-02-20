@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import List
 
-from ams.assessors.base import Assessor
+from ams.assessors import Assessor
 from ams.core.finding_ids import PHP as PID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec
@@ -327,7 +327,6 @@ class PHPStaticAssessor(Assessor):
             if session_usage > 0:
                 session_start_found = "session_start" in lowered
                 session_regenerate = "session_regenerate_id" in lowered
-                session_destroy = "session_destroy" in lowered
                 
                 if not session_start_found:
                     findings.append(

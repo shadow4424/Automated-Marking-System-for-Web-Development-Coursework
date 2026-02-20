@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Mapping
 
-from ams.assessors.base import Assessor
+from ams.assessors import Assessor
 from ams.core.models import BrowserEvidence, Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec
 
@@ -45,7 +45,7 @@ class PlaywrightRunner(BrowserRunner):
 
     def run(self, entry_path: Path, workdir: Path, interaction: bool = True) -> BrowserRunResult:  # pragma: no cover
         try:
-            from playwright.sync_api import Playwright, TimeoutError as PWTimeoutError, sync_playwright
+            from playwright.sync_api import TimeoutError as PWTimeoutError, sync_playwright
         except Exception as exc:
             return BrowserRunResult(status="skipped", notes=f"Playwright unavailable: {exc}")
 

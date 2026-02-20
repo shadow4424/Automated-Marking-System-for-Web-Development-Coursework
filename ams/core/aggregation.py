@@ -14,8 +14,10 @@ Key concepts
 
 from __future__ import annotations
 
+import logging
+from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -290,4 +292,80 @@ __all__ = [
     "compute_check_stats",
     "is_diagnostic",
     "get_check_key",
+    "resolve_conflicts",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Conflict resolution (formerly ams.core.arbitration)
+# ---------------------------------------------------------------------------
+
+from ams.core.models import Finding, FindingCategory, Severity  # noqa: E402
+
+_conflict_logger = logging.getLogger(__name__ + ".arbitration")
+
+
+def resolve_conflicts(findings: List[Finding]) -> List[Finding]:
+    """Resolve conflicts between Static and Visual findings.
+
+    Policy: Visual failures override static passes for the same feature.
+
+    Example:
+        - CSS.MEDIA_QUERY passes (code exists)
+        - VISUAL.CSS.MEDIA_QUERY fails (layout broken on mobile)
+        → Result: Penalize the component by keeping the VISUAL finding
+    """
+    if not findings:
+        return []
+
+    visual_findings: Dict[str, List[Finding]] = defaultdict(list)
+    static_findings: List[Finding] = []
+    other_findings: List[Finding] = []
+
+    for finding in findings:
+        if finding.id.startswith("VISUAL."):
+            base_rule_id = finding.id[len("VISUAL."):]
+            visual_findings[base_rule_id].append(finding)
+        elif finding.category == "visual" or finding.finding_category == FindingCategory.VISUAL:
+            original_rule = None
+            if isinstance(finding.evidence, dict):
+                original_rule = finding.evidence.get("original_rule")
+            if original_rule:
+                visual_findings[original_rule].append(finding)
+            else:
+                other_findings.append(finding)
+        else:
+            static_findings.append(finding)
+
+    resolved: List[Finding] = []
+    overridden_static_ids: set = set()
+
+    for base_rule_id, v_findings in visual_findings.items():
+        matching_static = [f for f in static_findings if f.id == base_rule_id]
+
+        if matching_static:
+            for static_finding in matching_static:
+                static_passed = static_finding.severity == Severity.INFO
+                visual_failed = any(
+                    f.severity in (Severity.FAIL, Severity.WARN) for f in v_findings
+                )
+                if static_passed and visual_failed:
+                    _conflict_logger.info(
+                        f"Conflict resolution: VISUAL.{base_rule_id} overrides static pass. "
+                        f"Code exists but visual check failed."
+                    )
+                    overridden_static_ids.add(id(static_finding))
+            resolved.extend(v_findings)
+        else:
+            resolved.extend(v_findings)
+
+    for static_finding in static_findings:
+        if id(static_finding) not in overridden_static_ids:
+            resolved.append(static_finding)
+
+    resolved.extend(other_findings)
+    _conflict_logger.debug(
+        f"Conflict resolution: {len(findings)} input → {len(resolved)} output, "
+        f"{len(overridden_static_ids)} overrides"
+    )
+    return resolved

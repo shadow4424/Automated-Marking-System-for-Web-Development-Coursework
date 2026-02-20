@@ -17,22 +17,13 @@ from typing import Any
 
 from ams.core.factory import get_llm_provider
 from ams.llm.providers import LLMResponse
+from ams.llm.prompts import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Configuration
 # =============================================================================
-
-# Phase 1.1: Strict System Prompt to prevent "Chatter"
-SYSTEM_PROMPT = (
-    "You are a backend service in an automated marking system. Follow formatting rules exactly. "
-    "If the user requests JSON, output ONLY a raw JSON object and nothing else: no markdown, no code fences, "
-    "no explanations, no extra text, no line breaks. Use only the keys requested, in the exact order. "
-    "Do not invent or rename keys. You may propose a score_adjustment only when explicitly requested, based "
-    "strictly on the rules in the user prompt; you do not decide the final mark. If you cannot comply, output "
-    '{"error":"cannot_comply"}.'
-)
 
 
 # =============================================================================

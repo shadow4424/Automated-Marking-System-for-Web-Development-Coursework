@@ -1,147 +1,133 @@
+"""Export batch-analytics data as CSV tables and PNG charts.
+
+Usage (CLI)::
+
+    ams export-figures --run-id <run_id> [--runs-root <dir>] [--out <dir>]
+
+The function reads the ``batch_analytics_<run_id>.json`` produced by
+:mod:`ams.analytics.batch_analytics` and writes:
+
+* ``score_distribution.csv``  – bucket counts
+* ``score_distribution.png``  – bar chart of the distribution
+* ``component_readiness.png`` – grouped bar chart per component
+"""
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Sequence
+from typing import Any
 
-try:
-    import matplotlib
-
-    matplotlib.use("Agg")  # Deterministic, headless
-    import matplotlib.pyplot as plt  # noqa: E402
-except ImportError:  # pragma: no cover - dependency is optional at runtime
-    matplotlib = None
-    plt = None
+import matplotlib
+matplotlib.use("Agg")  # non-interactive backend
+import matplotlib.pyplot as plt  # noqa: E402
 
 
-def _normalise_buckets(buckets: Mapping[str, int]) -> Dict[str, int]:
-    agg = {"0.0": 0, "0.5": 0, "1.0": 0}
-    for key, val in buckets.items():
-        label = str(key).lower()
-        target = "0.0"
-        if "0.5" in label or "partial" in label or "0-0.5" in label:
-            target = "0.5"
-        elif ("1" in label or "full" in label) and "0.5" not in label and "partial" not in label:
-            target = "1.0"
-        agg[target] = agg.get(target, 0) + int(val or 0)
-    return agg
+def export_figures(
+    *,
+    run_id: str,
+    runs_root: Path,
+    out_dir: Path,
+) -> None:
+    """Read analytics JSON for *run_id* and write figures to *out_dir*."""
+    analytics_dir = runs_root / run_id / "analytics"
+    analytics_path = analytics_dir / f"batch_analytics_{run_id}.json"
+    data: dict[str, Any] = json.loads(analytics_path.read_text(encoding="utf-8"))
 
-
-def _write_score_distribution(data: Mapping[str, object], out_dir: Path, run_id: str) -> None:
-    dist_csv = out_dir / "score_distribution.csv"
-    buckets_raw = data.get("overall", {}).get("buckets", {}) if isinstance(data, Mapping) else {}
-    buckets = _normalise_buckets(buckets_raw or {})
-    with dist_csv.open("w", encoding="utf-8") as fh:
-        fh.write("bucket,count\n")
-        for bucket in ("0.0", "0.5", "1.0"):
-            fh.write(f"{bucket},{buckets.get(bucket,0)}\n")
-
-    fig, ax = plt.subplots(figsize=(5, 3))
-    labels = ["0.0", "0.5", "1.0"]
-    counts = [buckets.get(k, 0) for k in labels]
-    ax.bar(labels, counts, color="#4C7DCB")
-    title_profile = data.get("profile", "")
-    suffix = f" ({run_id})" if run_id else ""
-    if title_profile:
-        suffix = f" ({run_id} · {title_profile})"
-    ax.set_title(f"Overall score distribution{suffix}")
-    ax.set_xlabel("Overall score")
-    ax.set_ylabel("Count")
-    ax.set_ylim(bottom=0)
-    fig.tight_layout()
-    fig.savefig(out_dir / "score_distribution.png")
-    plt.close(fig)
-
-
-def _ordered_components(comps: Iterable[str]) -> List[str]:
-    order = ["html", "css", "js", "php", "sql"]
-    known = [c for c in order if c in comps]
-    rest = sorted([c for c in comps if c not in order])
-    return known + rest
-
-
-def _write_component_readiness(data: Mapping[str, object], out_dir: Path) -> None:
-    comp_csv = out_dir / "component_readiness.csv"
-    comps: Mapping[str, Mapping[str, object]] = data.get("components", {}) or {}
-    with comp_csv.open("w", encoding="utf-8") as fh:
-        fh.write("component,average,pct_zero,pct_half,pct_full,skipped\n")
-        for comp in _ordered_components(comps.keys()):
-            stats = comps.get(comp, {}) or {}
-            fh.write(
-                f"{comp},{stats.get('average','')},{stats.get('pct_zero','')},{stats.get('pct_half','')},{stats.get('pct_full','')},{stats.get('skipped','')}\n"
-            )
-
-    # Chart
-    labels = _ordered_components(comps.keys())
-    zeros = [_safe_pct(comps.get(c, {}).get("pct_zero")) for c in labels]
-    halves = [_safe_pct(comps.get(c, {}).get("pct_half")) for c in labels]
-    fulls = [_safe_pct(comps.get(c, {}).get("pct_full")) for c in labels]
-    fig, ax = plt.subplots(figsize=(max(5, len(labels) * 0.9), 3))
-    ax.bar(labels, zeros, label="0.0", color="#d9534f")
-    bottom_half = [z for z in zeros]
-    ax.bar(labels, halves, bottom=bottom_half, label="0.5", color="#f0ad4e")
-    bottom_full = [z + h for z, h in zip(zeros, halves)]
-    ax.bar(labels, fulls, bottom=bottom_full, label="1.0", color="#5cb85c")
-    ax.set_ylabel("Percent of submissions")
-    ax.set_title("Component readiness (% 0/0.5/1)")
-    ax.set_ylim(0, 100)
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(out_dir / "component_readiness.png")
-    plt.close(fig)
-
-
-def _safe_pct(val: object) -> float:
-    try:
-        return float(val)
-    except Exception:
-        return 0.0
-
-
-def _write_needs_attention(data: Mapping[str, object], out_dir: Path) -> None:
-    needs_csv = out_dir / "needs_attention.csv"
-    needs: Sequence[Mapping[str, object]] = data.get("needs_attention", []) or []
-    with needs_csv.open("w", encoding="utf-8") as fh:
-        fh.write("submission_id,overall,reason\n")
-        for entry in needs:
-            fh.write(f"{entry.get('submission_id','')},{entry.get('overall','')},{entry.get('reason','')}\n")
-
-    reasons = [str(entry.get("reason", "other")) for entry in needs]
-    counts: Dict[str, int] = {}
-    for r in reasons:
-        counts[r] = counts.get(r, 0) + 1
-    top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:5]
-
-    fig, ax = plt.subplots(figsize=(6, 3))
-    if top:
-        labels = [r for r, _ in top]
-        vals = [v for _, v in top]
-        ax.bar(labels, vals, color="#4C7DCB")
-        ax.set_ylabel("Submissions")
-        ax.set_title("Top needs-attention reasons")
-    else:
-        ax.text(0.5, 0.5, "No submissions need attention", ha="center", va="center")
-        ax.set_xticks([])
-        ax.set_yticks([])
-    fig.tight_layout()
-    fig.savefig(out_dir / "needs_attention_top_reasons.png")
-    plt.close(fig)
-
-
-def export_figures(run_id: str, runs_root: Path, out_dir: Path) -> None:
-    if plt is None:
-        raise RuntimeError("matplotlib is required for export-figures. Install with 'pip install .[dev]'")
-    run_dir = runs_root / run_id
-    analytics_dir = run_dir / "analytics"
-    analytics_json = analytics_dir / f"batch_analytics_{run_id}.json"
-    if not analytics_json.exists():
-        return
-    data = json.loads(analytics_json.read_text(encoding="utf-8"))
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    _write_score_distribution(data, out_dir, run_id)
-    _write_component_readiness(data, out_dir)
-    _write_needs_attention(data, out_dir)
+    _export_score_distribution(data, out_dir)
+    _export_component_readiness(data, out_dir)
+    _export_needs_attention(data, out_dir)
 
 
-__all__ = ["export_figures"]
+# ── score distribution ───────────────────────────────────────────────
+def _export_score_distribution(data: dict[str, Any], out_dir: Path) -> None:
+    buckets: dict[str, int] = data.get("overall", {}).get("buckets", {})
+
+    # CSV
+    csv_path = out_dir / "score_distribution.csv"
+    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["bucket", "count"])
+        for label, count in buckets.items():
+            writer.writerow([label, count])
+
+    # PNG
+    labels = list(buckets.keys())
+    counts = list(buckets.values())
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.bar(range(len(labels)), counts, color="#4A90D9")
+    ax.set_xticks(range(len(labels)))
+    ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=8)
+    ax.set_ylabel("Students")
+    ax.set_title("Score Distribution")
+    fig.tight_layout()
+    fig.savefig(out_dir / "score_distribution.png", dpi=150)
+    plt.close(fig)
+
+
+# ── component readiness ──────────────────────────────────────────────
+def _export_component_readiness(data: dict[str, Any], out_dir: Path) -> None:
+    components: dict[str, dict[str, Any]] = data.get("components", {})
+    if not components:
+        return
+
+    comp_names = list(components.keys())
+    averages = [components[c].get("average", 0) for c in comp_names]
+    pct_full = [components[c].get("pct_full", 0) for c in comp_names]
+    pct_zero = [components[c].get("pct_zero", 0) for c in comp_names]
+
+    x = range(len(comp_names))
+    width = 0.25
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.bar([i - width for i in x], averages, width, label="Average", color="#4A90D9")
+    ax.bar(list(x), pct_full, width, label="% Full marks", color="#7EC87E")
+    ax.bar([i + width for i in x], pct_zero, width, label="% Zero", color="#E57373")
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(comp_names, fontsize=9)
+    ax.set_ylabel("Value")
+    ax.set_title("Component Readiness")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(out_dir / "component_readiness.png", dpi=150)
+    plt.close(fig)
+
+
+# ── needs attention ──────────────────────────────────────────────────
+def _export_needs_attention(data: dict[str, Any], out_dir: Path) -> None:
+    items: list[dict[str, Any]] = data.get("needs_attention", [])
+
+    # CSV
+    csv_path = out_dir / "needs_attention.csv"
+    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["submission_id", "overall", "reason"])
+        for item in items:
+            writer.writerow([
+                item.get("submission_id", ""),
+                item.get("overall", ""),
+                item.get("reason", ""),
+            ])
+
+    # Top reasons PNG
+    from collections import Counter
+
+    reasons = Counter(item.get("reason", "unknown") for item in items)
+    if not reasons:
+        return
+
+    labels = list(reasons.keys())
+    counts = list(reasons.values())
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.barh(range(len(labels)), counts, color="#E57373")
+    ax.set_yticks(range(len(labels)))
+    ax.set_yticklabels(labels, fontsize=9)
+    ax.set_xlabel("Count")
+    ax.set_title("Needs Attention — Top Reasons")
+    fig.tight_layout()
+    fig.savefig(out_dir / "needs_attention_top_reasons.png", dpi=150)
+    plt.close(fig)

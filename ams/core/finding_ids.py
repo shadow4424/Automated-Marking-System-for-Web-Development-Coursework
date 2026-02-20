@@ -180,31 +180,6 @@ class BEHAVIOUR:
     SQL_EXEC_TIMEOUT = "BEHAVIOUR.SQL_EXEC_TIMEOUT"
 
 
-# Convenience sets used by aggregation.py
-EVIDENCE_IDS: frozenset[str] = frozenset({
-    HTML.ELEMENT_EVIDENCE,
-    CSS.EVIDENCE,
-    JS.EVIDENCE,
-    PHP.EVIDENCE,
-    SQL.EVIDENCE,
-})
-
-STATIC_DIAGNOSTIC_IDS: frozenset[str] = frozenset({
-    HTML.PARSE_OK,
-    HTML.PARSE_SUSPECT,
-    CSS.BRACES_BALANCED,
-    CSS.BRACES_UNBALANCED,
-    JS.SYNTAX_OK,
-    JS.SYNTAX_SUSPECT,
-    PHP.TAG_OK,
-    PHP.TAG_MISSING,
-    PHP.SYNTAX_OK,
-    PHP.SYNTAX_SUSPECT,
-    SQL.STRUCTURE_OK,
-    SQL.STRUCTURE_SUSPECT,
-})
-
-
 __all__ = [
     "HTML",
     "CSS",
@@ -214,6 +189,4 @@ __all__ = [
     "CONSISTENCY",
     "BROWSER",
     "BEHAVIOUR",
-    "EVIDENCE_IDS",
-    "STATIC_DIAGNOSTIC_IDS",
 ]

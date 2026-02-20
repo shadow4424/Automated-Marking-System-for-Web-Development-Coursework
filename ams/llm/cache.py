@@ -6,7 +6,6 @@ Uses SHA256 hashing of prompts for cache keys.
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import sqlite3
 from datetime import datetime, timezone

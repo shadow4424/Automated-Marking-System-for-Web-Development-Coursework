@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import List
 
-from ams.assessors.base import Assessor
+from ams.assessors import Assessor
 from ams.core.finding_ids import SQL as SID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec
@@ -259,7 +259,6 @@ class SQLStaticAssessor(Assessor):
                     
                     snippet = []
                     for j in range(start, end):
-                        prefix = "> " if j == i else "  "
                         snippet.append(f"{j+1:3d} | {lines[j]}")
                     return "\n".join(snippet)
             

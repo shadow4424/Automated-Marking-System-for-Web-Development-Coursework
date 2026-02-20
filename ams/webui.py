@@ -78,22 +78,6 @@ ALLOWED_DOWNLOADS = {
 }
 
 
-def _artifact_url(run_id: str, artifact_path: str | Path) -> str:
-    """Build a URL for an artifact file.
-    
-    Args:
-        run_id: The run ID
-        artifact_path: The artifact path (absolute or relative to run_dir)
-    
-    Returns:
-        A URL string like '/runs/<run_id>/artifacts/artifacts/screenshot.png'
-    """
-    # Simple forward slash conversion for now - actual path validation
-    # is done in the run_artifact route
-    artifact_str = str(artifact_path).replace("\\", "/")
-    return f"/runs/{run_id}/artifacts/{artifact_str}"
-
-
 # --- Jinja helpers -----------------------------------------------------------
 
 import re as _re
@@ -101,12 +85,6 @@ import re as _re
 _PATH_RE = _re.compile(
     r"(?:[A-Za-z]:)?[\\/](?:[\w .~@#$%&()\-]+[\\/]){2,}[\w .~@#$%&()\-]+\.\w{1,10}$"
 )
-
-# Keys already rendered in dedicated UI blocks — hide from the raw evidence table
-_HIDDEN_EVIDENCE_KEYS = frozenset({
-    "snippet", "content", "llm_feedback", "hybrid_score",
-    "vision_analysis", "screenshot",
-})
 
 
 def _clean_path(value: object) -> str:
@@ -116,7 +94,7 @@ def _clean_path(value: object) -> str:
     """
     s = str(value).replace("\\", "/")
     # Try to cut at a well-known folder boundary
-    for marker in ("submission/", "artifacts/", "fixtures/", "test_coursework/"):
+    for marker in ("submission/", "artifacts/", "test_coursework/"):
         idx = s.find(marker)
         if idx != -1:
             return s[idx:]
@@ -186,7 +164,6 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
         logging.getLogger(__name__).warning(f"Workspace cleanup failed: {e}")
     
     # Register Jinja filters
-    app.jinja_env.filters["artifact_url"] = lambda artifact_path: _artifact_url(request.view_args.get("run_id") or "", artifact_path)
     app.jinja_env.filters["clean_path"] = _clean_path
     app.jinja_env.globals["render_evidence_value"] = _render_evidence_value
     
@@ -518,24 +495,6 @@ def _register_routes(app: Flask) -> None:
         analytics = json.loads(analytics_path.read_text(encoding="utf-8"))
         batch_summary_path = run_dir / run_info.get("summary", "batch_summary.json")
         batch_summary = json.loads(batch_summary_path.read_text(encoding="utf-8")) if batch_summary_path.exists() else {}
-        # Normalise old 2-tuple top_findings to 4-tuple format
-        summary = batch_summary.get("summary", {})
-        raw_findings = summary.get("top_findings", [])
-        total_subs = summary.get("total_submissions", 1) or 1
-        normalised = []
-        for entry in raw_findings:
-            if isinstance(entry, (list, tuple)):
-                if len(entry) == 4:
-                    normalised.append(entry)
-                elif len(entry) == 2:
-                    fid, count = entry
-                    pct = min(100, round(count / total_subs * 100))
-                    normalised.append([fid, count, count, pct])
-                else:
-                    normalised.append(entry)
-            else:
-                normalised.append(entry)
-        summary["top_findings"] = normalised
         return render_template(
             "batch_analytics.html",
             run=run_info,
@@ -999,9 +958,6 @@ def _write_run_index_mark(run_dir: Path, run_info: dict, report_path: Path) -> N
         report = json.loads(report_path.read_text(encoding="utf-8"))
     except Exception:
         return
-    
-    # Load metadata from file if available
-    metadata = load_metadata(run_dir)
     
     meta = report.get("metadata", {}) or {}
     submission_meta = meta.get("submission_metadata") or {}

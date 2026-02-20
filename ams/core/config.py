@@ -12,8 +12,6 @@ class ScoringMode(str, Enum):
     """
     STATIC_ONLY = "static_only"
     STATIC_PLUS_LLM = "static_plus_llm"
-    LLM_FEEDBACK_ONLY = "llm_feedback_only"
-    LLM_OVERRIDE = "llm_override"
 
 
 class LLMProviderType(str, Enum):
