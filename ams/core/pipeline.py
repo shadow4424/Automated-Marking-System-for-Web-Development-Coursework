@@ -452,11 +452,11 @@ class AssessmentPipeline:
 
             review_dict = review.model_dump()
 
-            # Build the finding message: feedback + improvement suggestion
+            # Build the finding message: feedback + improvement recommendation
             message_parts = [review.feedback or "No feedback generated."]
-            if getattr(review, "improvement_suggestion", None):
+            if review.improvement_recommendation:
                 message_parts.append(
-                    f"Suggestion: {review.improvement_suggestion}"
+                    f"Recommendation: {review.improvement_recommendation}"
                 )
             finding_message = " ".join(message_parts)
 

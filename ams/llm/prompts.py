@@ -136,8 +136,13 @@ For PASS: Identify what works well AND point out 1-2 specific areas that could s
 Your tone should be constructive but HONEST. If something looks bad, say it clearly.
 
 OUTPUT FORMAT:
-Respond ONLY with valid JSON. No markdown. Your feedback must be 2-3 sentences with specific observations.
-{{"status": "PASS" or "NEEDS_IMPROVEMENT", "feedback": "Your detailed, specific feedback identifying exact visual elements and problems."}}"""
+Respond ONLY with valid JSON. No markdown. You MUST provide THREE fields:
+
+1. status: "PASS" or "NEEDS_IMPROVEMENT"
+2. feedback: 2-3 sentences with specific observations about what you see
+3. improvement_recommendation: ONE clear, actionable step to improve the design (e.g., "Add a CSS stylesheet with a cohesive color palette and proper spacing", "Fix navigation contrast by using dark text on light backgrounds", "Align images in a grid layout and remove random rotations")
+
+{{"status": "PASS" or "NEEDS_IMPROVEMENT", "feedback": "Your detailed, specific feedback.", "improvement_recommendation": "One specific actionable design improvement."}}"""
 
 UX_REVIEW_USER_PROMPT_TEMPLATE = """Page: {page_name}
 
@@ -149,8 +154,8 @@ If ANY fail condition exists → NEEDS_IMPROVEMENT with 2-3 specific problems id
 
 If design meets ALL pass criteria → PASS with specific praise AND 1-2 refinement suggestions.
 
-Return ONLY the JSON object with specific, detailed feedback:
-{{"status": "PASS" or "NEEDS_IMPROVEMENT", "feedback": "Identify specific visual elements, exact problems, or areas for refinement."}}"""
+Return ONLY the JSON object with ALL THREE keys (status, feedback, improvement_recommendation):
+{{"status": "PASS" or "NEEDS_IMPROVEMENT", "feedback": "...", "improvement_recommendation": "One specific actionable step to enhance the design."}}"""
 
 # ============================================================================
 # Module exports

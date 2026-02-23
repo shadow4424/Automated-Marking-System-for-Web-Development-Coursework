@@ -359,6 +359,16 @@
         <p class="vision-reason">{{ ux.feedback }}</p>
         {% endif %}
 
+        {% if ux.improvement_recommendation %}
+        <div class="ux-recommendation">
+            <div class="ux-recommendation-header">
+                <span class="ux-recommendation-icon">💡</span>
+                <strong>Recommendation for Improvement</strong>
+            </div>
+            <p class="ux-recommendation-text">{{ ux.improvement_recommendation }}</p>
+        </div>
+        {% endif %}
+
         {% if ux.model %}
         <div class="text-sm text-muted mt-xs mb-sm">
             Model: {{ ux.model }}

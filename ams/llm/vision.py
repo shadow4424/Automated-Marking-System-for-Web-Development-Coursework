@@ -313,10 +313,11 @@ Respond with JSON only."""
                         "screenshot. Ensure the HTML file contains visible "
                         "content and that CSS styles are linked correctly."
                     ),
-                    improvement_suggestion=(
-                        "Add an external CSS stylesheet with layout rules, a "
-                        "colour scheme, and typographic styles so the page has "
-                        "a clear visual design."
+                    improvement_recommendation=(
+                        "Verify the HTML file contains visible elements "
+                        "(headings, paragraphs, images) and check that CSS "
+                        "stylesheets are properly linked with <link> tags in "
+                        "the <head> section."
                     ),
                     screenshot=screenshot_path,
                     model="deterministic_gate",
@@ -416,10 +417,19 @@ Respond with JSON only."""
             if status == "FAIL":
                 status = "NEEDS_IMPROVEMENT"
 
+            improvement_rec = str(
+                data.get("improvement_recommendation")
+                or data.get("recommendation")
+                or data.get("improvement_suggestion")
+                or data.get("suggestion")
+                or ""
+            ).strip()
+
             return UXReviewResult(
                 page=page_name,
                 status=status,
                 feedback=str(data["feedback"]),
+                improvement_recommendation=improvement_rec,
                 screenshot=screenshot_path,
                 model=type(self.provider).__name__,
             )

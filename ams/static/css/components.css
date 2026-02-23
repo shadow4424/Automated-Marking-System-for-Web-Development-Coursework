@@ -1104,6 +1104,34 @@ details[open] summary {
     font-size: var(--text-sm);
 }
 
+.ux-recommendation {
+    background-color: #f0f7ff;
+    border-left: 4px solid #3b82f6;
+    padding: var(--space-md);
+    margin: var(--space-md) 0;
+    border-radius: 4px;
+}
+
+.ux-recommendation-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-sm);
+    color: #1e40af;
+}
+
+.ux-recommendation-icon {
+    font-size: var(--text-lg);
+    line-height: 1;
+}
+
+.ux-recommendation-text {
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    margin: 0;
+}
+
 .vision-issues {
     list-style: none;
     padding: 0;

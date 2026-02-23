@@ -170,6 +170,6 @@ class UXReviewResult(BaseModel):
         ..., description="Overall UX verdict"
     )
     feedback: str = Field(default="", description="Qualitative UX feedback text")
-    improvement_suggestion: Optional[str] = Field(default=None, description="One specific, actionable suggestion (deprecated — no longer requested)")
+    improvement_recommendation: str = Field(default="", description="One specific, actionable recommendation for improving the page design")
     screenshot: str = Field(default="", description="Path to the screenshot analysed")
     model: str = Field(default="", description="Name of the model that produced this review")
