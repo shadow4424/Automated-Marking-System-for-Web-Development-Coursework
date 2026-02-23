@@ -39,19 +39,20 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # ─── Blank-image detection thresholds ────────────────────────────────────────
-_WHITE_PIXEL_THRESHOLD = 0.97   # fraction of near-white pixels to count as blank
+_WHITE_PIXEL_THRESHOLD = 0.985  # fraction of near-white pixels to count as blank
 _NEAR_WHITE_VALUE      = 245    # pixel channel value considered "near-white"
-_VARIANCE_THRESHOLD    = 50.0   # whole-image variance below which → solid colour
+_VARIANCE_THRESHOLD    = 20.0   # whole-image variance below which → solid colour
 
 
 def is_visually_empty(image_path: Path) -> bool:
     """Return *True* if the screenshot is blank / solid-colour / mostly white.
 
-    Two independent heuristics (either triggers *True*):
+    BOTH heuristics must agree (AND logic) to reduce false positives on
+    unstyled-but-visible pages (e.g. plain HTML with text content):
 
     1. **Low variance** – the whole image has almost no colour variation,
        meaning it is a solid-colour rectangle (regardless of which colour).
-    2. **Near-white dominance** – ≥97 % of pixels have *all three* RGB
+    2. **Near-white dominance** – ≥98.5 % of pixels have *all three* RGB
        channels above 245, i.e. the page is essentially an empty white page.
 
     Uses PIL + numpy for efficiency.  If the image cannot be opened the
@@ -63,16 +64,29 @@ def is_visually_empty(image_path: Path) -> bool:
         arr = np.asarray(img, dtype=np.float32)
 
         # Heuristic 1 – overall variance
-        if arr.var() < _VARIANCE_THRESHOLD:
-            logger.info("is_visually_empty: variance %.1f < %.1f → blank", arr.var(), _VARIANCE_THRESHOLD)
-            return True
+        variance = arr.var()
+        low_variance = variance < _VARIANCE_THRESHOLD
 
         # Heuristic 2 – near-white pixel ratio
         white_mask = np.all(arr >= _NEAR_WHITE_VALUE, axis=-1)   # per-pixel
         white_ratio = white_mask.mean()
-        if white_ratio >= _WHITE_PIXEL_THRESHOLD:
-            logger.info("is_visually_empty: white ratio %.2f ≥ %.2f → blank", white_ratio, _WHITE_PIXEL_THRESHOLD)
+        high_white = white_ratio >= _WHITE_PIXEL_THRESHOLD
+
+        # Both must agree to declare blank (AND logic)
+        if low_variance and high_white:
+            logger.info(
+                "is_visually_empty: variance %.1f < %.1f AND white ratio %.3f ≥ %.3f → blank",
+                variance, _VARIANCE_THRESHOLD, white_ratio, _WHITE_PIXEL_THRESHOLD,
+            )
             return True
+
+        if low_variance or high_white:
+            logger.debug(
+                "is_visually_empty: partial trigger (variance=%.1f %s %.1f, "
+                "white=%.3f %s %.3f) — NOT blank (AND required)",
+                variance, "<" if low_variance else ">=", _VARIANCE_THRESHOLD,
+                white_ratio, ">=" if high_white else "<", _WHITE_PIXEL_THRESHOLD,
+            )
 
         return False
     except Exception as exc:
@@ -402,13 +416,10 @@ Respond with JSON only."""
             if status == "FAIL":
                 status = "NEEDS_IMPROVEMENT"
 
-            improvement = str(data.get("improvement_suggestion", "")).strip()
-
             return UXReviewResult(
                 page=page_name,
                 status=status,
                 feedback=str(data["feedback"]),
-                improvement_suggestion=improvement,
                 screenshot=screenshot_path,
                 model=type(self.provider).__name__,
             )

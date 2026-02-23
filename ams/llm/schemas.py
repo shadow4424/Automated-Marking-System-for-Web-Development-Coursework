@@ -5,7 +5,7 @@ parsing and prevent crashes from malformed LLM output.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Literal, Any
+from typing import Dict, List, Literal, Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -170,6 +170,6 @@ class UXReviewResult(BaseModel):
         ..., description="Overall UX verdict"
     )
     feedback: str = Field(default="", description="Qualitative UX feedback text")
-    improvement_suggestion: str = Field(default="", description="One specific, actionable suggestion for the student")
+    improvement_suggestion: Optional[str] = Field(default=None, description="One specific, actionable suggestion (deprecated — no longer requested)")
     screenshot: str = Field(default="", description="Path to the screenshot analysed")
     model: str = Field(default="", description="Name of the model that produced this review")

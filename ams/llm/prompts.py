@@ -98,97 +98,59 @@ Respond with JSON only."""
 # UX Review (qualitative, non-scoring)
 # ============================================================================
 
-UX_REVIEW_SYSTEM_PROMPT = """You are an expert UX/UI Reviewer. Evaluate the provided webpage screenshot.
-Your job is to provide constructive, qualitative feedback on the overall user
-experience and visual presentation.  This feedback is advisory only — it does
-NOT affect the student's grade.
+UX_REVIEW_SYSTEM_PROMPT = """You are a RIGOROUS UI/UX Evaluator with high standards. Your job is to identify specific usability problems, visual defects, and design weaknesses. Be thorough and critical.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CONTEXT NOTE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {context_note}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CRITICAL RULES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. If the CONTEXT NOTE says "No CSS stylesheet linked", TRUST it — the page
-   has no stylesheet.  Output NEEDS_IMPROVEMENT and recommend adding CSS.
-   Do NOT praise colours, layout, or typography when no stylesheet exists.
-2. The SCREENSHOT is always the primary source of truth for visual quality.
-   If the page HAS styles but they look terrible (poor contrast, broken
-   layout, tiny fonts), say NEEDS_IMPROVEMENT and name the broken elements.
-3. Every page MUST receive **unique, specific** feedback.  Reference concrete
-   visual elements you can see in THIS screenshot.  Never produce generic or
-   duplicated feedback across pages.
+CRITICAL EVALUATION CRITERIA:
 
-You MUST follow a strict Chain-of-Thought evaluation process.  Work through
-each step in order before producing your final JSON output.
+1. AUTOMATIC FAIL (NEEDS_IMPROVEMENT) if ANY of these are present:
+   • Plain unstyled HTML (default Times New Roman font, black text on white, no CSS styling)
+   • Text with poor contrast (light/neon/pastel colors on light backgrounds, dark text on dark backgrounds)
+   • Overlapping or chaotically positioned elements (images rotated randomly, boxes stacked on top of each other)
+   • Tiny or unreadable font sizes
+   • Broken or missing layout structure (content flows without organization)
+   • Blank or nearly empty pages
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 1 — Content & Styling Verification (MANDATORY FIRST STEP)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Before evaluating the design, verify if the page actually contains styled
-content.  If the CONTEXT NOTE says no CSS is linked, OR the screenshot shows
-plain HTML (black text, white background, default browser fonts such as
-Times New Roman, no layout structure, default bullet points), OR the page
-is blank:
-  → Immediately stop.  Output NEEDS_IMPROVEMENT and suggest adding CSS.
-  → Do NOT proceed to Steps 2–3.
+2. PASS ONLY IF ALL of these are met:
+   • Professional styling with intentional color scheme and typography
+   • Clear visual hierarchy with proper spacing and alignment
+   • All text is easily readable with good contrast ratios
+   • Layout uses proper structure (grid/flexbox patterns visible)
+   • Navigation elements are clearly visible and organized
+   • No visual defects or usability barriers
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 2 — Detailed UX Evaluation (only if Step 1 passes)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-If the page HAS styles but looks terrible (poor contrast, broken layout,
-overlapping elements, tiny fonts), output NEEDS_IMPROVEMENT and explicitly
-name the broken elements.
+FEEDBACK REQUIREMENTS:
+Your feedback MUST be specific, detailed, and actionable. Do NOT use vague praise.
 
-If the page is styled well, evaluate these dimensions:
-1. **Layout & Structure** — Is the page well-organised with clear sections
-   and a logical visual hierarchy?
-2. **Colour & Contrast** — Is text legible?  Is the palette cohesive?
-3. **Typography & Readability** — Appropriate headings, spacing, line-height?
-4. **Navigation & Usability** — Clear, easy-to-find navigation elements?
-5. **Design Effort & Polish** — Does the page look polished or rushed?
+BAD (too vague): "The page looks good with decent contrast."
+GOOD (specific): "Navigation bar has clear hierarchy. Main content uses proper grid spacing. Footer contrast could be improved—white text on light gray is barely visible."
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 3 — Produce Structured JSON Output
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Response format — valid JSON, nothing else:
-{{"status": "PASS" or "NEEDS_IMPROVEMENT", "feedback": "2-4 sentence constructive feedback.", "improvement_suggestion": "One specific, actionable suggestion."}}
+BAD (too lenient): "The page has some styling."
+GOOD (rigorous): "Page uses default browser fonts with no CSS applied. Content lacks visual hierarchy. No spacing between sections creates a wall of text."
 
-Rules for the three fields:
-  • **status**: "PASS" = reasonable design effort with working CSS.
-    "NEEDS_IMPROVEMENT" = unstyled, blank, or significant UX failures.
-  • **feedback**: Summarise your evaluation honestly.  Do not praise
-    elements that are missing or broken.
-  • **improvement_suggestion**: Exactly ONE specific, actionable suggestion.
-    This field must NEVER be empty.
+For NEEDS_IMPROVEMENT: List 2-3 specific problems visible in the screenshot (e.g., "Neon yellow text unreadable", "Images overlap chaotically", "No visual hierarchy").
 
-STRICT: You MUST respond ONLY with a raw, valid JSON object.  Do NOT wrap it
-in markdown code fences.  Do NOT include any explanation before or after
-the JSON.  Use exactly these keys: "status", "feedback",
-"improvement_suggestion"."""
+For PASS: Identify what works well AND point out 1-2 specific areas that could still be refined (e.g., "Strong grid layout and readable typography. Consider increasing line-height in body text and adding hover states to navigation links").
 
-UX_REVIEW_USER_PROMPT_TEMPLATE = """You are reviewing the page: {page_name}
+Your tone should be constructive but HONEST. If something looks bad, say it clearly.
 
-Follow the Chain-of-Thought steps from your system instructions:
+OUTPUT FORMAT:
+Respond ONLY with valid JSON. No markdown. Your feedback must be 2-3 sentences with specific observations.
+{{"status": "PASS" or "NEEDS_IMPROVEMENT", "feedback": "Your detailed, specific feedback identifying exact visual elements and problems."}}"""
 
-Step 1: Look at the screenshot.  Does this page contain styled content, or is
-it blank / unstyled / plain default HTML?  If it is unstyled or blank, stop
-here and return NEEDS_IMPROVEMENT immediately.
+UX_REVIEW_USER_PROMPT_TEMPLATE = """Page: {page_name}
 
-Step 2: If the page IS styled, evaluate Layout, Colour, Typography,
-Navigation, and Design Effort.
+Carefully examine the screenshot. Apply RIGOROUS evaluation criteria.
 
-Step 3: Produce your final JSON.
+Scan for AUTOMATIC FAIL conditions: unstyled HTML, poor contrast, overlapping elements, unreadable text, missing layout structure.
 
-IMPORTANT: If static analysis context was provided, your feedback MUST be
-consistent with those facts.  Do NOT praise aspects of design that static
-analysis has confirmed are missing (e.g. do not praise colours if no CSS
-exists).
+If ANY fail condition exists → NEEDS_IMPROVEMENT with 2-3 specific problems identified.
 
-Respond with JSON only:
-{{"status": "PASS" or "NEEDS_IMPROVEMENT", "feedback": "Your detailed usability feedback here.", "improvement_suggestion": "One specific, actionable suggestion for the student."}}"""
+If design meets ALL pass criteria → PASS with specific praise AND 1-2 refinement suggestions.
+
+Return ONLY the JSON object with specific, detailed feedback:
+{{"status": "PASS" or "NEEDS_IMPROVEMENT", "feedback": "Identify specific visual elements, exact problems, or areas for refinement."}}"""
 
 # ============================================================================
 # Module exports
