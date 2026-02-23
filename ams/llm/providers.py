@@ -128,13 +128,13 @@ class LocalLMStudioProvider(LLMProvider):
     Connects to http://localhost:1234/v1 using the OpenAI SDK.
     Supports:
     - Text-only models (Llama 3.2 3B)
-    - Vision models (Qwen2-VL-2B-Instruct)
+    - Vision models (Qwen2.5-VL-7B-Instruct)
     """
     
     def __init__(
         self,
         base_url: str = "http://localhost:1234/v1",
-        model: str = "qwen2-vl-2b-instruct",
+        model: str = "qwen2.5-vl-7b-instruct",
         timeout: int = 120,
     ):
         """Initialize local provider.

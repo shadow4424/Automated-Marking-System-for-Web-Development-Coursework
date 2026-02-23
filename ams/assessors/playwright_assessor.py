@@ -148,6 +148,58 @@ class PlaywrightAssessor(Assessor):
         self.runner = runner or PlaywrightRunner()
         self.output_cap = output_cap
 
+    # ------------------------------------------------------------------
+    # Multi-page screenshot capture for UX Review
+    # ------------------------------------------------------------------
+
+    def capture_all_pages(self, context: SubmissionContext) -> List[dict]:
+        """Render every .html file in the submission and capture a
+        full-page screenshot for each one.
+
+        Returns a list of dicts::
+
+            [{"page": "index.html", "screenshot": Path("…/index_html.png")}, …]
+
+        The screenshots are saved under ``artifacts/browser/<filename>.png``.
+        This method is intentionally separated from the scoring pipeline so
+        it can be called independently for the UX Review feature.
+        """
+        html_files = sorted(context.discovered_files.get("html", []))
+        if not html_files:
+            return []
+
+        results: List[dict] = []
+        shot_dir = context.workspace_path / "artifacts" / "browser"
+        shot_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            from playwright.sync_api import sync_playwright
+        except Exception:
+            return results
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            for html_path in html_files:
+                page_name = html_path.name  # e.g. "index.html"
+                safe_stem = page_name.replace(".", "_")  # e.g. "index_html"
+                shot_path = shot_dir / f"{safe_stem}.png"
+
+                page = browser.new_page()
+                try:
+                    page.goto(html_path.as_uri(), wait_until="load", timeout=self.runner.timeout_ms if hasattr(self.runner, 'timeout_ms') else 5000)
+                    page.screenshot(path=str(shot_path), full_page=True)
+                    results.append({"page": page_name, "screenshot": shot_path})
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "Screenshot capture failed for %s: %s", page_name, exc,
+                    )
+                finally:
+                    page.close()
+            browser.close()
+
+        return results
+
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
         profile = context.metadata.get("profile", "unknown")

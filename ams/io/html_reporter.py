@@ -169,73 +169,8 @@ class HTMLReporter:
         screenshot_path: Optional[Path],
         output_path: Optional[Path] = None,
     ) -> str:
-        """Build the vision analysis section."""
-        vision_items = llm_analysis.get("vision_analysis", [])
-        
-        if not vision_items:
-            return '<p class="no-vision">No vision analysis performed.</p>'
-        
-        sections = []
-        for item in vision_items:
-            finding_id = item.get("finding_id", "Unknown")
-            result = item.get("result", {})
-            status = result.get("status", "UNKNOWN")
-            reason = result.get("reason", "No details provided")
-            issues = result.get("issues", [])
-            screenshot_name = item.get("screenshot", "screenshot.png")
-            
-            status_class = "pass" if status == "PASS" else "fail" if status == "FAIL" else "unknown"
-            
-            # Screenshot display — embed as base64 when available
-            img_html = ""
-            resolved_screenshot = None
-            if screenshot_path and screenshot_path.exists():
-                resolved_screenshot = screenshot_path
-            elif screenshot_name and output_path:
-                # Try finding screenshot relative to the output directory
-                candidate = Path(output_path) / screenshot_name
-                if not candidate.exists():
-                    candidate = Path(output_path) / "submission" / screenshot_name
-                if candidate.exists():
-                    resolved_screenshot = candidate
-
-            if resolved_screenshot and resolved_screenshot.exists():
-                import base64
-                try:
-                    raw = resolved_screenshot.read_bytes()
-                    b64 = base64.b64encode(raw).decode("ascii")
-                    suffix = resolved_screenshot.suffix.lower()
-                    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(suffix.lstrip("."), "image/png")
-                    img_html = f'<img src="data:{mime};base64,{b64}" alt="Page Screenshot" class="vision-screenshot">'
-                except Exception:
-                    img_html = f'<img src="{screenshot_name}" alt="Page Screenshot" class="vision-screenshot" onerror="this.style.display=\'none\'">'
-            elif screenshot_name:
-                img_html = f'<img src="{screenshot_name}" alt="Page Screenshot" class="vision-screenshot" onerror="this.style.display=\'none\'">'
-            
-            # Build issues list
-            issues_html = ""
-            if issues:
-                items = []
-                for issue in issues:
-                    desc = html.escape(issue.get("description", ""))
-                    sev = html.escape(issue.get("severity", "WARN"))
-                    items.append(f'<li><span class="severity-badge {"severe" if sev == "FAIL" else "warning"}">{sev}</span> {desc}</li>')
-                issues_html = '<ul class="vision-issues">' + "\n".join(items) + '</ul>'
-
-            section = f'''
-            <div class="vision-item">
-                <div class="vision-result {status_class}">
-                    <h4>Vision Check: {html.escape(finding_id)}</h4>
-                    <span class="vision-status {status_class}">{html.escape(status)}</span>
-                </div>
-                <p class="vision-reason">{html.escape(reason)}</p>
-                {issues_html}
-                {img_html}
-            </div>
-            '''
-            sections.append(section)
-        
-        return "\n".join(sections)
+        """Build the vision analysis section (legacy — now returns empty)."""
+        return ''
     
     def _build_stats_section(
         self,
@@ -254,7 +189,6 @@ class HTMLReporter:
         warnings = stats["warnings"]
         
         feedback_count = len(llm_analysis.get("feedback", []))
-        vision_count = len(llm_analysis.get("vision_analysis", []))
         partial_count = len(llm_analysis.get("partial_credit", []))
         
         return f'''
@@ -280,10 +214,6 @@ class HTMLReporter:
             <div class="stat-card ai">
                 <span class="stat-value">{feedback_count}</span>
                 <span class="stat-label">🤖 AI Feedback</span>
-            </div>
-            <div class="stat-card ai">
-                <span class="stat-value">{vision_count}</span>
-                <span class="stat-label">👁️ Vision Checks</span>
             </div>
             <div class="stat-card ai">
                 <span class="stat-value">{partial_count}</span>

@@ -50,12 +50,13 @@ LLM_PROVIDER = LLMProviderType.LOCAL
 
 # Local LM Studio settings
 LLM_BASE_URL = "http://localhost:1234/v1"
-LLM_MODEL_NAME = "qwen2-vl-2b-instruct"  # Phase 3: Vision model for multimodal
+LLM_MODEL_NAME = "qwen2.5-vl-7b-instruct"  # Phase 3: Vision model for multimodal
 LLM_TIMEOUT = 120  # Seconds to wait for response
 
 # Phase 3: Vision Capabilities
 VISION_ENABLED = True  # Enable multimodal image+text requests
 VISION_MAX_IMAGE_SIZE = 1024  # Max dimension for image resizing (pixels)
+VISION_MAX_TOKENS = 2048  # Min context window for vision responses
 VISION_TIMEOUT = 180  # Seconds to wait for vision response (longer than text)
 
 # OpenAI settings (for cloud fallback)
@@ -116,6 +117,7 @@ __all__ = [
     # Vision
     "VISION_ENABLED",
     "VISION_MAX_IMAGE_SIZE",
+    "VISION_MAX_TOKENS",
     "VISION_TIMEOUT",
     # Paths
     "PACKAGE_ROOT",

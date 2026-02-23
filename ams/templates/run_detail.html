@@ -69,7 +69,7 @@
 {# Count directly from findings so stat cards match the visible event list #}
 {% set ns = namespace(
     total=0, passed=0, failed=0, warnings=0, skipped=0,
-    ai_count=0, vision_count=0, partial_count=0
+    ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
 ) %}
 {% for f in findings %}
 {% set sev = f.severity|default('WARN')|upper %}
@@ -87,6 +87,9 @@
 {% endif %}
 {% if f.evidence is mapping and f.evidence.hybrid_score %}
 {% set ns.partial_count = ns.partial_count + 1 %}
+{% endif %}
+{% if f.evidence is mapping and f.evidence.ux_review %}
+{% set ns.ux_review_count = ns.ux_review_count + 1 %}
 {% endif %}
 {% endfor %}
 
@@ -110,7 +113,7 @@
             <div class="stat-label">Warnings</div>
         </div>
     </div>
-    {% if ns.ai_count > 0 or ns.vision_count > 0 or ns.partial_count > 0 %}
+    {% if ns.ai_count > 0 or ns.vision_count > 0 or ns.partial_count > 0 or ns.ux_review_count > 0 %}
     <div class="grid grid-auto">
         {% if ns.ai_count > 0 %}
         <div class="card stat-card stat-card--ai">
@@ -122,6 +125,12 @@
         <div class="card stat-card stat-card--ai">
             <div class="stat-value">{{ ns.vision_count }}</div>
             <div class="stat-label">👁️ Vision Checks</div>
+        </div>
+        {% endif %}
+        {% if ns.ux_review_count > 0 %}
+        <div class="card stat-card stat-card--ai">
+            <div class="stat-value">{{ ns.ux_review_count }}</div>
+            <div class="stat-label">🎨 UX Reviews</div>
         </div>
         {% endif %}
         {% if ns.partial_count > 0 %}
@@ -318,7 +327,63 @@
 </div>
 {% endfor %}
 
-{# ── Vision Analysis Section ── #}
+{# ── UX Review Section (qualitative, non-scoring) ── #}
+{% set ux_findings = [] %}
+{% for finding in findings %}
+{% if finding.evidence is mapping and finding.evidence.ux_review is mapping %}
+{% if ux_findings.append(finding) %}{% endif %}
+{% endif %}
+{% endfor %}
+
+{% if ux_findings %}
+<section class="mt-xl mb-xl">
+    <h2 class="section-header mb-md">UX &amp; Usability Review</h2>
+    <p class="text-muted text-sm mb-md">
+        This section provides qualitative UX/UI feedback for each page in the submission.
+        These reviews are <strong>advisory only</strong> and do <strong>not</strong> affect the final grade.
+    </p>
+    {% for finding in ux_findings %}
+    {% set ux = finding.evidence.ux_review %}
+    <div class="vision-card card mb-md">
+        <div class="vision-card-header">
+            <div>
+                <span class="finding-id">Page: {{ finding.evidence.page|default('unknown') }}</span>
+                <span class="badge badge-info">UX REVIEW</span>
+            </div>
+            <span class="vision-status vision-status--{{ 'pass' if ux.status == 'PASS' else ('fail' if ux.status == 'NEEDS_IMPROVEMENT' else 'unknown') }}">
+                {{ ux.status|default('UNKNOWN') }}
+            </span>
+        </div>
+
+        {% if ux.feedback %}
+        <p class="vision-reason">{{ ux.feedback }}</p>
+        {% endif %}
+
+        {% if ux.model %}
+        <div class="text-sm text-muted mt-xs mb-sm">
+            Model: {{ ux.model }}
+        </div>
+        {% endif %}
+
+        {% if finding.evidence.screenshot %}
+        {# Serve screenshot through run_artifact route — path is workspace-relative #}
+        {% set raw_ss = finding.evidence.screenshot|replace('\\', '/') %}
+        {% if batch_submission_id is defined and batch_submission_id %}
+        {% set ss_url = url_for('run_artifact', run_id=run_id, relpath='runs/' ~ batch_submission_id ~ '/' ~ raw_ss) %}
+        {% else %}
+        {% set ss_url = url_for('run_artifact', run_id=run_id, relpath=raw_ss) %}
+        {% endif %}
+        <div class="vision-screenshot-wrap">
+            <img src="{{ ss_url }}" alt="Screenshot of {{ finding.evidence.page|default('page') }}" class="vision-screenshot"
+                 onerror="this.parentElement.innerHTML='<p class=\'text-muted text-sm\'>Screenshot unavailable</p>'">
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
+
+{# ── Legacy Vision Analysis Section (rule-based visual checks) ── #}
 {% set vision_findings = [] %}
 {% for finding in findings %}
 {% if finding.evidence is mapping and finding.evidence.vision_analysis is mapping %}

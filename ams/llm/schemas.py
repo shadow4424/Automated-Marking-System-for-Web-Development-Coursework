@@ -93,6 +93,8 @@ __all__ = [
     "create_not_evaluated",
     "create_pass",
     "create_fail",
+    # UX Review
+    "UXReviewResult",
 ]
 
 
@@ -151,3 +153,23 @@ def create_fail(
         status="FAIL", confidence=confidence, issues=issues or [],
         reason=reason, meta=extra_meta,
     )
+
+
+# ---------------------------------------------------------------------------
+# UX Review schema (non-scoring, qualitative feedback)
+# ---------------------------------------------------------------------------
+
+class UXReviewResult(BaseModel):
+    """Result of a UX/UI qualitative review for a single page.
+
+    This is explicitly *non-scoring* — it is advisory feedback only.
+    """
+
+    page: str = Field(..., description="HTML filename reviewed (e.g. index.html)")
+    status: Literal["PASS", "NEEDS_IMPROVEMENT", "NOT_EVALUATED"] = Field(
+        ..., description="Overall UX verdict"
+    )
+    feedback: str = Field(default="", description="Qualitative UX feedback text")
+    improvement_suggestion: str = Field(default="", description="One specific, actionable suggestion for the student")
+    screenshot: str = Field(default="", description="Path to the screenshot analysed")
+    model: str = Field(default="", description="Name of the model that produced this review")

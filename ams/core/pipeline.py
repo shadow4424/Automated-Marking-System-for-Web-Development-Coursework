@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 from pathlib import Path
 from typing import Iterable, List, Mapping, Optional
@@ -34,9 +35,8 @@ from ams.io.submission import SubmissionProcessor
 from ams.llm.feedback import generate_feedback
 from ams.llm.scoring import evaluate_partial_credit, should_evaluate_partial_credit
 
-# Vision Integration (Phase 3 & C)
+# Vision / UX Review
 from ams.core.config import VISION_ENABLED
-from ams.llm.schemas import VisionResult, create_not_evaluated
 
 # Phase D: Conflict Resolution
 from ams.core.aggregation import resolve_conflicts
@@ -125,6 +125,21 @@ class AssessmentPipeline:
             behavioural_evidence=context.behavioural_evidence,
             browser_evidence=context.browser_evidence,
         )
+
+        # =================================================================
+        # UX Review — qualitative, NON-SCORING feedback per page
+        # =================================================================
+        ux_reviews: list = []
+        if self._should_use_llm() and self._vision_enabled:
+            ux_findings, ux_reviews = self._run_ux_reviews(
+                context, profile, findings,
+            )
+            # Append UX findings *after* scoring so they are visible in the
+            # report but have zero impact on the student's grade.
+            findings.extend(ux_findings)
+            if "ux_reviews" not in llm_evidence:
+                llm_evidence["ux_reviews"] = []
+            llm_evidence["ux_reviews"].extend(ux_reviews)
         
         report_path = workspace_path / "report.json"
         ReportWriter(report_path).write(
@@ -213,7 +228,7 @@ class AssessmentPipeline:
             Tuple of (enriched_findings, llm_evidence_dict)
         """
         enriched: List[Finding] = []
-        llm_evidence: dict = {"feedback": [], "partial_credit": [], "vision_analysis": []}
+        llm_evidence: dict = {"feedback": [], "partial_credit": []}
         
         # Locate screenshot for vision analysis — prefer real Playwright capture
         screenshot_path = self._find_screenshot(context.workspace_path, context)
@@ -349,83 +364,241 @@ class AssessmentPipeline:
                         if isinstance(finding.evidence, dict):
                             finding.evidence["hybrid_score"] = fallback_score
             
-            # Phase 3 + C: Vision Analysis for visual_check rules
-            if self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
-                visual_check = rule_metadata.get("visual_check", False)
-                
-                if visual_check and not screenshot_path:
-                    # No usable screenshot — mark as NOT_EVALUATED so the
-                    # report makes it clear vision was not silently skipped.
-                    not_eval = create_not_evaluated(
-                        reason="No browser screenshot available (Playwright may have crashed or timed out).",
-                        screenshot_found=False,
-                    )
-                    ne_dict = not_eval.model_dump()
-                    if isinstance(finding.evidence, dict):
-                        finding.evidence["vision_analysis"] = ne_dict
-                    llm_evidence["vision_analysis"].append({
-                        "finding_id": finding.id,
-                        "screenshot": None,
-                        "result": ne_dict,
-                    })
-                    logger.info(f"Vision analysis for {finding.id}: NOT_EVALUATED (no screenshot)")
-
-                elif visual_check and screenshot_path and self.vision_analyst:
-                    try:
-                        # Use description-first approach for reliability with small models
-                        requirement = f"Check if this design meets: {finding.message}"
-                        
-                        vision_result: VisionResult = self.vision_analyst.detect_layout_issues(
-                            screenshot_path=str(screenshot_path),
-                            requirement_context=requirement,
-                        )
-                        
-                        # Attach vision result to finding evidence (as dict)
-                        vision_dict = vision_result.model_dump()
-                        # Store the workspace-relative path so the web UI can
-                        # build a correct /artifacts/<relpath> URL.
-                        try:
-                            rel_screenshot = screenshot_path.relative_to(context.workspace_path)
-                        except ValueError:
-                            rel_screenshot = Path(screenshot_path.name)
-                        if "meta" in vision_dict and isinstance(vision_dict["meta"], dict):
-                            vision_dict["meta"]["screenshot"] = str(rel_screenshot)
-                        if isinstance(finding.evidence, dict):
-                            finding.evidence["vision_analysis"] = vision_dict
-                        
-                        llm_evidence["vision_analysis"].append({
-                            "finding_id": finding.id,
-                            "screenshot": str(rel_screenshot),
-                            "result": vision_dict,
-                        })
-                        
-                        # Phase C: Create VISUAL finding if status is FAIL
-                        if vision_result.status == "FAIL":
-                            for issue in vision_result.issues:
-                                visual_finding = Finding(
-                                    id=f"VISUAL.{finding.id}",
-                                    category="visual",
-                                    message=issue.description,
-                                    severity=Severity.FAIL if issue.severity == "FAIL" else Severity.WARN,
-                                    evidence={
-                                        "screenshot": str(rel_screenshot),
-                                        "original_rule": finding.id,
-                                        "confidence": vision_result.confidence,
-                                    },
-                                    source="VisionAnalyst",
-                                    finding_category=FindingCategory.VISUAL,
-                                )
-                                enriched.append(visual_finding)
-                                logger.info(f"Created VISUAL finding: {visual_finding.id}")
-                        
-                        logger.info(f"Vision analysis for {finding.id}: {vision_result.status}")
-                        
-                    except Exception as e:
-                        logger.warning(f"Failed vision analysis for {finding.id}: {e}")
+            # Phase 3 + C: Legacy Vision Analysis removed.
+            # Visual evaluation is now handled by the UX Review step that
+            # runs AFTER scoring and has zero impact on the grade.
             
             enriched.append(finding)
         
         return enriched, llm_evidence
+
+    # -----------------------------------------------------------------
+    # UX Review — multi-page qualitative feedback (zero scoring impact)
+    # -----------------------------------------------------------------
+
+    def _run_ux_reviews(
+        self,
+        context: SubmissionContext,
+        profile: str,
+        static_findings: List[Finding] | None = None,
+    ) -> tuple[List[Finding], list]:
+        """Capture screenshots of every HTML page and run a UX review.
+
+        Args:
+            context: The current submission context.
+            profile: Active marking profile name.
+            static_findings: Findings already produced by the static and
+                required assessors.  Used to build a *context note* for
+                the vision model so it has deterministic grounding (e.g.
+                "no CSS files found") **before** it looks at the image.
+
+        Returns:
+            (ux_findings, ux_evidence_list)
+
+        The findings use ``category='ux_review'`` which is **not** in
+        ``ScoringEngine.COMPONENTS``, so they are ignored by scoring.
+        """
+        from ams.assessors.playwright_assessor import PlaywrightAssessor as _PA
+
+        ux_findings: List[Finding] = []
+        ux_evidence: list = []
+
+        # Use the PlaywrightAssessor already in the pipeline, or create one
+        pa = None
+        if self.assessors:
+            for a in self.assessors:
+                if isinstance(a, _PA):
+                    pa = a
+                    break
+        if pa is None:
+            pa = _PA()
+
+        page_shots = pa.capture_all_pages(context)
+        if not page_shots:
+            logger.info("UX Review: no HTML pages found — skipping.")
+            return ux_findings, ux_evidence
+
+        analyst = self.vision_analyst
+        if analyst is None:
+            logger.warning("UX Review: VisionAnalyst not available — skipping.")
+            return ux_findings, ux_evidence
+
+        # Build a filename → Path lookup from the discovered HTML files so
+        # we can read each page's source to produce a per-page context note.
+        html_lookup: dict[str, Path] = {}
+        for hp in context.discovered_files.get("html", []):
+            html_lookup[hp.name] = hp
+
+        for entry in page_shots:
+            page_name: str = entry["page"]
+            shot_path: Path = entry["screenshot"]
+
+            # ── Per-page context note ────────────────────────────────────────
+            context_note = self._build_per_page_context(
+                page_name, html_lookup.get(page_name)
+            )
+
+            review = analyst.review_ux(str(shot_path), page_name, context_note=context_note)
+
+            # Build a workspace-relative screenshot path for the UI
+            try:
+                rel_screenshot = shot_path.relative_to(context.workspace_path)
+            except ValueError:
+                rel_screenshot = Path(shot_path.name)
+
+            # Derive a finding ID like UX_REVIEW.INDEX_HTML
+            safe_id = page_name.upper().replace(".", "_")
+            finding_id = f"UX_REVIEW.{safe_id}"
+
+            review_dict = review.model_dump()
+
+            # Build the finding message: feedback + improvement suggestion
+            message_parts = [review.feedback or "No feedback generated."]
+            if getattr(review, "improvement_suggestion", None):
+                message_parts.append(
+                    f"Suggestion: {review.improvement_suggestion}"
+                )
+            finding_message = " ".join(message_parts)
+
+            ux_findings.append(
+                Finding(
+                    id=finding_id,
+                    category="ux_review",  # NOT a scoring component
+                    message=finding_message,
+                    severity=Severity.INFO,  # Always INFO — advisory only
+                    evidence={
+                        "ux_review": review_dict,
+                        "screenshot": str(rel_screenshot),
+                        "page": page_name,
+                    },
+                    source="VisionAnalyst.ux_review",
+                    finding_category=FindingCategory.VISUAL,
+                    profile=profile,
+                    required=False,
+                )
+            )
+
+            ux_evidence.append({
+                "page": page_name,
+                "screenshot": str(rel_screenshot),
+                "review": review_dict,
+            })
+
+            logger.info(
+                "UX Review for %s: %s", page_name, review.status,
+            )
+
+        return ux_findings, ux_evidence
+
+    # -----------------------------------------------------------------
+    # Phase E: Static-grounding helper for UX reviews
+    # -----------------------------------------------------------------
+
+    @staticmethod
+    def _build_ux_context_note(findings: List[Finding]) -> str | None:
+        """Condense static-analysis findings into a short context note.
+
+        The note is injected into the vision model's system prompt so that
+        the LLM is *grounded* in verifiable facts before it interprets the
+        screenshot.  This prevents hallucinated praise for blank or unstyled
+        pages.
+
+        Returns ``None`` when there is nothing noteworthy to report (i.e.
+        both HTML and CSS are present and well-formed).
+        """
+        # Collect finding IDs for quick look-up
+        ids = {f.id for f in findings}
+
+        warnings: list[str] = []
+
+        # --- HTML ---
+        if "HTML.MISSING_FILES" in ids or "HTML.REQ.MISSING_FILES" in ids:
+            warnings.append(
+                "- No HTML files were found in the submission."
+            )
+
+        # --- CSS ---
+        if "CSS.MISSING_FILES" in ids or "CSS.REQ.MISSING_FILES" in ids:
+            warnings.append(
+                "- No CSS files were found.  The page has NO external stylesheet."
+            )
+        elif "CSS.NO_RULES" in ids:
+            warnings.append(
+                "- A CSS file exists but contains zero valid rules. "
+                "The page is effectively unstyled."
+            )
+
+        # --- JS ---
+        if "JS.MISSING_FILES" in ids or "JS.REQ.MISSING_FILES" in ids:
+            warnings.append(
+                "- No JavaScript files were found in the submission."
+            )
+
+        if not warnings:
+            return None
+
+        return "\n".join(warnings)
+
+    # -----------------------------------------------------------------
+    # Phase I: Per-page context builder for UX reviews
+    # -----------------------------------------------------------------
+
+    _LINK_CSS_RE = re.compile(
+        r"""<link\b[^>]*rel\s*=\s*["']stylesheet["'][^>]*>""",
+        re.IGNORECASE,
+    )
+    _STYLE_TAG_RE = re.compile(
+        r"<style[\s>]",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _build_per_page_context(page_name: str, html_path: Path | None) -> str:
+        """Read the HTML source for *one* page and produce a short context note.
+
+        Unlike the submission-level ``_build_ux_context_note`` this method
+        inspects the **actual HTML file** being evaluated so the context is
+        accurate per page.  For example, ``about.html`` may lack a
+        ``<link rel="stylesheet">`` while ``index.html`` includes one —
+        each page gets its own truthful context note.
+
+        Returns a short string suitable for injection into the system
+        prompt's ``{context_note}`` placeholder.
+        """
+        if html_path is None or not html_path.exists():
+            return (
+                f"WARNING: The HTML source for {page_name} could not be read. "
+                "Rely on visual evidence only."
+            )
+
+        try:
+            source = html_path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            return (
+                f"WARNING: The HTML source for {page_name} could not be read. "
+                "Rely on visual evidence only."
+            )
+
+        has_link = bool(AssessmentPipeline._LINK_CSS_RE.search(source))
+        has_style = bool(AssessmentPipeline._STYLE_TAG_RE.search(source))
+
+        if not has_link and not has_style:
+            return (
+                f"WARNING: Static analysis of {page_name} found NO "
+                "<link rel=\"stylesheet\"> and NO <style> block.  "
+                "This page has no CSS and is unstyled."
+            )
+
+        parts: list[str] = []
+        if has_link:
+            parts.append("an external <link rel=\"stylesheet\">")
+        if has_style:
+            parts.append("an inline <style> block")
+
+        return (
+            f"This page ({page_name}) includes {' and '.join(parts)}.  "
+            "Evaluate the visual quality of the applied styles."
+        )
 
     def _get_rule_metadata(self, rule_id: str, profile_spec: ProfileSpec, finding: Finding | None = None) -> dict:
         """Extract metadata for a rule from the profile spec.
