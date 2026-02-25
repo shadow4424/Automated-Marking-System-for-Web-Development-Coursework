@@ -10,7 +10,6 @@ Refactored to use the LLMProvider abstraction from ams.core.factory.
 """
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import Any
@@ -156,70 +155,3 @@ def generate_feedback(
     
     logger.debug(f"Feedback generated for rule: {rule_name}, fallback={feedback.meta.get('fallback', False)}")
     return result
-
-
-# =============================================================================
-# Demo / CLI Entry Point
-# =============================================================================
-
-
-def main():
-    """Demonstrate Phase 1 feedback generation."""
-    print("=" * 60)
-    print("Phase 1: Feedback & Reliability - Demo")
-    print("=" * 60)
-
-    # Mock student submission containing PII
-    mock_submission = """
-    <!-- Student: John Smith (c1234567) at john.smith@uni.edu -->
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>My Page</title>
-    </head>
-    <body>
-        <h1>Welcome</h1>
-        <p>This is my page.</p>
-    </body>
-    </html>
-    """
-
-    mock_error_context = (
-        "The HTML structure check failed because the document is missing "
-        "semantic elements (header, nav, main, footer). Student c1234567's "
-        "submission lacks proper structure."
-    )
-
-    # Step 1: Demonstrate PII scrubbing
-    print("\n[Step 1] PII Scrubbing")
-    print("-" * 40)
-    print("Original text (truncated):")
-    print(mock_submission[:100] + "...")
-    sanitized = scrub_pii(mock_submission)
-    print("\nSanitized text (truncated):")
-    print(sanitized[:100] + "...")
-
-    # Step 2: Generate feedback
-    print("\n[Step 2] Generating Feedback via LLM")
-    print("-" * 40)
-    print("Sending request to LM Studio...")
-
-    feedback = generate_feedback(
-        rule_name="html.has_semantic_structure",
-        student_code=mock_submission,
-        error_context=mock_error_context,
-        category="Semantics",
-    )
-
-    # Step 3: Display result
-    print("\n[Step 3] Parsed Feedback Result")
-    print("-" * 40)
-    print(json.dumps(feedback, indent=2))
-
-    print("\n" + "=" * 60)
-    print("Demo Complete")
-    print("=" * 60)
-
-
-if __name__ == "__main__":
-    main()

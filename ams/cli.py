@@ -1,10 +1,41 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ams.core.pipeline import AssessmentPipeline
+
+
+def _print_sandbox_banner() -> None:
+    """Print the sandbox status to stderr so it's always visible."""
+    from ams.sandbox.config import get_sandbox_status, get_sandbox_config, SandboxMode
+
+    status = get_sandbox_status()
+    cfg = get_sandbox_config()
+
+    if status["enforced"]:
+        print(f"\033[32m[Sandbox] ACTIVE — {status['message']}\033[0m", file=sys.stderr)
+    elif cfg.mode == SandboxMode.DOCKER:
+        # Docker required but not available — fatal
+        print(
+            f"\033[31m[Sandbox] ERROR — {status['message']}\033[0m",
+            file=sys.stderr,
+        )
+        print(
+            "\033[31mCannot run without Docker sandbox. "
+            "Start Docker and build the image (docker/build.sh), "
+            "or set AMS_SANDBOX_MODE=subprocess to bypass.\033[0m",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    else:
+        # Explicit subprocess mode
+        print(
+            f"\033[33m[Sandbox] WARNING — {status['message']}\033[0m",
+            file=sys.stderr,
+        )
 
 
 def _create_parser() -> argparse.ArgumentParser:
@@ -48,6 +79,9 @@ def _create_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     parser = _create_parser()
     args = parser.parse_args(argv)
+
+    # ── Sandbox enforcement — always check before any pipeline work ──
+    _print_sandbox_banner()
 
     if args.command == "mark":
         submission_path: Path = args.submission_path

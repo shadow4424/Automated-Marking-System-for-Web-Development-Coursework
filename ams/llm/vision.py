@@ -524,31 +524,3 @@ Respond with JSON only."""
 # =============================================================================
 
 __all__ = ["VisionAnalyst", "VisionResult", "VisionIssue", "UXReviewResult", "is_visually_empty"]
-
-
-# =============================================================================
-# Demo / Standalone Test
-# =============================================================================
-
-if __name__ == "__main__":
-    import sys
-    
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    
-    if len(sys.argv) < 2:
-        print("Usage: python -m ams.llm.vision <screenshot.png> [requirement]")
-        print("Example: python -m ams.llm.vision page.png 'Header should be blue'")
-        sys.exit(1)
-    
-    screenshot = sys.argv[1]
-    requirement = sys.argv[2] if len(sys.argv) > 2 else "The page should be visually correct and well-designed"
-    
-    analyst = VisionAnalyst()
-    result = analyst.detect_layout_issues(screenshot, requirement)
-    
-    print(f"\nStatus: {result.status}")
-    print(f"Reason: {result.reason}")
-    print(f"Confidence: {result.confidence}")
-    if result.meta:
-        print(f"Meta: {result.meta}")
-

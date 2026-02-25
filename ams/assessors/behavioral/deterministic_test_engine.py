@@ -33,6 +33,15 @@ class CommandRunner:
 
 
 class SubprocessRunner(CommandRunner):
+    """Direct host-process runner (dev/test only).
+
+    .. deprecated:: 2.0
+        Production execution uses :class:`~ams.sandbox.docker_runner.DockerCommandRunner`.
+        This class is retained only for local development and unit tests that
+        inject it explicitly via the *runner* parameter of
+        :class:`DeterministicTestEngine`.
+    """
+
     def run(self, args: Sequence[str], timeout: float, cwd: Path | None = None) -> RunResult:
         start = time.time()
         try:
@@ -97,11 +106,30 @@ class DeterministicTestEngine(Assessor):
         overall_timeout: float = 12.0,
         output_cap: int = 10_000,
     ) -> None:
-        self.runner = runner or SubprocessRunner()
+        if runner is not None:
+            self.runner = runner
+        else:
+            from ams.sandbox.factory import get_command_runner
+            self.runner = get_command_runner()
         self.per_test_timeout = per_test_timeout
         self.overall_timeout = overall_timeout
         self.output_cap = output_cap
         self._fatal_error_tokens = ("fatal error", "parse error")
+
+    def _is_php_available(self) -> bool:
+        """Check whether the PHP binary is reachable by the active runner.
+
+        When a Docker-based runner is in use, PHP is guaranteed to be
+        available inside the sandbox image — we skip the host-side
+        ``shutil.which`` check that would produce a false-negative.
+        """
+        try:
+            from ams.sandbox.docker_runner import DockerCommandRunner
+            if isinstance(self.runner, DockerCommandRunner):
+                return True
+        except ImportError:  # pragma: no cover
+            pass
+        return bool(shutil.which("php"))
 
     def run(self, context: SubmissionContext) -> List[Finding]:
         profile = context.metadata.get("profile", "unknown")
@@ -145,7 +173,7 @@ class DeterministicTestEngine(Assessor):
     # ------------------------------------------------------------------ PHP smoke
     def _php_smoke(self, context: SubmissionContext, profile: str, started_at: float) -> List[Finding]:
         target = self._select_php_entrypoint(context)
-        php_available = bool(shutil.which("php"))
+        php_available = self._is_php_available()
         component_required = False
 
         if not target:
@@ -283,7 +311,7 @@ class DeterministicTestEngine(Assessor):
     # ------------------------------------------------------------------ PHP form injection
     def _php_form_injection(self, context: SubmissionContext, profile: str, started_at: float) -> List[Finding]:
         target = self._select_php_entrypoint(context)
-        php_available = bool(shutil.which("php"))
+        php_available = self._is_php_available()
         component_required = False
 
         if not target or not php_available:

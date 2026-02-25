@@ -95,6 +95,19 @@ CACHE_DIR = PACKAGE_ROOT / "cache"
 WORKSPACE_MAX_AGE_HOURS = 24
 
 
+# =============================================================================
+# Sandbox Configuration (imported from ams.sandbox.config for convenience)
+# =============================================================================
+# Sandbox behaviour is controlled entirely via environment variables:
+#   AMS_SANDBOX_MODE=docker|subprocess   (default: docker)
+#   AMS_SANDBOX_IMAGE=ams-sandbox:latest
+#   AMS_SANDBOX_CPU_LIMIT=1.0
+#   AMS_SANDBOX_MEMORY_LIMIT=512m
+#   AMS_SANDBOX_PIDS_LIMIT=64
+#   AMS_SANDBOX_NETWORK_MODE=none
+# See ams.sandbox.config.SandboxConfig for full listing.
+
+
 __all__ = [
     # Scoring
     "ScoringMode",
@@ -126,4 +139,12 @@ __all__ = [
     "STATIC_DIR",
     "CACHE_DIR",
     "WORKSPACE_MAX_AGE_HOURS",
+    # Sandbox (re-exported for convenience)
+    "SANDBOX_DOCS",
 ]
+
+# Short doc-string constant so other modules can reference the env-vars.
+SANDBOX_DOCS = (
+    "Set AMS_SANDBOX_MODE=docker to enable Docker sandboxing. "
+    "See ams.sandbox.config for full configuration."
+)

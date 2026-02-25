@@ -39,6 +39,15 @@ class BrowserRunner:
 
 
 class PlaywrightRunner(BrowserRunner):
+    """Direct host-based Playwright runner (dev/test only).
+
+    .. deprecated:: 2.0
+        Production execution uses :class:`~ams.sandbox.playwright_docker.DockerPlaywrightRunner`.
+        This class is retained only for local development and unit tests that
+        inject it explicitly via the *runner* parameter of
+        :class:`PlaywrightAssessor`.
+    """
+
     def __init__(self, timeout_ms: int = 5000, output_cap: int = 10_000) -> None:
         self.timeout_ms = timeout_ms
         self.output_cap = output_cap
@@ -145,7 +154,11 @@ class PlaywrightAssessor(Assessor):
     name = "browser_automation"
 
     def __init__(self, runner: BrowserRunner | None = None, output_cap: int = 10_000) -> None:
-        self.runner = runner or PlaywrightRunner()
+        if runner is not None:
+            self.runner = runner
+        else:
+            from ams.sandbox.factory import get_browser_runner
+            self.runner = get_browser_runner()
         self.output_cap = output_cap
 
     # ------------------------------------------------------------------
@@ -163,7 +176,14 @@ class PlaywrightAssessor(Assessor):
         The screenshots are saved under ``artifacts/browser/<filename>.png``.
         This method is intentionally separated from the scoring pipeline so
         it can be called independently for the UX Review feature.
+
+        Execution goes through ``self.runner`` (a :class:`BrowserRunner`),
+        which respects the active sandbox mode.  When Docker sandboxing is
+        enabled, screenshots are captured inside the container.
         """
+        import logging as _logging
+        _logger = _logging.getLogger(__name__)
+
         html_files = sorted(context.discovered_files.get("html", []))
         if not html_files:
             return []
@@ -172,33 +192,39 @@ class PlaywrightAssessor(Assessor):
         shot_dir = context.workspace_path / "artifacts" / "browser"
         shot_dir.mkdir(parents=True, exist_ok=True)
 
-        try:
-            from playwright.sync_api import sync_playwright
-        except Exception:
-            return results
+        for html_path in html_files:
+            page_name = html_path.name  # e.g. "index.html"
+            safe_stem = page_name.replace(".", "_")  # e.g. "index_html"
+            shot_path = shot_dir / f"{safe_stem}.png"
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            for html_path in html_files:
-                page_name = html_path.name  # e.g. "index.html"
-                safe_stem = page_name.replace(".", "_")  # e.g. "index_html"
-                shot_path = shot_dir / f"{safe_stem}.png"
+            try:
+                # Run through the sandbox-aware BrowserRunner (interaction
+                # disabled — we only need the screenshot, not DOM diffs).
+                result = self.runner.run(
+                    html_path, context.workspace_path, interaction=False,
+                )
+                # The runner may produce its own screenshots; copy the
+                # first one to our canonical path if present.
+                if result.screenshot_paths:
+                    import shutil
+                    src = Path(result.screenshot_paths[0])
+                    if src.exists():
+                        shutil.copy2(src, shot_path)
+                        results.append({"page": page_name, "screenshot": shot_path})
+                        continue
 
-                page = browser.new_page()
-                try:
-                    page.goto(html_path.as_uri(), wait_until="load", timeout=self.runner.timeout_ms if hasattr(self.runner, 'timeout_ms') else 5000)
-                    page.screenshot(path=str(shot_path), full_page=True)
-                    results.append({"page": page_name, "screenshot": shot_path})
-                except Exception as exc:
-                    import logging
-                    logging.getLogger(__name__).warning(
-                        "Screenshot capture failed for %s: %s", page_name, exc,
+                # If the runner didn't capture a screenshot (e.g. Docker
+                # Playwright runner doesn't persist them), record what we
+                # can and skip this page.
+                if result.status in ("pass", "timeout"):
+                    _logger.info(
+                        "Browser ran %s (status=%s) but no screenshot file — skipping.",
+                        page_name, result.status,
                     )
-                finally:
-                    page.close()
-            browser.close()
-
-        return results
+            except Exception as exc:
+                _logger.warning(
+                    "Screenshot capture failed for %s: %s", page_name, exc,
+                )
 
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []

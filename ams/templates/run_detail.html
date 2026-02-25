@@ -42,6 +42,21 @@
 
 {# Single Run Report #}
 {% if report %}
+
+{# ── Environment Banner ── #}
+{% set env = report.get('environment') %}
+{% if env and (not env.get('php_available', true) or not env.get('browser_available', true) or not env.get('behavioural_tests_run', true) or not env.get('browser_tests_run', true)) %}
+<div class="card mb-lg" style="border-left:4px solid var(--warning, #e6a700); background:var(--warning-bg, #fff8e1); padding:1rem 1.25rem;">
+    <strong>⚠️ Runtime checks were unavailable</strong>
+    <p class="text-secondary mt-xs mb-0">
+        Some runtime checks were unavailable during this assessment.
+        {% if env.get('php_available') == false %}PHP was not detected.{% endif %}
+        {% if env.get('browser_available') == false %}Browser was not detected.{% endif %}
+        Scores may not fully reflect dynamic behaviour.
+    </p>
+</div>
+{% endif %}
+
 <div class="grid grid-auto mb-xl">
     <div class="card stat-card">
         {% set score = (report.scores.overall|default(0)) * 100 %}

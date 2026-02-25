@@ -166,6 +166,12 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
     # Register Jinja filters
     app.jinja_env.filters["clean_path"] = _clean_path
     app.jinja_env.globals["render_evidence_value"] = _render_evidence_value
+
+    # ── Sandbox status context processor ─────────────────────────────
+    @app.context_processor
+    def inject_sandbox_status():
+        from ams.sandbox.config import get_sandbox_status
+        return {"sandbox_status": get_sandbox_status()}
     
     _register_routes(app)
     return app
@@ -180,7 +186,20 @@ def _register_routes(app: Flask) -> None:
     def mark():
         if request.method == "GET":
             return render_template("mark.html", profiles=PROFILES.keys())
-        
+
+        # ── Sandbox enforcement ──────────────────────────────────────
+        from ams.sandbox.config import get_sandbox_status, get_sandbox_config, SandboxMode
+        _sb = get_sandbox_status()
+        _cfg = get_sandbox_config()
+        if _cfg.mode == SandboxMode.DOCKER and not _sb["enforced"]:
+            flash(
+                "Sandbox is required but Docker is not available. "
+                "Cannot process submissions without sandboxing. "
+                f"({_sb['message']})",
+                "error",
+            )
+            return render_template("mark.html", profiles=PROFILES.keys()), 503
+
         # Get form data
         file = request.files.get("submission")
         profile = request.form.get("profile", "frontend")
@@ -311,7 +330,20 @@ def _register_routes(app: Flask) -> None:
     def batch():
         if request.method == "GET":
             return render_template("batch.html", profiles=PROFILES.keys())
-        
+
+        # ── Sandbox enforcement ──────────────────────────────────────
+        from ams.sandbox.config import get_sandbox_status, get_sandbox_config, SandboxMode
+        _sb = get_sandbox_status()
+        _cfg = get_sandbox_config()
+        if _cfg.mode == SandboxMode.DOCKER and not _sb["enforced"]:
+            flash(
+                "Sandbox is required but Docker is not available. "
+                "Cannot process submissions without sandboxing. "
+                f"({_sb['message']})",
+                "error",
+            )
+            return render_template("batch.html", profiles=PROFILES.keys()), 503
+
         # Get form data
         file = request.files.get("submission")
         profile = request.form.get("profile", "frontend")

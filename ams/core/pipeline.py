@@ -89,6 +89,22 @@ class AssessmentPipeline:
         context = self._prepare_context(submission_path, workspace_path, profile)
         context.metadata["profile"] = profile
         context.metadata["scoring_mode"] = self.scoring_mode.value
+
+        # ── Record sandbox status in run metadata ────────────────────
+        try:
+            from ams.sandbox.config import get_sandbox_status
+            sandbox_status = get_sandbox_status()
+            context.metadata["sandbox"] = sandbox_status
+            if sandbox_status.get("enforced"):
+                logger.info("Pipeline running with Docker sandbox ACTIVE.")
+            else:
+                logger.warning(
+                    "Pipeline running WITHOUT full sandbox: %s",
+                    sandbox_status.get("message", ""),
+                )
+        except Exception as exc:
+            logger.warning("Unable to determine sandbox status: %s", exc)
+            context.metadata["sandbox"] = {"enforced": False, "message": str(exc)}
         
         # Add submission metadata to context
         if metadata:

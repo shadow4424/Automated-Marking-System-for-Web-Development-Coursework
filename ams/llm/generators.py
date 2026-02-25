@@ -173,5 +173,4 @@ Respond with JSON only: {{"summary": "...", "items": [{{"severity": "FAIL|WARN|I
 
 __all__ = [
     "FeedbackGenerator",
-    "FEEDBACK_SYSTEM_PROMPT",
 ]

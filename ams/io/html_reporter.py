@@ -5,7 +5,7 @@ assessment JSON data, including:
 - Circular score indicator
 - Feedback cards for failed rules
 - AI feedback badges
-- Vision analysis with screenshot display
+- Statistics and check summaries
 
 Usage:
     from ams.io.html_reporter import HTMLReporter
@@ -70,7 +70,6 @@ class HTMLReporter:
         
         # Build component sections
         findings_html = self._build_findings_section(findings, llm_analysis)
-        vision_html = self._build_vision_section(llm_analysis, screenshot_path, output_path)
         stats_html = self._build_stats_section(findings, llm_analysis)
         
         # Format timestamp
@@ -87,7 +86,6 @@ class HTMLReporter:
             grade_color=grade_color,
             grade_class=grade_class,
             findings_section=findings_html,
-            vision_section=vision_html,
             stats_section=stats_html,
         )
         
@@ -162,15 +160,6 @@ class HTMLReporter:
             cards_html.append(card)
         
         return "\n".join(cards_html)
-    
-    def _build_vision_section(
-        self,
-        llm_analysis: Dict,
-        screenshot_path: Optional[Path],
-        output_path: Optional[Path] = None,
-    ) -> str:
-        """Build the vision analysis section (legacy — now returns empty)."""
-        return ''
     
     def _build_stats_section(
         self,
@@ -453,64 +442,15 @@ class HTMLReporter:
             color: #4a148c;
         }}
         
-        /* Vision Section */
-        .vision-item {{
-            background: var(--card-bg);
-            border-radius: 8px;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }}
+        /* Vision Section - Removed (legacy) */
         
-        .vision-result {{
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }}
-        
-        .vision-status {{
-            font-size: 1rem;
-            font-weight: bold;
-            padding: 0.3rem 1rem;
-            border-radius: 20px;
-        }}
-        
-        .vision-status.pass {{
-            background: #e8f5e9;
-            color: var(--success);
-        }}
-        
-        .vision-status.fail {{
-            background: #ffebee;
-            color: var(--danger);
-        }}
-        
-        .vision-reason {{
-            color: var(--text-light);
-            margin-bottom: 1rem;
-        }}
-        
-        .vision-screenshot {{
-            max-width: 100%;
-            max-height: 300px;
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            margin-top: 1rem;
-        }}
-        
-        .no-issues, .no-vision {{
+        .no-issues {{
             text-align: center;
             padding: 2rem;
             background: #e8f5e9;
             border-radius: 8px;
             color: var(--success);
             font-size: 1.1rem;
-        }}
-        
-        .no-vision {{
-            background: #f5f5f5;
-            color: var(--text-light);
         }}
         
         footer {{
@@ -579,11 +519,6 @@ class HTMLReporter:
         <section>
             <h2 class="section-header">Issues & Feedback</h2>
             {findings_section}
-        </section>
-        
-        <section>
-            <h2 class="section-header">👁️ Vision Analysis</h2>
-            {vision_section}
         </section>
         
         <footer>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.metadata
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,12 +44,17 @@ class ReportWriter:
             # context.metadata might already have submission_metadata if passed in pipeline.run
 
         # Create Report Metadata
+        try:
+            _version = importlib.metadata.version("ams")
+        except importlib.metadata.PackageNotFoundError:
+            _version = "0.1.0-dev"
+
         report_meta = ReportMetadata(
             timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            pipeline_version="1.0-dev",  # TODO: Inject actual version
+            pipeline_version=_version,
             scoring_mode=scoring_mode,
             profile=profile,
-            provider=None, # TODO: Extract from context if available
+            provider=merged_metadata.get("llm_provider"),
             submission_metadata=metadata, 
         )
 

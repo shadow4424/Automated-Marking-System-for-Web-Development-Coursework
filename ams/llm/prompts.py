@@ -85,15 +85,6 @@ Response format — valid JSON, nothing else:
 
 Do NOT include any text outside the JSON object."""
 
-VISION_USER_PROMPT_TEMPLATE = """Requirement to verify:
-{requirement_context}
-
-Look at the screenshot carefully. Is this specific requirement visibly met?
-- If YES and you can see clear evidence of it → {{"result": "PASS", "reason": "..."}}
-- If NO, missing, broken, or unstyled → {{"result": "FAIL", "reason": "..."}}
-
-Respond with JSON only."""
-
 # ============================================================================
 # UX Review (qualitative, non-scoring)
 # ============================================================================
@@ -167,5 +158,6 @@ __all__ = [
     "PARTIAL_CREDIT_SYSTEM_PROMPT",
     "PARTIAL_CREDIT_USER_PROMPT_TEMPLATE",
     "VISION_SYSTEM_PROMPT",
-    "VISION_USER_PROMPT_TEMPLATE",
+    "UX_REVIEW_SYSTEM_PROMPT",
+    "UX_REVIEW_USER_PROMPT_TEMPLATE",
 ]

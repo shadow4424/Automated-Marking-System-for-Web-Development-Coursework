@@ -60,7 +60,8 @@
             <p class="form-hint">Maximum file size: 25 MB</p>
         </div>
 
-        <button type="submit" class="btn btn-primary btn-lg btn-block">
+        <button type="submit" class="btn btn-primary btn-lg btn-block"
+            {% if sandbox_status is defined and not sandbox_status.enforced and sandbox_status.mode == 'docker' %}disabled title="Docker sandbox must be running to process submissions"{% endif %}>
             Upload &amp; Mark
         </button>
     </form>

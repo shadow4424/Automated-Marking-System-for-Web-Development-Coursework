@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from pathlib import Path
 from typing import Mapping
@@ -10,6 +11,35 @@ from typing import Mapping
 import pytest
 
 from ams.core.pipeline import AssessmentPipeline
+
+
+# ---------------------------------------------------------------------------
+# Global sandbox fixture — force subprocess mode for all tests so that the
+# test suite does not require a running Docker daemon.  Individual sandbox
+# tests that need to test Docker behaviour mock the prerequisites instead.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _force_subprocess_sandbox():
+    """Ensure all tests run in subprocess sandbox mode by default.
+
+    This runs before *every* test so that sandbox config tests which
+    manipulate env vars cannot leak DOCKER mode into subsequent tests.
+    """
+    prev = os.environ.get("AMS_SANDBOX_MODE")
+    os.environ["AMS_SANDBOX_MODE"] = "subprocess"
+
+    from ams.sandbox.config import reset_sandbox_config
+    reset_sandbox_config()
+
+    yield
+
+    # Restore previous env var
+    if prev is None:
+        os.environ.pop("AMS_SANDBOX_MODE", None)
+    else:
+        os.environ["AMS_SANDBOX_MODE"] = prev
+    reset_sandbox_config()
 
 
 @pytest.fixture

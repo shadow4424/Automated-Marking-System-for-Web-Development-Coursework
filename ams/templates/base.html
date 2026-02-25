@@ -33,11 +33,27 @@
                 <a href="{{ url_for('runs') }}"
                     class="nav-link {% if request.endpoint == 'runs' %}active{% endif %}">Runs</a>
             </div>
+            {% if sandbox_status is defined %}
+            <div class="sandbox-indicator" title="{{ sandbox_status.message }}">
+                {% if sandbox_status.enforced %}
+                <span class="sandbox-badge sandbox-active">&#x1f6e1; Sandbox Active</span>
+                {% else %}
+                <span class="sandbox-badge sandbox-inactive">&#x26a0; Sandbox Inactive</span>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
     </nav>
 
     <main class="main-content">
         <div class="container">
+            {% if sandbox_status is defined and not sandbox_status.enforced and sandbox_status.mode == 'docker' %}
+            <div class="alert alert-error sandbox-warning animate-slideUp">
+                <strong>&#x26a0; Sandbox Not Available</strong> — {{ sandbox_status.message }}
+                Submissions will be blocked until Docker sandboxing is operational.
+            </div>
+            {% endif %}
+
             {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
             {% for category, message in messages %}
