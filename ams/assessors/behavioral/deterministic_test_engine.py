@@ -364,7 +364,7 @@ class DeterministicTestEngine(Assessor):
 
         inputs = self._discover_form_inputs(context) or {"name": "test", "email": "a@b.com"}
         wrapper_content = self._php_wrapper(inputs, target)
-        with tempfile.TemporaryDirectory(prefix="ams-php-wrapper-") as tmpdir:
+        with tempfile.TemporaryDirectory(prefix="ams-php-wrapper-", dir=str(target.parent)) as tmpdir:
             wrapper_path = Path(tmpdir) / "wrapper.php"
             wrapper_path.write_text(wrapper_content, encoding="utf-8")
             result = self.runner.run(

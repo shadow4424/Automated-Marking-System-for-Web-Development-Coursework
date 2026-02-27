@@ -36,7 +36,9 @@ from ams.llm.feedback import generate_feedback
 from ams.llm.scoring import evaluate_partial_credit, should_evaluate_partial_credit
 
 # Vision / UX Review
-from ams.core.config import VISION_ENABLED
+from ams.core.config import VISION_ENABLED, VISION_DELAY_BETWEEN_PAGES
+from ams.llm.schemas import UXReviewResult
+import time
 
 # Phase D: Conflict Resolution
 from ams.core.aggregation import resolve_conflicts
@@ -447,24 +449,82 @@ class AssessmentPipeline:
 
         for entry in page_shots:
             page_name: str = entry["page"]
-            shot_path: Path = entry["screenshot"]
+            shot_path = entry.get("screenshot")  # may be None
+
+            # ── Derive identifiers ───────────────────────────────────────────
+            safe_id = page_name.upper().replace(".", "_")
+            finding_id = f"UX_REVIEW.{safe_id}"
+
+            # ── Handle missing screenshot ────────────────────────────────────
+            if shot_path is None or not Path(str(shot_path)).exists():
+                logger.warning(
+                    "UX: failed %s error=no screenshot available", page_name,
+                )
+                ux_findings.append(
+                    Finding(
+                        id=finding_id,
+                        category="ux_review",
+                        message=f"UX review could not be completed for {page_name}: screenshot capture failed.",
+                        severity=Severity.INFO,
+                        evidence={
+                            "ux_review": {
+                                "page": page_name,
+                                "status": "NOT_EVALUATED",
+                                "feedback": "Screenshot capture failed — unable to perform visual review.",
+                            },
+                            "screenshot": None,
+                            "page": page_name,
+                        },
+                        source="VisionAnalyst.ux_review",
+                        finding_category=FindingCategory.VISUAL,
+                        profile=profile,
+                        required=False,
+                    )
+                )
+                ux_evidence.append({
+                    "page": page_name,
+                    "screenshot": None,
+                    "review": {
+                        "page": page_name,
+                        "status": "NOT_EVALUATED",
+                        "feedback": "Screenshot capture failed.",
+                    },
+                })
+                continue
+
+            shot_path = Path(shot_path)
 
             # ── Per-page context note ────────────────────────────────────────
             context_note = self._build_per_page_context(
                 page_name, html_lookup.get(page_name)
             )
 
-            review = analyst.review_ux(str(shot_path), page_name, context_note=context_note)
+            logger.debug(
+                "UX: evaluating %s screenshot=%s size=%d",
+                page_name, shot_path, shot_path.stat().st_size,
+            )
+
+            try:
+                review = analyst.review_ux(
+                    str(shot_path), page_name, context_note=context_note,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "UX: failed %s error=%s", page_name, exc,
+                )
+                review = UXReviewResult(
+                    page=page_name,
+                    status="NOT_EVALUATED",
+                    feedback=f"UX review failed: {exc}",
+                    screenshot=str(shot_path),
+                    model="unknown",
+                )
 
             # Build a workspace-relative screenshot path for the UI
             try:
                 rel_screenshot = shot_path.relative_to(context.workspace_path)
             except ValueError:
                 rel_screenshot = Path(shot_path.name)
-
-            # Derive a finding ID like UX_REVIEW.INDEX_HTML
-            safe_id = page_name.upper().replace(".", "_")
-            finding_id = f"UX_REVIEW.{safe_id}"
 
             review_dict = review.model_dump()
 
@@ -501,8 +561,19 @@ class AssessmentPipeline:
             })
 
             logger.info(
-                "UX Review for %s: %s", page_name, review.status,
+                "UX: success %s status=%s", page_name, review.status,
             )
+
+            # Optional cooldown between pages (default 0 = disabled)
+            if (
+                VISION_DELAY_BETWEEN_PAGES > 0
+                and entry is not page_shots[-1]
+            ):
+                logger.debug(
+                    "UX: sleeping %.1fs between pages",
+                    VISION_DELAY_BETWEEN_PAGES,
+                )
+                time.sleep(VISION_DELAY_BETWEEN_PAGES)
 
         return ux_findings, ux_evidence
 

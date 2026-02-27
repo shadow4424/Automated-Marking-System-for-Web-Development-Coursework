@@ -55,9 +55,10 @@ LLM_TIMEOUT = 120  # Seconds to wait for response
 
 # Phase 3: Vision Capabilities
 VISION_ENABLED = True  # Enable multimodal image+text requests
-VISION_MAX_IMAGE_SIZE = 1024  # Max dimension for image resizing (pixels)
+VISION_MAX_IMAGE_SIZE = 768  # Max dimension for image resizing (pixels)
 VISION_MAX_TOKENS = 2048  # Min context window for vision responses
 VISION_TIMEOUT = 180  # Seconds to wait for vision response (longer than text)
+VISION_DELAY_BETWEEN_PAGES = 0.0  # Optional cooldown (seconds) between UX reviews
 
 # OpenAI settings (for cloud fallback)
 LLM_OPENAI_MODEL = "gpt-4o-mini"
@@ -132,6 +133,7 @@ __all__ = [
     "VISION_MAX_IMAGE_SIZE",
     "VISION_MAX_TOKENS",
     "VISION_TIMEOUT",
+    "VISION_DELAY_BETWEEN_PAGES",
     # Paths
     "PACKAGE_ROOT",
     "WORKSPACE_ROOT",

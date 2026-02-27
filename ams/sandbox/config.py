@@ -58,7 +58,7 @@ class SandboxConfig:
     user: str = "1000:1000"         # UID:GID inside container
 
     # ── Playwright-specific ─────────────────────────────────────────
-    playwright_image: str = "mcr.microsoft.com/playwright/python:v1.40.0-jammy"
+    playwright_image: str = "ams-sandbox:latest"
     browser_timeout_ms: int = 8000  # Timeout for browser operations inside container
 
     @classmethod

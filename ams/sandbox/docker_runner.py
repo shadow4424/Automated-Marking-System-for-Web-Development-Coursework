@@ -101,6 +101,14 @@ class DockerCommandRunner(CommandRunner):
                 text=True,
                 timeout=timeout + 2,   # +2 s grace for container start
             )
+
+            # --- DEBUG BLOCK: Catch silent Docker daemon errors ---
+            if completed.returncode != 0:
+                print(f"\n\U0001f6a8 DOCKER DAEMON ERROR \U0001f6a8")
+                print(f"Command: {' '.join(docker_cmd)}")
+                print(f"Error details: {completed.stderr}\n")
+            # ----------------------------------------------------
+
             duration_ms = int((time.time() - start) * 1000)
             return RunResult(
                 exit_code=completed.returncode,
@@ -120,6 +128,9 @@ class DockerCommandRunner(CommandRunner):
                 timed_out=True,
             )
         except Exception as exc:
+            # --- DEBUG BLOCK: Catch Python execution errors ---
+            print(f"\n\U0001f6a8 DOCKER PYTHON EXCEPTION \U0001f6a8\n{exc}\n")
+            # --------------------------------------------------
             duration_ms = int((time.time() - start) * 1000)
             logger.error("Docker execution failed: %s", exc)
             return RunResult(
@@ -214,17 +225,15 @@ class DockerCommandRunner(CommandRunner):
         to the equivalent ``/submission/…`` path.
         """
         root_str = str(submission_root.resolve())
+        root_posix = submission_root.resolve().as_posix()
         rewritten: list[str] = []
         for arg in args:
             if root_str in arg:
-                rewritten.append(arg.replace(root_str, "/submission"))
-            else:
-                # Also handle posix-style paths
-                root_posix = submission_root.resolve().as_posix()
-                if root_posix in arg:
-                    rewritten.append(arg.replace(root_posix, "/submission"))
-                else:
-                    rewritten.append(arg)
+                # Replace host path and fix Windows backslashes → forward slashes
+                arg = arg.replace(root_str, "/submission").replace("\\", "/")
+            elif root_posix in arg:
+                arg = arg.replace(root_posix, "/submission")
+            rewritten.append(arg)
         return rewritten
 
 

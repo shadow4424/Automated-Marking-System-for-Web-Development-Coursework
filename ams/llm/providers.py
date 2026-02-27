@@ -34,6 +34,63 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# Safe Image Encoding (OOM Prevention)
+# =============================================================================
+
+
+def encode_image_safely(image_path: str, max_size: int = 768) -> str:
+    """Resize an image and compress to JPEG before base64-encoding.
+
+    This prevents Vision-LLM Out-of-Memory crashes that occur when
+    full-resolution, uncompressed screenshots are sent to 7B models
+    running in limited VRAM.
+
+    Args:
+        image_path: Path to the source image file.
+        max_size:   Maximum width/height in pixels (default 768).
+                    Images larger than this are down-scaled with
+                    Lanczos resampling while preserving aspect ratio.
+
+    Returns:
+        A base64-encoded string of the compressed JPEG image.
+    """
+    if not HAS_PIL:
+        raise ImportError(
+            "Pillow is required for safe image encoding. "
+            "Install with: pip install pillow"
+        )
+
+    jpeg_quality = 85
+
+    with Image.open(image_path) as img:
+        original_dims = img.size
+
+        # Convert to RGB (handles RGBA PNGs, palette images, etc.)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+
+        # Resize if the image exceeds max_size, maintaining aspect ratio
+        if max(img.width, img.height) > max_size:
+            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+
+        # Save to an in-memory buffer as compressed JPEG
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=jpeg_quality)
+
+        jpeg_bytes = buffer.tell()
+        encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+        logger.info(
+            "encode_image_safely: %s orig=%s final=%dx%d "
+            "format=JPEG quality=%d payload=%d bytes",
+            image_path, original_dims,
+            img.width, img.height,
+            jpeg_quality, jpeg_bytes,
+        )
+        return encoded
+
+
+# =============================================================================
 # Response Dataclass
 # =============================================================================
 
@@ -163,80 +220,55 @@ class LocalLMStudioProvider(LLMProvider):
                 raise ImportError("openai package not installed. Run: pip install openai")
         return self._client
     
-    def _encode_image(self, image_path: str) -> tuple[str, str]:
-        """Encode an image file as Base64, resizing if necessary.
-        
-        Images larger than VISION_MAX_IMAGE_SIZE are resized to prevent
-        LLM context overflow and crashes.
-        
+    def _encode_image(
+        self, image_path: str, max_size: int = VISION_MAX_IMAGE_SIZE,
+    ) -> tuple[str, str]:
+        """Encode an image file as a compressed JPEG Base64 string.
+
+        Resizes to *max_size* and compresses to JPEG (quality 85) to
+        prevent Vision-LLM Out-of-Memory crashes.  The *max_size*
+        parameter can be lowered on retry to further reduce tokens.
+
         Args:
             image_path: Path to the image file.
-            
+            max_size:   Maximum width/height in pixels.
+
         Returns:
             Tuple of (base64_string, mime_type)
-            
+
         Raises:
             FileNotFoundError: If the image doesn't exist.
         """
         path = Path(image_path)
-        
+
         if not path.exists():
             raise FileNotFoundError(f"Image not found: {image_path}")
-        
-        # Determine MIME type
+
+        if HAS_PIL:
+            base64_string = encode_image_safely(
+                str(path), max_size=max_size,
+            )
+            mime_type = "image/jpeg"
+            logger.debug(
+                "Encoded image (safe): %s -> JPEG, max_dim=%d",
+                path.name, max_size,
+            )
+            return base64_string, mime_type
+
+        # Fallback: PIL not available – send raw bytes (unchanged behaviour)
+        logger.warning(
+            "PIL not installed. Image will be sent at full resolution. "
+            "Install with: pip install pillow"
+        )
         mime_type, _ = mimetypes.guess_type(str(path))
         if mime_type is None or not mime_type.startswith("image/"):
             mime_type = "image/png"
-        
-        # Determine output format from MIME type
-        format_map = {
-            "image/png": "PNG",
-            "image/jpeg": "JPEG",
-            "image/jpg": "JPEG",
-            "image/gif": "GIF",
-            "image/webp": "WEBP",
-        }
-        output_format = format_map.get(mime_type, "PNG")
-        
-        # Read image data
+
         with open(path, "rb") as f:
             image_data = f.read()
-        
-        original_size = len(image_data)
-        
-        # Resize if PIL is available and image exceeds max size
-        if HAS_PIL:
-            img = Image.open(io.BytesIO(image_data))
-            original_dims = img.size
-            
-            max_dim = VISION_MAX_IMAGE_SIZE
-            if img.width > max_dim or img.height > max_dim:
-                # Resize maintaining aspect ratio
-                img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
-                
-                # Save to buffer
-                buffer = io.BytesIO()
-                # Handle RGBA to RGB conversion for JPEG
-                if output_format == "JPEG" and img.mode in ("RGBA", "P"):
-                    img = img.convert("RGB")
-                img.save(buffer, format=output_format)
-                image_data = buffer.getvalue()
-                
-                logger.info(
-                    f"Resized image: {path.name} from {original_dims} to {img.size}, "
-                    f"{original_size} -> {len(image_data)} bytes"
-                )
-            else:
-                logger.debug(f"Image {path.name} within size limits: {original_dims}")
-        else:
-            logger.warning(
-                "PIL not installed. Image will be sent at full resolution. "
-                "Install with: pip install pillow"
-            )
-        
+
         base64_string = base64.b64encode(image_data).decode("utf-8")
-        logger.debug(f"Encoded image: {path.name} ({len(image_data)} bytes, {mime_type})")
-        
+        logger.debug(f"Encoded image (raw): {path.name} ({len(image_data)} bytes, {mime_type})")
         return base64_string, mime_type
     
     def health_check(self) -> tuple[bool, str]:
@@ -259,6 +291,25 @@ class LocalLMStudioProvider(LLMProvider):
         except Exception as e:
             return False, f"LM Studio Error: {e}"
     
+    # Patterns in LM Studio / llama.cpp errors that indicate VRAM / slot
+    # exhaustion.  These are retryable with a smaller image payload.
+    _RETRYABLE_PATTERNS = (
+        "memory slot",
+        "failed to find a memory slot",
+        "failed to process image",
+        "channel error",
+    )
+
+    _MAX_ATTEMPTS = 3
+    _BACKOFF_SCHEDULE = (0.5, 1.5)  # seconds to sleep before attempt 2, 3
+    _SHRINK_FACTOR = 0.8            # reduce max_size by 20% each retry
+    _MIN_IMAGE_SIZE = 320           # never shrink below this
+
+    def _is_retryable(self, error_msg: str) -> bool:
+        """Return True if *error_msg* looks like a transient slot/OOM error."""
+        lower = error_msg.lower()
+        return any(p in lower for p in self._RETRYABLE_PATTERNS)
+
     def complete(
         self,
         prompt: str,
@@ -269,7 +320,11 @@ class LocalLMStudioProvider(LLMProvider):
         image_path: str | None = None,
     ) -> LLMResponse:
         """Generate a completion from the local LLM.
-        
+
+        For vision requests, implements adaptive retry with exponential
+        backoff and progressive image down-scaling when LM Studio reports
+        VRAM / context-slot exhaustion.
+
         Args:
             prompt: User prompt text.
             system_prompt: System prompt for behavior control.
@@ -286,10 +341,9 @@ class LocalLMStudioProvider(LLMProvider):
                 model=self._model,
                 error=str(e),
             )
-        
-        messages: list[dict[str, Any]] = []
-        
-        # Build system prompt for JSON mode
+
+        # ── Prepare system prompt (once) ─────────────────────────────────
+        effective_system_prompt = system_prompt
         if json_mode:
             json_instruction = (
                 "You MUST respond with valid JSON only. "
@@ -297,85 +351,133 @@ class LocalLMStudioProvider(LLMProvider):
                 "Do NOT wrap the JSON in markdown code blocks. "
                 "Do NOT say 'Here is the JSON' or similar."
             )
-            if system_prompt:
-                system_prompt = f"{system_prompt}\n\n{json_instruction}"
+            if effective_system_prompt:
+                effective_system_prompt = (
+                    f"{effective_system_prompt}\n\n{json_instruction}"
+                )
             else:
-                system_prompt = json_instruction
-        
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        
-        # Build user message (text-only or multimodal)
-        if image_path is not None:
-            # Phase 3: Multimodal message with image
-            try:
-                base64_image, mime_type = self._encode_image(image_path)
-                user_content = [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{mime_type};base64,{base64_image}"
-                        }
-                    }
-                ]
-                messages.append({"role": "user", "content": user_content})
-                logger.debug(f"Sending multimodal request with image: {image_path}")
-            except FileNotFoundError as e:
-                return LLMResponse(
-                    content="",
-                    model=self._model,
-                    error=str(e),
-                )
-        else:
-            # Text-only message
-            messages.append({"role": "user", "content": prompt})
-        
+                effective_system_prompt = json_instruction
+
+        # ── Retry loop (vision requests only) ────────────────────────────
+        current_max_size = VISION_MAX_IMAGE_SIZE
+        last_error: str = ""
         start_time = time.time()
-        
-        try:
-            response = client.chat.completions.create(
-                model=self._model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            latency_ms = int((time.time() - start_time) * 1000)
-            
-            content = response.choices[0].message.content or ""
-            
-            # Clean JSON if requested
-            if json_mode:
-                content = self._clean_json_response(content)
-            
-            usage = response.usage
-            
-            return LLMResponse(
-                content=content,
-                model=self._model,
-                input_tokens=usage.prompt_tokens if usage else 0,
-                output_tokens=usage.completion_tokens if usage else 0,
-                total_tokens=usage.total_tokens if usage else 0,
-                cached=False,
-                latency_ms=latency_ms,
-                raw_response=response.model_dump() if hasattr(response, "model_dump") else {},
-            )
-            
-        except Exception as e:
-            error_msg = str(e)
-            if "Connection" in error_msg or "refused" in error_msg.lower():
-                error_msg = (
-                    f"Cannot connect to LM Studio at {self._base_url}. "
-                    "Please ensure LM Studio is running and the server is started."
+
+        for attempt in range(1, self._MAX_ATTEMPTS + 1):
+            # ── Build a *fresh* messages list each attempt ───────────────
+            messages: list[dict[str, Any]] = []
+
+            if effective_system_prompt:
+                messages.append(
+                    {"role": "system", "content": effective_system_prompt}
                 )
-            
-            logger.error(f"Local LLM error: {error_msg}")
-            return LLMResponse(
-                content="",
-                model=self._model,
-                latency_ms=int((time.time() - start_time) * 1000),
-                error=error_msg,
+
+            if image_path is not None:
+                try:
+                    base64_image, mime_type = self._encode_image(
+                        image_path, max_size=current_max_size,
+                    )
+                    user_content: list[dict[str, Any]] = [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": (
+                                    f"data:{mime_type};base64,{base64_image}"
+                                )
+                            },
+                        },
+                    ]
+                    messages.append(
+                        {"role": "user", "content": user_content}
+                    )
+                    logger.debug(
+                        "Sending multimodal request [attempt %d/%d] "
+                        "image=%s max_size=%d",
+                        attempt, self._MAX_ATTEMPTS,
+                        image_path, current_max_size,
+                    )
+                except FileNotFoundError as e:
+                    return LLMResponse(
+                        content="",
+                        model=self._model,
+                        error=str(e),
+                    )
+            else:
+                messages.append({"role": "user", "content": prompt})
+
+            # ── Call the LLM ─────────────────────────────────────────────
+            try:
+                response = client.chat.completions.create(
+                    model=self._model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+
+                latency_ms = int((time.time() - start_time) * 1000)
+                content = response.choices[0].message.content or ""
+
+                if json_mode:
+                    content = self._clean_json_response(content)
+
+                usage = response.usage
+                return LLMResponse(
+                    content=content,
+                    model=self._model,
+                    input_tokens=usage.prompt_tokens if usage else 0,
+                    output_tokens=usage.completion_tokens if usage else 0,
+                    total_tokens=usage.total_tokens if usage else 0,
+                    cached=False,
+                    latency_ms=latency_ms,
+                    raw_response=(
+                        response.model_dump()
+                        if hasattr(response, "model_dump")
+                        else {}
+                    ),
+                )
+
+            except Exception as e:
+                last_error = str(e)
+
+                # ── Check for retryable slot/OOM error ───────────────────
+                if (
+                    image_path is not None
+                    and self._is_retryable(last_error)
+                    and attempt < self._MAX_ATTEMPTS
+                ):
+                    backoff = self._BACKOFF_SCHEDULE[attempt - 1]
+                    new_size = max(
+                        self._MIN_IMAGE_SIZE,
+                        int(current_max_size * self._SHRINK_FACTOR),
+                    )
+                    logger.warning(
+                        "LM Studio slot/OOM error (attempt %d/%d): %s. "
+                        "Retrying in %.1fs with max_size=%d",
+                        attempt, self._MAX_ATTEMPTS,
+                        last_error[:120], backoff, new_size,
+                    )
+                    time.sleep(backoff)
+                    current_max_size = new_size
+                    continue  # retry with smaller image
+
+                # ── Non-retryable or final attempt ───────────────────────
+                break
+
+        # ── All attempts exhausted or non-retryable error ────────────────
+        if "Connection" in last_error or "refused" in last_error.lower():
+            last_error = (
+                f"Cannot connect to LM Studio at {self._base_url}. "
+                "Please ensure LM Studio is running and the server is started."
             )
+
+        logger.error("Local LLM error: %s", last_error)
+        return LLMResponse(
+            content="",
+            model=self._model,
+            latency_ms=int((time.time() - start_time) * 1000),
+            error=last_error,
+        )
     
     @property
     def model_name(self) -> str:

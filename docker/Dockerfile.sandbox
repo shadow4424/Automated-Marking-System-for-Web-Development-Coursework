@@ -1,27 +1,31 @@
-FROM python:3.11-slim AS base
+FROM python:3.11-slim
 
 # ─── System packages ─────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
         php-cli \
         php-sqlite3 \
         sqlite3 \
-        curl \
+        nodejs \
+        npm \
+        chromium \
     && rm -rf /var/lib/apt/lists/*
 
+# ─── Playwright Python package (installed as root, readable by all) ───
+RUN pip install --no-cache-dir playwright pytest-playwright && \
+    chmod -R 755 /usr/local/lib/python3.11/site-packages/
+
 # ─── Unprivileged user ───────────────────────────────────────────────
-RUN groupadd -g 1000 amsuser && \
-    useradd  -u 1000 -g amsuser -m -s /bin/bash amsuser
+RUN useradd -m -u 1000 -s /bin/bash amsuser
 
 # ─── Writable workspace & tmp ────────────────────────────────────────
 RUN mkdir -p /submission /tmp/sandbox && \
-    chown amsuser:amsuser /tmp/sandbox
+    chown -R amsuser:amsuser /tmp/sandbox
 
 # ─── Default to unprivileged ─────────────────────────────────────────
 USER amsuser
 WORKDIR /tmp/sandbox
 
-# ─── Health-check ─────────────────────────────────────────────────────
-HEALTHCHECK --interval=60s --timeout=5s --retries=2 \
-    CMD php --version && sqlite3 --version
+# ─── Install Playwright browsers AS amsuser ──────────────────────────
+RUN playwright install chromium
 
 CMD ["/bin/bash"]

@@ -192,10 +192,15 @@ class PlaywrightAssessor(Assessor):
         shot_dir = context.workspace_path / "artifacts" / "browser"
         shot_dir.mkdir(parents=True, exist_ok=True)
 
-        for html_path in html_files:
+        for idx, html_path in enumerate(html_files):
             page_name = html_path.name  # e.g. "index.html"
             safe_stem = page_name.replace(".", "_")  # e.g. "index_html"
             shot_path = shot_dir / f"{safe_stem}.png"
+
+            _logger.debug(
+                "UX: evaluating page %d/%d %s",
+                idx + 1, len(html_files), page_name,
+            )
 
             try:
                 # Run through the sandbox-aware BrowserRunner (interaction
@@ -210,21 +215,39 @@ class PlaywrightAssessor(Assessor):
                     src = Path(result.screenshot_paths[0])
                     if src.exists():
                         shutil.copy2(src, shot_path)
+                        _logger.info(
+                            "UX: success %s screenshot=%s size=%d",
+                            page_name, shot_path,
+                            shot_path.stat().st_size,
+                        )
                         results.append({"page": page_name, "screenshot": shot_path})
                         continue
 
-                # If the runner didn't capture a screenshot (e.g. Docker
-                # Playwright runner doesn't persist them), record what we
-                # can and skip this page.
-                if result.status in ("pass", "timeout"):
-                    _logger.info(
-                        "Browser ran %s (status=%s) but no screenshot file — skipping.",
-                        page_name, result.status,
-                    )
+                # Runner didn't produce a usable screenshot — record the
+                # page with screenshot=None so the pipeline can still emit
+                # a NOT_EVALUATED finding instead of silently dropping it.
+                _logger.warning(
+                    "UX: failed %s error=no screenshot returned "
+                    "(runner status=%s, notes=%s)",
+                    page_name,
+                    getattr(result, "status", "?"),
+                    getattr(result, "notes", "")[:200],
+                )
+                results.append({"page": page_name, "screenshot": None})
+
             except Exception as exc:
                 _logger.warning(
-                    "Screenshot capture failed for %s: %s", page_name, exc,
+                    "UX: failed %s error=%s", page_name, exc,
                 )
+                results.append({"page": page_name, "screenshot": None})
+
+        _logger.info(
+            "capture_all_pages completed: %d/%d with screenshots",
+            sum(1 for r in results if r["screenshot"] is not None),
+            len(results),
+        )
+        return results
+
 
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []

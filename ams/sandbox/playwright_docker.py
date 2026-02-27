@@ -68,6 +68,40 @@ class DockerPlaywrightRunner(BrowserRunner):
                 try:
                     data = json.loads(result.stdout.strip().split("\n")[-1])
                     duration_ms = int((time.time() - start) * 1000)
+
+                    # Translate container screenshot path to host path
+                    host_screenshots: list[str] = []
+                    container_shot = data.get("screenshot_path", "")
+                    if container_shot:
+                        # /output/<name>.png → workdir/artifacts/browser/<name>.png
+                        shot_name = container_shot.rsplit("/", 1)[-1]
+                        host_shot = workdir / "artifacts" / "browser" / shot_name
+                        if host_shot.exists() and host_shot.stat().st_size > 500:
+                            host_screenshots.append(str(host_shot))
+                            logger.info(
+                                "Docker Playwright screenshot saved: %s (%d bytes)",
+                                host_shot, host_shot.stat().st_size,
+                            )
+                        else:
+                            logger.warning(
+                                "Screenshot path reported by container (%s) "
+                                "but host file missing or too small: %s (exists=%s)",
+                                container_shot, host_shot, host_shot.exists(),
+                            )
+
+                    # Fallback: scan output dir for any .png the container wrote
+                    if not host_screenshots:
+                        output_dir = workdir / "artifacts" / "browser"
+                        if output_dir.is_dir():
+                            for png in sorted(output_dir.glob("*.png")):
+                                if png.stat().st_size > 500:
+                                    host_screenshots.append(str(png))
+                                    logger.info(
+                                        "Docker Playwright screenshot found via scan: %s (%d bytes)",
+                                        png, png.stat().st_size,
+                                    )
+                                    break  # take the first valid one
+
                     return BrowserRunResult(
                         status=data.get("status", "error"),
                         url=data.get("url", ""),
@@ -77,7 +111,7 @@ class DockerPlaywrightRunner(BrowserRunner):
                         console_errors=data.get("console_errors", [])[:20],
                         network_errors=data.get("network_errors", [])[:20],
                         actions=data.get("actions", []),
-                        screenshot_paths=[],  # screenshots stay inside container
+                        screenshot_paths=host_screenshots,
                         notes=data.get("notes", ""),
                     )
                 except (json.JSONDecodeError, KeyError) as exc:
@@ -112,18 +146,42 @@ class DockerPlaywrightRunner(BrowserRunner):
 
     def _build_docker_cmd(self, workdir: Path, script_path: Path) -> list[str]:
         cfg = self.config
-        return [
+
+        # Ensure a writable output directory exists on the host so the
+        # container can persist screenshots back to the Windows filesystem.
+        output_dir = workdir / "artifacts" / "browser"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        cmd = [
             "docker", "run", "--rm",
             "--cpus", str(cfg.cpu_limit),
             "--memory", cfg.memory_limit,
-            "--pids-limit", str(cfg.pids_limit),
+            "--pids-limit", str(max(cfg.pids_limit, 256)),  # Chromium needs many threads
             "--network", cfg.network_mode,
-            "-v", f"{workdir.resolve()}:/workspace:ro",
-            "-v", f"{script_path.resolve()}:/run_pw.py:ro",
             "--user", cfg.user,
+            "--shm-size", "128m",
+            "-v", f"{workdir.resolve()}:/workspace:rw",
+            "-v", f"{output_dir.resolve()}:/output:rw",
+            "-v", f"{script_path.resolve()}:/run_pw.py:ro",
+            "--tmpfs", f"/tmp:rw,exec,size={cfg.tmpfs_size}",
+            "-e", "HOME=/tmp",
+            "-e", "PLAYWRIGHT_BROWSERS_PATH=/home/amsuser/.cache/ms-playwright",
+        ]
+
+        # Security hardening — NOTE: we intentionally skip --cap-drop ALL
+        # for Playwright containers because Chromium's internal sandbox
+        # requires default Linux capabilities (even with --no-sandbox flag).
+        # Docker network=none + user namespacing provides sufficient isolation.
+        if cfg.no_new_privileges:
+            cmd.extend(["--security-opt", "no-new-privileges"])
+        if cfg.seccomp_profile:
+            cmd.extend(["--security-opt", f"seccomp={cfg.seccomp_profile}"])
+
+        cmd.extend([
             cfg.playwright_image,
             "python", "/run_pw.py",
-        ]
+        ])
+        return cmd
 
     def _generate_script(
         self,
@@ -134,16 +192,21 @@ class DockerPlaywrightRunner(BrowserRunner):
         """Generate the Python script executed inside the container."""
         # Resolve the relative path from workdir to entry file
         try:
-            rel = entry_path.relative_to(workdir)
+            rel = entry_path.resolve().relative_to(workdir.resolve())
         except ValueError:
             rel = Path(entry_path.name)
+
+        # Build an absolute container path, forcing forward slashes
+        container_path = f"/workspace/{rel.as_posix()}".replace("\\", "/")
 
         timeout = self.timeout_ms
         cap = self.output_cap
         interact_flag = "True" if interaction else "False"
+        safe_stem = entry_path.stem.replace(".", "_")
 
         return textwrap.dedent(f"""\
             import json, sys, time
+            from pathlib import Path as _Path
             from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
             result = {{
@@ -154,7 +217,16 @@ class DockerPlaywrightRunner(BrowserRunner):
             }}
             try:
                 with sync_playwright() as p:
-                    browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
+                    browser = p.chromium.launch(
+                        executable_path="/usr/bin/chromium",
+                        headless=True,
+                        args=[
+                            "--disable-dev-shm-usage",
+                            "--no-sandbox",
+                            "--disable-setuid-sandbox",
+                            "--disable-gpu",
+                        ],
+                    )
                     page = browser.new_page()
 
                     console_errors, network_errors, actions = [], [], []
@@ -168,10 +240,10 @@ class DockerPlaywrightRunner(BrowserRunner):
                     page.on("console", _on_console)
                     page.on("requestfailed", _on_req_fail)
 
-                    url = "file:///workspace/{rel.as_posix()}"
+                    url = f"file://{container_path}".replace("\\\\", "/")
                     actions.append({{"type": "goto", "target": "{rel.name}"}})
                     start = time.time()
-                    page.goto(url, wait_until="load", timeout={timeout})
+                    page.goto(url, wait_until="domcontentloaded", timeout={timeout})
                     dom_before = page.content()[:{cap}]
 
                     interact = {interact_flag}
@@ -201,6 +273,17 @@ class DockerPlaywrightRunner(BrowserRunner):
                         dom_after = page.content()[:{cap}]
 
                     duration_ms = int((time.time() - start) * 1000)
+
+                    # Capture a full-page screenshot to the writable /output mount
+                    _shot_path = f"/output/{safe_stem}_{{int(time.time() * 1000)}}.png"
+                    try:
+                        page.screenshot(path=_shot_path, full_page=True)
+                        import os
+                        os.chmod(_shot_path, 0o644)  # ensure readable by host
+                    except Exception as _se:
+                        _shot_path = ""
+                        result["notes"] = f"Screenshot failed: {{_se}}"
+
                     browser.close()
 
                     result.update({{
@@ -210,6 +293,7 @@ class DockerPlaywrightRunner(BrowserRunner):
                         "console_errors": console_errors[:20],
                         "network_errors": network_errors[:20],
                         "actions": actions,
+                        "screenshot_path": _shot_path,
                     }})
             except PWTimeout:
                 result["status"] = "timeout"
