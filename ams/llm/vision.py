@@ -1,7 +1,7 @@
 """Vision Analysis Module for Screenshot-Based Grading.
 
 This module provides the VisionAnalyst class which uses Vision-capable LLMs
-(e.g., Qwen2-VL) to analyze screenshots and detect layout/visual issues.
+(e.g., Qwen2-VL) to analyse screenshots and detect layout/visual issues.
 
 Phase C: Updated with Pydantic schemas for reliability.
 Phase D: Added hash-based caching for performance.
@@ -97,7 +97,7 @@ def is_visually_empty(image_path: Path) -> bool:
 class VisionAnalyst:
     """High-level interface for visual grading using Vision LLMs.
     
-    This class provides methods to analyze screenshots against
+    This class provides methods to analyse screenshots against
     specific requirements and return structured VisionResult objects.
     
     Phase C Guarantees:
@@ -122,7 +122,7 @@ class VisionAnalyst:
     SYSTEM_PROMPT = VISION_SYSTEM_PROMPT
 
     def __init__(self, provider=None, cache_enabled: bool = None):
-        """Initialize the VisionAnalyst.
+        """Initialise the VisionAnalyst.
         
         Args:
             provider: Optional LLMProvider instance. If None, uses factory.
@@ -144,7 +144,7 @@ class VisionAnalyst:
         screenshot_path: str, 
         requirement_context: str
     ) -> VisionResult:
-        """Analyze a screenshot against a specific visual requirement.
+        """Analyse a screenshot against a specific visual requirement.
         
         This method NEVER raises exceptions. All errors result in
         a VisionResult with status=NOT_EVALUATED.
@@ -261,7 +261,7 @@ Respond with JSON only."""
         Returns:
             VisionResult with responsiveness assessment.
         """
-        # For now, analyze mobile screenshot with responsiveness requirement
+        # For now, analyse mobile screenshot with responsiveness requirement
         return self.detect_layout_issues(
             mobile_screenshot,
             "The page should be responsive and readable on mobile. "

@@ -193,7 +193,7 @@ class TestFindingSchemaConsistency:
     """Test that Finding schema is consistent across all assessors."""
 
     def test_all_findings_have_required_fields(self, tmp_path: Path):
-        """All findings should have standardized fields."""
+        """All findings should have standardised fields."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
         (submission_dir / "index.html").write_text(

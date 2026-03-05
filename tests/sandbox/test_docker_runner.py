@@ -39,7 +39,7 @@ def docker_config() -> SandboxConfig:
 
 
 class TestDockerCommandRunnerInit:
-    """Tests for DockerCommandRunner initialization."""
+    """Tests for DockerCommandRunner initialisation."""
 
     @patch("ams.sandbox.docker_runner.shutil.which", return_value=None)
     def test_raises_if_docker_not_on_path(self, _mock_which, docker_config):

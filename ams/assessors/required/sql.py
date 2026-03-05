@@ -10,7 +10,7 @@ from ams.core.profiles import ProfileSpec, RequiredSQLRule
 class SQLRequiredFeaturesAssessor(BaseRequiredAssessor):
     """Checks required SQL features based on profile spec.
     
-    Inherits common behavior from BaseRequiredAssessor:
+    Inherits common behaviour from BaseRequiredAssessor:
     - File reading and error handling
     - Snippet extraction
     - Finding creation

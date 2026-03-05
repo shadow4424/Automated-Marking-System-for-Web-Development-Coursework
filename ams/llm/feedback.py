@@ -79,7 +79,7 @@ def ask_llama(prompt: str, system_prompt: str = SYSTEM_PROMPT) -> str:
 
     Args:
         prompt: User prompt to send.
-        system_prompt: System prompt for behavior control.
+        system_prompt: System prompt for behaviour control.
 
     Returns:
         Raw response content from the LLM.

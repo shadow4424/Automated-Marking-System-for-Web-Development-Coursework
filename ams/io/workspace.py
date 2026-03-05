@@ -24,7 +24,7 @@ class WorkspaceManager:
     """
     
     def __init__(self, root: Optional[Path] = None):
-        """Initialize WorkspaceManager.
+        """Initialise WorkspaceManager.
         
         Args:
             root: Root directory for runs. Defaults to WORKSPACE_ROOT from config.

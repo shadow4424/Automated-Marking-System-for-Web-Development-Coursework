@@ -38,7 +38,7 @@ class SubmissionContext:
 
 @dataclass
 class Finding:
-    """Standardized finding with consistent schema for auditability."""
+    """Standardised finding with consistent schema for auditability."""
     id: str  # Unique finding code (e.g., "HTML.MISSING_FILES", "CSS.SYNTAX_ERROR")
     category: str  # Component category: "html", "css", "js", "php", "sql", "config", "visual"
     message: str  # Human-readable message
@@ -46,7 +46,7 @@ class Finding:
     evidence: Mapping[str, object]  # Structured evidence dict
     source: str  # Source assessor name
     
-    # Standardized fields for auditability
+    # Standardised fields for auditability
     finding_category: FindingCategory = field(default=FindingCategory.OTHER)  # Type: missing/syntax/structure/etc
     profile: str | None = None  # Profile name if applicable
     required: bool | None = None  # Whether component is required for profile

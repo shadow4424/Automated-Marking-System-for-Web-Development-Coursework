@@ -12,7 +12,7 @@ from ams.core.profiles import ProfileSpec, RequiredRule
 class HTMLRequiredElementsAssessor(BaseRequiredAssessor):
     """Checks required HTML elements based on profile spec using a real HTML parser.
     
-    Inherits common behavior from BaseRequiredAssessor:
+    Inherits common behaviour from BaseRequiredAssessor:
     - File reading and error handling
     - Snippet extraction
     - Finding creation

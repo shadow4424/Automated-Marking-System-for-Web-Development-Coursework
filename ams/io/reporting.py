@@ -79,7 +79,7 @@ class ReportWriter:
         return self.output_path
 
     def _serialize_finding(self, finding: Finding) -> dict:
-        """Serialize finding with all standardized fields."""
+        """Serialize finding with all standardised fields."""
         result = {
             "id": finding.id,
             "category": finding.category,

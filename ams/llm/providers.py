@@ -97,7 +97,7 @@ def encode_image_safely(image_path: str, max_size: int = 768) -> str:
 
 @dataclass
 class LLMResponse:
-    """Standardized response from any LLM provider."""
+    """Standardised response from any LLM provider."""
     content: str
     model: str
     input_tokens: int = 0
@@ -151,7 +151,7 @@ class LLMProvider(ABC):
         
         Args:
             prompt: User prompt text.
-            system_prompt: System prompt for behavior control.
+            system_prompt: System prompt for behaviour control.
             temperature: Sampling temperature (0.0 = deterministic).
             max_tokens: Maximum response tokens.
             json_mode: If True, enforce JSON output.
@@ -194,7 +194,7 @@ class LocalLMStudioProvider(LLMProvider):
         model: str = "qwen2.5-vl-7b-instruct",
         timeout: int = 120,
     ):
-        """Initialize local provider.
+        """Initialise local provider.
         
         Args:
             base_url: LM Studio API endpoint
@@ -327,7 +327,7 @@ class LocalLMStudioProvider(LLMProvider):
 
         Args:
             prompt: User prompt text.
-            system_prompt: System prompt for behavior control.
+            system_prompt: System prompt for behaviour control.
             temperature: Sampling temperature.
             max_tokens: Maximum response tokens.
             json_mode: If True, enforce JSON output.

@@ -112,7 +112,7 @@ class TestCSSHTMLConsistency:
             '<html><body><div id="existing">Hello</div></body></html>', encoding="utf-8"
         )
         (submission_dir / "style.css").write_text(
-            '#missing-id { color: red; }', encoding="utf-8"
+            '#missing-id { colour: red; }', encoding="utf-8"
         )
         
         report = _run_pipeline(submission_dir, profile="frontend")
@@ -151,7 +151,7 @@ class TestCSSHTMLConsistency:
             '<html><body><div id="myid" class="myclass">Hello</div></body></html>', encoding="utf-8"
         )
         (submission_dir / "style.css").write_text(
-            '#myid { color: red; } .myclass { margin: 0; }', encoding="utf-8"
+            '#myid { colour: red; } .myclass { margin: 0; }', encoding="utf-8"
         )
         
         report = _run_pipeline(submission_dir, profile="frontend")

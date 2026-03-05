@@ -362,7 +362,7 @@ def _process_one_submission(
         for f in findings:
             fid = f.get("id")
             if fid:
-                # Initialize if not seen before
+                # Initialise if not seen before
                 if fid not in finding_stats:
                     finding_stats[fid] = {"event_count": 0, "affected_submissions": set()}
                 # Increment event count

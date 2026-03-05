@@ -97,14 +97,14 @@ CRITICAL EVALUATION CRITERIA:
 
 1. AUTOMATIC FAIL (NEEDS_IMPROVEMENT) if ANY of these are present:
    • Plain unstyled HTML (default Times New Roman font, black text on white, no CSS styling)
-   • Text with poor contrast (light/neon/pastel colors on light backgrounds, dark text on dark backgrounds)
+   • Text with poor contrast (light/neon/pastel colours on light backgrounds, dark text on dark backgrounds)
    • Overlapping or chaotically positioned elements (images rotated randomly, boxes stacked on top of each other)
    • Tiny or unreadable font sizes
    • Broken or missing layout structure (content flows without organization)
    • Blank or nearly empty pages
 
 2. PASS ONLY IF ALL of these are met:
-   • Professional styling with intentional color scheme and typography
+   • Professional styling with intentional colour scheme and typography
    • Clear visual hierarchy with proper spacing and alignment
    • All text is easily readable with good contrast ratios
    • Layout uses proper structure (grid/flexbox patterns visible)
@@ -131,7 +131,7 @@ Respond ONLY with valid JSON. No markdown. You MUST provide THREE fields:
 
 1. status: "PASS" or "NEEDS_IMPROVEMENT"
 2. feedback: 2-3 sentences with specific observations about what you see
-3. improvement_recommendation: ONE clear, actionable step to improve the design (e.g., "Add a CSS stylesheet with a cohesive color palette and proper spacing", "Fix navigation contrast by using dark text on light backgrounds", "Align images in a grid layout and remove random rotations")
+3. improvement_recommendation: ONE clear, actionable step to improve the design (e.g., "Add a CSS stylesheet with a cohesive colour palette and proper spacing", "Fix navigation contrast by using dark text on light backgrounds", "Align images in a grid layout and remove random rotations")
 
 {{"status": "PASS" or "NEEDS_IMPROVEMENT", "feedback": "Your detailed, specific feedback.", "improvement_recommendation": "One specific actionable design improvement."}}"""
 

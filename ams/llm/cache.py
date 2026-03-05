@@ -21,7 +21,7 @@ class RequestCache:
     """
     
     def __init__(self, db_path: str | Path | None = None):
-        """Initialize the cache.
+        """Initialise the cache.
         
         Args:
             db_path: Path to SQLite database. Defaults to ams/cache.db
@@ -34,7 +34,7 @@ class RequestCache:
         self._init_db()
     
     def _init_db(self):
-        """Initialize the database schema."""
+        """Initialise the database schema."""
         with sqlite3.connect(self._db_path) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS llm_cache (

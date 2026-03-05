@@ -1,30 +1,111 @@
-# Automated-Marking-System-for-Web-Development-Coursework
-UoM 3rd Year Project
+# Automated Marking System (AMS) for Web Development Coursework
 
-## Examiner Quick Path
-1. Install with extras: `pip install -e .[demo]`
-2. Run the full demo (builds batch, runs marking, analytics, figures): `AMS_RUNS_ROOT=demo_out ams demo --profile fullstack`
-3. Start the web UI: `python -m ams.webui` then open http://localhost:5000
-4. In the UI: Run History → open the latest batch run → Analytics → download figures/CSV as needed.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-3100/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Web UI
+## Overview
 
-Run a simple teacher-facing web app:
+The AMS (Automated Marking System) is a powerful, pipeline-based assessment tool designed specifically for undergraduate web development coursework. It addresses the unique challenges of marking heterogeneous, multi-file submissions containing HTML, CSS, JavaScript, PHP, SQL, and API components.
 
+Unlike traditional automated markers that look for exact outputs, AMS combines **deterministic testing** (static analysis and behavioural tests) with **controlled, AI-assisted feedback**. This hybrid approach ensures fair, scalable, and reproducible marking while providing rich, explainable feedback that helps students understand their mistakes. 
+
+## Core Features
+
+- **Secure Sandboxing**: Student code is executed safely in isolated Docker containers, protecting the host environment from malicious or runaway scripts.
+- **Browser Automation & Vision**: Uses Playwright to simulate user interactions and LLM Vision capabilities to test visual layout, responsiveness, and dynamic DOM updates.
+- **Multi-Language Static Analysis**: Robust AST-based static analysis to detect necessary structures (e.g., HTML semantics, CSS rules, JavaScript control flow, PHP database queries) without enforcing rigid one-size-fits-all solutions.
+- **AI-Assisted Feedback**: Leverages advanced LLMs (local or API-driven) to summarise deterministic findings into clear, pedagogical feedback—crucially, without letting the AI dictate the final mark.
+- **Batch Analytics**: Evaluate entire cohorts simultaneously. Built-in analytics tools generate score distributions, highlight common failure modes, and provide detailed CSV exports for moderation.
+- **Web UI & CLI**: Instructors can use the intuitive `Flask`-based Web UI for quick, visual reviews, or rely on the powerful CLI for scriptable batch operations.
+
+## Architecture Pipeline
+
+Submissions flow through a rigorous, rule-based pipeline:
+1. **Acquisition & Normalisation**: Extracts and normalises student ZIP structures.
+2. **Setup**: Configures a secure Docker sandbox environment.
+3. **Static Assessors**: Analyses raw code (HTML/CSS parsing, simple AST checks).
+4. **Behavioural Assessors**: Executes deterministic tests against the sandbox (API endpoints, DB checks).
+5. **Playwright Assessors**: Spins up a headless browser for UI and interactivity checks.
+6. **LLM Arbitration**: Optional step where the LLM resolves conflicting signals (e.g., code looks right but UI is broken) and generates final feedback.
+7. **Reporting**: Outputs structured findings and final scores (1.0, 0.5, 0.0) into actionable reports.
+
+## Installation & Setup
+
+### Prerequisites
+- Python 3.10 or higher
+- Docker (required for secure sandboxing)
+- (Optional but recommended) Locally running LLM via LM Studio, or valid API keys (e.g., OpenAI) configured.
+
+### Developer Setup
+
+1. **Clone the repository:**
+   ```bash
+   git clone <repository_url>
+   cd Automated-Marking-System-for-Web-Development-Coursework
+   ```
+2. **Install the package and dependencies:**
+   To install the CLI and all necessary extras (including UI and plotting tools):
+   ```bash
+   pip install -e .[demo,dev]
+   ```
+3. **Install Playwright Browsers:**
+   Required for UI testing.
+   ```bash
+   playwright install
+   ```
+
+### Running the Docker Sandbox
+For the sandboxed behavioural tests to operate securely, you must have Docker running and the local sandbox image built.
+To build the required sandbox environment, run the provided script from the repository root:
+```bash
+./docker/build.sh
 ```
-python -m ams.webui
+If you start the `ams` CLI without the Docker image available, it will display a warning and instructions to either build it or bypass using `AMS_SANDBOX_MODE=subprocess`.
+
+## Usage Guide
+
+### 1. The Examiner Quick Path (Demo)
+Run a full end-to-end demonstration. This command processes sample batch submissions, calculates scores, generates analytics, and produces charts.
+```bash
+AMS_RUNS_ROOT=demo_out ams demo --profile fullstack
 ```
 
-Environment:
-- `AMS_RUNS_ROOT` (optional) to override where web runs are stored (default: `ams_web_runs/`).
-- `FLASK_ENV=development` for debug if needed.
+### 2. Using the Web UI
+Start the simple teacher-facing web application to upload and review individual submissions interactively:
+```bash
+FLASK_ENV=development python -m ams.webui
+```
+Then, open your browser to `http://localhost:5000`.
+- *Note: In the UI, navigate to "Run History" to review the latest batch runs and download detailed CSV analytics.*
 
-Features: single submission marking, batch marking with analytics, and run history with downloadable artifacts.
+### 3. Command Line Interface (CLI)
+The CLI allows integration with scripts and CI/CD systems.
 
-Browser automation (Playwright):
-- Install extras: `pip install "playwright>=1.41.0"` then `python -m playwright install` to fetch browsers.
-- In environments without Playwright browsers, browser tests will be skipped and marked accordingly in findings.
+**Mark a single submission:**
+```bash
+ams mark path/to/submission_dir -w path/to/workspace -o report.json --profile frontend
+```
 
-## Additional Commands
+**Run Batch Assessment:**
+Process a directory filled with student zip files or folders. Overrides global target paths.
+```bash
+ams batch path/to/input_folder --profile fullstack -o ams_batch_runs/run_name
+```
 
-Export figures from a batch run: `ams export-figures --run-id <run_id> --runs-root ams_batch_runs --out figures/`
+**Export Figures & Analytics:**
+After a batch run, generate visualisations to help with moderation.
+```bash
+ams export-figures --run-id <run_id> --runs-root ams_batch_runs --out output_figures/
+```
+
+## Contributing and Development
+
+The test suite ensures the stability of parsing, sandboxing, and assessment logic.
+Run all tests using pytest:
+```bash
+pytest
+```
+To run tests while skipping slow sandbox or LLM logic:
+```bash
+pytest -m "not slow"
+```

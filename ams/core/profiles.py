@@ -114,7 +114,7 @@ class ProfileSpec:
 
 def _build_profile_specs() -> Dict[str, ProfileSpec]:
     # HTML Rules - Expanded with comprehensive web development criteria
-    # Weights are normalized so that the total = 1.0 for the HTML component.
+    # Weights are normalised so that the total = 1.0 for the HTML component.
     # Categories: Structure, Metadata, Semantic, Interactive/Forms, Accessibility
     html_rules = [
         # === STRUCTURE (0.26 total) ===
@@ -318,7 +318,7 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
 
     
     # CSS Rules - Expanded with comprehensive web development criteria
-    # Weights are normalized so that the total = 1.0 for the CSS component.
+    # Weights are normalised so that the total = 1.0 for the CSS component.
     # Categories: Structure, Selectors, Layout, Styling, Responsiveness, Maintainability
     css_rules = [
         # === STRUCTURE (0.14 total) ===
@@ -488,7 +488,7 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
 
     
     # JavaScript Rules - Expanded with comprehensive web development criteria
-    # Weights are normalized so that the total = 1.0 for the JS component.
+    # Weights are normalised so that the total = 1.0 for the JS component.
     # Categories: Events, DOM, Functions, Control Flow, Validation, Async, Error Handling, Modern JS
     js_rules = [
         # === EVENTS (0.12 total) ===
@@ -647,7 +647,7 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
 
     
     # PHP Rules - Expanded with comprehensive web development criteria
-    # Weights are normalized so that the total = 1.0 for the PHP component.
+    # Weights are normalised so that the total = 1.0 for the PHP component.
     # Categories: Structure, Input, Output, Database, Sessions, Functions, Control Flow, Error Handling, Includes
     php_rules_fullstack = [
         # === STRUCTURE (0.06 total) ===
@@ -807,7 +807,7 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
 
     
     # SQL Rules - Expanded with comprehensive database design criteria
-    # Weights are normalized so that the total = 1.0 for the SQL component.
+    # Weights are normalised so that the total = 1.0 for the SQL component.
     # Categories: Schema, Constraints, CRUD, Queries, Advanced
     sql_rules_fullstack = [
         # === SCHEMA (0.30 total) ===
@@ -963,7 +963,7 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
 
 
     # Behavioral Rules - Dynamic runtime testing criteria
-    # Weights are normalized so that the total = 1.0 for the behavioral component.
+    # Weights are normalised so that the total = 1.0 for the behavioral component.
     behavioral_rules_frontend = [
         BehavioralRule(
             id="behavior.page_loads",

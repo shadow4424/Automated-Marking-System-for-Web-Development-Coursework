@@ -107,13 +107,13 @@ DEMO_CSS = '''/* Student Portfolio Stylesheet */
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     line-height: 1.6;
-    color: #333;
-    background-color: #f4f4f4;
+    colour: #333;
+    background-colour: #f4f4f4;
 }
 
 header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    colour: white;
     padding: 2rem;
     text-align: center;
 }
@@ -127,7 +127,7 @@ nav ul {
 }
 
 nav a {
-    color: white;
+    colour: white;
     text-decoration: none;
     font-weight: bold;
 }
@@ -147,7 +147,7 @@ section {
 }
 
 h2 {
-    color: #667eea;
+    colour: #667eea;
     margin-bottom: 1rem;
 }
 
@@ -174,7 +174,7 @@ input, textarea {
 
 button {
     background: #667eea;
-    color: white;
+    colour: white;
     padding: 0.75rem 2rem;
     border: none;
     border-radius: 4px;
@@ -190,7 +190,7 @@ footer {
     text-align: center;
     padding: 2rem;
     background: #333;
-    color: white;
+    colour: white;
 }
 '''
 

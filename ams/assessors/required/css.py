@@ -10,7 +10,7 @@ from ams.core.profiles import ProfileSpec, RequiredCSSRule
 class CSSRequiredRulesAssessor(BaseRequiredAssessor):
     """Checks required CSS rules based on profile spec.
     
-    Inherits common behavior from BaseRequiredAssessor:
+    Inherits common behaviour from BaseRequiredAssessor:
     - File reading and error handling
     - Snippet extraction
     - Finding creation
@@ -131,7 +131,7 @@ class CSSRequiredRulesAssessor(BaseRequiredAssessor):
             return count, count >= rule.min_count
         
         # === STANDARD NEEDLE COUNTING ===
-        # For simple needles like ".", "#", "@media", "color:"
+        # For simple needles like ".", "#", "@media", "colour:"
         count = content.count(rule.needle)
         return count, count >= rule.min_count
 

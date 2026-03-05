@@ -76,7 +76,7 @@ def golden_submission(build_submission) -> Path:
         """,
         "style.css": """
         body { font-family: sans-serif; }
-        header { background: #333; color: white; }
+        header { background: #333; colour: white; }
         @media (max-width: 600px) {
             header { background: #000; }
         }

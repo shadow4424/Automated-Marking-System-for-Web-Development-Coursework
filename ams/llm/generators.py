@@ -37,7 +37,7 @@ class FeedbackGenerator:
     """
     
     def __init__(self, provider=None):
-        """Initialize the generator.
+        """Initialise the generator.
         
         Args:
             provider: Optional LLMProvider instance. If None, uses factory default.
@@ -110,7 +110,7 @@ class FeedbackGenerator:
         if len(code_snippet) > 500:
             code_snippet = code_snippet[:500] + "\n... [truncated]"
         
-        prompt = f"""Analyze this failed rule check and provide structured feedback.
+        prompt = f"""Analyse this failed rule check and provide structured feedback.
 
 Rule: {rule_id}
 Category: {category}
@@ -128,13 +128,13 @@ Respond with JSON only: {{"summary": "...", "items": [{{"severity": "FAIL|WARN|I
     def _parse_response(self, raw_data: Dict[str, Any]) -> LLMFeedback:
         """Parse raw LLM response into validated LLMFeedback.
         
-        Handles various LLM output formats and normalizes them.
+        Handles various LLM output formats and normalises them.
         """
         # Handle case where LLM returns error object
         if "error" in raw_data and "summary" not in raw_data:
             raise ValueError(f"LLM returned error: {raw_data.get('error')}")
         
-        # Normalize items if LLM used different key names
+        # Normalise items if LLM used different key names
         items_raw = raw_data.get("items", [])
         if not isinstance(items_raw, list):
             items_raw = [items_raw] if items_raw else []
@@ -145,7 +145,7 @@ Respond with JSON only: {{"summary": "...", "items": [{{"severity": "FAIL|WARN|I
             if not isinstance(item, dict):
                 continue
             try:
-                # Normalize severity to uppercase
+                # Normalise severity to uppercase
                 if "severity" in item:
                     item["severity"] = str(item["severity"]).upper()
                     # Map common variations

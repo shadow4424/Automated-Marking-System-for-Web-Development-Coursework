@@ -57,7 +57,7 @@ class HTMLReporter:
         max_score = score_evidence.get("max_score", 100)
         percentage = (final_score / max_score * 100) if max_score > 0 else 0
         
-        # Determine grade color
+        # Determine grade colour
         if percentage >= 70:
             grade_color = "#4CAF50"  # Green
             grade_class = "excellent"
@@ -242,7 +242,7 @@ class HTMLReporter:
         body {{
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: var(--bg);
-            color: var(--text);
+            colour: var(--text);
             line-height: 1.6;
         }}
         
@@ -254,7 +254,7 @@ class HTMLReporter:
         
         header {{
             background: linear-gradient(135deg, var(--primary) 0%, #764ba2 100%);
-            color: white;
+            colour: white;
             padding: 2rem;
             text-align: center;
             margin-bottom: 2rem;
@@ -311,12 +311,12 @@ class HTMLReporter:
         .score-value {{
             font-size: 3rem;
             font-weight: bold;
-            color: {grade_color};
+            colour: {grade_color};
         }}
         
         .score-label {{
             font-size: 0.9rem;
-            color: var(--text-light);
+            colour: var(--text-light);
         }}
         
         /* Stats Grid */
@@ -348,7 +348,7 @@ class HTMLReporter:
         
         .stat-label {{
             font-size: 0.85rem;
-            color: var(--text-light);
+            colour: var(--text-light);
         }}
         
         /* Section Headers */
@@ -373,7 +373,7 @@ class HTMLReporter:
         }}
         
         .finding-card.severe {{
-            border-left-color: var(--danger);
+            border-left-colour: var(--danger);
         }}
         
         .finding-header {{
@@ -386,7 +386,7 @@ class HTMLReporter:
         
         .finding-id {{
             font-weight: bold;
-            color: var(--primary);
+            colour: var(--primary);
         }}
         
         .finding-category {{
@@ -394,7 +394,7 @@ class HTMLReporter:
             padding: 0.2rem 0.6rem;
             background: #e8eaf6;
             border-radius: 4px;
-            color: var(--primary-dark);
+            colour: var(--primary-dark);
         }}
         
         .severity-badge {{
@@ -407,16 +407,16 @@ class HTMLReporter:
         
         .severity-badge.severe {{
             background: #ffebee;
-            color: var(--danger);
+            colour: var(--danger);
         }}
         
         .severity-badge.warning {{
             background: #fff3e0;
-            color: var(--warning);
+            colour: var(--warning);
         }}
         
         .finding-message {{
-            color: var(--text);
+            colour: var(--text);
             margin-bottom: 1rem;
         }}
         
@@ -430,7 +430,7 @@ class HTMLReporter:
         .ai-badge {{
             display: inline-block;
             background: #9c27b0;
-            color: white;
+            colour: white;
             font-size: 0.75rem;
             padding: 0.2rem 0.6rem;
             border-radius: 4px;
@@ -439,7 +439,7 @@ class HTMLReporter:
         
         .ai-feedback p {{
             font-size: 0.9rem;
-            color: #4a148c;
+            colour: #4a148c;
         }}
         
         /* Vision Section - Removed (legacy) */
@@ -449,7 +449,7 @@ class HTMLReporter:
             padding: 2rem;
             background: #e8f5e9;
             border-radius: 8px;
-            color: var(--success);
+            colour: var(--success);
             font-size: 1.1rem;
         }}
         
@@ -457,7 +457,7 @@ class HTMLReporter:
             text-align: center;
             padding: 2rem;
             margin-top: 2rem;
-            color: var(--text-light);
+            colour: var(--text-light);
             font-size: 0.9rem;
         }}
         

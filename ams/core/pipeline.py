@@ -288,7 +288,7 @@ class AssessmentPipeline:
                     code_snippet = finding.evidence.get("content", "")[:500]
             
             # Log warning for findings with no code evidence ONLY if from required assessors where code is expected
-            # Skip warning for findings from Quality, Consistency, Behavior, Browser assessors which may not have code
+            # Skip warning for findings from Quality, Consistency, Behaviour, Browser assessors which may not have code
             is_required_assessor = any(
                 finding.id.upper().startswith(prefix) 
                 for prefix in ["HTML.REQ", "CSS.REQ", "JS.REQ", "PHP.REQ", "SQL.REQ"]
