@@ -23,6 +23,7 @@ from typing import Mapping
 from flask import (
     Flask,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -53,6 +54,7 @@ from ams.io.web_storage import (
 )
 from ams.tools.batch import run_batch
 from ams.analytics import build_teacher_analytics
+from ams.core.job_manager import job_manager
 
 MAX_UPLOAD_MB = 25
 ALLOWED_DOWNLOADS = {
@@ -303,28 +305,37 @@ def _register_routes(app: Flask) -> None:
                 },
             )
             
-            report_path = pipeline.run(
-                submission_path=submission_root,
-                workspace_path=run_dir,
-                profile=profile,
-                metadata=metadata.to_dict(),
-            )
-            
-            run_info = {
-                "id": run_id,
-                "mode": "mark",
-                "profile": profile,
-                "scoring_mode": scoring_mode.value,
-                "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                "report": report_path.name,
-                "summary": "summary.txt",
-                "student_id": student_id,
-                "assignment_id": assignment_id,
-                "original_filename": original_filename,
-            }
-            save_run_info(run_dir, run_info)
-            _write_run_index_mark(run_dir, run_info, report_path)
-            return redirect(url_for("run_detail", run_id=run_id))
+            # ── Background execution ─────────────────────────────────
+            # Heavy pipeline work is submitted to the thread pool so the
+            # HTTP request returns immediately with a job ID.
+            meta_dict = metadata.to_dict()
+
+            def _run_mark_job() -> dict:
+                """Executed in the thread pool."""
+                report_path = pipeline.run(
+                    submission_path=submission_root,
+                    workspace_path=run_dir,
+                    profile=profile,
+                    metadata=meta_dict,
+                )
+                run_info = {
+                    "id": run_id,
+                    "mode": "mark",
+                    "profile": profile,
+                    "scoring_mode": scoring_mode.value,
+                    "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "report": report_path.name,
+                    "summary": "summary.txt",
+                    "student_id": student_id,
+                    "assignment_id": assignment_id,
+                    "original_filename": original_filename,
+                }
+                save_run_info(run_dir, run_info)
+                _write_run_index_mark(run_dir, run_info, report_path)
+                return {"run_id": run_id}
+
+            job_id = job_manager.submit_job("single_mark", _run_mark_job)
+            return jsonify({"job_id": job_id, "status": "accepted", "run_id": run_id}), 202
         finally:
             # Clean up temporary file
             try:
@@ -426,38 +437,60 @@ def _register_routes(app: Flask) -> None:
             extracted.mkdir(parents=True, exist_ok=True)
             safe_extract_zip(upload_zip, extracted, max_size_mb=MAX_UPLOAD_MB)
             
-            # Run batch with metadata context
-            summary = run_batch(
-                submissions_dir=extracted,
-                out_root=run_dir,
-                profile=profile,
-                keep_individual_runs=True,
-                assignment_id=assignment_id,
-                scoring_mode=scoring_mode,
-            )
-            
-            run_info = {
-                "id": run_id,
-                "mode": "batch",
-                "profile": profile,
-                "scoring_mode": scoring_mode.value,
-                "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                "summary": "batch_summary.json",
-                "batch_summary": summary,
-                "assignment_id": assignment_id,
-                "original_filename": original_filename,
-            }
-            _write_batch_analytics(run_dir, profile, run_id)
-            _write_batch_reports_zip(run_dir, profile, run_id)
-            _write_run_index_batch(run_dir, run_info)
-            save_run_info(run_dir, run_info)
-            return redirect(url_for("run_detail", run_id=run_id))
+            # Run batch with metadata context — off the request thread
+            def _run_batch_job() -> dict:
+                """Executed in the thread pool."""
+                summary = run_batch(
+                    submissions_dir=extracted,
+                    out_root=run_dir,
+                    profile=profile,
+                    keep_individual_runs=True,
+                    assignment_id=assignment_id,
+                    scoring_mode=scoring_mode,
+                )
+                run_info = {
+                    "id": run_id,
+                    "mode": "batch",
+                    "profile": profile,
+                    "scoring_mode": scoring_mode.value,
+                    "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "summary": "batch_summary.json",
+                    "batch_summary": summary,
+                    "assignment_id": assignment_id,
+                    "original_filename": original_filename,
+                }
+                _write_batch_analytics(run_dir, profile, run_id)
+                _write_batch_reports_zip(run_dir, profile, run_id)
+                _write_run_index_batch(run_dir, run_info)
+                save_run_info(run_dir, run_info)
+                return {"run_id": run_id}
+
+            job_id = job_manager.submit_job("batch_mark", _run_batch_job)
+            return jsonify({"job_id": job_id, "status": "accepted", "run_id": run_id}), 202
         finally:
             # Clean up temporary file
             try:
                 tmp_zip_path.unlink()
             except Exception:
                 pass
+
+    # ── Job polling API ──────────────────────────────────────────────
+    @app.route("/api/jobs/<job_id>")
+    def job_status(job_id: str):
+        """Return the current state of a background job as JSON."""
+        status = job_manager.get_job_status(job_id)
+        if status is None:
+            return jsonify({"error": "Job not found"}), 404
+        # Convert Path results to strings for JSON serialisation
+        result = status.get("result")
+        if isinstance(result, dict):
+            status["result"] = {
+                k: str(v) if hasattr(v, "__fspath__") else v
+                for k, v in result.items()
+            }
+        elif hasattr(result, "__fspath__"):
+            status["result"] = str(result)
+        return jsonify(status)
 
     @app.route("/runs")
     def runs():

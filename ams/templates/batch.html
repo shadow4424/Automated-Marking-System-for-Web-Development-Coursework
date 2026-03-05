@@ -57,15 +57,4 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
-<script>
-    document.getElementById('batchForm').addEventListener('submit', function (e) {
-        const assignmentId = this.assignment_id.value.trim();
-
-        if (!/^[a-zA-Z0-9_-]{2,30}$/.test(assignmentId)) {
-            e.preventDefault();
-            alert('Assignment ID must be 2-30 alphanumeric characters');
-        }
-    });
-</script>
-{% endblock %}
+{% block scripts %}{% endblock %}

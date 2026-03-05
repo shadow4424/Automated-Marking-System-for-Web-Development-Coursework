@@ -68,23 +68,4 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
-<script>
-    document.getElementById('markForm').addEventListener('submit', function (e) {
-        const studentId = this.student_id.value.trim();
-        const assignmentId = this.assignment_id.value.trim();
-
-        if (!/^[a-zA-Z0-9_-]{3,20}$/.test(studentId)) {
-            e.preventDefault();
-            alert('Student ID must be 3-20 alphanumeric characters');
-            return;
-        }
-
-        if (!/^[a-zA-Z0-9_-]{2,30}$/.test(assignmentId)) {
-            e.preventDefault();
-            alert('Assignment ID must be 2-30 alphanumeric characters');
-            return;
-        }
-    });
-</script>
-{% endblock %}
+{% block scripts %}{% endblock %}
