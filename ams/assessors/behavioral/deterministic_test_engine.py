@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import sqlite3
 import subprocess
@@ -158,6 +159,7 @@ class DeterministicTestEngine(Assessor):
             findings.extend(self._php_smoke(context, profile, start))
             findings.extend(self._php_form_injection(context, profile, start))
             findings.extend(self._sql_sqlite_exec(context, profile, start))
+            findings.extend(self._api_exec(context, profile, start))
         except Exception as exc:  # pragma: no cover - defensive guard
             findings.append(
                 self._finding(
@@ -556,6 +558,234 @@ class DeterministicTestEngine(Assessor):
             )
         ]
 
+    # ------------------------------------------------------------------ API execution
+    def _api_exec(
+        self, context: SubmissionContext, profile: str, started_at: float
+    ) -> List[Finding]:
+        """Execute API endpoint tests against PHP files that serve JSON."""
+        component_required = False
+
+        # --- Discovery: find files that look like API endpoints ---
+        api_endpoint = self._discover_api_endpoint(context)
+
+        if not api_endpoint:
+            evidence = BehaviouralEvidence(
+                test_id="API.EXEC",
+                component="php",
+                status="skipped",
+                exit_code=None,
+                stdout="",
+                stderr="No API endpoint discovered",
+                duration_ms=0,
+                inputs={"reason": "no_api_endpoint"},
+                outputs={},
+            )
+            self._record_evidence(context, evidence)
+            return [
+                self._finding(
+                    code=BID.API_EXEC_SKIPPED,
+                    message="API execution test skipped (no API endpoint discovered).",
+                    severity=Severity.SKIPPED,
+                    profile=profile,
+                    required=component_required,
+                    evidence={"reason": "no_api_endpoint"},
+                )
+            ]
+
+        if not self._is_php_available():
+            evidence = BehaviouralEvidence(
+                test_id="API.EXEC",
+                component="php",
+                status="skipped",
+                exit_code=None,
+                stdout="",
+                stderr="php binary not available",
+                duration_ms=0,
+                inputs={"target": str(api_endpoint)},
+                outputs={},
+            )
+            self._record_evidence(context, evidence)
+            return [
+                self._finding(
+                    code=BID.API_EXEC_SKIPPED,
+                    message="API execution test skipped; php binary not available.",
+                    severity=Severity.SKIPPED,
+                    profile=profile,
+                    required=component_required,
+                    evidence={"target": str(api_endpoint), "php_available": False},
+                )
+            ]
+
+        if self._timed_out(started_at):
+            evidence = BehaviouralEvidence(
+                test_id="API.EXEC",
+                component="php",
+                status="timeout",
+                exit_code=None,
+                stdout="",
+                stderr="Overall behavioural stage timeout reached",
+                duration_ms=int((time.time() - started_at) * 1000),
+                inputs={"target": str(api_endpoint)},
+                outputs={},
+            )
+            self._record_evidence(context, evidence)
+            return [
+                self._finding(
+                    code=BID.API_EXEC_TIMEOUT,
+                    message="API execution test timed out (stage timeout).",
+                    severity=Severity.FAIL,
+                    profile=profile,
+                    required=component_required,
+                    evidence={"target": str(api_endpoint)},
+                )
+            ]
+
+        # --- Execute API test via PHP wrapper ---
+        findings: List[Finding] = []
+        test_start = time.time()
+
+        # Build a wrapper that simulates a GET request and captures JSON output
+        wrapper_content = self._api_wrapper(api_endpoint)
+        with tempfile.TemporaryDirectory(
+            prefix="ams-api-exec-", dir=str(api_endpoint.parent)
+        ) as tmpdir:
+            wrapper_path = Path(tmpdir) / "api_test_wrapper.php"
+            wrapper_path.write_text(wrapper_content, encoding="utf-8")
+
+            result = self.runner.run(
+                ["php", "-d", "display_errors=1", "-f", str(wrapper_path)],
+                timeout=self.per_test_timeout,
+                cwd=api_endpoint.parent,
+            )
+
+        duration_ms = int((time.time() - test_start) * 1000)
+
+        if result.timed_out:
+            evidence = BehaviouralEvidence(
+                test_id="API.EXEC",
+                component="php",
+                status="timeout",
+                exit_code=result.exit_code,
+                stdout=self._cap(result.stdout),
+                stderr=self._cap(result.stderr),
+                duration_ms=duration_ms,
+                inputs={"target": str(api_endpoint)},
+                outputs={"timed_out": True},
+            )
+            self._record_evidence(context, evidence)
+            return [
+                self._finding(
+                    code=BID.API_EXEC_TIMEOUT,
+                    message="API execution test timed out.",
+                    severity=Severity.FAIL,
+                    profile=profile,
+                    required=component_required,
+                    evidence={"target": str(api_endpoint), "duration_ms": duration_ms},
+                )
+            ]
+
+        # --- Validate output ---
+        output = result.stdout.strip()
+        fatal_seen = self._contains_fatal(result.stderr) or self._contains_fatal(
+            result.stdout
+        )
+
+        json_valid = False
+        parsed_json = None
+        if output:
+            try:
+                parsed_json = json.loads(output)
+                json_valid = True
+            except (json.JSONDecodeError, ValueError):
+                json_valid = False
+
+        api_passed = (
+            result.exit_code == 0 and not fatal_seen and json_valid
+        )
+        status = "pass" if api_passed else "fail"
+
+        evidence = BehaviouralEvidence(
+            test_id="API.EXEC",
+            component="php",
+            status=status,
+            exit_code=result.exit_code,
+            stdout=self._cap(result.stdout),
+            stderr=self._cap(result.stderr),
+            duration_ms=duration_ms,
+            inputs={"target": str(api_endpoint)},
+            outputs={
+                "json_valid": json_valid,
+                "response_type": type(parsed_json).__name__ if parsed_json is not None else None,
+            },
+        )
+        self._record_evidence(context, evidence)
+
+        # JSON validity sub-finding
+        if json_valid:
+            findings.append(
+                self._finding(
+                    code=BID.API_JSON_VALID,
+                    message="API endpoint returned valid JSON.",
+                    severity=Severity.INFO,
+                    profile=profile,
+                    required=component_required,
+                    evidence={
+                        "target": str(api_endpoint),
+                        "response_type": type(parsed_json).__name__,
+                    },
+                )
+            )
+        elif output:
+            findings.append(
+                self._finding(
+                    code=BID.API_JSON_INVALID,
+                    message="API endpoint output is not valid JSON.",
+                    severity=Severity.WARN,
+                    profile=profile,
+                    required=component_required,
+                    evidence={
+                        "target": str(api_endpoint),
+                        "output_preview": output[:500],
+                    },
+                )
+            )
+
+        # Overall pass/fail
+        if api_passed:
+            findings.append(
+                self._finding(
+                    code=BID.API_EXEC_PASS,
+                    message="API endpoint executed and returned valid JSON response.",
+                    severity=Severity.INFO,
+                    profile=profile,
+                    required=component_required,
+                    evidence={
+                        "target": str(api_endpoint),
+                        "exit_code": result.exit_code,
+                        "duration_ms": duration_ms,
+                    },
+                )
+            )
+        else:
+            findings.append(
+                self._finding(
+                    code=BID.API_EXEC_FAIL,
+                    message="API endpoint execution failed or returned invalid response.",
+                    severity=Severity.WARN,
+                    profile=profile,
+                    required=component_required,
+                    evidence={
+                        "target": str(api_endpoint),
+                        "exit_code": result.exit_code,
+                        "json_valid": json_valid,
+                        "fatal_error": fatal_seen,
+                        "stderr_first_line": self._first_line(result.stderr),
+                    },
+                )
+            )
+
+        return findings
+
     # ------------------------------------------------------------------ helpers
     def _execute_sql_files(self, sql_files: Iterable[Path]) -> dict:
         statements: List[tuple[Path, str]] = []
@@ -674,6 +904,76 @@ class DeterministicTestEngine(Assessor):
             except Exception:
                 continue
         return actions
+
+    def _discover_api_endpoint(self, context: SubmissionContext) -> Path | None:
+        """Find PHP files that appear to be API endpoints (return JSON)."""
+        import re as _re
+
+        php_files = sorted(context.discovered_files.get("php", []))
+        if not php_files:
+            return None
+
+        # First pass: look for files with explicit JSON content-type + json_encode
+        for path in php_files:
+            try:
+                content = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            lowered = content.lower()
+            has_json_header = bool(_re.search(
+                r"""header\s*\(\s*['"]Content-Type\s*:\s*application/json""",
+                content,
+                _re.IGNORECASE,
+            ))
+            has_json_encode = "json_encode(" in lowered
+            if has_json_header and has_json_encode:
+                return path
+
+        # Second pass: look for files with json_encode + method routing
+        for path in php_files:
+            try:
+                content = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            lowered = content.lower()
+            has_json_encode = "json_encode(" in lowered
+            has_method_routing = bool(_re.search(
+                r"""\$_SERVER\s*\[\s*['"]REQUEST_METHOD""",
+                content,
+            ))
+            if has_json_encode and has_method_routing:
+                return path
+
+        # Third pass: preferred API-style filenames
+        api_names = ["api.php", "endpoint.php", "rest.php", "data.php", "service.php"]
+        for name in api_names:
+            for path in php_files:
+                if path.name.lower() == name:
+                    return path
+
+        return None
+
+    def _api_wrapper(self, target: Path) -> str:
+        """Generate a PHP wrapper that simulates a GET request to an API endpoint.
+
+        The wrapper:
+        1. Sets REQUEST_METHOD to GET
+        2. Captures all output via ob_start/ob_get_clean
+        3. Uses __DIR__ relative include so it works inside Docker containers
+        """
+        # Use relative path from the wrapper's temp dir up to the target's parent
+        target_name = target.name
+        return (
+            "<?php\n"
+            "$_SERVER['REQUEST_METHOD'] = 'GET';\n"
+            "$_SERVER['CONTENT_TYPE'] = 'application/json';\n"
+            "$_GET = [];\n"
+            "$_POST = [];\n"
+            "ob_start();\n"
+            f"include __DIR__ . '/../{target_name}';\n"
+            "$output = ob_get_clean();\n"
+            "echo $output;\n"
+        )
 
     def _record_evidence(self, context: SubmissionContext, evidence: BehaviouralEvidence) -> None:
         # Ensure standard stage label and capped outputs

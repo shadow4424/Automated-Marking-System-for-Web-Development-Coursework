@@ -359,6 +359,76 @@ class PHPStaticAssessor(Assessor):
                         )
                     )
 
+            # ---- API Usage Analysis ----
+            findings.extend(self._analyse_api_usage(path, content))
+
+        return findings
+
+    # ------------------------------------------------------------------ API
+    def _analyse_api_usage(self, path, content: str) -> List[Finding]:
+        """Detect and report API endpoint patterns in PHP files."""
+        lowered = content.lower()
+        findings: List[Finding] = []
+
+        # --- Endpoint Recognition ---
+        # Detect files returning JSON instead of HTML
+        json_content_type = bool(re.search(
+            r"""header\s*\(\s*['"]Content-Type\s*:\s*application/json""",
+            content,
+            re.IGNORECASE,
+        ))
+        json_encode_count = lowered.count("json_encode(")
+
+        # --- Method Routing ---
+        # Detect $_SERVER['REQUEST_METHOD'] routing
+        method_routing = bool(re.search(
+            r"""\$_SERVER\s*\[\s*['"]REQUEST_METHOD['"]\s*\]""",
+            content,
+        ))
+
+        # --- Input Parsing ---
+        # Detect raw JSON input consumption
+        php_input = bool(re.search(
+            r"""file_get_contents\s*\(\s*['"]php://input['"]""",
+            content,
+            re.IGNORECASE,
+        ))
+        json_decode_count = lowered.count("json_decode(")
+
+        # --- HTTP Response Codes ---
+        http_response_code = bool(re.search(
+            r"""http_response_code\s*\(""",
+            content,
+            re.IGNORECASE,
+        ))
+
+        is_api_endpoint = json_content_type and json_encode_count > 0
+        has_api_patterns = (
+            is_api_endpoint or method_routing or php_input or json_decode_count > 0
+        )
+
+        if has_api_patterns:
+            findings.append(
+                Finding(
+                    id=PID.API_EVIDENCE,
+                    category="php",
+                    message="API endpoint patterns detected in PHP file.",
+                    severity=Severity.INFO,
+                    evidence={
+                        "path": str(path),
+                        "json_content_type_header": json_content_type,
+                        "json_encode_count": json_encode_count,
+                        "method_routing": method_routing,
+                        "php_input_read": php_input,
+                        "json_decode_count": json_decode_count,
+                        "http_response_code": http_response_code,
+                        "is_api_endpoint": is_api_endpoint,
+                    },
+                    source=self.name,
+                    finding_category=FindingCategory.EVIDENCE,
+                )
+            )
+
         return findings
 
 

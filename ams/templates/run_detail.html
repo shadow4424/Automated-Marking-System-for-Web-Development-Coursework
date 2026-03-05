@@ -45,8 +45,10 @@
 
 {# ── Environment Banner ── #}
 {% set env = report.get('environment') %}
-{% if env and (not env.get('php_available', true) or not env.get('browser_available', true) or not env.get('behavioural_tests_run', true) or not env.get('browser_tests_run', true)) %}
-<div class="card mb-lg" style="border-left:4px solid var(--warning, #e6a700); background:var(--warning-bg, #fff8e1); padding:1rem 1.25rem;">
+{% if env and (not env.get('php_available', true) or not env.get('browser_available', true) or not
+env.get('behavioural_tests_run', true) or not env.get('browser_tests_run', true)) %}
+<div class="card mb-lg"
+    style="border-left:4px solid var(--warning, #e6a700); background:var(--warning-bg, #fff8e1); padding:1rem 1.25rem;">
     <strong>⚠️ Runtime checks were unavailable</strong>
     <p class="text-secondary mt-xs mb-0">
         Some runtime checks were unavailable during this assessment.
@@ -83,8 +85,8 @@
 {% set diagnostics = report.diagnostics|default([]) %}
 {# Count directly from findings so stat cards match the visible event list #}
 {% set ns = namespace(
-    total=0, passed=0, failed=0, warnings=0, skipped=0,
-    ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
+total=0, passed=0, failed=0, warnings=0, skipped=0,
+ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
 ) %}
 {% for f in findings %}
 {% set sev = f.severity|default('WARN')|upper %}
@@ -177,8 +179,25 @@
     <button type="button" class="btn btn-secondary btn-sm" data-collapse-all>Collapse All</button>
 </div>
 
-{# Findings List #}
+{# Findings List – split into GRADED and INFORMATIONAL #}
+{# UX review findings are excluded here; they render in their own section below #}
+{% set graded_findings = [] %}
+{% set info_findings = [] %}
 {% for finding in findings %}
+{% set has_ux = finding.evidence is mapping and finding.evidence.ux_review is mapping %}
+{% if has_ux %}
+{# Skip – rendered in the dedicated UX & Usability Review section #}
+{% elif finding.finding_category|default('other') == 'evidence' %}
+{% if info_findings.append(finding) %}{% endif %}
+{% else %}
+{% if graded_findings.append(finding) %}{% endif %}
+{% endif %}
+{% endfor %}
+
+{# ── Graded Tests ── #}
+{% if graded_findings %}
+<h2 class="section-header mb-md">📝 Graded Tests</h2>
+{% for finding in graded_findings %}
 {% set sev = finding.severity|default('WARN')|upper %}
 <div class="finding finding-{{ 'pass' if sev == 'INFO' else ('fail' if sev == 'FAIL' else ('skipped' if sev == 'SKIPPED' else 'warn')) }}"
     data-severity="{{ sev|lower }}" data-rule-id="{{ finding.id|default('') }}"
@@ -274,7 +293,8 @@
             <div class="text-xs text-muted mb-xs uppercase tracking-wide">Screenshot</div>
             {% set ev_ss = finding.evidence.screenshot|replace('\\', '/') %}
             {% if batch_submission_id is defined and batch_submission_id %}
-            {% set ev_ss_url = url_for('run_artifact', run_id=run_id, relpath='runs/' ~ batch_submission_id ~ '/' ~ ev_ss) %}
+            {% set ev_ss_url = url_for('run_artifact', run_id=run_id, relpath='runs/' ~ batch_submission_id ~ '/' ~
+            ev_ss) %}
             {% else %}
             {% set ev_ss_url = url_for('run_artifact', run_id=run_id, relpath=ev_ss) %}
             {% endif %}
@@ -288,21 +308,22 @@
         {% if finding.evidence is mapping %}
         <div class="finding-evidence details-content">
             <dl class="evidence-dl">
-            {% for key, val in finding.evidence.items() %}
-                {% if key not in ('snippet', 'content', 'llm_feedback', 'hybrid_score', 'vision_analysis', 'screenshot') %}
+                {% for key, val in finding.evidence.items() %}
+                {% if key not in ('snippet', 'content', 'llm_feedback', 'hybrid_score', 'vision_analysis', 'screenshot')
+                %}
                 <div class="evidence-row">
                     <dt>{{ key }}</dt>
                     <dd>
-                    {% if val is mapping %}
+                        {% if val is mapping %}
                         <dl class="evidence-dl evidence-dl--nested">
-                        {% for k2, v2 in val.items() %}
+                            {% for k2, v2 in val.items() %}
                             <div class="evidence-row">
                                 <dt>{{ k2 }}</dt>
                                 <dd>{{ render_evidence_value(v2) }}</dd>
                             </div>
-                        {% endfor %}
+                            {% endfor %}
                         </dl>
-                    {% elif val is iterable and val is not string %}
+                        {% elif val is iterable and val is not string %}
                         {% if val %}
                         <ul class="evidence-list">
                             {% for item in val %}
@@ -312,13 +333,13 @@
                         {% else %}
                         <span class="text-muted">—</span>
                         {% endif %}
-                    {% else %}
+                        {% else %}
                         {{ render_evidence_value(val) }}
-                    {% endif %}
+                        {% endif %}
                     </dd>
                 </div>
                 {% endif %}
-            {% endfor %}
+                {% endfor %}
             </dl>
         </div>
         {% elif finding.evidence is iterable and finding.evidence is not string %}
@@ -335,12 +356,123 @@
     </details>
     {% endif %}
 </div>
-{% else %}
+{% endfor %}
+{% endif %}
+
+{# ── Informational Evidence (no score) ── #}
+{% if info_findings %}
+<h2 class="section-header mb-md mt-xl">📋 Informational Evidence</h2>
+<p class="text-muted text-sm mb-md">These findings are collected for informational purposes and <strong>do not</strong>
+    affect the final grade.</p>
+{% for finding in info_findings %}
+{% set sev = finding.severity|default('WARN')|upper %}
+<div class="finding finding-{{ 'pass' if sev == 'INFO' else ('fail' if sev == 'FAIL' else ('skipped' if sev == 'SKIPPED' else 'warn')) }}"
+    data-severity="{{ sev|lower }}" data-rule-id="{{ finding.id|default('') }}"
+    data-component="{{ finding.category|default('') }}" {% if sev=='SKIPPED'
+    %}style="opacity: 0.5; border-left-color: #6b7280;" {% endif %}>
+    <div class="finding-header">
+        <span class="finding-id">{{ finding.id|default('unknown') }}</span>
+        {% if finding.category %}
+        <span class="badge badge-info">{{ finding.category|upper }}</span>
+        {% endif %}
+        <span
+            class="badge badge-{{ 'success' if sev == 'INFO' else ('danger' if sev == 'FAIL' else ('secondary' if sev == 'SKIPPED' else 'warning')) }}"
+            {% if sev=='SKIPPED' %}style="background: #374151; color: #9ca3af;" {% endif %}>
+            {{ sev }}
+        </span>
+        {# No score badge for informational findings #}
+    </div>
+    <p class="finding-message">{{ finding.message|default('No message') }}</p>
+
+    {# Evidence (collapsible) #}
+    {% if finding.evidence %}
+    <details>
+        <summary class="text-sm">Evidence</summary>
+
+        {% if finding.evidence.snippet %}
+        <div class="mt-sm mb-sm p-sm bg-gray-900 rounded border border-gray-700">
+            <div class="text-xs text-muted mb-xs uppercase tracking-wide">Code Snippet</div>
+            <pre
+                class="text-xs font-mono text-gray-300 overflow-x-auto p-0 m-0 bg-transparent border-0">{{ finding.evidence.snippet }}</pre>
+        </div>
+        {% endif %}
+
+        {% if finding.evidence.screenshot %}
+        <div class="mt-sm mb-sm">
+            <div class="text-xs text-muted mb-xs uppercase tracking-wide">Screenshot</div>
+            {% set ev_ss = finding.evidence.screenshot|replace('\\', '/') %}
+            {% if batch_submission_id is defined and batch_submission_id %}
+            {% set ev_ss_url = url_for('run_artifact', run_id=run_id, relpath='runs/' ~ batch_submission_id ~ '/' ~
+            ev_ss) %}
+            {% else %}
+            {% set ev_ss_url = url_for('run_artifact', run_id=run_id, relpath=ev_ss) %}
+            {% endif %}
+            <img src="{{ ev_ss_url }}" class="max-w-full rounded border border-gray-700 shadow-sm"
+                alt="Evidence Screenshot"
+                onerror="this.parentElement.innerHTML='<p class=\'text-muted text-sm\'>Screenshot unavailable</p>'">
+        </div>
+        {% endif %}
+
+        {% if finding.evidence is mapping %}
+        <div class="finding-evidence details-content">
+            <dl class="evidence-dl">
+                {% for key, val in finding.evidence.items() %}
+                {% if key not in ('snippet', 'content', 'llm_feedback', 'hybrid_score', 'vision_analysis', 'screenshot')
+                %}
+                <div class="evidence-row">
+                    <dt>{{ key }}</dt>
+                    <dd>
+                        {% if val is mapping %}
+                        <dl class="evidence-dl evidence-dl--nested">
+                            {% for k2, v2 in val.items() %}
+                            <div class="evidence-row">
+                                <dt>{{ k2 }}</dt>
+                                <dd>{{ render_evidence_value(v2) }}</dd>
+                            </div>
+                            {% endfor %}
+                        </dl>
+                        {% elif val is iterable and val is not string %}
+                        {% if val %}
+                        <ul class="evidence-list">
+                            {% for item in val %}
+                            <li>{{ render_evidence_value(item) }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                        {% else %}
+                        {{ render_evidence_value(val) }}
+                        {% endif %}
+                    </dd>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </dl>
+        </div>
+        {% elif finding.evidence is iterable and finding.evidence is not string %}
+        <div class="finding-evidence details-content">
+            <ul class="evidence-list">
+                {% for item in finding.evidence %}
+                <li>{{ render_evidence_value(item) }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% else %}
+        <pre class="finding-evidence details-content">{{ finding.evidence }}</pre>
+        {% endif %}
+    </details>
+    {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+{% if not graded_findings and not info_findings %}
 <div class="empty-state card">
     <h3 class="empty-state-title">No findings</h3>
     <p class="empty-state-text">The submission has no specific findings to display.</p>
 </div>
-{% endfor %}
+{% endif %}
 
 {# ── UX Review Section (qualitative, non-scoring) ── #}
 {% set ux_findings = [] %}
@@ -365,7 +497,8 @@
                 <span class="finding-id">Page: {{ finding.evidence.page|default('unknown') }}</span>
                 <span class="badge badge-info">UX REVIEW</span>
             </div>
-            <span class="vision-status vision-status--{{ 'pass' if ux.status == 'PASS' else ('fail' if ux.status == 'NEEDS_IMPROVEMENT' else 'unknown') }}">
+            <span
+                class="vision-status vision-status--{{ 'pass' if ux.status == 'PASS' else ('fail' if ux.status == 'NEEDS_IMPROVEMENT' else 'unknown') }}">
                 {{ ux.status|default('UNKNOWN') }}
             </span>
         </div>
@@ -399,8 +532,9 @@
         {% set ss_url = url_for('run_artifact', run_id=run_id, relpath=raw_ss) %}
         {% endif %}
         <div class="vision-screenshot-wrap">
-            <img src="{{ ss_url }}" alt="Screenshot of {{ finding.evidence.page|default('page') }}" class="vision-screenshot"
-                 onerror="this.parentElement.innerHTML='<p class=\'text-muted text-sm\'>Screenshot unavailable</p>'">
+            <img src="{{ ss_url }}" alt="Screenshot of {{ finding.evidence.page|default('page') }}"
+                class="vision-screenshot"
+                onerror="this.parentElement.innerHTML='<p class=\'text-muted text-sm\'>Screenshot unavailable</p>'">
         </div>
         {% endif %}
     </div>
@@ -466,7 +600,7 @@
         {% endif %}
         <div class="vision-screenshot-wrap">
             <img src="{{ ss_url }}" alt="Page Screenshot" class="vision-screenshot"
-                 onerror="this.parentElement.innerHTML='<p class=\'text-muted text-sm\'>Screenshot unavailable</p>'">
+                onerror="this.parentElement.innerHTML='<p class=\'text-muted text-sm\'>Screenshot unavailable</p>'">
         </div>
         {% endif %}
     </div>

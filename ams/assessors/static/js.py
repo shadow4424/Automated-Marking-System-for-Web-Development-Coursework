@@ -169,6 +169,9 @@ class JSStaticAssessor(Assessor):
                 )
             )
 
+            # ---- API Usage Analysis ----
+            findings.extend(self._analyse_api_usage(path, content))
+
             # Code Quality Checks
             # 1. Detect global variables (variables declared without var/let/const)
             # This is a heuristic - look for assignments that aren't in function scope
@@ -335,6 +338,76 @@ class JSStaticAssessor(Assessor):
                         finding_category=FindingCategory.STRUCTURE,
                     )
                 )
+
+        return findings
+
+    # ------------------------------------------------------------------ API
+    def _analyse_api_usage(self, path, content: str) -> List[Finding]:
+        """Detect and report API usage patterns in JavaScript files."""
+        lowered = content.lower()
+        findings: List[Finding] = []
+
+        # --- HTTP Method Extraction ---
+        # Match method specifications inside fetch options objects
+        method_pattern = re.compile(
+            r"""(?:method\s*:\s*['"])(GET|POST|PUT|DELETE|PATCH)(?:['"])""",
+            re.IGNORECASE,
+        )
+        http_methods_found = [m.upper() for m in method_pattern.findall(content)]
+
+        # --- Endpoint Detection ---
+        # Look for URL-like strings inside fetch() calls
+        endpoint_pattern = re.compile(
+            r"""fetch\s*\(\s*['"`]([^'"`]+)['"`]""",
+            re.IGNORECASE,
+        )
+        endpoints_found = endpoint_pattern.findall(content)
+        api_style_endpoints = [
+            ep for ep in endpoints_found
+            if "/api" in ep.lower() or ep.startswith("http") or ep.startswith("/")
+        ]
+
+        # --- Payload & Headers ---
+        json_stringify_count = lowered.count("json.stringify")
+        content_type_json = lowered.count("application/json")
+        headers_count = lowered.count("headers")
+
+        # --- Response Handling ---
+        response_json_count = lowered.count(".json(")
+        catch_count = lowered.count(".catch(")
+        then_count = lowered.count(".then(")
+        response_ok_count = content.count("response.ok") + content.count("!response.ok")
+
+        has_api_usage = bool(
+            http_methods_found
+            or api_style_endpoints
+            or json_stringify_count
+            or response_json_count
+        )
+
+        if has_api_usage:
+            findings.append(
+                Finding(
+                    id=JID.API_EVIDENCE,
+                    category="js",
+                    message="API usage patterns detected in JavaScript.",
+                    severity=Severity.INFO,
+                    evidence={
+                        "path": str(path),
+                        "http_methods": http_methods_found,
+                        "endpoints": api_style_endpoints[:10],
+                        "json_stringify_count": json_stringify_count,
+                        "content_type_json": content_type_json,
+                        "headers_count": headers_count,
+                        "response_json_count": response_json_count,
+                        "catch_count": catch_count,
+                        "then_count": then_count,
+                        "response_ok_count": response_ok_count,
+                    },
+                    source=self.name,
+                    finding_category=FindingCategory.EVIDENCE,
+                )
+            )
 
         return findings
 

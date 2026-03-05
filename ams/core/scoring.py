@@ -643,6 +643,13 @@ class ScoringEngine:
         any_fail = php_smoke in {"fail", "timeout", "error"} or php_form in {"fail", "timeout", "error"}
         static_attempt = has_usage or tag_ok or syntax_ok or syntax_partial
 
+        # API behavioural results
+        api_exec = behavioural_view.get("api_exec")
+        if api_exec == "pass":
+            any_pass = True
+        elif api_exec in {"fail", "timeout", "error"}:
+            any_fail = True
+
         if any_pass:
             base_score = max(base_score, 0.5)
             rationale.append({"rule": "php_behavioural_pass", "finding_ids": ["BEHAVIOUR.PHP_SMOKE_PASS" if php_smoke == "pass" else "BEHAVIOUR.PHP_FORM_RUN_PASS"], "note": "Behavioural PHP test passed"})
@@ -765,6 +772,8 @@ class ScoringEngine:
                 view["php_form"] = status
             elif test_id.startswith("SQL.SQLITE_EXEC"):
                 view["sql_exec"] = status
+            elif test_id.startswith("API.EXEC"):
+                view["api_exec"] = status
             if status == "skipped" and getattr(ev, "component", "") == "php":
                 view["php_skipped_env"] = True
         return view
