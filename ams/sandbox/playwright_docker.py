@@ -31,10 +31,14 @@ class DockerPlaywrightRunner(BrowserRunner):
         config: SandboxConfig | None = None,
         timeout_ms: int | None = None,
         output_cap: int = 10_000,
+        container_retain: bool = False,
+        run_id: str | None = None,
     ) -> None:
         self.config = config or get_sandbox_config()
         self.timeout_ms = timeout_ms or self.config.browser_timeout_ms
         self.output_cap = output_cap
+        self.container_retain = container_retain
+        self.run_id = run_id
 
     def run(
         self,
@@ -42,7 +46,31 @@ class DockerPlaywrightRunner(BrowserRunner):
         workdir: Path,
         interaction: bool = True,
     ) -> BrowserRunResult:
-        """Run browser automation inside a Docker container."""
+        """Run browser automation inside a Docker container.
+
+        Retries once on timeout to handle transient Docker/Chromium delays.
+        """
+        result = self._run_once(entry_path, workdir, interaction)
+        if result.status == "timeout":
+            logger.info(
+                "Docker Playwright timed out — retrying once (entry=%s)",
+                entry_path.name,
+            )
+            result = self._run_once(entry_path, workdir, interaction)
+            if result.status == "timeout":
+                logger.warning(
+                    "Docker Playwright timed out on retry (entry=%s)",
+                    entry_path.name,
+                )
+        return result
+
+    def _run_once(
+        self,
+        entry_path: Path,
+        workdir: Path,
+        interaction: bool = True,
+    ) -> BrowserRunResult:
+        """Single attempt at running browser automation."""
         start = time.time()
 
         # Build the Python script that will run inside the container
@@ -126,9 +154,22 @@ class DockerPlaywrightRunner(BrowserRunner):
 
         except subprocess.TimeoutExpired:
             duration_ms = int((time.time() - start) * 1000)
+            # Try to salvage any screenshots the container wrote before timeout
+            salvaged: list[str] = []
+            output_dir = workdir / "artifacts" / "browser"
+            if output_dir.is_dir():
+                for png in sorted(output_dir.glob("*.png")):
+                    if png.stat().st_size > 500:
+                        salvaged.append(str(png))
+                        logger.info(
+                            "Salvaged screenshot after timeout: %s (%d bytes)",
+                            png, png.stat().st_size,
+                        )
+                        break
             return BrowserRunResult(
                 status="timeout",
                 duration_ms=duration_ms,
+                screenshot_paths=salvaged or None,
                 notes="Docker Playwright container timed out",
             )
         except Exception as exc:
@@ -153,7 +194,16 @@ class DockerPlaywrightRunner(BrowserRunner):
         output_dir.mkdir(parents=True, exist_ok=True)
 
         cmd = [
-            "docker", "run", "--rm",
+            "docker", "run",
+        ]
+
+        # Container retention: skip --rm and assign a name when threats detected
+        if self.container_retain and self.run_id:
+            cmd.extend(["--name", f"ams-threat-pw-{self.run_id}"])
+        else:
+            cmd.append("--rm")
+
+        cmd.extend([
             "--cpus", str(cfg.cpu_limit),
             "--memory", cfg.memory_limit,
             "--pids-limit", str(max(cfg.pids_limit, 256)),  # Chromium needs many threads
@@ -166,7 +216,7 @@ class DockerPlaywrightRunner(BrowserRunner):
             "--tmpfs", f"/tmp:rw,exec,size={cfg.tmpfs_size}",
             "-e", "HOME=/tmp",
             "-e", "PLAYWRIGHT_BROWSERS_PATH=/home/amsuser/.cache/ms-playwright",
-        ]
+        ])
 
         # Security hardening — NOTE: we intentionally skip --cap-drop ALL
         # for Playwright containers because Chromium's internal sandbox
@@ -298,6 +348,19 @@ class DockerPlaywrightRunner(BrowserRunner):
             except PWTimeout:
                 result["status"] = "timeout"
                 result["notes"] = "Page load timeout inside container"
+                # Still try to capture whatever rendered before the timeout
+                try:
+                    _shot_path = f"/output/{safe_stem}_timeout_{{int(time.time() * 1000)}}.png"
+                    page.screenshot(path=_shot_path, full_page=True, timeout=3000)
+                    import os
+                    os.chmod(_shot_path, 0o644)
+                    result["screenshot_path"] = _shot_path
+                except Exception:
+                    pass
+                try:
+                    browser.close()
+                except Exception:
+                    pass
             except Exception as e:
                 result["status"] = "error"
                 result["notes"] = str(e)

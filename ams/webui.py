@@ -171,7 +171,13 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
     @app.context_processor
     def inject_sandbox_status():
         from ams.sandbox.config import get_sandbox_status
-        return {"sandbox_status": get_sandbox_status()}
+        ctx = {"sandbox_status": get_sandbox_status()}
+        try:
+            from ams.sandbox.forensics import list_retained_containers
+            ctx["threat_containers"] = list_retained_containers()
+        except Exception:
+            ctx["threat_containers"] = []
+        return ctx
     
     _register_routes(app)
     return app
@@ -766,6 +772,37 @@ def _register_routes(app: Flask) -> None:
         elif filename.startswith("score_buckets"):
             dl_name = f"score_buckets_{profile}_{run_id}.csv"
         return send_file(target, as_attachment=True, download_name=dl_name)
+
+    # ── Threats dashboard ────────────────────────────────────────────
+
+    @app.route("/threats")
+    def threats():
+        from ams.sandbox.forensics import list_retained_containers
+        containers = list_retained_containers()
+        return render_template("threats.html", containers=containers)
+
+    @app.route("/threats/<container_name>/inspect")
+    def threat_inspect(container_name: str):
+        from ams.sandbox.forensics import inspect_container
+        info = inspect_container(container_name)
+        if info is None:
+            flash("Container not found or not inspectable.", "error")
+            return redirect(url_for("threats"))
+        return render_template(
+            "threats.html",
+            containers=[],
+            inspected=info,
+        )
+
+    @app.route("/threats/<container_name>/cleanup", methods=["POST"])
+    def threat_cleanup(container_name: str):
+        from ams.sandbox.forensics import cleanup_container
+        ok = cleanup_container(container_name)
+        if ok:
+            flash(f"Container {container_name} removed.", "success")
+        else:
+            flash(f"Failed to remove container {container_name}.", "error")
+        return redirect(url_for("threats"))
 
 
 app = create_app()

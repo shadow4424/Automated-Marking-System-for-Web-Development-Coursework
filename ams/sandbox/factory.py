@@ -26,7 +26,12 @@ class SandboxUnavailableError(RuntimeError):
     """Raised when Docker sandboxing is required but not available."""
 
 
-def get_command_runner(config: SandboxConfig | None = None) -> CommandRunner:
+def get_command_runner(
+    config: SandboxConfig | None = None,
+    *,
+    container_retain: bool = False,
+    run_id: str | None = None,
+) -> CommandRunner:
     """Return a ``CommandRunner`` appropriate for the configured sandbox mode.
 
     When mode is DOCKER (default), Docker **must** be reachable and the
@@ -42,7 +47,11 @@ def get_command_runner(config: SandboxConfig | None = None) -> CommandRunner:
         try:
             from ams.sandbox.docker_runner import DockerCommandRunner
 
-            runner = DockerCommandRunner(cfg)
+            runner = DockerCommandRunner(
+                cfg,
+                container_retain=container_retain,
+                run_id=run_id,
+            )
             logger.info("Using DockerCommandRunner (sandboxed execution).")
             return runner
         except ImportError as exc:
@@ -67,7 +76,12 @@ def get_command_runner(config: SandboxConfig | None = None) -> CommandRunner:
     return SubprocessRunner()
 
 
-def get_browser_runner(config: SandboxConfig | None = None) -> BrowserRunner:
+def get_browser_runner(
+    config: SandboxConfig | None = None,
+    *,
+    container_retain: bool = False,
+    run_id: str | None = None,
+) -> BrowserRunner:
     """Return a ``BrowserRunner`` appropriate for the configured sandbox mode.
 
     When mode is DOCKER (default), Docker **must** be reachable.
@@ -79,7 +93,11 @@ def get_browser_runner(config: SandboxConfig | None = None) -> BrowserRunner:
         try:
             from ams.sandbox.playwright_docker import DockerPlaywrightRunner
 
-            runner = DockerPlaywrightRunner(cfg)
+            runner = DockerPlaywrightRunner(
+                cfg,
+                container_retain=container_retain,
+                run_id=run_id,
+            )
             logger.info("Using DockerPlaywrightRunner (sandboxed browser).")
             return runner
         except ImportError as exc:

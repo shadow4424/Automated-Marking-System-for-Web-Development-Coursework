@@ -32,6 +32,10 @@
                     class="nav-link {% if request.endpoint == 'batch' %}active{% endif %}">Batch</a>
                 <a href="{{ url_for('runs') }}"
                     class="nav-link {% if request.endpoint == 'runs' %}active{% endif %}">Runs</a>
+                {% if threat_containers is defined and threat_containers %}
+                <a href="{{ url_for('threats') }}"
+                    class="nav-link {% if request.endpoint == 'threats' %}active{% endif %}" style="color:#dc2626;">Threats</a>
+                {% endif %}
             </div>
             {% if sandbox_status is defined %}
             <div class="sandbox-indicator" title="{{ sandbox_status.message }}">
@@ -40,6 +44,11 @@
                 {% else %}
                 <span class="sandbox-badge sandbox-inactive">&#x26a0; Sandbox Inactive</span>
                 {% endif %}
+            </div>
+            {% endif %}
+            {% if threat_containers is defined and threat_containers %}
+            <div class="sandbox-indicator" title="{{ threat_containers|length }} retained threat container(s)">
+                <span class="sandbox-badge" style="background:#dc2626;color:#fff;">{{ threat_containers|length }} Threat{{ 's' if threat_containers|length != 1 }}</span>
             </div>
             {% endif %}
         </div>

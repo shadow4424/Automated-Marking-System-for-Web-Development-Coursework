@@ -112,43 +112,94 @@ class AssessmentPipeline:
         if metadata:
             context.metadata["submission_metadata"] = metadata
         
-        profile_spec = get_profile_spec(profile)
-        assessors = self.assessors or _default_assessors(profile_spec)
+        # Derive run_id from workspace directory name for container naming
+        context.metadata["run_id"] = workspace_path.name
 
         findings: List[Finding] = []
-        for assessor in assessors:
-            findings.extend(assessor.run(context))
-
-        # Add CONFIG warnings for required components with no required rules
-        findings.extend(self._check_config_warnings(profile_spec, context))
 
         # =================================================================
-        # LLM Integration Hook (Phase 1 & 2)
+        # Threat Scanning — pre-execution inspection of submission files
         # =================================================================
-        llm_evidence: dict = {}
-        if self._should_use_llm():
-            findings, llm_evidence = self._enrich_findings_with_llm(
-                findings, profile_spec, context,
+        threat_findings, container_retain = self._run_threat_scan(context)
+        if threat_findings:
+            findings.extend(threat_findings)
+            context.metadata["threat_detected"] = True
+            context.metadata["container_retain"] = container_retain
+            logger.warning(
+                "Threat scanner flagged submission with %d finding(s). "
+                "container_retain=%s  — skipping further assessment.",
+                len(threat_findings),
+                container_retain,
+            )
+        else:
+            context.metadata["threat_detected"] = False
+            context.metadata["container_retain"] = False
+
+        # When threats are detected, skip all further assessment stages
+        # (assessors, LLM enrichment, UX review) to avoid executing
+        # potentially malicious code.  Jump straight to scoring/reporting.
+        if not context.metadata.get("threat_detected"):
+            profile_spec = get_profile_spec(profile)
+            assessors = self.assessors or _default_assessors(
+                profile_spec,
+                container_retain=context.metadata.get("container_retain", False),
+                run_id=context.metadata.get("run_id"),
+            )
+
+            for assessor in assessors:
+                findings.extend(assessor.run(context))
+
+            # Add CONFIG warnings for required components with no required rules
+            findings.extend(self._check_config_warnings(profile_spec, context))
+
+            # =================================================================
+            # Artifact Integrity Verification — ensure screenshots exist
+            # =================================================================
+            try:
+                from ams.sandbox.artifact_validator import validate_screenshot
+                _validated_shot, artifact_findings = validate_screenshot(workspace_path)
+                findings.extend(artifact_findings)
+                if artifact_findings:
+                    logger.warning("Artifact validation: screenshot missing or corrupt")
+            except Exception as exc:
+                logger.warning("Artifact validation failed: %s", exc)
+
+            # =================================================================
+            # LLM Integration Hook (Phase 1 & 2)
+            # =================================================================
+            llm_evidence: dict = {}
+            if self._should_use_llm():
+                findings, llm_evidence = self._enrich_findings_with_llm(
+                    findings, profile_spec, context,
+                )
+
+            # =================================================================
+            # Phase D: Conflict Resolution
+            # =================================================================
+            # Resolve conflicts between Static and Visual findings before scoring
+            findings = resolve_conflicts(findings)
+        else:
+            profile_spec = get_profile_spec(profile)
+            llm_evidence = {}
+
+        # When threats are detected the submission is unsafe — force score to 0.
+        if context.metadata.get("threat_detected"):
+            scores = {"overall": 0.0, "by_component": {}}
+            score_evidence = None
+        else:
+            scores, score_evidence = self.scoring_engine.score_with_evidence(
+                findings,
+                profile=profile,
+                behavioural_evidence=context.behavioural_evidence,
+                browser_evidence=context.browser_evidence,
             )
 
         # =================================================================
-        # Phase D: Conflict Resolution
-        # =================================================================
-        # Resolve conflicts between Static and Visual findings before scoring
-        findings = resolve_conflicts(findings)
-
-        scores, score_evidence = self.scoring_engine.score_with_evidence(
-            findings,
-            profile=profile,
-            behavioural_evidence=context.behavioural_evidence,
-            browser_evidence=context.browser_evidence,
-        )
-
-        # =================================================================
         # UX Review — qualitative, NON-SCORING feedback per page
+        # (skipped when threats are detected)
         # =================================================================
         ux_reviews: list = []
-        if self._should_use_llm() and self._vision_enabled:
+        if not context.metadata.get("threat_detected") and self._should_use_llm() and self._vision_enabled:
             ux_findings, ux_reviews = self._run_ux_reviews(
                 context, profile, findings,
             )
@@ -226,6 +277,125 @@ class AssessmentPipeline:
         except Exception as exc:
             logger.warning("Failed to remove uploaded_extract/: %s", exc)
 
+    # ------------------------------------------------------------------
+    # Threat Scanning
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _run_threat_scan(
+        context: SubmissionContext,
+    ) -> tuple[List[Finding], bool]:
+        """Run the threat scanner on submission files.
+
+        Returns ``(threat_findings, container_retain)``.
+        *container_retain* is ``True`` when HIGH-severity threats are found.
+        """
+        from ams.sandbox.threat_scanner import ThreatScanner
+        from ams.sandbox.threat_patterns import ThreatCategory
+        from ams.core.finding_ids import SANDBOX
+
+        # Category → finding-ID mapping
+        _CATEGORY_TO_ID = {
+            ThreatCategory.SHELL_EXECUTION: SANDBOX.THREAT.SHELL_EXECUTION,
+            ThreatCategory.PROCESS_CONTROL: SANDBOX.THREAT.PROCESS_CONTROL,
+            ThreatCategory.FILESYSTEM_ESCAPE: SANDBOX.THREAT.FILESYSTEM_ESCAPE,
+            ThreatCategory.NETWORK_ACCESS: SANDBOX.THREAT.NETWORK_ACCESS,
+            ThreatCategory.CODE_INJECTION: SANDBOX.THREAT.CODE_INJECTION,
+            ThreatCategory.OBFUSCATION: SANDBOX.THREAT.OBFUSCATION,
+            ThreatCategory.DANGEROUS_JS: SANDBOX.THREAT.DANGEROUS_JS,
+            ThreatCategory.BINARY_INJECTION: SANDBOX.THREAT.BINARY_INJECTION,
+            ThreatCategory.SYMLINK_ATTACK: SANDBOX.THREAT.SYMLINK_ATTACK,
+        }
+
+        findings: List[Finding] = []
+        container_retain = False
+
+        try:
+            scanner = ThreatScanner()
+            scan_result = scanner.scan(context.submission_path)
+
+            if not scan_result.threats:
+                return findings, container_retain
+
+            container_retain = scan_result.has_high_threats
+
+            for threat in scan_result.threats:
+                finding_id = _CATEGORY_TO_ID.get(
+                    threat.category,
+                    SANDBOX.THREAT.SHELL_EXECUTION,  # fallback
+                )
+
+                findings.append(Finding(
+                    id=finding_id,
+                    category="security",
+                    message=f"Threat detected: {threat.description} in {threat.file}"
+                            + (f" (line {threat.line})" if threat.line else ""),
+                    severity=Severity.THREAT,
+                    evidence={
+                        "file": threat.file,
+                        "line": threat.line,
+                        "pattern_name": threat.pattern_name,
+                        "category": threat.category.value,
+                        "threat_severity": threat.severity.value,
+                        "snippet": threat.snippet,
+                    },
+                    source="ThreatScanner",
+                    finding_category=FindingCategory.SECURITY,
+                ))
+
+            # Store scan summary in context metadata
+            context.metadata["threat_scan"] = {
+                "total_threats": scan_result.threat_count,
+                "high": scan_result.high_count,
+                "medium": scan_result.medium_count,
+                "low": scan_result.low_count,
+                "files_scanned": scan_result.files_scanned,
+                "container_retain": container_retain,
+            }
+
+        except Exception as exc:
+            logger.error("Threat scanner failed: %s", exc)
+
+        return findings, container_retain
+
+    @staticmethod
+    def _enrich_threat_finding(finding: Finding, llm_evidence: dict) -> None:
+        """Use LLM to generate a security analysis for a THREAT finding."""
+        from ams.llm.feedback import ask_llama, scrub_pii
+        from ams.llm.prompts import (
+            THREAT_ANALYSIS_SYSTEM_PROMPT,
+            THREAT_ANALYSIS_USER_PROMPT_TEMPLATE,
+        )
+        from ams.llm.utils import clean_json_response
+        import json as _json
+
+        evidence = finding.evidence if isinstance(finding.evidence, dict) else {}
+        snippet = scrub_pii(evidence.get("snippet", "")[:500])
+        prompt = THREAT_ANALYSIS_USER_PROMPT_TEMPLATE.format(
+            category=evidence.get("category", "unknown"),
+            pattern_name=evidence.get("pattern_name", "unknown"),
+            file_path=evidence.get("file", "unknown"),
+            snippet=snippet,
+        )
+
+        try:
+            raw = ask_llama(prompt, system_prompt=THREAT_ANALYSIS_SYSTEM_PROMPT)
+            cleaned = clean_json_response(raw)
+            analysis = _json.loads(cleaned)
+            evidence["llm_threat_analysis"] = analysis
+            llm_evidence.setdefault("threat_analysis", []).append({
+                "finding_id": finding.id,
+                "analysis": analysis,
+            })
+        except Exception as exc:
+            logger.warning("LLM threat analysis failed for %s: %s", finding.id, exc)
+            evidence["llm_threat_analysis"] = {
+                "risk_level": evidence.get("threat_severity", "UNKNOWN"),
+                "explanation": finding.message,
+                "recommendation": "Review manually — LLM analysis unavailable.",
+                "error": True,
+            }
+
     def _should_use_llm(self) -> bool:
         """Check if LLM should be used based on scoring mode."""
         return self.scoring_mode == ScoringMode.STATIC_PLUS_LLM
@@ -263,6 +433,13 @@ class AssessmentPipeline:
                     }
                     if isinstance(finding.evidence, dict):
                         finding.evidence["llm_feedback"] = fallback_feedback
+                enriched.append(finding)
+                continue
+
+            # --- THREAT findings: LLM security analysis ---
+            if finding.severity == Severity.THREAT:
+                if self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
+                    self._enrich_threat_finding(finding, llm_evidence)
                 enriched.append(finding)
                 continue
             
@@ -845,8 +1022,22 @@ class AssessmentPipeline:
         return warnings
 
 
-def _default_assessors(profile_spec: ProfileSpec) -> List[Assessor]:
+def _default_assessors(
+    profile_spec: ProfileSpec,
+    *,
+    container_retain: bool = False,
+    run_id: str | None = None,
+) -> List[Assessor]:
     """Return the default ordered assessor pipeline for a profile."""
+    from ams.sandbox.factory import get_command_runner, get_browser_runner
+
+    cmd_runner = get_command_runner(
+        container_retain=container_retain, run_id=run_id,
+    )
+    browser_runner = get_browser_runner(
+        container_retain=container_retain, run_id=run_id,
+    )
+
     return [
         HTMLStaticAssessor(),
         CSSStaticAssessor(),
@@ -860,8 +1051,8 @@ def _default_assessors(profile_spec: ProfileSpec) -> List[Assessor]:
         SQLRequiredFeaturesAssessor(profile=profile_spec),
         ConsistencyAssessor(),  # Cross-file consistency checks after static/required
         HTMLBehavioralAssessor(),
-        DeterministicTestEngine(),
-        PlaywrightAssessor(),
+        DeterministicTestEngine(runner=cmd_runner),
+        PlaywrightAssessor(runner=browser_runner),
     ]
 
 

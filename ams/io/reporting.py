@@ -75,7 +75,7 @@ class ReportWriter:
         
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         self.output_path.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
-        self._write_summary(context, scores, profile, behavioural, browser, metadata)
+        self._write_summary(context, scores, profile, behavioural, browser, metadata, findings=list(findings))
         return self.output_path
 
     def _serialize_finding(self, finding: Finding) -> dict:
@@ -144,12 +144,29 @@ class ReportWriter:
         behavioural: list[dict],
         browser: list[dict],
         metadata: Optional[Mapping[str, object]] = None,
+        findings: Optional[list] = None,
     ) -> None:
         summary_path = self.output_path.with_name("summary.txt")
         lines = []
         submission_name = context.metadata.get("submission_name", "submission")
         lines.append(f"Submission: {submission_name}")
         lines.append(f"Profile: {profile}")
+
+        # Check for security threats
+        threat_detected = context.metadata.get("threat_detected", False)
+        threat_findings = []
+        if findings:
+            threat_findings = [f for f in findings if getattr(f, 'severity', None) and f.severity.value == 'THREAT']
+        if threat_detected or threat_findings:
+            lines.append("")
+            lines.append("=" * 60)
+            lines.append("SECURITY THREATS IDENTIFIED")
+            lines.append("=" * 60)
+            lines.append(f"  {len(threat_findings)} security threat(s) detected in this submission.")
+            lines.append("  Assessment was halted — no further checks were performed.")
+            for tf in threat_findings:
+                lines.append(f"  - {tf.id}: {tf.message}")
+            lines.append("=" * 60)
         
         # Add metadata if available
         if metadata:

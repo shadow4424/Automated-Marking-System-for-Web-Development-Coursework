@@ -43,6 +43,20 @@
 {# Single Run Report #}
 {% if report %}
 
+{# ── Threat Alert Banner ── #}
+{% set threat_count = report.findings|default([])|selectattr('severity','equalto','THREAT')|list|length %}
+{% if threat_count > 0 %}
+<div class="card mb-lg"
+    style="border-left:4px solid #dc2626; background:#fef2f2; padding:1rem 1.25rem;">
+    <strong style="color:#dc2626; font-size:1.1rem;">SECURITY THREATS DETECTED — ASSESSMENT BLOCKED</strong>
+    <p class="mt-xs mb-0" style="color:#991b1b;">
+        {{ threat_count }} security threat{{ 's' if threat_count != 1 }} identified in this submission.
+        All further checks were skipped for safety. This submission scored
+        <strong>0%</strong> and should be reviewed manually.
+    </p>
+</div>
+{% endif %}
+
 {# ── Environment Banner ── #}
 {% set env = report.get('environment') %}
 {% if env and (not env.get('php_available', true) or not env.get('browser_available', true) or not
@@ -85,7 +99,7 @@ env.get('behavioural_tests_run', true) or not env.get('browser_tests_run', true)
 {% set diagnostics = report.diagnostics|default([]) %}
 {# Count directly from findings so stat cards match the visible event list #}
 {% set ns = namespace(
-total=0, passed=0, failed=0, warnings=0, skipped=0,
+total=0, passed=0, failed=0, warnings=0, skipped=0, threats=0,
 ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
 ) %}
 {% for f in findings %}
@@ -94,6 +108,7 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
 {% if sev == 'INFO' %}{% set ns.passed = ns.passed + 1 %}
 {% elif sev == 'FAIL' %}{% set ns.failed = ns.failed + 1 %}
 {% elif sev == 'WARN' %}{% set ns.warnings = ns.warnings + 1 %}
+{% elif sev == 'THREAT' %}{% set ns.threats = ns.threats + 1 %}
 {% elif sev == 'SKIPPED' %}{% set ns.skipped = ns.skipped + 1 %}
 {% endif %}
 {% if f.evidence is mapping and f.evidence.llm_feedback %}
@@ -130,6 +145,14 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
             <div class="stat-label">Warnings</div>
         </div>
     </div>
+    {% if ns.threats > 0 %}
+    <div class="stat-grid-4 mb-lg">
+        <div class="card stat-card" style="border-left: 4px solid #dc2626;">
+            <div class="stat-value" style="color: #dc2626;">{{ ns.threats }}</div>
+            <div class="stat-label">Security Threats</div>
+        </div>
+    </div>
+    {% endif %}
     {% if ns.ai_count > 0 or ns.vision_count > 0 or ns.partial_count > 0 or ns.ux_review_count > 0 %}
     <div class="grid grid-auto">
         {% if ns.ai_count > 0 %}
@@ -169,6 +192,7 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
         <button type="button" class="filter-toggle" data-severity="info">✓ Pass</button>
         <button type="button" class="filter-toggle" data-severity="warn">⚠ Warn</button>
         <button type="button" class="filter-toggle" data-severity="fail">✗ Fail</button>
+        <button type="button" class="filter-toggle" data-severity="threat">Threat</button>
         <button type="button" class="btn btn-ghost btn-sm" data-reset>Reset</button>
     </div>
     <span class="toolbar-count" data-findings-count>{{ findings|length }} events</span>
@@ -179,16 +203,23 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
     <button type="button" class="btn btn-secondary btn-sm" data-collapse-all>Collapse All</button>
 </div>
 
-{# Findings List – split into GRADED and INFORMATIONAL #}
+{# Findings List – split into GRADED, THREATS, SKIPPED, and INFORMATIONAL #}
 {# UX review findings are excluded here; they render in their own section below #}
 {% set graded_findings = [] %}
+{% set threat_findings_section = [] %}
+{% set skipped_findings_section = [] %}
 {% set info_findings = [] %}
 {% for finding in findings %}
 {% set has_ux = finding.evidence is mapping and finding.evidence.ux_review is mapping %}
+{% set sev = finding.severity|default('WARN')|upper %}
 {% if has_ux %}
 {# Skip – rendered in the dedicated UX & Usability Review section #}
 {% elif finding.finding_category|default('other') == 'evidence' %}
 {% if info_findings.append(finding) %}{% endif %}
+{% elif sev == 'THREAT' %}
+{% if threat_findings_section.append(finding) %}{% endif %}
+{% elif sev == 'SKIPPED' %}
+{% if skipped_findings_section.append(finding) %}{% endif %}
 {% else %}
 {% if graded_findings.append(finding) %}{% endif %}
 {% endif %}
@@ -196,13 +227,15 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
 
 {# ── Graded Tests ── #}
 {% if graded_findings %}
-<h2 class="section-header mb-md">📝 Graded Tests</h2>
+<h2 class="section-header mb-md">Graded Tests</h2>
+
 {% for finding in graded_findings %}
 {% set sev = finding.severity|default('WARN')|upper %}
-<div class="finding finding-{{ 'pass' if sev == 'INFO' else ('fail' if sev == 'FAIL' else ('skipped' if sev == 'SKIPPED' else 'warn')) }}"
+<div class="finding finding-{{ 'pass' if sev == 'INFO' else ('fail' if sev == 'FAIL' else ('threat' if sev == 'THREAT' else ('skipped' if sev == 'SKIPPED' else 'warn'))) }}"
     data-severity="{{ sev|lower }}" data-rule-id="{{ finding.id|default('') }}"
     data-component="{{ finding.category|default('') }}" {% if sev=='SKIPPED'
-    %}style="opacity: 0.5; border-left-color: #6b7280;" {% endif %}>
+    %}style="opacity: 0.5; border-left-color: #6b7280;" {% endif %}{% if sev=='THREAT'
+    %}style="border-left: 4px solid #dc2626; background: #fef2f2;" {% endif %}>
     <div class="finding-header">
         <span class="finding-id">{{ finding.id|default('unknown') }}</span>
         {% if finding.category %}
@@ -210,7 +243,8 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
         {% endif %}
         <span
             class="badge badge-{{ 'success' if sev == 'INFO' else ('danger' if sev == 'FAIL' else ('secondary' if sev == 'SKIPPED' else 'warning')) }}"
-            {% if sev=='SKIPPED' %}style="background: #374151; color: #9ca3af;" {% endif %}>
+            {% if sev=='SKIPPED' %}style="background: #374151; color: #9ca3af;" {% endif %}
+            {% if sev=='THREAT' %}style="background: #dc2626; color: #fff;" {% endif %}>
             {{ sev }}
         </span>
         {# Universal Scoring Badge Logic #}
@@ -359,9 +393,108 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
 {% endfor %}
 {% endif %}
 
+{# ── Security Threats (separate section) ── #}
+{% if threat_findings_section %}
+<h2 class="section-header mb-md mt-xl" style="color: #dc2626;">Security Threats</h2>
+<div class="card mb-lg" style="border-left:4px solid #dc2626; background:#fef2f2; padding:1rem 1.25rem;">
+    <strong>Security Threats Detected</strong>
+    <p class="text-secondary mt-xs mb-0">
+        {{ threat_findings_section|length }} potential security threat{{ 's' if threat_findings_section|length != 1 }}
+        {{ 'were' if threat_findings_section|length != 1 else 'was' }} detected in this submission.
+        Review the flagged findings below for details.
+    </p>
+</div>
+{% for finding in threat_findings_section %}
+{% set sev = 'THREAT' %}
+<div class="finding finding-threat"
+    data-severity="threat" data-rule-id="{{ finding.id|default('') }}"
+    data-component="{{ finding.category|default('') }}"
+    style="border-left: 4px solid #dc2626; background: #fef2f2;">
+    <div class="finding-header">
+        <span class="finding-id">{{ finding.id|default('unknown') }}</span>
+        {% if finding.category %}
+        <span class="badge badge-info">{{ finding.category|upper }}</span>
+        {% endif %}
+        <span class="badge" style="background: #dc2626; color: #fff;">THREAT</span>
+    </div>
+    <p class="finding-message">{{ finding.message|default('No message') }}</p>
+
+    {# AI Feedback #}
+    {% if finding.evidence is mapping and finding.evidence.llm_feedback is mapping %}
+    {% set fb = finding.evidence.llm_feedback %}
+    {% set fb_text = fb.summary or fb.evidence or (fb['items'][0].message if fb['items'] else '') %}
+    {% if fb_text and fb_text != finding.id %}
+    <div class="ai-feedback-card">
+        <span class="ai-badge">AI Feedback</span>
+        <p>{{ fb_text }}</p>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {# Evidence (collapsible) #}
+    {% if finding.evidence %}
+    <details>
+        <summary class="text-sm">Evidence</summary>
+
+        {# Code Snippet #}
+        {% if finding.evidence is mapping and finding.evidence.snippet %}
+        <div class="mt-sm mb-sm p-sm bg-gray-900 rounded border border-gray-700">
+            <div class="text-xs text-muted mb-xs uppercase tracking-wide">Code Snippet
+                {% if finding.evidence.file and finding.evidence.line %}
+                <span class="text-secondary"> — {{ finding.evidence.file }}:{{ finding.evidence.line }}</span>
+                {% endif %}
+            </div>
+            <pre class="text-xs font-mono text-gray-300 overflow-x-auto p-0 m-0 bg-transparent border-0">{{ finding.evidence.snippet }}</pre>
+        </div>
+        {% endif %}
+
+        {% if finding.evidence is mapping %}
+        <div class="finding-evidence details-content">
+            <dl class="evidence-dl">
+                {% for key, val in finding.evidence.items() %}
+                {% if key not in ('snippet', 'content', 'llm_feedback', 'hybrid_score', 'vision_analysis', 'screenshot') %}
+                <div class="evidence-row">
+                    <dt>{{ key }}</dt>
+                    <dd>{{ render_evidence_value(val) }}</dd>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </dl>
+        </div>
+        {% else %}
+        <pre class="finding-evidence details-content">{{ finding.evidence }}</pre>
+        {% endif %}
+    </details>
+    {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+{# ── Skipped Checks (separate section) ── #}
+{% if skipped_findings_section %}
+<h2 class="section-header mb-md mt-xl">Skipped Checks</h2>
+<p class="text-muted text-sm mb-md">These checks were skipped because they are not applicable to the current profile
+    or their prerequisites were not met. They <strong>do not</strong> affect the final grade.</p>
+{% for finding in skipped_findings_section %}
+<div class="finding finding-skipped"
+    data-severity="skipped" data-rule-id="{{ finding.id|default('') }}"
+    data-component="{{ finding.category|default('') }}"
+    style="opacity: 0.5; border-left-color: #6b7280;">
+    <div class="finding-header">
+        <span class="finding-id">{{ finding.id|default('unknown') }}</span>
+        {% if finding.category %}
+        <span class="badge badge-info">{{ finding.category|upper }}</span>
+        {% endif %}
+        <span class="badge" style="background: #374151; color: #9ca3af;">SKIPPED</span>
+    </div>
+    <p class="finding-message">{{ finding.message|default('No message') }}</p>
+</div>
+{% endfor %}
+{% endif %}
+
 {# ── Informational Evidence (no score) ── #}
 {% if info_findings %}
-<h2 class="section-header mb-md mt-xl">📋 Informational Evidence</h2>
+<h2 class="section-header mb-md mt-xl">Informational Evidence</h2>
 <p class="text-muted text-sm mb-md">These findings are collected for informational purposes and <strong>do not</strong>
     affect the final grade.</p>
 {% for finding in info_findings %}
@@ -467,7 +600,7 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
 {% endfor %}
 {% endif %}
 
-{% if not graded_findings and not info_findings %}
+{% if not graded_findings and not threat_findings_section and not skipped_findings_section and not info_findings %}
 <div class="empty-state card">
     <h3 class="empty-state-title">No findings</h3>
     <p class="empty-state-text">The submission has no specific findings to display.</p>
@@ -653,6 +786,7 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
                     <th>Student</th>
                     <th>Score</th>
                     <th>Status</th>
+                    <th>Threats</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -678,6 +812,13 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
                         <span class="badge badge-warning">Pass</span>
                         {% else %}
                         <span class="badge badge-danger">Fail</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if sub.threat_count %}
+                        <span class="badge badge-danger" title="{{ sub.threat_count }} threat finding(s)">{{ sub.threat_count }}</span>
+                        {% else %}
+                        <span class="text-secondary">—</span>
                         {% endif %}
                     </td>
                     <td class="actions-cell">

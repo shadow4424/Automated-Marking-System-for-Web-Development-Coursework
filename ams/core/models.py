@@ -11,6 +11,7 @@ class Severity(str, Enum):
     INFO = "INFO"
     WARN = "WARN"
     FAIL = "FAIL"
+    THREAT = "THREAT"
     SKIPPED = "SKIPPED"
 
 
@@ -23,6 +24,7 @@ class FindingCategory(str, Enum):
     CONFIG = "config"  # Configuration issues (marker setup problems)
     EVIDENCE = "evidence"  # Informational evidence collected
     VISUAL = "visual"  # Phase C: Visual/layout issues from vision analysis
+    SECURITY = "security"  # Sandbox threat detections
     OTHER = "other"  # Other issues
 
 

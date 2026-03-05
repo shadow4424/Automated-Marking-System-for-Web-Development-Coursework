@@ -30,8 +30,15 @@ logger = logging.getLogger(__name__)
 class DockerCommandRunner(CommandRunner):
     """Execute commands inside an ephemeral Docker container."""
 
-    def __init__(self, config: SandboxConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: SandboxConfig | None = None,
+        container_retain: bool = False,
+        run_id: str | None = None,
+    ) -> None:
         self.config = config or get_sandbox_config()
+        self.container_retain = container_retain
+        self.run_id = run_id
         self._validate_prerequisites()
 
     # ------------------------------------------------------------------
@@ -156,7 +163,16 @@ class DockerCommandRunner(CommandRunner):
         cfg = self.config
 
         cmd: list[str] = [
-            "docker", "run", "--rm",
+            "docker", "run",
+        ]
+
+        # Container retention: skip --rm and assign a name when threats detected
+        if self.container_retain and self.run_id:
+            cmd.extend(["--name", f"ams-threat-{self.run_id}"])
+        else:
+            cmd.append("--rm")
+
+        cmd.extend([
             # Resource limits
             "--cpus", str(cfg.cpu_limit),
             "--memory", cfg.memory_limit,
@@ -170,7 +186,7 @@ class DockerCommandRunner(CommandRunner):
             "-w", inner_cwd,
             # User
             "--user", cfg.user,
-        ]
+        ])
 
         if cfg.read_only_root:
             cmd.append("--read-only")

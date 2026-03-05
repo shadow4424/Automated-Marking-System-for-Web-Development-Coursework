@@ -375,6 +375,13 @@ def _process_one_submission(
             if fid in finding_stats:
                 finding_stats[fid]["affected_submissions"].add(item.id)
         record["status"] = "ok"
+        
+        # Count threat findings for this submission
+        threat_count = sum(
+            1 for f in findings if f.get("severity") == "THREAT"
+        )
+        if threat_count:
+            record["threat_count"] = threat_count
     except Exception as exc:  # pragma: no cover - defensive
         record["error"] = str(exc)
         record["status"] = "error"

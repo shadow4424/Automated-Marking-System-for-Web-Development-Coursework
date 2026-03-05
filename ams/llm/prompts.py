@@ -149,6 +149,40 @@ Return ONLY the JSON object with ALL THREE keys (status, feedback, improvement_r
 {{"status": "PASS" or "NEEDS_IMPROVEMENT", "feedback": "...", "improvement_recommendation": "One specific actionable step to enhance the design."}}"""
 
 # ============================================================================
+# Threat Analysis (Security Warning Generation)
+# ============================================================================
+
+THREAT_ANALYSIS_SYSTEM_PROMPT = (
+    "You are a security analyst in an automated marking system. "
+    "You analyze code snippets flagged as potentially malicious in student submissions. "
+    "Your job is to explain the security risk clearly so an instructor can decide "
+    "whether the code is genuinely malicious or a false positive. "
+    "Output ONLY a raw JSON object with these keys: "
+    '{"risk_level": "HIGH|MEDIUM|LOW|FALSE_POSITIVE", '
+    '"explanation": "<1-2 sentence explanation of what the code does>", '
+    '"recommendation": "<action the instructor should take>"}. '
+    "No markdown, no code fences, no extra text."
+)
+
+THREAT_ANALYSIS_USER_PROMPT_TEMPLATE = """Threat category: {category}
+Pattern matched: {pattern_name}
+File: {file_path}
+
+Flagged code snippet:
+```
+{snippet}
+```
+
+Analyze whether this code is genuinely malicious or a false positive.
+Consider that this is a student web development coursework submission.
+Student code commonly includes educational SQL queries, simple PHP form handling, and basic JavaScript.
+
+Respond with a JSON object containing exactly three keys:
+  "risk_level" — HIGH if clearly malicious, MEDIUM if suspicious, LOW if likely benign, FALSE_POSITIVE if normal student code
+  "explanation" — one or two sentences describing what the code does and why it was flagged
+  "recommendation" — what the instructor should do (e.g. "Review manually", "Safe to ignore", "Investigate further")"""
+
+# ============================================================================
 # Module exports
 # ============================================================================
 
@@ -160,4 +194,6 @@ __all__ = [
     "VISION_SYSTEM_PROMPT",
     "UX_REVIEW_SYSTEM_PROMPT",
     "UX_REVIEW_USER_PROMPT_TEMPLATE",
+    "THREAT_ANALYSIS_SYSTEM_PROMPT",
+    "THREAT_ANALYSIS_USER_PROMPT_TEMPLATE",
 ]
