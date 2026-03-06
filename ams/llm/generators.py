@@ -173,4 +173,161 @@ Respond with JSON only: {{"summary": "...", "items": [{{"severity": "FAIL|WARN|I
 
 __all__ = [
     "FeedbackGenerator",
+    "BatchFeedbackGenerator",
 ]
+
+
+class BatchFeedbackGenerator:
+    """Batch LLM feedback generator — consolidates multiple failed rules into one prompt.
+
+    Sends up to N failed rules in a single LLM call and maps the response
+    back to individual rule_ids.  Falls back to per-rule generation when a
+    batch response is unparseable.
+    """
+
+    def __init__(self, provider=None):
+        self._provider = provider
+
+    @property
+    def provider(self):
+        if self._provider is None:
+            self._provider = get_llm_provider()
+        return self._provider
+
+    def generate_batch(
+        self, evidence_list: list[dict[str, Any]]
+    ) -> dict[str, LLMFeedback]:
+        """Generate feedback for multiple rules in a single LLM call.
+
+        Args:
+            evidence_list: List of evidence dicts, each with keys:
+                rule_id, category, code_snippet, error_context
+
+        Returns:
+            Dict mapping rule_id -> LLMFeedback
+        """
+        if not evidence_list:
+            return {}
+
+        # Single item — delegate to standard generator
+        if len(evidence_list) == 1:
+            gen = FeedbackGenerator(provider=self._provider)
+            fb = gen.generate(evidence_list[0])
+            return {evidence_list[0]["rule_id"]: fb}
+
+        rule_ids = [e["rule_id"] for e in evidence_list]
+
+        try:
+            return self._generate_internal(evidence_list, rule_ids)
+        except Exception as e:
+            logger.warning("Batch feedback generation failed, using fallbacks: %s", e)
+            fallback = create_fallback_feedback(e)
+            return {rid: fallback for rid in rule_ids}
+
+    # ------------------------------------------------------------------
+
+    def _generate_internal(
+        self,
+        evidence_list: list[dict[str, Any]],
+        rule_ids: list[str],
+    ) -> dict[str, LLMFeedback]:
+        from ams.llm.prompts import (
+            BATCH_FEEDBACK_SYSTEM_PROMPT,
+        )
+
+        prompt = self._build_batch_prompt(evidence_list)
+
+        response: LLMResponse = self.provider.complete(
+            prompt=prompt,
+            system_prompt=BATCH_FEEDBACK_SYSTEM_PROMPT,
+            json_mode=True,
+        )
+
+        if response.error:
+            raise RuntimeError(f"LLM provider error: {response.error}")
+
+        cleaned = clean_json_response(response.content)
+        raw_data = json.loads(cleaned)
+
+        return self._parse_batch_response(raw_data, rule_ids)
+
+    def _build_batch_prompt(self, evidence_list: list[dict[str, Any]]) -> str:
+        from ams.llm.prompts import BATCH_FEEDBACK_USER_TEMPLATE
+
+        blocks: list[str] = []
+        for ev in evidence_list:
+            snippet = ev.get("code_snippet", "")
+            if len(snippet) > 500:
+                snippet = snippet[:500] + "\n... [truncated]"
+            blocks.append(
+                f"---\n"
+                f"Rule: {ev['rule_id']} | Category: {ev.get('category', 'unknown')}\n"
+                f"Context: {ev.get('error_context', 'Rule check failed.')}\n"
+                f"Code:\n```\n{snippet}\n```\n"
+                f"---"
+            )
+
+        return BATCH_FEEDBACK_USER_TEMPLATE.format(
+            count=len(evidence_list),
+            rules_block="\n\n".join(blocks),
+        )
+
+    def _parse_batch_response(
+        self,
+        raw_data: dict[str, Any],
+        rule_ids: list[str],
+    ) -> dict[str, LLMFeedback]:
+        results_list = raw_data.get("results", [])
+        if not isinstance(results_list, list):
+            results_list = [results_list] if results_list else []
+
+        parsed: dict[str, LLMFeedback] = {}
+        for item in results_list:
+            if not isinstance(item, dict):
+                continue
+            rid = item.get("rule_id", "")
+            if rid not in rule_ids:
+                continue
+
+            items_raw = item.get("items", [])
+            if not isinstance(items_raw, list):
+                items_raw = [items_raw] if items_raw else []
+
+            validated_items: list[FeedbackItem] = []
+            for fi in items_raw:
+                if not isinstance(fi, dict):
+                    continue
+                try:
+                    if "severity" in fi:
+                        fi["severity"] = str(fi["severity"]).upper()
+                        severity_map = {
+                            "ERROR": "FAIL",
+                            "WARNING": "WARN",
+                            "INFORMATION": "INFO",
+                            "NOTE": "INFO",
+                        }
+                        fi["severity"] = severity_map.get(
+                            fi["severity"], fi["severity"]
+                        )
+                    validated_items.append(FeedbackItem(**fi))
+                except (ValidationError, Exception):
+                    continue
+
+            parsed[rid] = LLMFeedback(
+                summary=str(item.get("summary", ""))[:200],
+                items=validated_items,
+                meta={
+                    "fallback": False,
+                    "provider": type(self.provider).__name__,
+                    "batch": True,
+                },
+            )
+
+        # Fill missing rule_ids with fallbacks
+        for rid in rule_ids:
+            if rid not in parsed:
+                parsed[rid] = create_fallback_feedback(
+                    "Rule missing from batch LLM response"
+                )
+
+        return parsed

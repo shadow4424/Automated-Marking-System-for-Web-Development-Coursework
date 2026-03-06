@@ -68,7 +68,7 @@ def _build_partial_credit_prompt(
     return PARTIAL_CREDIT_USER_PROMPT_TEMPLATE.format(
         rule_name=rule_name,
         category=category,
-        student_code=student_code,
+        code_snippet=student_code,
         error_context=error_context,
     )
 
@@ -343,9 +343,144 @@ def should_evaluate_partial_credit(
     return True
 
 
+# =============================================================================
+# Batch Partial Credit (Prompt Consolidation)
+# =============================================================================
+
+
+def evaluate_partial_credit_batch(
+    items: list[dict],
+) -> dict[str, HybridScore]:
+    """Evaluate partial credit for multiple failed rules in a single LLM call.
+
+    Args:
+        items: List of dicts with keys:
+            rule_name, student_code, error_context, category, partial_range
+
+    Returns:
+        Dict mapping rule_name -> HybridScore
+    """
+    if not items:
+        return {}
+
+    # Single item — delegate to the standard function
+    if len(items) == 1:
+        it = items[0]
+        hs = evaluate_partial_credit(
+            rule_name=it["rule_name"],
+            student_code=it["student_code"],
+            error_context=it["error_context"],
+            category=it.get("category", "unknown"),
+            partial_range=it.get("partial_range", (0.0, 0.5)),
+        )
+        return {it["rule_name"]: hs}
+
+    rule_names = [it["rule_name"] for it in items]
+
+    try:
+        return _evaluate_batch_internal(items, rule_names)
+    except Exception as e:
+        logger.warning("Batch partial credit failed, using fallbacks: %s", e)
+        return {rn: HybridScore(static_score=0.0) for rn in rule_names}
+
+
+def _evaluate_batch_internal(
+    items: list[dict],
+    rule_names: list[str],
+) -> dict[str, HybridScore]:
+    from ams.llm.prompts import (
+        BATCH_PARTIAL_CREDIT_SYSTEM_PROMPT,
+        BATCH_PARTIAL_CREDIT_USER_TEMPLATE,
+    )
+
+    blocks: list[str] = []
+    for it in items:
+        code = scrub_pii(it["student_code"])
+        if len(code) > 500:
+            code = code[:500] + "\n... [truncated]"
+        ctx = scrub_pii(it["error_context"])
+        blocks.append(
+            f"---\n"
+            f"Rule: {it['rule_name']} (category: {it.get('category', 'unknown')})\n"
+            f"Failure reason: {ctx}\n"
+            f"Code:\n```\n{code}\n```\n"
+            f"---"
+        )
+
+    prompt = BATCH_PARTIAL_CREDIT_USER_TEMPLATE.format(
+        count=len(items),
+        rules_block="\n\n".join(blocks),
+    )
+
+    raw_response = ask_llama(prompt, system_prompt=BATCH_PARTIAL_CREDIT_SYSTEM_PROMPT)
+    cleaned = _clean_json_response(raw_response)
+
+    try:
+        parsed_top = json.loads(cleaned)
+    except (json.JSONDecodeError, ValueError):
+        parsed_top = {}
+
+    results_list = parsed_top.get("results", [])
+    if not isinstance(results_list, list):
+        results_list = []
+
+    # Build a lookup from rule_name -> partial_range for clamping
+    range_map = {it["rule_name"]: it.get("partial_range", (0.0, 0.5)) for it in items}
+
+    scored: dict[str, HybridScore] = {}
+    for entry in results_list:
+        if not isinstance(entry, dict):
+            continue
+        rid = entry.get("rule_id", "")
+        if rid not in rule_names:
+            continue
+
+        partial_range = range_map.get(rid, (0.0, 0.5))
+
+        # Use the existing robust parser on this single entry
+        entry_json = json.dumps(entry)
+        parsed_entry = _parse_partial_credit_response(entry_json, entry_json)
+
+        hs = HybridScore(static_score=0.0)
+        hs.raw_response = entry
+        hs.intent_detected = parsed_entry.get("intent", "no").lower() == "yes"
+        hs.reasoning = parsed_entry.get("reasoning", "")
+
+        # Apply the same reasoning-keyword override as the single-item path
+        if not hs.intent_detected and hs.reasoning:
+            lower_reasoning = hs.reasoning.lower()
+            if any(kw in lower_reasoning for kw in ("attempted", "minor syntax", "typo")):
+                logger.info(
+                    "Overriding intent to YES based on reasoning keywords: %s",
+                    hs.reasoning,
+                )
+                hs.intent_detected = True
+
+        suggested = float(parsed_entry.get("suggested_score", 0.0))
+
+        min_partial, max_partial = partial_range
+        if hs.intent_detected and suggested == 0.0:
+            suggested = 0.2
+        if hs.intent_detected:
+            hs.llm_score = min(max(suggested, min_partial), max_partial)
+        else:
+            hs.llm_score = 0.0
+
+        hs.final_score = arbitrate_score(hs.static_score, hs.llm_score)
+        scored[rid] = hs
+
+    # Fill missing with zero-score fallbacks
+    for rn in rule_names:
+        if rn not in scored:
+            scored[rn] = HybridScore(static_score=0.0)
+
+    return scored
+
+
 __all__ = [
     "HybridScore",
     "evaluate_partial_credit",
+    "evaluate_partial_credit_batch",
     "arbitrate_score",
     "should_evaluate_partial_credit",
     "check_attempt_signal",

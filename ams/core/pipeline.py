@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Iterable, List, Mapping, Optional
 
@@ -33,7 +34,8 @@ from ams.io.submission import SubmissionProcessor
 
 # LLM Integration (Phase 1 & 2)
 from ams.llm.feedback import generate_feedback
-from ams.llm.scoring import evaluate_partial_credit, should_evaluate_partial_credit
+from ams.llm.scoring import evaluate_partial_credit, evaluate_partial_credit_batch, should_evaluate_partial_credit
+from ams.llm.generators import BatchFeedbackGenerator
 
 # Vision / UX Review
 from ams.core.config import VISION_ENABLED, VISION_DELAY_BETWEEN_PAGES
@@ -415,12 +417,20 @@ class AssessmentPipeline:
         Returns:
             Tuple of (enriched_findings, llm_evidence_dict)
         """
+        BATCH_SIZE = 5  # Max rules per consolidated LLM prompt
+
         enriched: List[Finding] = []
         llm_evidence: dict = {"feedback": [], "partial_credit": []}
         
         # Locate screenshot for vision analysis — prefer real Playwright capture
         screenshot_path = self._find_screenshot(context.workspace_path, context)
-        
+
+        # =================================================================
+        # Pass 1: Triage — handle non-LLM findings immediately and collect
+        #         LLM-eligible findings for batched processing.
+        # =================================================================
+        llm_candidates: list[dict] = []  # items that need LLM calls
+
         for finding in findings:
             # Handle SKIPPED findings for required components (provide deterministic feedback)
             if finding.severity == Severity.SKIPPED:
@@ -454,7 +464,6 @@ class AssessmentPipeline:
                 rule_id = finding.evidence["rule_id"]
             
             # Extract rule metadata for LLM enrichment (used by Phase 2 and 3)
-            # Pass finding for fallback category if rule not found in required rules
             rule_metadata = self._get_rule_metadata(rule_id, profile_spec, finding)
             
             # Extract code snippet from evidence if available
@@ -464,8 +473,6 @@ class AssessmentPipeline:
                 if not code_snippet:
                     code_snippet = finding.evidence.get("content", "")[:500]
             
-            # Log warning for findings with no code evidence ONLY if from required assessors where code is expected
-            # Skip warning for findings from Quality, Consistency, Behaviour, Browser assessors which may not have code
             is_required_assessor = any(
                 finding.id.upper().startswith(prefix) 
                 for prefix in ["HTML.REQ", "CSS.REQ", "JS.REQ", "PHP.REQ", "SQL.REQ"]
@@ -474,7 +481,6 @@ class AssessmentPipeline:
                 logger.warning(f"Finding {finding.id} has no code evidence for LLM enrichment (MISSING_FILES or read error)")
             
             # Skip LLM enrichment for non-required findings without code evidence
-            # These findings (Quality, Consistency, Browser, etc.) don't require code context
             if not code_snippet.strip() and not is_required_assessor:
                 enriched.append(finding)
                 continue
@@ -482,7 +488,7 @@ class AssessmentPipeline:
             # Handle empty code (MISSING_FILES) with deterministic message for required assessors
             if not code_snippet.strip() and is_required_assessor:
                 fallback_feedback = {
-                    "summary": f"No code was found for this check. Ensure you include the required files and format.",
+                    "summary": "No code was found for this check. Ensure you include the required files and format.",
                     "items": [],
                     "meta": {"fallback": True, "reason": "no_code"},
                 }
@@ -491,79 +497,146 @@ class AssessmentPipeline:
                 enriched.append(finding)
                 continue
             
-            # Phase 1: Generate feedback for failed rules
-            if self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
-                try:
-                    feedback = generate_feedback(
-                        rule_name=finding.id,
-                        student_code=code_snippet,
-                        error_context=finding.message,
-                        category=finding.category,
-                    )
-                    
-                    # Attach feedback to finding evidence
-                    if isinstance(finding.evidence, dict):
-                        finding.evidence["llm_feedback"] = feedback
-                    
-                    llm_evidence["feedback"].append({
-                        "finding_id": finding.id,
-                        "feedback": feedback,
-                    })
-                    
-                except Exception as e:
-                    logger.warning(f"Failed to generate LLM feedback for {finding.id}: {e}")
-                    # Attach fallback feedback on error
-                    fallback_feedback = {
-                        "summary": f"This check failed: {finding.message}",
-                        "items": [],
-                        "meta": {"fallback": True, "reason": "llm_error"},
+            # This finding qualifies for batched LLM processing
+            llm_candidates.append({
+                "finding": finding,
+                "rule_id": rule_id,
+                "rule_metadata": rule_metadata,
+                "code_snippet": code_snippet,
+            })
+
+        # =================================================================
+        # Pass 2: Parallel batched LLM calls — feedback and partial
+        #         credit are independent, so submit them as separate
+        #         tasks to maximise LLM slot utilisation.
+        # =================================================================
+        if llm_candidates and self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
+            chunks = [
+                llm_candidates[i:i + BATCH_SIZE]
+                for i in range(0, len(llm_candidates), BATCH_SIZE)
+            ]
+
+            # Pre-build work items for every chunk (read-only, no LLM yet)
+            chunk_fb_evidence: list[list[dict]] = []
+            chunk_pc_items: list[list[dict]] = []
+            chunk_pc_finding_maps: list[dict[str, dict]] = []
+
+            for chunk in chunks:
+                fb_evidence = [
+                    {
+                        "rule_id": item["finding"].id,
+                        "category": item["finding"].category,
+                        "code_snippet": item["code_snippet"],
+                        "error_context": item["finding"].message,
                     }
-                    if isinstance(finding.evidence, dict):
-                        finding.evidence["llm_feedback"] = fallback_feedback
-            
-            # Phase 2: Evaluate partial credit
-            if self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
-                partial_allowed = rule_metadata.get("partial_allowed", False)
-                partial_range = rule_metadata.get("partial_range", (0.0, 0.5))
-                
-                if should_evaluate_partial_credit(0.0, partial_allowed):
-                    try:
-                        hybrid_score = evaluate_partial_credit(
-                            rule_name=finding.id,
-                            student_code=code_snippet,
-                            error_context=finding.message,
-                            category=rule_metadata.get("category", "unknown"),
-                            partial_range=partial_range,
-                        )
-                        
-                        # Attach hybrid score to finding evidence
-                        if isinstance(finding.evidence, dict):
-                            finding.evidence["hybrid_score"] = hybrid_score.to_dict()
-                        
-                        llm_evidence["partial_credit"].append({
-                            "finding_id": finding.id,
-                            "hybrid_score": hybrid_score.to_dict(),
+                    for item in chunk
+                ]
+                chunk_fb_evidence.append(fb_evidence)
+
+                pc_items: list[dict] = []
+                pc_finding_map: dict[str, dict] = {}
+                for item in chunk:
+                    rm = item["rule_metadata"]
+                    if should_evaluate_partial_credit(0.0, rm.get("partial_allowed", False)):
+                        pc_items.append({
+                            "rule_name": item["finding"].id,
+                            "student_code": item["code_snippet"],
+                            "error_context": item["finding"].message,
+                            "category": rm.get("category", "unknown"),
+                            "partial_range": rm.get("partial_range", (0.0, 0.5)),
                         })
-                        
-                    except Exception as e:
-                        logger.warning(f"Failed to evaluate partial credit for {finding.id}: {e}")
-                        # Attach fallback hybrid_score on error
-                        fallback_score = {
-                            "static_score": 0.0,
-                            "llm_score": None,
-                            "final_score": 0.0,
-                            "reasoning": f"Partial credit evaluation failed: {str(e)[:100]}",
-                            "intent_detected": False,
-                            "error": True,
-                        }
-                        if isinstance(finding.evidence, dict):
-                            finding.evidence["hybrid_score"] = fallback_score
-            
-            # Phase 3 + C: Legacy Vision Analysis removed.
-            # Visual evaluation is now handled by the UX Review step that
-            # runs AFTER scoring and has zero impact on the grade.
-            
-            enriched.append(finding)
+                        pc_finding_map[item["finding"].id] = item
+                chunk_pc_items.append(pc_items)
+                chunk_pc_finding_maps.append(pc_finding_map)
+
+            # Thread-safe callables (each creates its own provider)
+            def _run_feedback(fb_evidence):
+                return BatchFeedbackGenerator().generate_batch(fb_evidence)
+
+            def _run_partial_credit(pc_items_list):
+                return evaluate_partial_credit_batch(pc_items_list) if pc_items_list else {}
+
+            # Submit feedback and partial credit as independent futures
+            total_tasks = len(chunks) + sum(1 for pc in chunk_pc_items if pc)
+            llm_workers = min(4, total_tasks)
+
+            logger.info(
+                "Parallel LLM enrichment: %d chunks → %d tasks across %d workers",
+                len(chunks), total_tasks, llm_workers,
+            )
+
+            fb_results: dict[int, dict] = {}
+            pc_results: dict[int, dict] = {}
+
+            with ThreadPoolExecutor(max_workers=llm_workers) as executor:
+                fb_futures = {
+                    executor.submit(_run_feedback, fb_ev): ("fb", idx)
+                    for idx, fb_ev in enumerate(chunk_fb_evidence)
+                }
+                pc_futures = {
+                    executor.submit(_run_partial_credit, pc_it): ("pc", idx)
+                    for idx, pc_it in enumerate(chunk_pc_items)
+                    if pc_it
+                }
+
+                all_futures = {**fb_futures, **pc_futures}
+
+                for future in as_completed(all_futures):
+                    task_type, idx = all_futures[future]
+                    try:
+                        result = future.result()
+                        if task_type == "fb":
+                            fb_results[idx] = result
+                        else:
+                            pc_results[idx] = result
+                    except Exception as exc:
+                        logger.error("LLM %s chunk %d failed: %s", task_type, idx, exc)
+
+            # Apply results back to findings (single-threaded, safe)
+            for idx, chunk in enumerate(chunks):
+                fb_map = fb_results.get(idx, {})
+                for item in chunk:
+                    fid = item["finding"].id
+                    fb = fb_map.get(fid)
+                    if fb is not None:
+                        fb_dict = fb.model_dump() if hasattr(fb, "model_dump") else fb
+                        if isinstance(item["finding"].evidence, dict):
+                            item["finding"].evidence["llm_feedback"] = fb_dict
+                        llm_evidence["feedback"].append({
+                            "finding_id": fid,
+                            "feedback": fb_dict,
+                        })
+                    else:
+                        if isinstance(item["finding"].evidence, dict):
+                            item["finding"].evidence["llm_feedback"] = {
+                                "summary": f"This check failed: {item['finding'].message}",
+                                "items": [],
+                                "meta": {"fallback": True, "reason": "llm_error"},
+                            }
+
+                score_map = pc_results.get(idx, {})
+                pc_finding_map = chunk_pc_finding_maps[idx]
+                for rule_name, hybrid_score in score_map.items():
+                    pi = pc_finding_map.get(rule_name)
+                    if pi is None:
+                        continue
+                    if isinstance(pi["finding"].evidence, dict):
+                        pi["finding"].evidence["hybrid_score"] = hybrid_score.to_dict()
+                    llm_evidence["partial_credit"].append({
+                        "finding_id": rule_name,
+                        "hybrid_score": hybrid_score.to_dict(),
+                    })
+
+            logger.info(
+                "LLM enrichment complete: %d feedback, %d partial-credit across %d chunks",
+                len(llm_evidence["feedback"]),
+                len(llm_evidence["partial_credit"]),
+                len(chunks),
+            )
+
+        # Append all LLM-candidate findings to enriched (preserving order)
+        for item in llm_candidates:
+            enriched.append(item["finding"])
         
         return enriched, llm_evidence
 

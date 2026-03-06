@@ -26,7 +26,12 @@ _MAX_WORKERS = 4
 
 
 class JobManager:
-    """Thread-safe in-memory job scheduler backed by a thread pool."""
+    """Thread-safe in-memory job scheduler backed by a thread pool.
+
+    A global semaphore ensures only one submission runs at a time so
+    its batch-parallel LLM calls get full throughput from the model
+    server (no slot contention with other submissions).
+    """
 
     def __init__(self, max_workers: int = _MAX_WORKERS) -> None:
         self._executor = ThreadPoolExecutor(
@@ -35,6 +40,8 @@ class JobManager:
         )
         self._jobs: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()
+        # Only one submission may use the LLM at a time.
+        self._llm_gate = threading.Semaphore(1)
 
     # ------------------------------------------------------------------
     # Public API
@@ -94,13 +101,20 @@ class JobManager:
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        """Execute *func* inside the thread pool and record the outcome."""
+        """Execute *func* inside the thread pool and record the outcome.
+
+        Acquires ``_llm_gate`` so only one submission uses the LLM at a
+        time, giving it full access to all model-server slots.
+        """
+        self._llm_gate.acquire()
         try:
             result = func(*args, **kwargs)
             self._finish(job_id, status="completed", result=result)
         except Exception as exc:
             logger.exception("Job %s failed.", job_id)
             self._finish(job_id, status="failed", error=str(exc))
+        finally:
+            self._llm_gate.release()
 
     def _finish(
         self,

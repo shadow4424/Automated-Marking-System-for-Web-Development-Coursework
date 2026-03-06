@@ -59,7 +59,7 @@ class SandboxConfig:
 
     # ── Playwright-specific ─────────────────────────────────────────
     playwright_image: str = "ams-sandbox:latest"
-    browser_timeout_ms: int = 15000  # Timeout for browser operations inside container
+    browser_timeout_ms: int = 30000  # Timeout for browser operations inside container (increased to handle slow submissions)
 
     @classmethod
     def from_env(cls) -> SandboxConfig:

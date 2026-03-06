@@ -68,6 +68,59 @@ Respond with a JSON object containing exactly three keys:
   "suggested_score" — a number between 0.0 and 0.5"""
 
 # ============================================================================
+# Batch Feedback Generation (Prompt Consolidation)
+# ============================================================================
+
+BATCH_FEEDBACK_SYSTEM_PROMPT = (
+    "You are a backend service in an automated marking system. "
+    "You will receive MULTIPLE failed rule checks at once. "
+    "For EACH rule, provide feedback in a structured JSON object. "
+    "Output ONLY a raw JSON object with this exact structure: "
+    '{"results": [{"rule_id": "<the rule ID>", "summary": "<1-sentence summary>", '
+    '"items": [{"severity": "FAIL|WARN|INFO", "message": "<feedback>", '
+    '"evidence_refs": ["file.ext:line"]}]}]}. '
+    "You MUST include one entry in the results array for EVERY rule_id provided. "
+    "No markdown, no code fences, no explanations. Use only the keys shown."
+)
+
+BATCH_FEEDBACK_USER_TEMPLATE = """The student failed the following {count} automated checks. Analyse ALL of them and provide structured feedback for each.
+
+{rules_block}
+
+Respond with a JSON object containing a "results" array with one entry per rule:
+{{"results": [{{"rule_id": "...", "summary": "...", "items": [{{"severity": "FAIL|WARN|INFO", "message": "...", "evidence_refs": []}}]}}]}}"""
+
+# ============================================================================
+# Batch Partial Credit (Prompt Consolidation)
+# ============================================================================
+
+BATCH_PARTIAL_CREDIT_SYSTEM_PROMPT = (
+    "You are a scoring engine. You receive student code that FAILED multiple checks. "
+    "For EACH rule, decide if the code shows effort and suggest partial credit. "
+    'You MUST respond with ONLY a JSON object containing a "results" array. '
+    "Each entry MUST have exactly four keys: "
+    '"rule_id" (string: the rule ID), '
+    '"intent" (string: "yes" or "no"), '
+    '"reasoning" (string: one sentence), '
+    '"suggested_score" (number: 0.0 to 0.5). '
+    "You MUST include one entry for EVERY rule_id provided. "
+    "Output ONLY the JSON object, nothing else."
+)
+
+BATCH_PARTIAL_CREDIT_USER_TEMPLATE = """The student failed the following {count} checks. For EACH rule, decide if the code shows effort.
+
+{rules_block}
+
+Scoring guide (apply per rule):
+- 0.4 to 0.5: student clearly tried to implement this feature but has bugs or syntax errors
+- 0.2 to 0.4: student wrote related code but did not fully address the rule
+- 0.1 to 0.2: student wrote code in this language showing general effort
+- 0.0: file is empty, contains only comments, or is completely unrelated
+
+Respond with a JSON object:
+{{"results": [{{"rule_id": "...", "intent": "yes|no", "reasoning": "...", "suggested_score": 0.0}}]}}"""
+
+# ============================================================================
 # Vision Analysis (legacy rule-based)
 # ============================================================================
 
@@ -191,6 +244,10 @@ __all__ = [
     "SYSTEM_PROMPT",
     "PARTIAL_CREDIT_SYSTEM_PROMPT",
     "PARTIAL_CREDIT_USER_PROMPT_TEMPLATE",
+    "BATCH_FEEDBACK_SYSTEM_PROMPT",
+    "BATCH_FEEDBACK_USER_TEMPLATE",
+    "BATCH_PARTIAL_CREDIT_SYSTEM_PROMPT",
+    "BATCH_PARTIAL_CREDIT_USER_TEMPLATE",
     "VISION_SYSTEM_PROMPT",
     "UX_REVIEW_SYSTEM_PROMPT",
     "UX_REVIEW_USER_PROMPT_TEMPLATE",
