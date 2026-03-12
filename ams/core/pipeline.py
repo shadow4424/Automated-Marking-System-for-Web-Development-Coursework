@@ -84,11 +84,12 @@ class AssessmentPipeline:
         return self._vision_analyst
 
     def run(
-        self, 
-        submission_path: Path, 
-        workspace_path: Path, 
+        self,
+        submission_path: Path,
+        workspace_path: Path,
         profile: str = "frontend",
-        metadata: Mapping[str, object] | None = None
+        metadata: Mapping[str, object] | None = None,
+        skip_threat_scan: bool = False,
     ) -> Path:
         context = self._prepare_context(submission_path, workspace_path, profile)
         context.metadata["profile"] = profile
@@ -109,11 +110,11 @@ class AssessmentPipeline:
         except Exception as exc:
             logger.warning("Unable to determine sandbox status: %s", exc)
             context.metadata["sandbox"] = {"enforced": False, "message": str(exc)}
-        
+
         # Add submission metadata to context
         if metadata:
             context.metadata["submission_metadata"] = metadata
-        
+
         # Derive run_id from workspace directory name for container naming
         context.metadata["run_id"] = workspace_path.name
 
@@ -122,20 +123,29 @@ class AssessmentPipeline:
         # =================================================================
         # Threat Scanning — pre-execution inspection of submission files
         # =================================================================
-        threat_findings, container_retain = self._run_threat_scan(context)
-        if threat_findings:
-            findings.extend(threat_findings)
-            context.metadata["threat_detected"] = True
-            context.metadata["container_retain"] = container_retain
+        if skip_threat_scan:
             logger.warning(
-                "Threat scanner flagged submission with %d finding(s). "
-                "container_retain=%s  — skipping further assessment.",
-                len(threat_findings),
-                container_retain,
+                "Threat scan BYPASSED for run %s — instructor override active.",
+                workspace_path.name,
             )
-        else:
             context.metadata["threat_detected"] = False
+            context.metadata["threat_override"] = True
             context.metadata["container_retain"] = False
+        else:
+            threat_findings, container_retain = self._run_threat_scan(context)
+            if threat_findings:
+                findings.extend(threat_findings)
+                context.metadata["threat_detected"] = True
+                context.metadata["container_retain"] = container_retain
+                logger.warning(
+                    "Threat scanner flagged submission with %d finding(s). "
+                    "container_retain=%s  — skipping further assessment.",
+                    len(threat_findings),
+                    container_retain,
+                )
+            else:
+                context.metadata["threat_detected"] = False
+                context.metadata["container_retain"] = False
 
         # When threats are detected, skip all further assessment stages
         # (assessors, LLM enrichment, UX review) to avoid executing

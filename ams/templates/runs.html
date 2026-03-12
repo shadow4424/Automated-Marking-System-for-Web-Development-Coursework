@@ -18,6 +18,7 @@
     <div class="toolbar-filters">
         <button type="button" class="filter-toggle" data-filter="mode:mark">Single</button>
         <button type="button" class="filter-toggle" data-filter="mode:batch">Batch</button>
+        <button type="button" class="filter-toggle" data-filter="threat:true" style="--toggle-active-bg:#dc2626;">Threats</button>
     </div>
     <span class="toolbar-count" data-count></span>
 </div>
@@ -25,11 +26,16 @@
 {% if runs %}
 <div class="flex flex-col gap-md">
     {% for r in runs %}
-    <a href="{{ url_for('run_detail', run_id=r.id) }}" class="run-card" data-filterable
+    <a href="{{ url_for('run_detail', run_id=r.id) }}"
+        class="run-card{% if r.threat_flagged %} run-card--threat{% endif %}" data-filterable
         data-mode="{{ r.mode or 'mark' }}"
+        data-threat="{{ 'true' if r.threat_flagged else 'false' }}"
         data-search="{{ r.id }} {{ r.student_id|default('') }} {{ r.assignment_id|default('') }} {{ r.original_filename|default('') }}">
 
         <div class="run-card-score">
+            {% if r.threat_flagged %}
+            <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">THREAT</span>
+            {% else %}
             {% set score = r.get('score') %}
             {% if score is not none %}
             {% if score >= 70 %}
@@ -42,6 +48,7 @@
             {% else %}
             <span class="score-badge badge-muted">–</span>
             {% endif %}
+            {% endif %}
         </div>
 
         <div class="run-card-content">
@@ -50,6 +57,9 @@
                     {{ r.mode or 'mark' }}
                 </span>
                 <span>{{ r.profile or 'unknown' }}</span>
+                {% if r.threat_flagged %}
+                <span class="badge" style="background:#dc2626;color:#fff;">Security Threat</span>
+                {% endif %}
             </div>
             <div class="run-card-meta">
                 <span>ID {{ r.id[:24] }}...</span>

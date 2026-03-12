@@ -46,14 +46,28 @@
 {# ── Threat Alert Banner ── #}
 {% set threat_count = report.findings|default([])|selectattr('severity','equalto','THREAT')|list|length %}
 {% if threat_count > 0 %}
-<div class="card mb-lg"
+<div class="card mb-lg" id="threat-alert-banner"
     style="border-left:4px solid #dc2626; background:#fef2f2; padding:1rem 1.25rem;">
     <strong style="color:#dc2626; font-size:1.1rem;">SECURITY THREATS DETECTED — ASSESSMENT BLOCKED</strong>
-    <p class="mt-xs mb-0" style="color:#991b1b;">
+    <p class="mt-xs" style="color:#991b1b;">
         {{ threat_count }} security threat{{ 's' if threat_count != 1 }} identified in this submission.
         All further checks were skipped for safety. This submission scored
         <strong>0%</strong> and should be reviewed manually.
     </p>
+    {% if not batch_submission_id %}
+    <div class="mt-sm" style="border-top:1px solid #fca5a5;padding-top:0.75rem;">
+        <p class="text-sm mb-sm" style="color:#7f1d1d;">
+            <strong>Instructor Override:</strong> If you have independently reviewed this submission and
+            confirmed it does not pose a security risk, you may override the block to run the full assessment.
+        </p>
+        <button type="button" id="override-threat-btn"
+            class="btn btn-sm"
+            style="background:#dc2626;color:#fff;border:1px solid #b91c1c;"
+            data-run-id="{{ run_id }}">
+            Override Security Block &amp; Reprocess
+        </button>
+    </div>
+    {% endif %}
 </div>
 {% endif %}
 
@@ -470,6 +484,114 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
 {% endfor %}
 {% endif %}
 
+{# ── Flagged File Contents ── #}
+{% if threat_file_contents %}
+<section id="flagged-files-section" class="mt-xl">
+    <h2 class="section-header mb-sm" style="color:#dc2626;">Flagged File Contents</h2>
+    <p class="text-secondary mb-lg text-sm">
+        {{ threat_file_contents|length }} file{{ 's' if threat_file_contents|length != 1 else '' }}
+        {{ 'contain' if threat_file_contents|length != 1 else 'contains' }} patterns that triggered
+        security alerts.
+        Lines highlighted in red are the exact locations where threats were detected.
+    </p>
+
+    {% for filepath, filedata in threat_file_contents.items() %}
+    {% set file_id = filepath|replace('/','-')|replace('.','-')|replace(' ','-') %}
+    <details class="mb-lg" open id="file-block-{{ loop.index }}">
+        <summary style="
+            display:flex; align-items:center; gap:0.6rem;
+            background:#7f1d1d; color:#fef2f2;
+            padding:0.55rem 1rem; border-radius:6px 6px 0 0;
+            font-family:monospace; font-size:0.85rem; cursor:pointer;
+            list-style:none; user-select:none;">
+            <span style="font-size:0.9rem; flex-shrink:0;">&#9888;</span>
+            <span style="flex:1; word-break:break-all;">{{ filepath }}</span>
+            <span style="flex-shrink:0; font-size:0.72rem; opacity:0.85;
+                background:rgba(0,0,0,0.25); padding:0.15rem 0.5rem; border-radius:10px;">
+                {{ filedata.threat_lines|length }}
+                threat line{{ 's' if filedata.threat_lines|length != 1 else '' }}
+            </span>
+        </summary>
+
+        <div style="overflow:auto; max-height:60vh;
+            background:#0d1117; border:1px solid #dc2626;
+            border-top:none; border-radius:0 0 6px 6px;">
+            <table style="width:100%; border-collapse:collapse;
+                font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+                font-size:0.8rem; line-height:1.55;">
+                <tbody>
+                {% if filedata.lines %}
+                {% for line in filedata.lines %}
+                {% set lineno = loop.index %}
+                {% set is_threat = lineno in filedata.threat_lines %}
+                <tr id="{{ file_id }}-L{{ lineno }}"
+                    style="{% if is_threat %}background:rgba(220,38,38,0.18);{% endif %}">
+                    <td style="
+                        padding:0.05rem 0.8rem 0.05rem 0.5rem;
+                        text-align:right;
+                        vertical-align:top;
+                        min-width:3.2rem;
+                        white-space:nowrap;
+                        user-select:none;
+                        border-right:2px solid {% if is_threat %}#ef4444{% else %}#21262d{% endif %};
+                        color:{% if is_threat %}#f87171{% else %}#484f58{% endif %};
+                        {% if is_threat %}font-weight:700;{% endif %}">{{ lineno }}</td>
+                    <td style="
+                        padding:0.05rem 0.75rem;
+                        white-space:pre;
+                        vertical-align:top;
+                        color:{% if is_threat %}#fca5a5{% else %}#c9d1d9{% endif %};
+                        {% if is_threat %}font-weight:600;{% endif %}">{{ line|e }}{% if is_threat %}<span style="
+                                display:inline-block;
+                                margin-left:1.25rem;
+                                font-family:-apple-system,sans-serif;
+                                font-size:0.68rem;
+                                font-weight:700;
+                                letter-spacing:0.04em;
+                                background:#dc2626;
+                                color:#fff;
+                                padding:0.1rem 0.45rem;
+                                border-radius:3px;
+                                vertical-align:middle;">THREAT</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr>
+                    <td style="padding:1rem; color:#484f58; font-style:italic;">(empty file)</td>
+                </tr>
+                {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+    {% endfor %}
+
+    <script>
+    (function () {
+        /* Auto-scroll each open <details> block to its first threat row */
+        document.querySelectorAll('#flagged-files-section details[open]').forEach(function (det) {
+            var firstThreat = det.querySelector('tr[id*="-L"]');
+            /* find first row with the THREAT badge */
+            var threatRows = det.querySelectorAll('tbody tr');
+            for (var i = 0; i < threatRows.length; i++) {
+                if (threatRows[i].querySelector('span[style*="background:#dc2626"]')) {
+                    firstThreat = threatRows[i];
+                    break;
+                }
+            }
+            if (firstThreat) {
+                var scroll = det.querySelector('div[style*="overflow:auto"]');
+                if (scroll) {
+                    var offset = firstThreat.offsetTop - scroll.offsetTop - 80;
+                    scroll.scrollTop = Math.max(0, offset);
+                }
+            }
+        });
+    }());
+    </script>
+</section>
+{% endif %}
+
 {# ── Skipped Checks (separate section) ── #}
 {% if skipped_findings_section %}
 <h2 class="section-header mb-md mt-xl">Skipped Checks</h2>
@@ -834,4 +956,81 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
     </div>
 </section>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+
+    var btn = document.getElementById('override-threat-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', function () {
+        if (!confirm(
+            'WARNING: This submission was flagged as a potential security threat.\n\n' +
+            'Only override if you have independently reviewed the code and confirmed it is safe.\n\n' +
+            'The submission will be fully re-assessed with threat scanning disabled.\n\n' +
+            'Continue?'
+        )) {
+            return;
+        }
+
+        var runId = btn.dataset.runId;
+        btn.disabled = true;
+        btn.textContent = 'Submitting override\u2026';
+
+        fetch('/runs/' + runId + '/override-threat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}'
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.error) {
+                alert('Error: ' + data.error);
+                btn.disabled = false;
+                btn.textContent = 'Override Security Block & Reprocess';
+                return;
+            }
+
+            var jobId = data.job_id;
+            btn.textContent = 'Processing\u2026';
+
+            var banner = document.getElementById('threat-alert-banner');
+            var statusEl = document.createElement('p');
+            statusEl.id = 'override-status';
+            statusEl.style.cssText = 'color:#991b1b;margin-top:0.5rem;font-weight:600;';
+            statusEl.textContent = 'Reprocessing submission \u2014 this may take a moment\u2026';
+            banner.appendChild(statusEl);
+
+            function poll() {
+                fetch('/api/jobs/' + jobId)
+                .then(function (r) { return r.json(); })
+                .then(function (status) {
+                    if (status.status === 'completed') {
+                        statusEl.textContent = 'Processing complete. Reloading results\u2026';
+                        setTimeout(function () { location.reload(); }, 800);
+                    } else if (status.status === 'failed') {
+                        statusEl.style.color = '#dc2626';
+                        statusEl.textContent = 'Reprocessing failed: ' + (status.error || 'Unknown error');
+                        btn.disabled = false;
+                        btn.textContent = 'Override Security Block & Reprocess';
+                    } else {
+                        setTimeout(poll, 1500);
+                    }
+                })
+                .catch(function () { setTimeout(poll, 2000); });
+            }
+
+            setTimeout(poll, 1500);
+        })
+        .catch(function (err) {
+            alert('Request failed: ' + err.message);
+            btn.disabled = false;
+            btn.textContent = 'Override Security Block & Reprocess';
+        });
+    });
+}());
+</script>
 {% endblock %}

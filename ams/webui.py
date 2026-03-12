@@ -147,6 +147,87 @@ def _ensure_check_stats(report: dict) -> dict:
     return report
 
 
+def _load_threat_file_contents(findings: list, run_dir: Path) -> dict:
+    """Load source file contents for threat-flagged findings.
+
+    For each THREAT finding that references a file inside the submission
+    directory, reads the file and records which line numbers triggered alerts.
+
+    Returns a ``dict`` keyed by the file's path relative to ``submission/``:
+
+    .. code-block:: python
+
+        {
+            "index.php": {
+                "lines": ["<?php", "system($_GET['cmd']);", ...],
+                "threat_lines": [2, ...],
+            },
+            ...
+        }
+
+    Files larger than 200 KB are skipped.  All paths are validated to stay
+    within ``run_dir/submission/`` — no traversal is possible.
+    """
+    MAX_FILE_BYTES = 200 * 1024  # 200 KB per-file cap
+    submission_dir = (run_dir / "submission").resolve()
+
+    threat_findings = [
+        f for f in findings
+        if f.get("severity") == "THREAT"
+        and isinstance(f.get("evidence"), dict)
+        and f["evidence"].get("file")
+    ]
+    if not threat_findings:
+        return {}
+
+    def _to_rel(raw: str) -> str:
+        """Convert an absolute or relative file reference to a path relative to submission/."""
+        s = str(raw).replace("\\", "/")
+        if "submission/" in s:
+            idx = s.rfind("submission/")
+            return s[idx + len("submission/"):]
+        return Path(raw).name
+
+    file_data: dict[str, dict] = {}
+
+    # First pass — load unique files
+    for finding in threat_findings:
+        file_rel = _to_rel(finding["evidence"]["file"])
+        if not file_rel or file_rel in file_data:
+            continue
+        candidate = (submission_dir / file_rel).resolve()
+        try:
+            candidate.relative_to(submission_dir)
+        except ValueError:
+            continue  # path traversal attempt — skip
+        if not candidate.is_file():
+            continue
+        if candidate.stat().st_size > MAX_FILE_BYTES:
+            continue
+        try:
+            content = candidate.read_text(encoding="utf-8", errors="replace")
+            file_data[file_rel] = {"lines": content.splitlines(), "threat_lines": []}
+        except Exception:
+            pass
+
+    # Second pass — mark threat lines
+    for finding in threat_findings:
+        file_rel = _to_rel(finding["evidence"]["file"])
+        if file_rel not in file_data:
+            continue
+        try:
+            ln = int(finding["evidence"]["line"])
+            if ln not in file_data[file_rel]["threat_lines"]:
+                file_data[file_rel]["threat_lines"].append(ln)
+        except (TypeError, ValueError, KeyError):
+            pass
+
+    for key in file_data:
+        file_data[key]["threat_lines"].sort()
+
+    return file_data
+
+
 def create_app(config: Mapping[str, object] | None = None) -> Flask:
     app = Flask(__name__, template_folder="templates")
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024  # security: limit upload size
@@ -543,6 +624,9 @@ def _register_routes(app: Flask) -> None:
                 context["report"] = _ensure_check_stats(
                     json.loads(report_path.read_text(encoding="utf-8"))
                 )
+                context["threat_file_contents"] = _load_threat_file_contents(
+                    context["report"].get("findings", []), run_dir
+                )
         else:
             summary_path = run_dir / run_info.get("summary", "batch_summary.json")
             if summary_path.exists():
@@ -551,6 +635,67 @@ def _register_routes(app: Flask) -> None:
             if analytics_path.exists():
                 context["analytics"] = json.loads(analytics_path.read_text(encoding="utf-8"))
         return render_template("run_detail.html", **context)
+
+    @app.route("/runs/<run_id>/override-threat", methods=["POST"])
+    def override_threat(run_id: str):
+        """Re-run the marking pipeline for a threat-blocked submission, bypassing the threat scan.
+
+        The original ZIP file is re-extracted and passed through the full
+        assessment pipeline with ``skip_threat_scan=True``.  Returns a job ID
+        that the client can poll via ``/api/jobs/<job_id>``.
+        """
+        runs_root = get_runs_root(app)
+        run_dir = find_run_by_id(runs_root, run_id)
+        if run_dir is None:
+            return jsonify({"error": "Run not found"}), 404
+
+        run_info = load_run_info(run_dir)
+        if not run_info:
+            return jsonify({"error": "Run info not found"}), 404
+
+        if run_info.get("mode") != "mark":
+            return jsonify({"error": "Override is only supported for single-mark runs"}), 400
+
+        original_filename = run_info.get("original_filename", "")
+        upload_zip = run_dir / original_filename
+        if not upload_zip.exists():
+            zips = list(run_dir.glob("*.zip"))
+            if not zips:
+                return jsonify({"error": "Original submission ZIP not found — cannot reprocess"}), 404
+            upload_zip = zips[0]
+
+        profile = run_info.get("profile", "frontend")
+        scoring_mode_str = run_info.get("scoring_mode", "static_plus_llm")
+        try:
+            scoring_mode = ScoringMode(scoring_mode_str)
+        except ValueError:
+            scoring_mode = ScoringMode("static_plus_llm")
+
+        pipeline = AssessmentPipeline(scoring_mode=scoring_mode)
+        meta_dict = dict(run_info)
+
+        def _run_override_job() -> dict:
+            """Re-extract and re-assess the submission with threat scan disabled."""
+            extracted = run_dir / "uploaded_extract"
+            extracted.mkdir(parents=True, exist_ok=True)
+            safe_extract_zip(upload_zip, extracted, max_size_mb=MAX_UPLOAD_MB)
+            submission_root = find_submission_root(extracted)
+            pipeline.run(
+                submission_path=submission_root,
+                workspace_path=run_dir,
+                profile=profile,
+                metadata=meta_dict,
+                skip_threat_scan=True,
+            )
+            # Persist override timestamp in run_info so the dashboard reflects it
+            updated = dict(run_info)
+            updated["threat_override"] = True
+            updated["threat_override_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            save_run_info(run_dir, updated)
+            return {"run_id": run_id}
+
+        job_id = job_manager.submit_job("threat_override", _run_override_job)
+        return jsonify({"job_id": job_id, "status": "accepted", "run_id": run_id}), 202
 
     @app.route("/batch/<run_id>/analytics")
     def batch_analytics(run_id: str):
@@ -620,7 +765,7 @@ def _register_routes(app: Flask) -> None:
         report = _ensure_check_stats(
             json.loads(report_path.read_text(encoding="utf-8"))
         )
-        
+
         # Create a pseudo run_info for this submission
         submission_run_info = {
             "mode": "mark",
@@ -629,12 +774,17 @@ def _register_routes(app: Flask) -> None:
             "student_id": submission_id,
             "created_at": run_info.get("created_at", ""),
         }
-        
+
+        # submission_dir doubles as the "run_dir" for threat file loading
+        # because batch sub-runs store their files under runs/<id>/submission/
         return render_template(
             "run_detail.html",
             run=submission_run_info,
             run_id=run_id,
             report=report,
+            threat_file_contents=_load_threat_file_contents(
+                report.get("findings", []), submission_dir
+            ),
             batch_submission_id=submission_id,  # Flag to show back button
             back_url=url_for('run_detail', run_id=run_id),
         )

@@ -905,6 +905,16 @@ details[open] summary {
     opacity: 1;
 }
 
+.run-card--threat {
+    border-left: 4px solid #dc2626;
+    background: #fff8f8;
+}
+
+.run-card--threat:hover {
+    background: #fff0f0;
+    border-color: #dc2626;
+}
+
 /* ----------------------------------------------------------------------------
    13. Empty State
    ---------------------------------------------------------------------------- */

@@ -193,6 +193,13 @@ def list_runs(runs_root: Path) -> list[dict]:
                     if scores and "overall" in scores:
                         # Store score as percentage (0-100) for dashboard display
                         info["score"] = scores["overall"] * 100
+                    # Detect threat-blocked submissions (not overridden)
+                    findings = report.get("findings", [])
+                    has_threats = any(
+                        f.get("severity") == "THREAT" for f in findings
+                    )
+                    override_active = report.get("metadata", {}).get("threat_override", False)
+                    info["threat_flagged"] = has_threats and not override_active
                 except Exception:
                     pass
             
