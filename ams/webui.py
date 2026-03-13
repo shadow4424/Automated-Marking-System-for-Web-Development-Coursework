@@ -34,6 +34,7 @@ from flask import (
     url_for,
 )
 
+from ams.core.db import init_db, get_assignment
 from ams.core.pipeline import AssessmentPipeline
 from ams.core.config import (
     ScoringMode,
@@ -272,17 +273,44 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
         except Exception:
             ctx["threat_containers"] = []
         return ctx
-    
+
+    # ── RBAC: initialise database & register blueprints ───────────────
+    init_db()
+
+    from ams.web.auth import auth_bp, inject_user_context
+    from ams.web.routes_admin import admin_bp
+    from ams.web.routes_teacher import teacher_bp
+    from ams.web.routes_student import student_bp
+
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(teacher_bp)
+    app.register_blueprint(student_bp)
+
+    app.context_processor(inject_user_context)
+
     _register_routes(app)
     return app
 
 
 def _register_routes(app: Flask) -> None:
+    from ams.web.auth import login_required, teacher_or_admin_required, get_current_user
+
     @app.route("/")
     def home():
-        return render_template("home.html")
+        if "user_id" in session and session.get("2fa_verified"):
+            user = get_current_user()
+            if user:
+                if user["role"] == "admin":
+                    return redirect(url_for("admin.dashboard"))
+                elif user["role"] == "teacher":
+                    return redirect(url_for("teacher.dashboard"))
+                else:
+                    return redirect(url_for("student.dashboard"))
+        return redirect(url_for("auth.login"))
 
     @app.route("/mark", methods=["GET", "POST"])
+    @login_required
     def mark():
         if request.method == "GET":
             github_connected = bool(session.get("github_token"))
@@ -541,6 +569,7 @@ def _register_routes(app: Flask) -> None:
                 pass
 
     @app.route("/batch", methods=["GET", "POST"])
+    @teacher_or_admin_required
     def batch():
         if request.method == "GET":
             return render_template("batch.html", profiles=PROFILES.keys())
@@ -699,6 +728,7 @@ def _register_routes(app: Flask) -> None:
         return jsonify(status)
 
     @app.route("/runs")
+    @login_required
     def runs():
         runs_root = get_runs_root(app)
         all_runs = list_runs(runs_root)
@@ -735,14 +765,51 @@ def _register_routes(app: Flask) -> None:
             query=query,
         )
 
+    @app.route("/runs/<run_id>/delete", methods=["POST"])
+    @teacher_or_admin_required
+    def delete_run(run_id: str):
+        runs_root = get_runs_root(app)
+        run_dir = find_run_by_id(runs_root, run_id)
+        if run_dir is None:
+            flash("Run not found.", "error")
+            return redirect(url_for("runs"))
+        shutil.rmtree(run_dir, ignore_errors=True)
+        flash(f"Run '{run_id[:24]}…' deleted.", "success")
+        return redirect(url_for("runs"))
+
     @app.route("/runs/<run_id>")
+    @login_required
     def run_detail(run_id: str):
         runs_root = get_runs_root(app)
         run_dir = find_run_by_id(runs_root, run_id)
         if run_dir is None:
             return "Run not found", 404
         run_info = load_run_info(run_dir)
-        context = {"run": run_info, "run_id": run_id}
+
+        # ── RBAC: student access control ──────────────────────────────
+        user = get_current_user()
+        if user and user["role"] == "student":
+            # Students can only view their own runs
+            run_student_id = run_info.get("student_id", "")
+            if run_student_id != user["userID"]:
+                # Check batch submissions too
+                batch_summary = run_info.get("batch_summary", [])
+                found = False
+                if isinstance(batch_summary, list):
+                    for rec in batch_summary:
+                        if rec.get("student_id") == user["userID"]:
+                            found = True
+                            break
+                if not found:
+                    flash("You do not have access to this submission.", "error")
+                    return redirect(url_for("student.dashboard"))
+
+        # Check marks_released status for grade visibility
+        assignment_id = run_info.get("assignment_id", "")
+        assignment = get_assignment(assignment_id) if assignment_id else None
+        marks_released = assignment["marks_released"] if assignment else True  # default True for non-assignment runs
+
+        context = {"run": run_info, "run_id": run_id, "marks_released": marks_released}
         if run_info.get("mode") == "mark":
             report_path = run_dir / run_info.get("report", "report.json")
             if report_path.exists():
@@ -762,6 +829,7 @@ def _register_routes(app: Flask) -> None:
         return render_template("run_detail.html", **context)
 
     @app.route("/runs/<run_id>/override-threat", methods=["POST"])
+    @teacher_or_admin_required
     def override_threat(run_id: str):
         """Re-run the marking pipeline for a threat-blocked submission, bypassing the threat scan.
 
@@ -823,12 +891,23 @@ def _register_routes(app: Flask) -> None:
         return jsonify({"job_id": job_id, "status": "accepted", "run_id": run_id}), 202
 
     @app.route("/batch/<run_id>/analytics")
+    @login_required
     def batch_analytics(run_id: str):
         runs_root = get_runs_root(app)
         run_dir = find_run_by_id(runs_root, run_id)
         if run_dir is None:
             return "Run not found", 404
         run_info = load_run_info(run_dir)
+
+        # Students can only see analytics after marks are released
+        user = get_current_user()
+        assignment_id = run_info.get("assignment_id", "")
+        assignment = get_assignment(assignment_id) if assignment_id else None
+        marks_released = assignment["marks_released"] if assignment else True
+        if user and user["role"] == "student" and not marks_released:
+            flash("Analytics are not yet available for this assignment.", "warning")
+            return redirect(url_for("student.dashboard"))
+
         analytics_info = _ensure_batch_analytics(run_dir, run_id)
         if not analytics_info:
             return "Analytics not found", 404
@@ -845,6 +924,7 @@ def _register_routes(app: Flask) -> None:
         )
 
     @app.route("/runs/<run_id>/artifacts/<path:relpath>")
+    @login_required
     def run_artifact(run_id: str, relpath: str):
         runs_root = get_runs_root(app)
         run_dir = find_run_by_id(runs_root, run_id)
@@ -867,6 +947,7 @@ def _register_routes(app: Flask) -> None:
         return send_file(candidate, as_attachment=as_download, download_name=candidate.name)
 
     @app.route("/batch/<run_id>/submissions/<submission_id>/view")
+    @login_required
     def batch_submission_view(run_id: str, submission_id: str):
         """View a batch submission's report in the browser (like a single submission)."""
         runs_root = get_runs_root(app)
@@ -915,6 +996,7 @@ def _register_routes(app: Flask) -> None:
         )
 
     @app.route("/batch/<run_id>/submissions/<submission_id>/report.json")
+    @login_required
     def batch_submission_report(run_id: str, submission_id: str):
         runs_root = get_runs_root(app)
         run_dir = find_run_by_id(runs_root, run_id)
@@ -933,6 +1015,7 @@ def _register_routes(app: Flask) -> None:
         return send_file(report_path, as_attachment=True, download_name=dl_name)
 
     @app.route("/run/<run_id>/bundle")
+    @login_required
     def download_bundle(run_id: str):
         """Download grading-relevant artifacts for a run as a ZIP bundle.
 
@@ -1038,6 +1121,7 @@ def _register_routes(app: Flask) -> None:
             return "Error creating bundle", 500
 
     @app.route("/download/<run_id>/<filename>")
+    @login_required
     def download(run_id: str, filename: str):
         if not allowed_download(filename, allowed=ALLOWED_DOWNLOADS):
             return "Not allowed", 403
@@ -1084,12 +1168,14 @@ def _register_routes(app: Flask) -> None:
     # ── Threats dashboard ────────────────────────────────────────────
 
     @app.route("/threats")
+    @teacher_or_admin_required
     def threats():
         from ams.sandbox.forensics import list_retained_containers
         containers = list_retained_containers()
         return render_template("threats.html", containers=containers)
 
     @app.route("/threats/<container_name>/inspect")
+    @teacher_or_admin_required
     def threat_inspect(container_name: str):
         from ams.sandbox.forensics import inspect_container
         info = inspect_container(container_name)
@@ -1103,6 +1189,7 @@ def _register_routes(app: Flask) -> None:
         )
 
     @app.route("/threats/<container_name>/cleanup", methods=["POST"])
+    @teacher_or_admin_required
     def threat_cleanup(container_name: str):
         from ams.sandbox.forensics import cleanup_container
         ok = cleanup_container(container_name)

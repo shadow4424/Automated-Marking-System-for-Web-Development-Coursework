@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}{{ assignment.title }} — AMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ assignment.title }}</h1>
+    <p class="text-secondary">
+        <code>{{ assignment.assignmentID }}</code>
+        <span class="badge badge-secondary">{{ assignment.profile }}</span>
+        {% if assignment.marks_released %}
+        <span class="badge badge-success">Marks Released</span>
+        {% else %}
+        <span class="badge badge-warning">Marks Withheld</span>
+        {% endif %}
+    </p>
+    <div class="page-header-actions">
+        <a href="{{ url_for('teacher.dashboard') }}" class="btn btn-ghost btn-sm">← Back to Dashboard</a>
+        {% if assignment.marks_released %}
+        <form method="POST" action="{{ url_for('teacher.withhold', assignment_id=assignment.assignmentID) }}" style="display:inline;">
+            <button type="submit" class="btn btn-ghost btn-sm">Withhold Marks</button>
+        </form>
+        {% else %}
+        <form method="POST" action="{{ url_for('teacher.release', assignment_id=assignment.assignmentID) }}" style="display:inline;">
+            <button type="submit" class="btn btn-success btn-sm">Release Marks</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{% if assignment.description %}
+<div class="card" style="margin-bottom:var(--space-lg);">
+    <div class="card-header">
+        <h2 class="card-title">Description</h2>
+    </div>
+    <p>{{ assignment.description }}</p>
+</div>
+{% endif %}
+
+<!-- Stats Row -->
+<div class="stat-grid-4" style="margin-bottom:var(--space-xl);">
+    <div class="card stat-card stat-card--default">
+        <div class="stat-value">{{ student_details|length }}</div>
+        <div class="stat-label">Students Assigned</div>
+    </div>
+    <div class="card stat-card stat-card--success">
+        <div class="stat-value">{{ runs|length }}</div>
+        <div class="stat-label">Submissions</div>
+    </div>
+    <div class="card stat-card stat-card--ai">
+        <div class="stat-value">{{ assignment.profile }}</div>
+        <div class="stat-label">Profile</div>
+    </div>
+    <div class="card stat-card stat-card--warning">
+        <div class="stat-value">{{ assignment.created_at[:10] if assignment.created_at else '—' }}</div>
+        <div class="stat-label">Created</div>
+    </div>
+</div>
+
+<div class="grid-2" style="gap:var(--space-xl);">
+    <!-- Assigned Students -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Assigned Students</h2>
+            <span class="badge badge-muted">{{ student_details|length }}</span>
+        </div>
+        {% if student_details %}
+        <div class="table-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>User ID</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in student_details %}
+                    <tr>
+                        <td><code>{{ s.userID }}</code></td>
+                        <td>{{ s.firstName }} {{ s.lastName }}</td>
+                        <td>{{ s.email }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p class="empty-state-title">No students assigned</p>
+            <p class="empty-state-text">Use the form below to assign students.</p>
+        </div>
+        {% endif %}
+
+        <!-- Edit Students -->
+        <details style="margin-top:var(--space-md);">
+            <summary class="btn btn-ghost btn-sm">Edit Student Allocation</summary>
+            <form method="POST" action="{{ url_for('teacher.update_students', assignment_id=assignment.assignmentID) }}" style="margin-top:var(--space-sm);">
+                {% if all_students %}
+                <div class="student-select-list">
+                    {% for s in all_students %}
+                    <label class="student-select-item">
+                        <input type="checkbox" name="students" value="{{ s.userID }}"
+                            {% if s.userID in assignment.assigned_students %}checked{% endif %}>
+                        <span class="student-select-name">{{ s.firstName }} {{ s.lastName }}</span>
+                        <span class="student-select-id">{{ s.userID }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="form-hint">No students registered yet.</p>
+                {% endif %}
+                <button type="submit" class="btn btn-primary btn-sm" style="margin-top:var(--space-sm);">Save Changes</button>
+            </form>
+        </details>
+    </div>
+
+    <!-- Assignment Info -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Assignment Info</h2>
+        </div>
+        <dl style="display:grid; grid-template-columns:auto 1fr; gap:var(--space-xs) var(--space-md);">
+            <dt class="text-secondary">ID</dt>
+            <dd><code>{{ assignment.assignmentID }}</code></dd>
+            <dt class="text-secondary">Teacher</dt>
+            <dd><code>{{ assignment.teacherID }}</code></dd>
+            <dt class="text-secondary">Profile</dt>
+            <dd><span class="badge badge-secondary">{{ assignment.profile }}</span></dd>
+            <dt class="text-secondary">Created</dt>
+            <dd>{{ assignment.created_at or '—' }}</dd>
+            <dt class="text-secondary">Marks</dt>
+            <dd>
+                {% if assignment.marks_released %}
+                <span class="badge badge-success">Released</span>
+                {% else %}
+                <span class="badge badge-warning">Withheld</span>
+                {% endif %}
+            </dd>
+        </dl>
+    </div>
+</div>
+
+<!-- Submissions Table -->
+<div class="card" style="margin-top:var(--space-xl);">
+    <div class="card-header">
+        <h2 class="card-title">Submissions</h2>
+        <span class="badge badge-muted">{{ runs|length }}</span>
+    </div>
+    {% if runs %}
+    <div class="table-container">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Mode</th>
+                    <th>Score</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in runs %}
+                <tr>
+                    <td><code>{{ r.student_id or '—' }}</code></td>
+                    <td><span class="badge {% if r.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">{{ r.mode or 'mark' }}</span></td>
+                    <td>
+                        {% if r.threat_flagged %}
+                        <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span>
+                        {% elif r.get('score') is not none %}
+                        <strong>{{ r.score|round|int }}%</strong>
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td>{{ r.created_at[:10] if r.created_at else '—' }}</td>
+                    <td>
+                        {% if r.threat_flagged %}
+                        <span class="badge" style="background:#dc2626;color:#fff;">Threat</span>
+                        {% else %}
+                        <span class="badge badge-success">OK</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('run_detail', run_id=r.id) }}" class="btn btn-ghost btn-sm">View →</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon"></div>
+        <p class="empty-state-title">No submissions yet</p>
+        <p class="empty-state-text">Submissions will appear here once students submit their work or when batch uploads are processed.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

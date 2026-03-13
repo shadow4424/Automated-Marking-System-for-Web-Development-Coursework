@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Create Account — AMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Create Account</h1>
+    <p class="text-secondary">Create a new teacher or student account.</p>
+    <div class="page-header-actions">
+        <a href="{{ url_for('admin.dashboard') }}" class="btn btn-ghost btn-sm">&larr; Back to Dashboard</a>
+    </div>
+</div>
+
+<div class="grid-2" style="gap:var(--space-xl);">
+    <!-- Create Teacher -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Create Teacher Account</h2>
+        </div>
+        <form method="POST" action="{{ url_for('admin.create_teacher') }}">
+            <div class="form-group">
+                <label class="form-label" for="t_user_id">User ID <span class="required">*</span></label>
+                <input type="text" id="t_user_id" name="user_id" class="form-input" placeholder="e.g. teacher01" required>
+            </div>
+            <div class="grid-2" style="gap:var(--space-md);">
+                <div class="form-group">
+                    <label class="form-label" for="t_first">First Name <span class="required">*</span></label>
+                    <input type="text" id="t_first" name="first_name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="t_last">Last Name <span class="required">*</span></label>
+                    <input type="text" id="t_last" name="last_name" class="form-input" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="t_email">Email <span class="required">*</span></label>
+                <input type="email" id="t_email" name="email" class="form-input" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="t_pass">Password <span class="required">*</span></label>
+                <input type="password" id="t_pass" name="password" class="form-input" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Create Teacher</button>
+        </form>
+    </div>
+
+    <!-- Create Student -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Create Student Account</h2>
+        </div>
+        <form method="POST" action="{{ url_for('admin.create_student') }}">
+            <div class="form-group">
+                <label class="form-label" for="s_user_id">User ID <span class="required">*</span></label>
+                <input type="text" id="s_user_id" name="user_id" class="form-input" placeholder="e.g. student01" required>
+            </div>
+            <div class="grid-2" style="gap:var(--space-md);">
+                <div class="form-group">
+                    <label class="form-label" for="s_first">First Name <span class="required">*</span></label>
+                    <input type="text" id="s_first" name="first_name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="s_last">Last Name <span class="required">*</span></label>
+                    <input type="text" id="s_last" name="last_name" class="form-input" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="s_email">Email <span class="required">*</span></label>
+                <input type="email" id="s_email" name="email" class="form-input" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="s_pass">Password <span class="required">*</span></label>
+                <input type="password" id="s_pass" name="password" class="form-input" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Create Student</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}All Users — AMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>All Users</h1>
+    <p class="text-secondary">Manage system accounts.</p>
+    <div class="page-header-actions">
+        <a href="{{ url_for('admin.dashboard') }}" class="btn btn-ghost btn-sm">&larr; Back to Dashboard</a>
+        <a href="{{ url_for('admin.create_account_page') }}" class="btn btn-primary btn-sm">Create Account</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Users</h2>
+        <span class="badge badge-muted">{{ users|length }}</span>
+    </div>
+    {% if users %}
+    <div class="table-container">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>User ID</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td><code>{{ u.userID }}</code></td>
+                    <td>{{ u.firstName }} {{ u.lastName }}</td>
+                    <td>{{ u.email }}</td>
+                    <td>
+                        {% if u.role == 'admin' %}
+                        <span class="badge badge-primary">Admin</span>
+                        {% elif u.role == 'teacher' %}
+                        <span class="badge badge-success">Teacher</span>
+                        {% else %}
+                        <span class="badge badge-info">Student</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if u.userID != 'admin123' %}
+                        <form method="POST" action="{{ url_for('admin.remove_user', user_id=u.userID) }}"
+                            style="display:inline;"
+                            onsubmit="return confirm('Delete user {{ u.userID }}?');">
+                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                        </form>
+                        {% else %}
+                        <span class="text-muted">Protected</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p class="empty-state-title">No users found</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

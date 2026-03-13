@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Verify Identity — AMS{% endblock %}
+
+{% block content %}
+<div class="auth-wrapper">
+    <div class="auth-card card animate-slideUp">
+        <div class="auth-header">
+            <div class="auth-logo">A</div>
+            <h1 class="auth-title">Two-Factor Verification</h1>
+            <p class="auth-subtitle">Enter the 6-digit code sent to your email</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('auth.verify_2fa') }}" class="auth-form">
+            <div class="form-group">
+                <label class="form-label" for="code">Verification Code <span class="required">*</span></label>
+                <input type="text" id="code" name="code" class="form-input" style="text-align:center; font-family:var(--font-mono); font-size:var(--text-xl); letter-spacing:0.3em;"
+                    placeholder="000000" maxlength="6" pattern="[0-9]{6}" required autofocus autocomplete="one-time-code">
+                <p class="form-hint">Check your email inbox (or the server console) for the code.</p>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-lg" style="width:100%;">Verify</button>
+
+            <div style="text-align:center; margin-top:var(--space-md);">
+                <a href="{{ url_for('auth.login') }}" class="btn btn-ghost btn-sm">Back to Sign In</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -10,6 +10,7 @@ from ams.webui import create_app, _write_run_index_mark
 from ams.core.pipeline import AssessmentPipeline
 from ams.io.web_storage import create_run_dir, save_run_info
 from ams.io.web_storage import safe_extract_zip, find_submission_root
+from tests.webui.conftest import authenticate_client
 
 
 def _make_submission_zip() -> bytes:
@@ -36,6 +37,7 @@ def test_web_mark_and_batch_same_score(tmp_path: Path) -> None:
     runs_root = tmp_path / "web_runs"
     app = create_app({"TESTING": True, "AMS_RUNS_ROOT": runs_root})
     client = app.test_client()
+    authenticate_client(client)
     run_id, run_dir = create_run_dir(runs_root, mode="mark", profile="frontend")
 
     extract_root = run_dir / "uploaded_extract"

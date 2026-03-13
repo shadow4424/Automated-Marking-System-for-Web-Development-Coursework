@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard — AMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Admin Dashboard</h1>
+    <p class="text-secondary">System overview and management.</p>
+</div>
+
+<!-- View Toggle -->
+<div class="card" style="margin-bottom:var(--space-lg);">
+    <div class="card-header">
+        <h2 class="card-title">View Mode</h2>
+    </div>
+    <div style="display:flex; gap:var(--space-sm); flex-wrap:wrap;">
+        <a href="{{ url_for('admin.view_as', role='admin') }}"
+            class="btn {% if not view_as_role %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">Admin View</a>
+        <a href="{{ url_for('admin.view_as', role='teacher') }}"
+            class="btn {% if view_as_role == 'teacher' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">Teacher View</a>
+        <a href="{{ url_for('admin.view_as', role='student') }}"
+            class="btn {% if view_as_role == 'student' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">Student View</a>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="stat-grid-4" style="margin-bottom:var(--space-xl);">
+    <div class="card stat-card stat-card--default">
+        <div class="stat-value">{{ users|length }}</div>
+        <div class="stat-label">Total Users</div>
+    </div>
+    <div class="card stat-card stat-card--ai">
+        <div class="stat-value">{{ admins|length }}</div>
+        <div class="stat-label">Admins</div>
+    </div>
+    <div class="card stat-card stat-card--success">
+        <div class="stat-value">{{ teachers|length }}</div>
+        <div class="stat-label">Teachers</div>
+    </div>
+    <div class="card stat-card stat-card--warning">
+        <div class="stat-value">{{ students|length }}</div>
+        <div class="stat-label">Students</div>
+    </div>
+</div>
+
+<!-- Navigation Cards -->
+<div class="grid grid-3" style="gap:var(--space-lg);">
+    <a href="{{ url_for('admin.create_account_page') }}" class="card" style="text-decoration:none; color:inherit; display:block;">
+        <div class="card-header">
+            <h2 class="card-title">Create Account</h2>
+        </div>
+        <p class="text-secondary">Create new teacher or student accounts.</p>
+        <div style="margin-top:var(--space-md);">
+            <span class="btn btn-primary btn-sm">Create Account</span>
+        </div>
+    </a>
+    <a href="{{ url_for('admin.users_page') }}" class="card" style="text-decoration:none; color:inherit; display:block;">
+        <div class="card-header">
+            <h2 class="card-title">Manage Users</h2>
+            <span class="badge badge-muted">{{ users|length }}</span>
+        </div>
+        <p class="text-secondary">View and manage all user accounts.</p>
+        <div style="margin-top:var(--space-md);">
+            <span class="btn btn-secondary btn-sm">View Users</span>
+        </div>
+    </a>
+    <a href="{{ url_for('admin.assignments_page') }}" class="card" style="text-decoration:none; color:inherit; display:block;">
+        <div class="card-header">
+            <h2 class="card-title">All Assignments</h2>
+            <span class="badge badge-muted">{{ assignments|length }}</span>
+        </div>
+        <p class="text-secondary">Monitor assignments across all teachers.</p>
+        <div style="margin-top:var(--space-md);">
+            <span class="btn btn-secondary btn-sm">View Assignments</span>
+        </div>
+    </a>
+</div>
+{% endblock %}

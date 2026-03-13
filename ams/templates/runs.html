@@ -79,6 +79,13 @@
 
         <div class="run-card-actions">
             <span class="btn btn-ghost btn-sm">View →</span>
+            {% if user_role in ('admin', 'teacher') %}
+            <form method="POST" action="{{ url_for('delete_run', run_id=r.id) }}" class="run-delete-form"
+                  onclick="event.stopPropagation(); event.preventDefault();"
+                  onsubmit="return confirm('Delete this run permanently?');">
+                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+            </form>
+            {% endif %}
         </div>
     </a>
     {% endfor %}

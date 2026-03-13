@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ams.webui import create_app
+from tests.webui.conftest import authenticate_client
 
 
 def test_run_artifact_serves_file(tmp_path: Path) -> None:
@@ -16,6 +17,7 @@ def test_run_artifact_serves_file(tmp_path: Path) -> None:
 
     app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
     client = app.test_client()
+    authenticate_client(client)
     res = client.get(f"/runs/{run_id}/artifacts/artifacts/shot.png")
     assert res.status_code == 200
     assert res.get_data(as_text=True) == "img"
@@ -29,5 +31,6 @@ def test_run_artifact_blocks_traversal(tmp_path: Path) -> None:
 
     app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
     client = app.test_client()
+    authenticate_client(client)
     res = client.get(f"/runs/{run_id}/artifacts/../../etc/passwd")
     assert res.status_code == 403

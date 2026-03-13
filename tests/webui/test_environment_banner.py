@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from ams.webui import create_app
+from tests.webui.conftest import authenticate_client
 
 
 def _make_run(tmp_path: Path, run_id: str, report: dict) -> None:
@@ -26,6 +27,7 @@ def test_environment_banner_shown_when_runtime_skipped(tmp_path: Path) -> None:
     _make_run(tmp_path, "rid", report)
     app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
     client = app.test_client()
+    authenticate_client(client)
     res = client.get("/runs/rid")
     body = res.get_data(as_text=True)
     assert "runtime checks were unavailable" in body.lower()
@@ -42,6 +44,7 @@ def test_environment_banner_not_shown_when_all_available(tmp_path: Path) -> None
     _make_run(tmp_path, "rid2", report)
     app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
     client = app.test_client()
+    authenticate_client(client)
     res = client.get("/runs/rid2")
     body = res.get_data(as_text=True)
     assert "runtime checks were unavailable" not in body.lower()

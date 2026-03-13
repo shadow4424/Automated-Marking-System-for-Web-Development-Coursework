@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from ams.webui import create_app
+from tests.webui.conftest import authenticate_client
 
 
 def _make_run(tmp_path: Path, run_id: str, mode: str, profile: str, overall: float | None = None) -> None:
@@ -21,6 +22,7 @@ def test_runs_history_lists_existing_runs(tmp_path: Path) -> None:
 
     app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
     client = app.test_client()
+    authenticate_client(client)
     res = client.get("/runs")
     assert res.status_code == 200
     body = res.get_data(as_text=True)
@@ -46,6 +48,7 @@ def test_runs_history_searches_student_fields(tmp_path: Path) -> None:
 
     app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
     client = app.test_client()
+    authenticate_client(client)
     res = client.get("/runs?q=11074020")
     assert res.status_code == 200
     body = res.get_data(as_text=True)

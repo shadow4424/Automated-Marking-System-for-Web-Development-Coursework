@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}My Coursework — AMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>My Coursework</h1>
+    <p class="text-secondary">Your assignments and submission history.</p>
+    <div class="page-header-actions">
+        <a href="{{ url_for('student.dashboard') }}" class="btn btn-ghost btn-sm">&larr; Back to Dashboard</a>
+        <a href="{{ url_for('mark') }}" class="btn btn-primary btn-sm">Upload Submission</a>
+    </div>
+</div>
+
+{% if student_id %}
+<!-- To-Do Assignments -->
+<div class="card" style="margin-bottom:var(--space-xl);">
+    <div class="card-header">
+        <h2 class="card-title">To-Do</h2>
+        <span class="badge badge-warning">{{ todo|length }}</span>
+    </div>
+    {% if todo %}
+    <div class="table-container">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Assignment</th>
+                    <th>Title</th>
+                    <th>Profile</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in todo %}
+                <tr>
+                    <td><a href="{{ url_for('student.assignment_view', assignment_id=a.assignmentID) }}"><code>{{ a.assignmentID }}</code></a></td>
+                    <td><a href="{{ url_for('student.assignment_view', assignment_id=a.assignmentID) }}">{{ a.title }}</a></td>
+                    <td><span class="badge badge-secondary">{{ a.profile }}</span></td>
+                    <td><span class="badge badge-warning">Pending</span></td>
+                    <td><a href="{{ url_for('mark') }}" class="btn btn-primary btn-sm">Submit</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p class="empty-state-title">All caught up!</p>
+        <p class="empty-state-text">No pending assignments.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Completed Assignments -->
+<div class="card" style="margin-bottom:var(--space-xl);">
+    <div class="card-header">
+        <h2 class="card-title">Completed</h2>
+        <span class="badge badge-success">{{ completed|length }}</span>
+    </div>
+    {% if completed %}
+    <div class="table-container">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Assignment</th>
+                    <th>Title</th>
+                    <th>Profile</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in completed %}
+                <tr>
+                    <td><a href="{{ url_for('student.assignment_view', assignment_id=a.assignmentID) }}"><code>{{ a.assignmentID }}</code></a></td>
+                    <td><a href="{{ url_for('student.assignment_view', assignment_id=a.assignmentID) }}">{{ a.title }}</a></td>
+                    <td><span class="badge badge-secondary">{{ a.profile }}</span></td>
+                    <td><span class="badge badge-success">Released</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p class="empty-state-title">No completed assignments yet</p>
+        <p class="empty-state-text">Marks will appear here once your teacher releases them.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- My Submissions -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">My Submissions</h2>
+        <span class="badge badge-muted">{{ my_runs|length }}</span>
+    </div>
+    {% if my_runs %}
+    <div style="display:flex; flex-direction:column; gap:var(--space-md);">
+        {% for run in my_runs %}
+        <div class="run-card" style="cursor:default; transform:none;">
+            <div class="run-card-score">
+                {% if run._marks_released %}
+                    {% if run.get('_submission_record') %}
+                        {% set score = run._submission_record.get('overall', 0) * 100 %}
+                    {% else %}
+                        {% set score = run.get('score', 0) %}
+                    {% endif %}
+                    <div class="score-badge {% if score >= 70 %}score-high{% elif score >= 40 %}score-medium{% else %}score-low{% endif %}">
+                        {{ "%.0f"|format(score) }}%
+                    </div>
+                {% else %}
+                    <div class="score-badge" style="background:var(--color-surface); color:var(--color-text-muted);">
+                        —
+                    </div>
+                {% endif %}
+            </div>
+            <div class="run-card-content">
+                <div class="run-card-title">
+                    {% if run.get('assignment_id') %}
+                        <code>{{ run.assignment_id }}</code>
+                    {% endif %}
+                    {% if run.get('_submission_record') %}
+                        <span class="badge badge-info">Batch</span>
+                    {% else %}
+                        <span class="badge badge-primary">Individual</span>
+                    {% endif %}
+                </div>
+                <div class="run-card-meta">
+                    <span>Run: {{ run.id }}</span>
+                    {% if run.get('created_at') %}
+                    <span>{{ run.created_at[:10] }}</span>
+                    {% endif %}
+                    <span class="badge badge-secondary">{{ run.get('profile', 'frontend') }}</span>
+                </div>
+                {% if run._marks_released %}
+                <div style="margin-top:var(--space-sm);">
+                    <span class="badge badge-success">Marks Released</span>
+                </div>
+                {% else %}
+                <div style="margin-top:var(--space-sm);">
+                    <span class="badge badge-warning">Awaiting Release</span>
+                    <span class="text-muted text-sm" style="margin-left:var(--space-sm);">Your grade will appear once your teacher releases marks.</span>
+                </div>
+                {% endif %}
+            </div>
+            <div class="run-card-actions">
+                {% if run._marks_released %}
+                <a href="{{ url_for('run_detail', run_id=run.id) }}" class="btn btn-secondary btn-sm">View Report</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">&#128196;</div>
+        <p class="empty-state-title">No submissions yet</p>
+        <p class="empty-state-text">Upload your first submission to get started.</p>
+    </div>
+    {% endif %}
+</div>
+
+{% else %}
+<!-- Admin view-as mode with no student ID -->
+<div class="empty-state">
+    <div class="empty-state-icon">&#128100;</div>
+    <p class="empty-state-title">Student Coursework Preview</p>
+    <p class="empty-state-text">You are viewing the student coursework layout as an admin. No personal data is shown.</p>
+</div>
+{% endif %}
+{% endblock %}

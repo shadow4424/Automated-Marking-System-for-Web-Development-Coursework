@@ -23,14 +23,18 @@ def _make_zip(files: dict[str, str]) -> bytes:
 
 def _client(tmp_path: Path):
     app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
-    return app.test_client(), tmp_path
+    client = app.test_client()
+    # Authenticate as admin so RBAC decorators don't redirect
+    from tests.webui.conftest import authenticate_client
+    authenticate_client(client)
+    return client, tmp_path
 
 
 def test_webui_home_ok(tmp_path: Path):
     client, _ = _client(tmp_path)
     res = client.get("/")
-    assert res.status_code == 200
-    assert b"Automated Marking System" in res.data
+    # Authenticated home redirects to role-based dashboard
+    assert res.status_code == 302
 
 
 def test_webui_mark_rejects_non_zip(tmp_path: Path):

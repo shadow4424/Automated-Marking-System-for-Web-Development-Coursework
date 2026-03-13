@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Teacher Dashboard — AMS{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Teacher Dashboard</h1>
+    <p class="text-secondary">Manage your assignments and student submissions.</p>
+    {% if view_as_role == 'teacher' %}
+    <div class="alert alert-info" style="margin-top:var(--space-sm);">
+        You are viewing as <strong>Teacher</strong>.
+        <a href="{{ url_for('admin.view_as', role='admin') }}" class="btn btn-ghost btn-sm" style="margin-left:var(--space-sm);">Back to Admin</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Quick Stats -->
+<div class="stat-grid-4" style="margin-bottom:var(--space-xl);">
+    <div class="card stat-card stat-card--success">
+        <div class="stat-value">{{ assignments|length }}</div>
+        <div class="stat-label">Assignments</div>
+    </div>
+    <div class="card stat-card stat-card--warning">
+        <div class="stat-value">{{ students|length }}</div>
+        <div class="stat-label">Students</div>
+    </div>
+    <div class="card stat-card stat-card--ai">
+        <div class="stat-value">{{ assignments|selectattr('marks_released')|list|length }}</div>
+        <div class="stat-label">Released</div>
+    </div>
+    <div class="card stat-card stat-card--danger">
+        <div class="stat-value">{{ assignments|rejectattr('marks_released')|list|length }}</div>
+        <div class="stat-label">Withheld</div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card" style="margin-bottom:var(--space-xl);">
+    <div class="card-header">
+        <h2 class="card-title">Quick Actions</h2>
+    </div>
+    <div style="display:flex; gap:var(--space-md); flex-wrap:wrap;">
+        <a href="{{ url_for('teacher.create_assignment_route') }}" class="btn btn-primary btn-lg" style="justify-content:flex-start;">
+            Create New Assignment
+        </a>
+        <a href="{{ url_for('mark') }}" class="btn btn-secondary btn-lg" style="justify-content:flex-start;">
+            Mark Single Submission
+        </a>
+        <a href="{{ url_for('batch') }}" class="btn btn-secondary btn-lg" style="justify-content:flex-start;">
+            Batch Upload
+        </a>
+        <a href="{{ url_for('runs') }}" class="btn btn-secondary btn-lg" style="justify-content:flex-start;">
+            View All Runs
+        </a>
+    </div>
+</div>
+
+<!-- Assignments Table -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Your Assignments</h2>
+        <span class="badge badge-muted">{{ assignments|length }}</span>
+    </div>
+    {% if assignments %}
+    <div class="table-container">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Assignment ID</th>
+                    <th>Title</th>
+                    <th>Profile</th>
+                    <th>Students</th>
+                    <th>Marks Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in assignments %}
+                <tr>
+                    <td><a href="{{ url_for('teacher.assignment_detail', assignment_id=a.assignmentID) }}"><code>{{ a.assignmentID }}</code></a></td>
+                    <td><a href="{{ url_for('teacher.assignment_detail', assignment_id=a.assignmentID) }}">{{ a.title }}</a></td>
+                    <td><span class="badge badge-secondary">{{ a.profile }}</span></td>
+                    <td>{{ a.assigned_students|length }} allocated</td>
+                    <td>
+                        {% if a.marks_released %}
+                        <span class="badge badge-success">Released</span>
+                        {% else %}
+                        <span class="badge badge-warning">Withheld</span>
+                        {% endif %}
+                    </td>
+                    <td style="display:flex; gap:var(--space-xs);">
+                        {% if a.marks_released %}
+                        <form method="POST" action="{{ url_for('teacher.withhold', assignment_id=a.assignmentID) }}">
+                            <button type="submit" class="btn btn-ghost btn-sm">Withhold</button>
+                        </form>
+                        {% else %}
+                        <form method="POST" action="{{ url_for('teacher.release', assignment_id=a.assignmentID) }}">
+                            <button type="submit" class="btn btn-success btn-sm">Release Marks</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">&#128218;</div>
+        <p class="empty-state-title">No assignments yet</p>
+        <p class="empty-state-text">Create your first assignment to get started.</p>
+        <a href="{{ url_for('teacher.create_assignment_route') }}" class="btn btn-primary">Create Assignment</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 
 from ams.webui import create_app, _write_batch_reports_zip
+from tests.webui.conftest import authenticate_client
 
 
 def _write_batch_summary(run_dir: Path, run_id: str) -> None:
@@ -40,6 +41,7 @@ def test_batch_analytics_route_generates_on_demand(tmp_path: Path) -> None:
 
     app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
     client = app.test_client()
+    authenticate_client(client)
     res = client.get(f"/batch/{run_id}/analytics")
     assert res.status_code == 200
     analytics_path = run_dir / "analytics" / f"batch_analytics_{run_id}.json"

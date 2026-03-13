@@ -87,6 +87,18 @@ env.get('behavioural_tests_run', true) or not env.get('browser_tests_run', true)
 </div>
 {% endif %}
 
+{# ── Grade visibility: students with withheld marks see limited view ── #}
+{% set is_student = (user_role == 'student') %}
+{% set hide_grades = (is_student and not marks_released) %}
+
+{% if hide_grades %}
+<div class="alert alert-warning animate-slideUp" style="margin-bottom:var(--space-xl);">
+    <strong>Grades Not Yet Released</strong> — Your teacher has not released marks for this assignment.
+    Once marks are released, you will be able to see your score, detailed feedback, and cohort analytics.
+</div>
+{% endif %}
+
+{% if not hide_grades %}
 <div class="grid grid-auto mb-xl">
     <div class="card stat-card">
         {% set score = (report.scores.overall|default(0)) * 100 %}
@@ -870,6 +882,7 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
     <div class="details-content card-body">{{ report.llm_feedback }}</div>
 </details>
 {% endif %}
+{% endif %}{# end hide_grades #}
 {% endif %}
 
 {# Batch Summary #}
