@@ -66,10 +66,11 @@
             return;
         }
 
-        // GitHub mode — require both repo and branch
+        // GitHub mode — require connection + both repo and branch selected
+        var isConnected = !!connectedState;  // element only present when connected
         var repoOk   = repoSelect   && repoSelect.value;
         var branchOk = branchSelect  && branchSelect.value;
-        submitBtn.disabled = !(repoOk && branchOk);
+        submitBtn.disabled = !(isConnected && repoOk && branchOk);
     }
 
     // ── Disconnect ────────────────────────────────────────────────

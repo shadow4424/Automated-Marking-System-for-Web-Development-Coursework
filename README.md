@@ -109,3 +109,34 @@ To run tests while skipping slow sandbox or LLM logic:
 ```bash
 pytest -m "not slow"
 ```
+
+## Debug Commands
+
+If you need to reset the system to default settings or troubleshoot issues, here are the most important debug commands:
+
+**1. Hard Reset All Docker Containers:**
+Useful if the system is hanging on Docker operations or failing to list containers.
+```powershell
+docker stop $(docker ps -a -q --filter ancestor=ams-sandbox)
+docker rm -f $(docker ps -a -q --filter ancestor=ams-sandbox)
+# Also clear retained threat containers
+docker rm -f $(docker ps -a -q --filter name="ams-threat-")
+```
+
+**2. Clear Run History (Hard Delete):**
+This deletes all run data and resets the dashboard to empty.
+```powershell
+Remove-Item -Recurse -Force ams_web_runs\*
+```
+
+**3. Clear LLM Caches:**
+Forces the LLM to regenerate all responses instead of using cached ones.
+```powershell
+Remove-Item -Recurse -Force cache\*
+```
+
+**4. Force Rebuild Docker Sandbox:**
+Useful if package dependencies have changed.
+```bash
+./docker/build.sh --no-cache
+```

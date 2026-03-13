@@ -328,13 +328,13 @@ def _register_routes(app: Flask) -> None:
             # ------ GitHub submission path ------
             github_token = session.get("github_token")
             if not github_token:
-                flash("Please link your GitHub account first.")
-                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=False), 400
+                flash("Please link your GitHub account first.", "error")
+                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=False, github_user=github_user), 400
 
             # Validate repo format (owner/repo)
             if "/" not in github_repo or github_repo.count("/") != 1:
-                flash("Invalid GitHub repository format. Use owner/repo.")
-                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=True), 400
+                flash("Invalid GitHub repository format. Use owner/repo.", "error")
+                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
 
             try:
                 # Branch-specific zipball (Gradescope-style)
@@ -354,8 +354,8 @@ def _register_routes(app: Flask) -> None:
                 gh_resp.raise_for_status()
             except _requests.RequestException as exc:
                 logger.warning("GitHub zipball download failed for %s: %s", github_repo, exc)
-                flash(f"Failed to download repository from GitHub: {exc}")
-                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=True), 400
+                flash(f"Failed to download repository from GitHub: {exc}", "error")
+                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
 
             # Save to a temporary ZIP file
             with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
@@ -369,12 +369,12 @@ def _register_routes(app: Flask) -> None:
         else:
             # ------ ZIP upload path ------
             if not file or not file.filename:
-                flash("Please upload a .zip file or select a GitHub repository.")
-                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=bool(session.get("github_token"))), 400
+                flash("Please upload a .zip file or select a GitHub repository.", "error")
+                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
 
             if not validate_file_type(file.filename):
-                flash("Invalid file type. Please upload a .zip file.")
-                return render_template("mark.html", profiles=PROFILES.keys()), 400
+                flash("Invalid file type. Please upload a .zip file.", "error")
+                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
 
             # Save to temp file
             with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
@@ -389,26 +389,26 @@ def _register_routes(app: Flask) -> None:
                 tmp_zip_path.unlink()
             except Exception:
                 pass
-            flash("The uploaded file is not a valid ZIP archive.")
-            return render_template("mark.html", profiles=PROFILES.keys(), github_connected=bool(session.get("github_token"))), 400
+            flash("The uploaded file is not a valid ZIP archive.", "error")
+            return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
         
         # Validate and convert scoring mode
         try:
             scoring_mode = ScoringMode(scoring_mode_str)
         except ValueError:
-            flash(f"Invalid scoring mode: {scoring_mode_str}")
-            return render_template("mark.html", profiles=PROFILES.keys()), 400
+            flash(f"Invalid scoring mode: {scoring_mode_str}", "error")
+            return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
         
         # Validate metadata
         valid_student, student_error = MetadataValidator.validate_student_id(student_id)
         if not valid_student:
-            flash(f"Invalid Student ID: {student_error}")
-            return render_template("mark.html", profiles=PROFILES.keys()), 400
+            flash(f"Invalid Student ID: {student_error}", "error")
+            return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
         
         valid_assignment, assignment_error = MetadataValidator.validate_assignment_id(assignment_id)
         if not valid_assignment:
-            flash(f"Invalid Assignment ID: {assignment_error}")
-            return render_template("mark.html", profiles=PROFILES.keys()), 400
+            flash(f"Invalid Assignment ID: {assignment_error}", "error")
+            return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
         
         # Sanitize identifiers
         student_id = MetadataValidator.sanitize_identifier(student_id)
@@ -566,24 +566,24 @@ def _register_routes(app: Flask) -> None:
         
         # Validate file
         if not file or not file.filename:
-            flash("Please upload a .zip file.")
+            flash("Please upload a .zip file.", "error")
             return render_template("batch.html", profiles=PROFILES.keys()), 400
         
         if not validate_file_type(file.filename):
-            flash("Invalid file type. Please upload a .zip file.")
+            flash("Invalid file type. Please upload a .zip file.", "error")
             return render_template("batch.html", profiles=PROFILES.keys()), 400
         
         # Validate and convert scoring mode
         try:
             scoring_mode = ScoringMode(scoring_mode_str)
         except ValueError:
-            flash(f"Invalid scoring mode: {scoring_mode_str}")
+            flash(f"Invalid scoring mode: {scoring_mode_str}", "error")
             return render_template("batch.html", profiles=PROFILES.keys()), 400
         
         # Validate assignment ID
         valid_assignment, assignment_error = MetadataValidator.validate_assignment_id(assignment_id)
         if not valid_assignment:
-            flash(f"Invalid Assignment ID: {assignment_error}")
+            flash(f"Invalid Assignment ID: {assignment_error}", "error")
             return render_template("batch.html", profiles=PROFILES.keys()), 400
         
         # Sanitize
@@ -603,14 +603,14 @@ def _register_routes(app: Flask) -> None:
                 tmp_zip_path.unlink()
             except Exception:
                 pass
-            flash("The uploaded file is not a valid ZIP archive.")
+            flash("The uploaded file is not a valid ZIP archive.", "error")
             return render_template("batch.html", profiles=PROFILES.keys()), 400
 
         try:
             # Validate file size
             valid_size, size_error = validate_file_size(tmp_zip_path, MAX_UPLOAD_MB)
             if not valid_size:
-                flash(size_error or "File size exceeds maximum limit.")
+                flash(size_error or "File size exceeds maximum limit.", "error")
                 return render_template("batch.html", profiles=PROFILES.keys()), 400
             
             # Create batch metadata (assignment-level)
