@@ -1,0 +1,1 @@
+"""AMS web blueprints package."""

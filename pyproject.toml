@@ -8,6 +8,10 @@ version = "0.1.0"
 description = "CLI-first automated marking system skeleton"
 authors = [{name = "Automated System", email = "noreply@example.com"}]
 requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.0",
+    "requests>=2.28",
+]
 
 [project.scripts]
 ams = "ams.cli:main"

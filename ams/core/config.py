@@ -109,6 +109,18 @@ WORKSPACE_MAX_AGE_HOURS = 24
 # See ams.sandbox.config.SandboxConfig for full listing.
 
 
+# =============================================================================
+# GitHub OAuth Configuration
+# =============================================================================
+import os as _os
+
+GITHUB_CLIENT_ID: str = _os.environ.get("AMS_GITHUB_CLIENT_ID", "")
+GITHUB_CLIENT_SECRET: str = _os.environ.get("AMS_GITHUB_CLIENT_SECRET", "")
+GITHUB_OAUTH_CALLBACK: str = _os.environ.get(
+    "AMS_GITHUB_OAUTH_CALLBACK", "http://localhost:5000/api/github/callback"
+)
+
+
 __all__ = [
     # Scoring
     "ScoringMode",
@@ -143,6 +155,10 @@ __all__ = [
     "WORKSPACE_MAX_AGE_HOURS",
     # Sandbox (re-exported for convenience)
     "SANDBOX_DOCS",
+    # GitHub OAuth
+    "GITHUB_CLIENT_ID",
+    "GITHUB_CLIENT_SECRET",
+    "GITHUB_OAUTH_CALLBACK",
 ]
 
 # Short doc-string constant so other modules can reference the env-vars.

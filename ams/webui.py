@@ -12,6 +12,7 @@ Start locally with: ``python -m flask --app ams.webui run --debug``
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import tempfile
 import zipfile
@@ -20,6 +21,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Mapping
 
+import requests as _requests
 from flask import (
     Flask,
     flash,
@@ -28,11 +30,17 @@ from flask import (
     render_template,
     request,
     send_file,
+    session,
     url_for,
 )
 
 from ams.core.pipeline import AssessmentPipeline
-from ams.core.config import ScoringMode
+from ams.core.config import (
+    ScoringMode,
+    GITHUB_CLIENT_ID,
+    GITHUB_CLIENT_SECRET,
+    GITHUB_OAUTH_CALLBACK,
+)
 from ams.core.profiles import PROFILES
 from ams.core.aggregation import aggregate_findings_to_checks, compute_check_stats
 from ams.io.metadata import MetadataValidator, SubmissionMetadata
@@ -52,9 +60,12 @@ from ams.io.web_storage import (
     validate_file_size,
     validate_file_type,
 )
+from ams.web.helpers import validate_is_zipfile
 from ams.tools.batch import run_batch
 from ams.analytics import build_teacher_analytics
 from ams.core.job_manager import job_manager
+
+logger = logging.getLogger(__name__)
 
 MAX_UPLOAD_MB = 25
 ALLOWED_DOWNLOADS = {
@@ -274,7 +285,14 @@ def _register_routes(app: Flask) -> None:
     @app.route("/mark", methods=["GET", "POST"])
     def mark():
         if request.method == "GET":
-            return render_template("mark.html", profiles=PROFILES.keys())
+            github_connected = bool(session.get("github_token"))
+            github_user = session.get("github_user", "")
+            return render_template(
+                "mark.html",
+                profiles=PROFILES.keys(),
+                github_connected=github_connected,
+                github_user=github_user,
+            )
 
         # ── Sandbox enforcement ──────────────────────────────────────
         from ams.sandbox.config import get_sandbox_status, get_sandbox_config, SandboxMode
@@ -289,21 +307,90 @@ def _register_routes(app: Flask) -> None:
             )
             return render_template("mark.html", profiles=PROFILES.keys()), 503
 
+        # GitHub state (needed for error paths and template rendering)
+        github_connected = bool(session.get("github_token"))
+        github_user = session.get("github_user", "")
+
         # Get form data
         file = request.files.get("submission")
+        github_repo = request.form.get("github_repo", "").strip()
+        github_branch = request.form.get("github_branch", "").strip()
         profile = request.form.get("profile", "frontend")
         student_id = request.form.get("student_id", "").strip()
         assignment_id = request.form.get("assignment_id", "").strip()
         scoring_mode_str = request.form.get("scoring_mode", "static_plus_llm").strip()
-        
-        # Validate file
-        if not file or not file.filename:
-            flash("Please upload a .zip file.")
-            return render_template("mark.html", profiles=PROFILES.keys()), 400
-        
-        if not validate_file_type(file.filename):
-            flash("Invalid file type. Please upload a .zip file.")
-            return render_template("mark.html", profiles=PROFILES.keys()), 400
+
+        # ── Determine submission source (ZIP upload vs GitHub) ──
+        using_github = bool(github_repo)
+        tmp_zip_path: Path | None = None
+
+        if using_github:
+            # ------ GitHub submission path ------
+            github_token = session.get("github_token")
+            if not github_token:
+                flash("Please link your GitHub account first.")
+                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=False), 400
+
+            # Validate repo format (owner/repo)
+            if "/" not in github_repo or github_repo.count("/") != 1:
+                flash("Invalid GitHub repository format. Use owner/repo.")
+                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=True), 400
+
+            try:
+                # Branch-specific zipball (Gradescope-style)
+                if github_branch:
+                    zipball_url = f"https://api.github.com/repos/{github_repo}/zipball/{github_branch}"
+                else:
+                    zipball_url = f"https://api.github.com/repos/{github_repo}/zipball"
+                gh_resp = _requests.get(
+                    zipball_url,
+                    headers={
+                        "Authorization": f"Bearer {github_token}",
+                        "Accept": "application/vnd.github+json",
+                    },
+                    stream=True,
+                    timeout=60,
+                )
+                gh_resp.raise_for_status()
+            except _requests.RequestException as exc:
+                logger.warning("GitHub zipball download failed for %s: %s", github_repo, exc)
+                flash(f"Failed to download repository from GitHub: {exc}")
+                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=True), 400
+
+            # Save to a temporary ZIP file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
+                for chunk in gh_resp.iter_content(chunk_size=8192):
+                    tmp_file.write(chunk)
+                tmp_zip_path = Path(tmp_file.name)
+
+            branch_suffix = f"_{github_branch}" if github_branch else ""
+            original_filename = f"{github_repo.replace('/', '_')}{branch_suffix}.zip"
+
+        else:
+            # ------ ZIP upload path ------
+            if not file or not file.filename:
+                flash("Please upload a .zip file or select a GitHub repository.")
+                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=bool(session.get("github_token"))), 400
+
+            if not validate_file_type(file.filename):
+                flash("Invalid file type. Please upload a .zip file.")
+                return render_template("mark.html", profiles=PROFILES.keys()), 400
+
+            # Save to temp file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
+                file.save(tmp_file.name)
+                tmp_zip_path = Path(tmp_file.name)
+
+            original_filename = MetadataValidator.sanitize_filename(file.filename)
+
+        # ── Strict ZIP content validation (magic-byte check) ─────
+        if not validate_is_zipfile(tmp_zip_path):
+            try:
+                tmp_zip_path.unlink()
+            except Exception:
+                pass
+            flash("The uploaded file is not a valid ZIP archive.")
+            return render_template("mark.html", profiles=PROFILES.keys(), github_connected=bool(session.get("github_token"))), 400
         
         # Validate and convert scoring mode
         try:
@@ -326,26 +413,26 @@ def _register_routes(app: Flask) -> None:
         # Sanitize identifiers
         student_id = MetadataValidator.sanitize_identifier(student_id)
         assignment_id = MetadataValidator.sanitize_identifier(assignment_id)
-        original_filename = MetadataValidator.sanitize_filename(file.filename)
+        original_filename = MetadataValidator.sanitize_filename(original_filename)
         
         # Create metadata
+        uploader_extra: dict = {
+            "ip_address": request.remote_addr or "unknown",
+            "user_agent": request.headers.get("User-Agent", "unknown")[:200],
+        }
+        if using_github:
+            uploader_extra["source"] = "github"
+            uploader_extra["github_repo"] = github_repo
+
         metadata = SubmissionMetadata(
             student_id=student_id,
             assignment_id=assignment_id,
             timestamp=datetime.now(timezone.utc),
             original_filename=original_filename,
-            uploader_metadata={
-                "ip_address": request.remote_addr or "unknown",
-                "user_agent": request.headers.get("User-Agent", "unknown")[:200],
-            },
+            uploader_metadata=uploader_extra,
         )
         
         runs_root = get_runs_root(app)
-        
-        # Save uploaded file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
-            file.save(tmp_file.name)
-            tmp_zip_path = Path(tmp_file.name)
         
         try:
             # Validate file size
@@ -370,8 +457,33 @@ def _register_routes(app: Flask) -> None:
             extracted.mkdir(parents=True, exist_ok=True)
             safe_extract_zip(upload_zip, extracted, max_size_mb=MAX_UPLOAD_MB)
             
-            pipeline = AssessmentPipeline(scoring_mode=scoring_mode)
+            # ── Find true root of submission (bypassing macOS folders or zip wrappers)
             submission_root = find_submission_root(extracted)
+            
+            # ── Zero-content guard ───────────────────────────────────────
+            # Reject the submission instantly if there are zero relevant web files
+            SUPPORTED_EXTENSIONS = {".html", ".css", ".js", ".php", ".sql"}
+            has_web_files = any(
+                f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS 
+                for f in submission_root.rglob("*")
+            )
+
+            if not has_web_files:
+                try:
+                    shutil.rmtree(run_dir, ignore_errors=True)
+                    if tmp_zip_path.exists():
+                        tmp_zip_path.unlink()
+                except Exception:
+                    pass
+                flash("No web development files (HTML, CSS, JS, PHP, SQL) were found in this repository. Please select the correct repository.", "error")
+                return render_template(
+                    "mark.html",
+                    profiles=PROFILES.keys(),
+                    github_connected=github_connected,
+                    github_user=github_user,
+                ), 400
+
+            pipeline = AssessmentPipeline(scoring_mode=scoring_mode)
             
             # Pass metadata to pipeline via context
             app.logger.debug(
@@ -383,6 +495,7 @@ def _register_routes(app: Flask) -> None:
                     "profile": profile,
                     "student_id": student_id,
                     "assignment_id": assignment_id,
+                    "source": "github" if using_github else "upload",
                 },
             )
             
@@ -410,7 +523,10 @@ def _register_routes(app: Flask) -> None:
                     "student_id": student_id,
                     "assignment_id": assignment_id,
                     "original_filename": original_filename,
+                    "source": "github" if using_github else "upload",
                 }
+                if using_github:
+                    run_info["github_repo"] = github_repo
                 save_run_info(run_dir, run_info)
                 _write_run_index_mark(run_dir, run_info, report_path)
                 return {"run_id": run_id}
@@ -481,6 +597,15 @@ def _register_routes(app: Flask) -> None:
             file.save(tmp_file.name)
             tmp_zip_path = Path(tmp_file.name)
         
+        # ── Strict ZIP content validation (magic-byte check) ─────
+        if not validate_is_zipfile(tmp_zip_path):
+            try:
+                tmp_zip_path.unlink()
+            except Exception:
+                pass
+            flash("The uploaded file is not a valid ZIP archive.")
+            return render_template("batch.html", profiles=PROFILES.keys()), 400
+
         try:
             # Validate file size
             valid_size, size_error = validate_file_size(tmp_zip_path, MAX_UPLOAD_MB)
@@ -986,6 +1111,170 @@ def _register_routes(app: Flask) -> None:
         else:
             flash(f"Failed to remove container {container_name}.", "error")
         return redirect(url_for("threats"))
+
+    # ── GitHub OAuth + API endpoints ────────────────────────────────
+
+    @app.route("/api/github/login")
+    def github_login():
+        """Redirect the user to GitHub's OAuth authorization page."""
+        import secrets as _secrets
+
+        if not GITHUB_CLIENT_ID:
+            flash("GitHub integration is not configured (missing Client ID).")
+            return redirect(url_for("mark"))
+
+        state = _secrets.token_urlsafe(32)
+        session["github_oauth_state"] = state
+
+        params = (
+            f"client_id={GITHUB_CLIENT_ID}"
+            f"&redirect_uri={GITHUB_OAUTH_CALLBACK}"
+            f"&scope=repo"
+            f"&state={state}"
+        )
+        return redirect(f"https://github.com/login/oauth/authorize?{params}")
+
+    @app.route("/api/github/callback")
+    def github_callback():
+        """Handle the OAuth redirect from GitHub.
+
+        Exchanges the temporary ``code`` for an ``access_token``, then stores
+        the token and user info in the session.
+        """
+        code = request.args.get("code", "")
+        state = request.args.get("state", "")
+
+        # CSRF protection — validate state
+        expected_state = session.pop("github_oauth_state", None)
+        if not code or not state or state != expected_state:
+            flash("GitHub authorization failed (invalid state). Please try again.")
+            return redirect(url_for("mark"))
+
+        # Exchange code for access_token
+        try:
+            token_resp = _requests.post(
+                "https://github.com/login/oauth/access_token",
+                headers={"Accept": "application/json"},
+                data={
+                    "client_id": GITHUB_CLIENT_ID,
+                    "client_secret": GITHUB_CLIENT_SECRET,
+                    "code": code,
+                    "redirect_uri": GITHUB_OAUTH_CALLBACK,
+                },
+                timeout=15,
+            )
+            token_resp.raise_for_status()
+            token_data = token_resp.json()
+        except _requests.RequestException as exc:
+            logger.warning("GitHub OAuth token exchange failed: %s", exc)
+            flash("Failed to connect to GitHub. Please try again.")
+            return redirect(url_for("mark"))
+
+        access_token = token_data.get("access_token")
+        if not access_token:
+            error_desc = token_data.get("error_description", "Unknown error")
+            flash(f"GitHub authorization failed: {error_desc}")
+            return redirect(url_for("mark"))
+
+        # Fetch user info for display
+        try:
+            user_resp = _requests.get(
+                "https://api.github.com/user",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10,
+            )
+            user_resp.raise_for_status()
+            user_info = user_resp.json()
+        except _requests.RequestException:
+            user_info = {}
+
+        session["github_token"] = access_token
+        session["github_user"] = user_info.get("login", "")
+        session["github_avatar"] = user_info.get("avatar_url", "")
+
+        flash(f"Connected to GitHub as {user_info.get('login', 'unknown')}.", "success")
+        return redirect(url_for("mark"))
+
+    @app.route("/api/github/disconnect", methods=["POST"])
+    def github_disconnect():
+        """Clear the GitHub OAuth token from the session."""
+        session.pop("github_token", None)
+        session.pop("github_user", None)
+        session.pop("github_avatar", None)
+        return jsonify({"status": "disconnected"})
+
+    @app.route("/api/github/repos")
+    def github_repos():
+        """Return the authenticated user's GitHub repositories as JSON."""
+        token = session.get("github_token")
+        if not token:
+            return jsonify({"error": "GitHub account not linked"}), 401
+
+        try:
+            resp = _requests.get(
+                "https://api.github.com/user/repos",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"sort": "updated", "per_page": 100},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            repos = resp.json()
+        except _requests.RequestException as exc:
+            return jsonify({"error": f"Failed to fetch repositories: {exc}"}), 502
+
+        return jsonify([
+            {
+                "full_name": r["full_name"],
+                "name": r["name"],
+                "private": r["private"],
+                "updated_at": r.get("updated_at", ""),
+                "description": r.get("description") or "",
+                "default_branch": r.get("default_branch", "main"),
+            }
+            for r in repos
+        ])
+
+    @app.route("/api/github/repos/<owner>/<repo>/branches")
+    def github_branches(owner: str, repo: str):
+        """Return branches for a specific repository."""
+        token = session.get("github_token")
+        if not token:
+            return jsonify({"error": "GitHub account not linked"}), 401
+
+        full_name = f"{owner}/{repo}"
+
+        # Fetch default branch name from the repo metadata
+        default_branch = "main"
+        try:
+            repo_resp = _requests.get(
+                f"https://api.github.com/repos/{full_name}",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10,
+            )
+            repo_resp.raise_for_status()
+            default_branch = repo_resp.json().get("default_branch", "main")
+        except _requests.RequestException:
+            pass  # fall back to 'main'
+
+        try:
+            resp = _requests.get(
+                f"https://api.github.com/repos/{full_name}/branches",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"per_page": 100},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            branches = resp.json()
+        except _requests.RequestException as exc:
+            return jsonify({"error": f"Failed to fetch branches: {exc}"}), 502
+
+        return jsonify([
+            {
+                "name": b["name"],
+                "is_default": b["name"] == default_branch,
+            }
+            for b in branches
+        ])
 
 
 app = create_app()
