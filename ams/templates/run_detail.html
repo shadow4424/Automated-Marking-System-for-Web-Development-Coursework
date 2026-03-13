@@ -889,6 +889,12 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
             <div class="stat-value text-danger">{{ batch.summary.failed|default(0) }}</div>
             <div class="stat-label">Failed</div>
         </div>
+        {% if batch.summary.invalid|default(0) > 0 %}
+        <div class="card stat-card">
+            <div class="stat-value text-warning">{{ batch.summary.invalid }}</div>
+            <div class="stat-label">Invalid Name</div>
+        </div>
+        {% endif %}
         <div class="card stat-card">
             <div class="stat-value">{{ ((batch.summary.overall_stats.mean|default(0)) * 100)|round|int }}%</div>
             <div class="stat-label">Avg Score</div>
@@ -926,7 +932,13 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
                         {% else %}–{% endif %}
                     </td>
                     <td>
-                        {% if sub.error or sub.status == 'error' %}
+                        {% if sub.status == 'invalid_student_id' %}
+                        <span class="badge badge-warning" title="{{ sub.validation_error|default('Student ID must contain only letters and digits') }}">Invalid Student ID</span>
+                        {% elif sub.status == 'invalid_assignment_id' %}
+                        <span class="badge badge-warning" title="{{ sub.validation_error|default('Assignment ID in filename does not match') }}">Invalid Assignment ID</span>
+                        {% elif sub.invalid %}
+                        <span class="badge badge-warning" title="{{ sub.validation_error|default('Filename does not match studentID_assignmentID.zip') }}">Invalid Name</span>
+                        {% elif sub.error or sub.status == 'error' %}
                         <span class="badge badge-danger">Error</span>
                         {% elif score >= 70 %}
                         <span class="badge badge-success">Excellent</span>
@@ -944,10 +956,14 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
                         {% endif %}
                     </td>
                     <td class="actions-cell">
+                        {% if not sub.invalid %}
                         <a href="{{ url_for('batch_submission_view', run_id=run_id, submission_id=sub.id) }}"
                             class="btn btn-primary btn-sm" title="View in browser">👁️ View</a>
                         <a href="{{ url_for('batch_submission_report', run_id=run_id, submission_id=sub.id) }}"
                             class="btn btn-ghost btn-sm" title="Download JSON">⬇️ Download</a>
+                        {% else %}
+                        <span class="text-secondary text-sm" title="{{ sub.validation_error|default('Invalid filename format') }}">—</span>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}

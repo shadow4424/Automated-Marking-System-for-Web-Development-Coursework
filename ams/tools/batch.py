@@ -2,17 +2,46 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 import statistics
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 import shutil
 import tempfile
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from ams.core.pipeline import AssessmentPipeline
 from ams.core.config import ScoringMode
 from ams.io.web_storage import safe_extract_zip, find_submission_root
+
+# Submission filename must match: studentID_assignmentID.zip
+# studentID: alphanumeric only, e.g. "student1234" (letters and digits, no special characters)
+# assignmentID: anything after the first underscore; matched against the batch-level assignment ID at runtime
+_STUDENT_ID_RE = re.compile(r'^[a-zA-Z0-9]+$')
+
+
+def validate_submission_filename(filename: str) -> Tuple[bool, str, str]:
+    """Parse and structurally validate a ZIP filename as studentID_assignmentID.zip.
+
+    Checks that the stem contains a '_' separator, that both parts are non-empty,
+    and that the studentID is alphanumeric.  Does NOT cross-check the assignmentID
+    against a batch-level assignment ID — that check happens at processing time.
+
+    Returns (is_valid, student_id, assignment_id).
+    student_id and assignment_id are empty strings when the filename is invalid.
+    """
+    stem = Path(filename).stem
+    if '_' not in stem:
+        return False, "", ""
+    idx = stem.index('_')
+    student_id = stem[:idx]
+    assignment_id_part = stem[idx + 1:]
+    if not student_id or not assignment_id_part:
+        return False, "", ""
+    if not _STUDENT_ID_RE.fullmatch(student_id):
+        return False, "", ""
+    return True, student_id, assignment_id_part
 
 
 @dataclass(frozen=True)
@@ -112,10 +141,12 @@ def run_batch(
 
 def aggregate_batch(records: List[dict], finding_stats: Dict[str, Dict[str, object]], failure_reason_counts: Counter[str], profile: str) -> dict:
     total = len(records)
-    # Processing status counts: succeeded = processed without error, failed = errored
-    succeeded = sum(1 for r in records if "error" not in r)
+    invalid = sum(1 for r in records if r.get("invalid"))
+    # succeeded = ran through the pipeline without error; failed = pipeline error (not invalid name)
+    succeeded = sum(1 for r in records if r.get("status") == "ok")
     failed = sum(1 for r in records if "error" in r)
-    processed_records = [r for r in records if "error" not in r and r.get("overall") is not None]
+    # Include both successfully graded and invalid (grade 0) records in score statistics
+    processed_records = [r for r in records if r.get("overall") is not None and "error" not in r]
 
     overall_scores = [float(r["overall"]) for r in processed_records if r.get("overall") is not None]
     overall_stats = None
@@ -173,6 +204,7 @@ def aggregate_batch(records: List[dict], finding_stats: Dict[str, Dict[str, obje
         "total_submissions": total,
         "succeeded": succeeded,
         "failed": failed,
+        "invalid": invalid,
         "overall_stats": overall_stats,
         "component_stats": component_stats,
         "buckets": buckets,
@@ -198,7 +230,7 @@ def write_outputs(
     (out_root / "batch_summary.json").write_text(json.dumps(batch_summary, indent=2), encoding="utf-8")
 
     csv_path = out_root / "batch_summary.csv"
-    fieldnames = ["id", "kind", "overall", "html", "css", "js", "php", "sql", "error"]
+    fieldnames = ["id", "student_id", "assignment_id", "kind", "overall", "html", "css", "js", "php", "sql", "status", "error"]
     with csv_path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
@@ -207,6 +239,8 @@ def write_outputs(
             writer.writerow(
                 {
                     "id": record.get("id"),
+                    "student_id": record.get("student_id", ""),
+                    "assignment_id": record.get("assignment_id", ""),
                     "kind": record.get("kind"),
                     "overall": record.get("overall"),
                     "html": comps.get("html"),
@@ -214,7 +248,8 @@ def write_outputs(
                     "js": comps.get("js"),
                     "php": comps.get("php") if profile == "fullstack" else "",
                     "sql": comps.get("sql") if profile == "fullstack" else "",
-                    "error": record.get("error", ""),
+                    "status": record.get("status", ""),
+                    "error": record.get("error", "") or record.get("validation_error", ""),
                 }
             )
 
@@ -277,14 +312,10 @@ def _process_one_submission(
     failure_reason_counts: Counter[str],
     assignment_id: Optional[str] = None,
 ) -> dict:
-    # Try to extract student_id from item.id (common patterns: student_id.zip, student_id/, etc.)
-    student_id = item.id
-    # Remove common suffixes
-    for suffix in [".zip", "_submission", "-submission"]:
-        if student_id.lower().endswith(suffix):
-            student_id = student_id[:-len(suffix)]
-    
-    record = {
+    # ── Filename validation ────────────────────────────────────────────────────
+    # Step 1: must contain at least one '_' separator
+    stem = Path(item.path.name).stem
+    record: dict = {
         "id": item.id,
         "path": str(item.path),
         "kind": item.kind,
@@ -292,9 +323,69 @@ def _process_one_submission(
         "components": _empty_components(),
         "report_path": None,
         "original_filename": item.path.name,
-        "student_id": student_id,
-        "assignment_id": assignment_id,
+        "student_id": item.id,
+        "assignment_id": assignment_id or "",
     }
+
+    if '_' not in stem:
+        record["overall"] = 0.0
+        record["status"] = "invalid_filename"
+        record["invalid"] = True
+        record["validation_error"] = (
+            f"'{item.path.name}' does not match the required format studentID_assignmentID.zip"
+        )
+        failure_reason_counts["InvalidFilename"] += 1
+        return record
+
+    sep = stem.index('_')
+    raw_student_id = stem[:sep]
+    raw_assignment_id = stem[sep + 1:]
+
+    # Step 2: studentID must be alphanumeric only
+    if not raw_student_id or not _STUDENT_ID_RE.fullmatch(raw_student_id):
+        record["student_id"] = raw_student_id or item.id
+        record["overall"] = 0.0
+        record["status"] = "invalid_student_id"
+        record["invalid"] = True
+        record["validation_error"] = (
+            f"Student ID '{raw_student_id}' in '{item.path.name}' is invalid: "
+            f"must contain only letters and digits (e.g. student1234)"
+        )
+        failure_reason_counts["InvalidStudentId"] += 1
+        return record
+
+    # Step 3: assignmentID must be non-empty and match the batch assignment
+    if not raw_assignment_id:
+        record["student_id"] = raw_student_id
+        record["overall"] = 0.0
+        record["status"] = "invalid_assignment_id"
+        record["invalid"] = True
+        record["validation_error"] = (
+            f"Assignment ID is missing in '{item.path.name}'"
+        )
+        failure_reason_counts["InvalidAssignmentId"] += 1
+        return record
+
+    if assignment_id and raw_assignment_id != assignment_id:
+        record["student_id"] = raw_student_id
+        record["assignment_id"] = raw_assignment_id
+        record["overall"] = 0.0
+        record["status"] = "invalid_assignment_id"
+        record["invalid"] = True
+        record["validation_error"] = (
+            f"Assignment ID '{raw_assignment_id}' in '{item.path.name}' "
+            f"does not match the expected assignment '{assignment_id}'"
+        )
+        failure_reason_counts["InvalidAssignmentId"] += 1
+        return record
+
+    # Both parts are valid — use parsed values for the rest of processing
+    parsed_student_id = raw_student_id
+    parsed_assignment_id = raw_assignment_id
+    record["student_id"] = parsed_student_id
+    record["assignment_id"] = parsed_assignment_id
+    # ──────────────────────────────────────────────────────────────────────────
+
     temp_ctx: Optional[tempfile.TemporaryDirectory[str]] = None
     try:
         if keep_individual_runs:
@@ -323,13 +414,13 @@ def _process_one_submission(
             shutil.copytree(source_path, target, dirs_exist_ok=True)
             submission_root = find_submission_root(target).resolve()
 
-        # Create metadata for this submission
+        # Create metadata for this submission using the validated filename components
         from ams.io.metadata import MetadataValidator, SubmissionMetadata
         from datetime import datetime, timezone
-        
+
         submission_metadata = SubmissionMetadata(
-            student_id=MetadataValidator.sanitize_identifier(student_id),
-            assignment_id=MetadataValidator.sanitize_identifier(assignment_id) if assignment_id else "unknown",
+            student_id=MetadataValidator.sanitize_identifier(parsed_student_id),
+            assignment_id=MetadataValidator.sanitize_identifier(parsed_assignment_id),
             timestamp=datetime.now(timezone.utc),
             original_filename=MetadataValidator.sanitize_filename(item.path.name),
         )
@@ -349,8 +440,8 @@ def _process_one_submission(
         # Extract metadata from report if available
         report_metadata = report_data.get("metadata", {}).get("submission_metadata")
         if report_metadata:
-            record["student_id"] = report_metadata.get("student_id", student_id)
-            record["assignment_id"] = report_metadata.get("assignment_id", assignment_id)
+            record["student_id"] = report_metadata.get("student_id", parsed_student_id)
+            record["assignment_id"] = report_metadata.get("assignment_id", parsed_assignment_id)
             record["original_filename"] = report_metadata.get("original_filename", item.path.name)
             record["upload_timestamp"] = report_metadata.get("timestamp")
         
@@ -396,6 +487,7 @@ def _process_one_submission(
 __all__ = [
     "BatchItem",
     "discover_batch_items",
+    "validate_submission_filename",
     "run_batch",
     "aggregate_batch",
     "write_outputs",
