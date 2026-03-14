@@ -39,7 +39,13 @@
                     <td>{{ a.title }}</td>
                     <td><span class="badge badge-secondary">{{ a.profile }}</span></td>
                     <td>{{ a.due_date[:16].replace('T', ' ') if a.due_date else '—' }}</td>
-                    <td><span class="badge badge-warning">Pending</span></td>
+                    <td>
+                        {% if a._uploaded %}
+                        <span class="badge badge-success">Uploaded</span>
+                        {% else %}
+                        <span class="badge badge-danger">Not uploaded</span>
+                        {% endif %}
+                    </td>
                     <td><a href="{{ url_for('mark') }}" class="btn btn-primary btn-sm">Submit</a></td>
                 </tr>
                 {% endfor %}
@@ -79,7 +85,13 @@
                     <td>{{ a.title }}</td>
                     <td><span class="badge badge-secondary">{{ a.profile }}</span></td>
                     <td>{{ a.due_date[:16].replace('T', ' ') if a.due_date else '—' }}</td>
-                    <td><span class="badge badge-success">Released</span></td>
+                    <td>
+                        {% if a._uploaded %}
+                        <span class="badge badge-success">Uploaded</span>
+                        {% else %}
+                        <span class="badge badge-danger">Late</span>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

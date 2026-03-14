@@ -44,7 +44,7 @@
 </div>
 
 <!-- Navigation Cards -->
-<div class="grid grid-3" style="gap:var(--space-lg);">
+<div class="grid grid-2" style="gap:var(--space-lg);">
     <a href="{{ url_for('admin.create_account_page') }}" class="card" style="text-decoration:none; color:inherit; display:block;">
         <div class="card-header">
             <h2 class="card-title">Create Account</h2>
@@ -54,6 +54,15 @@
             <span class="btn btn-primary btn-sm">Create Account</span>
         </div>
     </a>
+    <a href="{{ url_for('teacher.create_assignment_route') }}" class="card" style="text-decoration:none; color:inherit; display:block;">
+        <div class="card-header">
+            <h2 class="card-title">Create Assignment</h2>
+        </div>
+        <p class="text-secondary">Create a new assignment for students.</p>
+        <div style="margin-top:var(--space-md);">
+            <span class="btn btn-primary btn-sm">Create Assignment</span>
+        </div>
+    </a>
     <a href="{{ url_for('admin.users_page') }}" class="card" style="text-decoration:none; color:inherit; display:block;">
         <div class="card-header">
             <h2 class="card-title">Manage Users</h2>
@@ -61,7 +70,7 @@
         </div>
         <p class="text-secondary">View and manage all user accounts.</p>
         <div style="margin-top:var(--space-md);">
-            <span class="btn btn-secondary btn-sm">View Users</span>
+            <span class="btn btn-primary btn-sm">View Users</span>
         </div>
     </a>
     <a href="{{ url_for('admin.assignments_page') }}" class="card" style="text-decoration:none; color:inherit; display:block;">
@@ -71,7 +80,7 @@
         </div>
         <p class="text-secondary">Monitor assignments across all teachers.</p>
         <div style="margin-top:var(--space-md);">
-            <span class="btn btn-secondary btn-sm">View Assignments</span>
+            <span class="btn btn-primary btn-sm">View Assignments</span>
         </div>
     </a>
 </div>

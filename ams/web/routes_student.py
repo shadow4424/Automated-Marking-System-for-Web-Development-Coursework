@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from flask import (
@@ -30,11 +31,17 @@ def _resolve_student_id() -> str | None:
     return None
 
 
-def _gather_student_runs(student_id: str) -> list[dict]:
-    """Collect all runs belonging to *student_id* with ``_marks_released`` flags."""
+def _gather_student_runs(student_id: str) -> tuple[list[dict], set[str]]:
+    """Collect runs for *student_id*.
+
+    Returns ``(runs_list, submitted_assignment_ids)`` where
+    *submitted_assignment_ids* is the set of assignment IDs for which
+    the student has at least one submission.
+    """
     runs_root = get_runs_root(current_app)
     all_runs = list_runs(runs_root)
     my_runs: list[dict] = []
+    submitted_aids: set[str] = set()
 
     for run in all_runs:
         if run.get("mode") == "mark":
@@ -43,6 +50,8 @@ def _gather_student_runs(student_id: str) -> list[dict]:
                 assignment = get_assignment(aid) if aid else None
                 run["_marks_released"] = assignment["marks_released"] if assignment else False
                 my_runs.append(run)
+                if aid:
+                    submitted_aids.add(aid)
         elif run.get("mode") == "batch":
             batch_summary = run.get("batch_summary", [])
             if isinstance(batch_summary, list):
@@ -54,9 +63,35 @@ def _gather_student_runs(student_id: str) -> list[dict]:
                         student_run["_submission_record"] = rec
                         student_run["_marks_released"] = assignment["marks_released"] if assignment else False
                         my_runs.append(student_run)
+                        if aid:
+                            submitted_aids.add(aid)
                         break
 
-    return my_runs
+    return my_runs, submitted_aids
+
+
+def _split_assignments(
+    assignments: list[dict], submitted_aids: set[str],
+) -> tuple[list[dict], list[dict]]:
+    """Split assignments into *todo* and *completed* lists.
+
+    - **todo**: due date is in the future (or unset)
+    - **completed**: due date has passed
+    Each assignment gets a ``_uploaded`` boolean flag.
+    """
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M")
+    todo: list[dict] = []
+    completed: list[dict] = []
+
+    for a in assignments:
+        a["_uploaded"] = a["assignmentID"] in submitted_aids
+        due = a.get("due_date", "")
+        if due and due < now:
+            completed.append(a)
+        else:
+            todo.append(a)
+
+    return todo, completed
 
 
 # ---------------------------------------------------------------------------
@@ -70,12 +105,12 @@ def dashboard():
 
     assignments: list[dict] = []
     my_runs: list[dict] = []
+    submitted_aids: set[str] = set()
     if student_id:
         assignments = list_assignments_for_student(student_id)
-        my_runs = _gather_student_runs(student_id)
+        my_runs, submitted_aids = _gather_student_runs(student_id)
 
-    todo = [a for a in assignments if not a["marks_released"]]
-    completed = [a for a in assignments if a["marks_released"]]
+    todo, completed = _split_assignments(assignments, submitted_aids)
 
     return render_template(
         "student_dashboard.html",
@@ -95,12 +130,12 @@ def coursework():
 
     assignments: list[dict] = []
     my_runs: list[dict] = []
+    submitted_aids: set[str] = set()
     if student_id:
         assignments = list_assignments_for_student(student_id)
-        my_runs = _gather_student_runs(student_id)
+        my_runs, submitted_aids = _gather_student_runs(student_id)
 
-    todo = [a for a in assignments if not a["marks_released"]]
-    completed = [a for a in assignments if a["marks_released"]]
+    todo, completed = _split_assignments(assignments, submitted_aids)
 
     return render_template(
         "student_coursework.html",

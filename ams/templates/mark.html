@@ -1,7 +1,126 @@
 {% extends "base.html" %}
-{% block title %}Mark Submission - AMS{% endblock %}
+{% block title %}{% if user_role == 'student' %}Submit Coursework{% else %}Mark Submission{% endif %} — AMS{% endblock %}
 
 {% block content %}
+{% if user_role == 'student' %}
+{# ──────────────────── STUDENT VIEW ──────────────────── #}
+<div class="page-header">
+    <h1>Submit Coursework</h1>
+    <p class="text-secondary">
+        Select your assignment and upload your work as a ZIP file or connect via GitHub.
+    </p>
+</div>
+
+<div class="card">
+    <form method="post" enctype="multipart/form-data" id="markForm">
+        {# Hidden system fields #}
+        <input type="hidden" id="student_id" name="student_id" value="{{ user_id }}">
+        <input type="hidden" name="scoring_mode" value="static_plus_llm">
+        <select id="profile" name="profile" style="display:none;">
+            {% for prof in profiles %}
+            <option value="{{ prof }}">{{ prof }}</option>
+            {% endfor %}
+        </select>
+
+        {# Assignment picker #}
+        <div class="form-group">
+            <label class="form-label" for="assignment_id">
+                Assignment <span class="required">*</span>
+            </label>
+            {% if student_assignments %}
+            <select id="assignment_id" name="assignment_id" class="form-select" required>
+                <option value="">Select an assignment…</option>
+                {% for a in student_assignments %}
+                <option value="{{ a.assignmentID }}" data-profile="{{ a.profile }}">
+                    {{ a.title }}{% if a.due_date %} — Due {{ a.due_date[:16].replace('T', ' ') }}{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+            {% else %}
+            <div class="empty-state" style="padding:var(--space-lg) 0;">
+                <p class="empty-state-title">No assignments available</p>
+                <p class="empty-state-text">You have no pending assignments to submit.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        {# Submission method #}
+        <div class="form-group">
+            <label class="form-label">How would you like to submit?</label>
+            <div class="submission-method-radios">
+                <label class="radio-label">
+                    <input type="radio" name="submission_method" value="upload" checked id="methodUpload">
+                    Upload ZIP
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="submission_method" value="github" id="methodGithub">
+                    GitHub Repository
+                </label>
+            </div>
+        </div>
+
+        {# ── ZIP upload ── #}
+        <div id="uploadSection">
+            <div class="form-group">
+                <label class="form-label" for="submission">Upload your submission</label>
+                <input type="file" id="submission" name="submission" class="form-file-input" accept=".zip">
+                <p class="form-hint">ZIP file only. Maximum size: 25 MB.</p>
+            </div>
+        </div>
+
+        {# ── GitHub ── #}
+        <div id="githubSection" style="display:none;">
+            <div class="form-group">
+                <label class="form-label">Connect your Account</label>
+                {% if github_connected %}
+                <div class="github-connected-status" id="githubConnectedState">
+                    <span class="github-status-dot github-status-active"></span>
+                    <span>Connected as <strong>{{ github_user }}</strong></span>
+                    <button type="button" class="btn btn-sm btn-outline" id="githubDisconnectBtn">Disconnect</button>
+                </div>
+                {% else %}
+                <div id="githubDisconnectedState">
+                    <a href="{{ url_for('github_login') }}" class="btn btn-secondary" id="githubConnectBtn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right:4px">
+                            <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                        </svg>
+                        Connect to GitHub
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="grid grid-2" id="githubRepoSection" {% if not github_connected %}style="display:none;"{% endif %}>
+                <div class="form-group">
+                    <label class="form-label" for="github_repo_select">
+                        Repository <span class="required">*</span>
+                    </label>
+                    <select id="github_repo_select" name="github_repo" class="form-select" disabled>
+                        <option value="">Select a repository…</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="github_branch_select">
+                        Branch <span class="required">*</span>
+                    </label>
+                    <select id="github_branch_select" name="github_branch" class="form-select" disabled>
+                        <option value="">Select a branch…</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        {% if student_assignments %}
+        <button type="submit" class="btn btn-primary btn-lg btn-block" id="markSubmitBtn"
+            {% if sandbox_status is defined and not sandbox_status.enforced and sandbox_status.mode == 'docker' %}disabled title="Docker sandbox must be running to process submissions"{% endif %}>
+            Submit Coursework
+        </button>
+        {% endif %}
+    </form>
+</div>
+
+{% else %}
+{# ──────────────────── TEACHER / ADMIN VIEW ──────────────────── #}
 <div class="page-header">
     <h1>Mark Single Submission</h1>
     <p class="text-secondary">
@@ -52,7 +171,7 @@
             </div>
         </div>
 
-        {# ── Submission method radio buttons (Gradescope-style) ── #}
+        {# ── Submission method radio buttons ── #}
         <div class="form-group">
             <label class="form-label">Submission Method</label>
             <div class="submission-method-radios">
@@ -78,11 +197,8 @@
 
         {# ── GitHub submission section ── #}
         <div id="githubSection" style="display:none;">
-
-            {# Connect your account #}
             <div class="form-group">
                 <label class="form-label">Connect your Account</label>
-
                 {% if github_connected %}
                 <div class="github-connected-status" id="githubConnectedState">
                     <span class="github-status-dot github-status-active"></span>
@@ -101,7 +217,6 @@
                 {% endif %}
             </div>
 
-            {# Repository + Branch dropdowns #}
             <div class="grid grid-2" id="githubRepoSection" {% if not github_connected %}style="display:none;"{% endif %}>
                 <div class="form-group">
                     <label class="form-label" for="github_repo_select">
@@ -128,8 +243,24 @@
         </button>
     </form>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/github-submissions.js') }}" defer></script>
+{% if user_role == 'student' and student_assignments %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var sel = document.getElementById('assignment_id');
+    var prof = document.getElementById('profile');
+    if (sel && prof) {
+        sel.addEventListener('change', function() {
+            var opt = sel.options[sel.selectedIndex];
+            var p = opt.getAttribute('data-profile');
+            if (p) prof.value = p;
+        });
+    }
+});
+</script>
+{% endif %}
 {% endblock %}

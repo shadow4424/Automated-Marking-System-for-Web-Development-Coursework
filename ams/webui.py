@@ -34,7 +34,7 @@ from flask import (
     url_for,
 )
 
-from ams.core.db import init_db, get_assignment
+from ams.core.db import init_db, get_assignment, list_assignments_for_student
 from ams.core.pipeline import AssessmentPipeline
 from ams.core.config import (
     ScoringMode,
@@ -289,6 +289,18 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
 
     app.context_processor(inject_user_context)
 
+    @app.context_processor
+    def inject_released_aids():
+        """Expose released assignment IDs so the job widget can gate 'View' links."""
+        if session.get("user_role") == "student" and session.get("user_id"):
+            aids = [
+                a["assignmentID"]
+                for a in list_assignments_for_student(session["user_id"])
+                if a.get("marks_released")
+            ]
+            return {"released_assignment_ids": aids}
+        return {"released_assignment_ids": []}
+
     _register_routes(app)
     return app
 
@@ -315,11 +327,23 @@ def _register_routes(app: Flask) -> None:
         if request.method == "GET":
             github_connected = bool(session.get("github_token"))
             github_user = session.get("github_user", "")
+            user_role = session.get("user_role", "")
+            user_id = session.get("user_id", "")
+            student_assignments = []
+            if user_role == "student":
+                now = datetime.now().strftime("%Y-%m-%dT%H:%M")
+                student_assignments = [
+                    a for a in list_assignments_for_student(user_id)
+                    if not a.get("due_date") or a["due_date"] >= now
+                ]
             return render_template(
                 "mark.html",
                 profiles=PROFILES.keys(),
                 github_connected=github_connected,
                 github_user=github_user,
+                user_role=user_role,
+                user_id=user_id,
+                student_assignments=student_assignments,
             )
 
         # ── Sandbox enforcement ──────────────────────────────────────

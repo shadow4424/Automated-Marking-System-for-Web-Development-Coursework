@@ -17,7 +17,7 @@
     {% block head %}{% endblock %}
 </head>
 
-<body>
+<body data-user-role="{{ session.get('user_role', '') }}">
     <nav class="navbar">
         <div class="container navbar-inner">
             <div class="navbar-brand">
@@ -118,6 +118,7 @@
     <footer class="footer"></footer>
 
     <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+    <script>window.AMS_RELEASED_AIDS={{ released_assignment_ids|default([])|tojson }};</script>
     <script src="{{ url_for('static', filename='js/job-poller.js') }}" defer></script>
     {% block scripts %}{% endblock %}
 </body>

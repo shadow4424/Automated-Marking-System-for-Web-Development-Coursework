@@ -33,8 +33,9 @@
         catch (e) {}
     }
 
-    function _addJob(jobId, runId, label) {
+    function _addJob(jobId, runId, label, assignmentId) {
         jobs.push({ jobId: jobId, runId: runId, label: label,
+                    assignmentId: assignmentId || '',
                     status: 'processing', startedAt: Date.now(),
                     completedAt: null, error: null });
         _saveJobs();
@@ -143,6 +144,15 @@
         return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
     }
 
+    function _isStudent() {
+        var body = document.body;
+        return body && body.getAttribute('data-user-role') === 'student';
+    }
+
+    function _isReleased(assignmentId) {
+        return window.AMS_RELEASED_AIDS && window.AMS_RELEASED_AIDS.indexOf(assignmentId) !== -1;
+    }
+
     function _rowHtml(job) {
         var icon, meta, action, dismissBtn = '';
 
@@ -153,7 +163,9 @@
         } else if (job.status === 'completed') {
             icon         = '<span class="wg-done wg-row-icon">&#10003;</span>';
             meta         = 'Done in ' + _durationStr(job.duration || 0);
-            action       = '<a href="/runs/' + _esc(job.runId) + '" class="wg-view">View &rarr;</a>';
+            action       = (_isStudent() && !_isReleased(job.assignmentId))
+                               ? '<span style="color:#818cf8;font-size:.8rem;">Awaiting release</span>'
+                               : '<a href="/runs/' + _esc(job.runId) + '" class="wg-view">View &rarr;</a>';
             dismissBtn   = '<button class="wg-dismiss" data-dismiss="' + _esc(job.jobId) + '" title="Dismiss">&times;</button>';
         } else {
             icon         = '<span class="wg-fail wg-row-icon">&#10007;</span>';
@@ -330,7 +342,7 @@
                 })
                 .then(function (data) {
                     if (!data) return;
-                    _addJob(data.job_id, data.run_id, label);
+                    _addJob(data.job_id, data.run_id, label, assignmentId);
                     _poll(data.job_id);
                     window.location.href = '/';
                 })
