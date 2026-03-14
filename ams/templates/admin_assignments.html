@@ -25,8 +25,10 @@
                     <th>Title</th>
                     <th>Teacher</th>
                     <th>Profile</th>
+                    <th>Due Date</th>
                     <th>Students</th>
                     <th>Marks</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -36,6 +38,7 @@
                     <td><a href="{{ url_for('teacher.assignment_detail', assignment_id=a.assignmentID) }}">{{ a.title }}</a></td>
                     <td>{{ a.teacherID }}</td>
                     <td><span class="badge badge-secondary">{{ a.profile }}</span></td>
+                    <td>{{ a.due_date[:16].replace('T', ' ') if a.due_date else '—' }}</td>
                     <td>{{ a.assigned_students|length }}</td>
                     <td>
                         {% if a.marks_released %}
@@ -43,6 +46,11 @@
                         {% else %}
                         <span class="badge badge-warning">Withheld</span>
                         {% endif %}
+                    </td>
+                    <td>
+                        <form method="POST" action="{{ url_for('teacher.delete_assignment_route', assignment_id=a.assignmentID) }}" onsubmit="return confirm('Delete assignment {{ a.assignmentID }}?');">
+                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                        </form>
                     </td>
                 </tr>
                 {% endfor %}

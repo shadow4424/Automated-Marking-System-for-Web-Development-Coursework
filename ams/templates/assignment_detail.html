@@ -25,6 +25,9 @@
             <button type="submit" class="btn btn-success btn-sm">Release Marks</button>
         </form>
         {% endif %}
+        <form method="POST" action="{{ url_for('teacher.delete_assignment_route', assignment_id=assignment.assignmentID) }}" style="display:inline;" onsubmit="return confirm('Delete assignment {{ assignment.assignmentID }}? This cannot be undone.');">
+            <button type="submit" class="btn btn-danger btn-sm">Delete Assignment</button>
+        </form>
     </div>
 </div>
 
@@ -52,8 +55,8 @@
         <div class="stat-label">Profile</div>
     </div>
     <div class="card stat-card stat-card--warning">
-        <div class="stat-value">{{ assignment.created_at[:10] if assignment.created_at else '—' }}</div>
-        <div class="stat-label">Created</div>
+        <div class="stat-value">{{ assignment.due_date[:10] if assignment.due_date else '—' }}</div>
+        <div class="stat-label">Due Date</div>
     </div>
 </div>
 
@@ -127,8 +130,8 @@
             <dd><code>{{ assignment.teacherID }}</code></dd>
             <dt class="text-secondary">Profile</dt>
             <dd><span class="badge badge-secondary">{{ assignment.profile }}</span></dd>
-            <dt class="text-secondary">Created</dt>
-            <dd>{{ assignment.created_at or '—' }}</dd>
+            <dt class="text-secondary">Due Date</dt>
+            <dd>{{ assignment.due_date[:16].replace('T', ' ') if assignment.due_date else '—' }}</dd>
             <dt class="text-secondary">Marks</dt>
             <dd>
                 {% if assignment.marks_released %}

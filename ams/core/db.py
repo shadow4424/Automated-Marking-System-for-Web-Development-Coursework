@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS assignments (
     profile              TEXT NOT NULL DEFAULT 'frontend',
     marks_released       INTEGER NOT NULL DEFAULT 0,
     assigned_students    TEXT NOT NULL DEFAULT '[]',
+    due_date             TEXT NOT NULL DEFAULT '',
     created_at           TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (teacherID) REFERENCES users(userID)
 );
@@ -79,6 +80,11 @@ def init_db() -> None:
     conn = get_db()
     try:
         conn.executescript(_SCHEMA_SQL)
+
+        # Migrate: add due_date column if missing (existing DBs)
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(assignments)").fetchall()]
+        if "due_date" not in cols:
+            conn.execute("ALTER TABLE assignments ADD COLUMN due_date TEXT NOT NULL DEFAULT ''")
 
         # Provision root admin when missing
         row = conn.execute(
@@ -200,13 +206,14 @@ def create_assignment(
     description: str = "",
     profile: str = "frontend",
     assigned_students: list[str] | None = None,
+    due_date: str = "",
 ) -> bool:
     """Create a new assignment. Returns ``True`` on success."""
     conn = get_db()
     try:
         conn.execute(
-            "INSERT INTO assignments (assignmentID, teacherID, title, description, profile, assigned_students) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO assignments (assignmentID, teacherID, title, description, profile, assigned_students, due_date) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 assignment_id,
                 teacher_id,
@@ -214,6 +221,7 @@ def create_assignment(
                 description,
                 profile,
                 json.dumps(assigned_students or []),
+                due_date,
             ),
         )
         conn.commit()
@@ -306,6 +314,19 @@ def withhold_marks(assignment_id: str) -> bool:
         cur = conn.execute(
             "UPDATE assignments SET marks_released = 0 WHERE assignmentID = ?",
             (assignment_id,),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def delete_assignment(assignment_id: str) -> bool:
+    """Delete an assignment. Returns ``True`` if a row was removed."""
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            "DELETE FROM assignments WHERE assignmentID = ?", (assignment_id,)
         )
         conn.commit()
         return cur.rowcount > 0

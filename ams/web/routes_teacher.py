@@ -16,6 +16,7 @@ from flask import (
 
 from ams.core.db import (
     create_assignment,
+    delete_assignment,
     get_assignment,
     get_user,
     list_assignments,
@@ -59,6 +60,7 @@ def create_assignment_route():
     title = request.form.get("title", "").strip()
     description = request.form.get("description", "").strip()
     profile = request.form.get("profile", "frontend").strip()
+    due_date = request.form.get("due_date", "").strip()
     selected_students = request.form.getlist("students")
 
     if not assignment_id or not title:
@@ -73,6 +75,7 @@ def create_assignment_route():
         description=description,
         profile=profile,
         assigned_students=selected_students,
+        due_date=due_date,
     )
     if ok:
         flash(f"Assignment '{assignment_id}' created successfully.", "success")
@@ -140,4 +143,14 @@ def release(assignment_id: str):
 def withhold(assignment_id: str):
     withhold_marks(assignment_id)
     flash(f"Marks withheld for '{assignment_id}'.", "info")
+    return redirect(url_for("teacher.dashboard"))
+
+
+@teacher_bp.route("/assignment/<assignment_id>/delete", methods=["POST"])
+@teacher_or_admin_required
+def delete_assignment_route(assignment_id: str):
+    if delete_assignment(assignment_id):
+        flash(f"Assignment '{assignment_id}' deleted.", "success")
+    else:
+        flash(f"Could not delete assignment '{assignment_id}'.", "error")
     return redirect(url_for("teacher.dashboard"))

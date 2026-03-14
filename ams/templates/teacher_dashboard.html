@@ -69,6 +69,7 @@
                     <th>Assignment ID</th>
                     <th>Title</th>
                     <th>Profile</th>
+                    <th>Due Date</th>
                     <th>Students</th>
                     <th>Marks Status</th>
                     <th>Actions</th>
@@ -80,6 +81,7 @@
                     <td><a href="{{ url_for('teacher.assignment_detail', assignment_id=a.assignmentID) }}"><code>{{ a.assignmentID }}</code></a></td>
                     <td><a href="{{ url_for('teacher.assignment_detail', assignment_id=a.assignmentID) }}">{{ a.title }}</a></td>
                     <td><span class="badge badge-secondary">{{ a.profile }}</span></td>
+                    <td>{{ a.due_date[:16].replace('T', ' ') if a.due_date else '—' }}</td>
                     <td>{{ a.assigned_students|length }} allocated</td>
                     <td>
                         {% if a.marks_released %}
@@ -88,16 +90,21 @@
                         <span class="badge badge-warning">Withheld</span>
                         {% endif %}
                     </td>
-                    <td style="display:flex; gap:var(--space-xs);">
-                        {% if a.marks_released %}
-                        <form method="POST" action="{{ url_for('teacher.withhold', assignment_id=a.assignmentID) }}">
-                            <button type="submit" class="btn btn-ghost btn-sm">Withhold</button>
-                        </form>
-                        {% else %}
-                        <form method="POST" action="{{ url_for('teacher.release', assignment_id=a.assignmentID) }}">
-                            <button type="submit" class="btn btn-success btn-sm">Release Marks</button>
-                        </form>
-                        {% endif %}
+                    <td>
+                        <div style="display:flex; gap:var(--space-xs); align-items:center;">
+                            {% if a.marks_released %}
+                            <form method="POST" action="{{ url_for('teacher.withhold', assignment_id=a.assignmentID) }}">
+                                <button type="submit" class="btn btn-warning btn-sm">Withhold</button>
+                            </form>
+                            {% else %}
+                            <form method="POST" action="{{ url_for('teacher.release', assignment_id=a.assignmentID) }}">
+                                <button type="submit" class="btn btn-success btn-sm">Release</button>
+                            </form>
+                            {% endif %}
+                            <form method="POST" action="{{ url_for('teacher.delete_assignment_route', assignment_id=a.assignmentID) }}" onsubmit="return confirm('Delete assignment {{ a.assignmentID }}?');">
+                                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}

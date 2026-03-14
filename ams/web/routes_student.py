@@ -13,7 +13,7 @@ from flask import (
 
 from ams.core.db import get_assignment, list_assignments_for_student
 from ams.io.web_storage import get_runs_root, list_runs
-from ams.web.auth import get_current_user, login_required, role_required
+from ams.web.auth import get_current_user, login_required
 
 student_bp = Blueprint("student", __name__, url_prefix="/student")
 
@@ -108,37 +108,5 @@ def coursework():
         todo=todo,
         completed=completed,
         my_runs=my_runs,
-        student_id=student_id,
-    )
-
-
-@student_bp.route("/assignment/<assignment_id>")
-@login_required
-def assignment_view(assignment_id: str):
-    from flask import flash, redirect, url_for
-
-    student_id = _resolve_student_id()
-    if not student_id:
-        flash("No student context available.", "error")
-        return redirect(url_for("student.dashboard"))
-
-    assignment = get_assignment(assignment_id)
-    if assignment is None:
-        flash("Assignment not found.", "error")
-        return redirect(url_for("student.coursework"))
-
-    # Ensure this student is assigned to this assignment
-    if student_id not in assignment.get("assigned_students", []):
-        flash("You are not assigned to this coursework.", "error")
-        return redirect(url_for("student.coursework"))
-
-    # Gather only this student's runs for this assignment
-    all_runs = _gather_student_runs(student_id)
-    assignment_runs = [r for r in all_runs if r.get("assignment_id") == assignment_id]
-
-    return render_template(
-        "student_assignment_view.html",
-        assignment=assignment,
-        my_runs=assignment_runs,
         student_id=student_id,
     )

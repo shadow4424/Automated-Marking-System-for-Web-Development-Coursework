@@ -27,6 +27,7 @@
                     <th>Assignment</th>
                     <th>Title</th>
                     <th>Profile</th>
+                    <th>Due Date</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -34,9 +35,10 @@
             <tbody>
                 {% for a in todo %}
                 <tr>
-                    <td><a href="{{ url_for('student.assignment_view', assignment_id=a.assignmentID) }}"><code>{{ a.assignmentID }}</code></a></td>
-                    <td><a href="{{ url_for('student.assignment_view', assignment_id=a.assignmentID) }}">{{ a.title }}</a></td>
+                    <td><code>{{ a.assignmentID }}</code></td>
+                    <td>{{ a.title }}</td>
                     <td><span class="badge badge-secondary">{{ a.profile }}</span></td>
+                    <td>{{ a.due_date[:16].replace('T', ' ') if a.due_date else '—' }}</td>
                     <td><span class="badge badge-warning">Pending</span></td>
                     <td><a href="{{ url_for('mark') }}" class="btn btn-primary btn-sm">Submit</a></td>
                 </tr>
@@ -66,15 +68,17 @@
                     <th>Assignment</th>
                     <th>Title</th>
                     <th>Profile</th>
+                    <th>Due Date</th>
                     <th>Status</th>
                 </tr>
             </thead>
             <tbody>
                 {% for a in completed %}
                 <tr>
-                    <td><a href="{{ url_for('student.assignment_view', assignment_id=a.assignmentID) }}"><code>{{ a.assignmentID }}</code></a></td>
-                    <td><a href="{{ url_for('student.assignment_view', assignment_id=a.assignmentID) }}">{{ a.title }}</a></td>
+                    <td><code>{{ a.assignmentID }}</code></td>
+                    <td>{{ a.title }}</td>
                     <td><span class="badge badge-secondary">{{ a.profile }}</span></td>
+                    <td>{{ a.due_date[:16].replace('T', ' ') if a.due_date else '—' }}</td>
                     <td><span class="badge badge-success">Released</span></td>
                 </tr>
                 {% endfor %}

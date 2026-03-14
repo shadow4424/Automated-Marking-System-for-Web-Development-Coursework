@@ -146,6 +146,16 @@
     box-shadow: 0 8px 16px rgba(22, 163, 74, 0.25);
 }
 
+.btn-warning {
+    background: var(--color-warning);
+    color: #fff;
+}
+
+.btn-warning:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 16px rgba(245, 158, 11, 0.25);
+}
+
 .btn-sm {
     padding: var(--space-xs) var(--space-sm);
     font-size: var(--text-xs);
