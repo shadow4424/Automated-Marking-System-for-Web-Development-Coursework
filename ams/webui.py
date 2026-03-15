@@ -556,32 +556,55 @@ def _register_routes(app: Flask) -> None:
             # HTTP request returns immediately with a job ID.
             meta_dict = metadata.to_dict()
 
+            # Write run_info immediately so the run appears in history
+            initial_run_info = {
+                "id": run_id,
+                "mode": "mark",
+                "profile": profile,
+                "scoring_mode": scoring_mode.value,
+                "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "student_id": student_id,
+                "assignment_id": assignment_id,
+                "original_filename": original_filename,
+                "source": "github" if using_github else "upload",
+                "status": "pending",
+            }
+            if using_github:
+                initial_run_info["github_repo"] = github_repo
+            save_run_info(run_dir, initial_run_info)
+
             def _run_mark_job() -> dict:
                 """Executed in the thread pool."""
-                report_path = pipeline.run(
-                    submission_path=submission_root,
-                    workspace_path=run_dir,
-                    profile=profile,
-                    metadata=meta_dict,
-                )
-                run_info = {
-                    "id": run_id,
-                    "mode": "mark",
-                    "profile": profile,
-                    "scoring_mode": scoring_mode.value,
-                    "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                    "report": report_path.name,
-                    "summary": "summary.txt",
-                    "student_id": student_id,
-                    "assignment_id": assignment_id,
-                    "original_filename": original_filename,
-                    "source": "github" if using_github else "upload",
-                }
-                if using_github:
-                    run_info["github_repo"] = github_repo
-                save_run_info(run_dir, run_info)
-                _write_run_index_mark(run_dir, run_info, report_path)
-                return {"run_id": run_id}
+                try:
+                    report_path = pipeline.run(
+                        submission_path=submission_root,
+                        workspace_path=run_dir,
+                        profile=profile,
+                        metadata=meta_dict,
+                    )
+                    run_info = {
+                        "id": run_id,
+                        "mode": "mark",
+                        "profile": profile,
+                        "scoring_mode": scoring_mode.value,
+                        "created_at": initial_run_info["created_at"],
+                        "report": report_path.name,
+                        "summary": "summary.txt",
+                        "student_id": student_id,
+                        "assignment_id": assignment_id,
+                        "original_filename": original_filename,
+                        "source": "github" if using_github else "upload",
+                        "status": "completed",
+                    }
+                    if using_github:
+                        run_info["github_repo"] = github_repo
+                    save_run_info(run_dir, run_info)
+                    _write_run_index_mark(run_dir, run_info, report_path)
+                    return {"run_id": run_id}
+                except Exception as exc:
+                    failed_info = dict(initial_run_info, status="failed", error=str(exc))
+                    save_run_info(run_dir, failed_info)
+                    raise
 
             job_id = job_manager.submit_job("single_mark", _run_mark_job)
             return jsonify({"job_id": job_id, "status": "accepted", "run_id": run_id}), 202
@@ -697,32 +720,50 @@ def _register_routes(app: Flask) -> None:
             safe_extract_zip(upload_zip, extracted, max_size_mb=MAX_UPLOAD_MB)
             
             # Run batch with metadata context — off the request thread
+            initial_run_info = {
+                "id": run_id,
+                "mode": "batch",
+                "profile": profile,
+                "scoring_mode": scoring_mode.value,
+                "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "assignment_id": assignment_id,
+                "original_filename": original_filename,
+                "status": "pending",
+            }
+            save_run_info(run_dir, initial_run_info)
+
             def _run_batch_job() -> dict:
                 """Executed in the thread pool."""
-                summary = run_batch(
-                    submissions_dir=extracted,
-                    out_root=run_dir,
-                    profile=profile,
-                    keep_individual_runs=True,
-                    assignment_id=assignment_id,
-                    scoring_mode=scoring_mode,
-                )
-                run_info = {
-                    "id": run_id,
-                    "mode": "batch",
-                    "profile": profile,
-                    "scoring_mode": scoring_mode.value,
-                    "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                    "summary": "batch_summary.json",
-                    "batch_summary": summary,
-                    "assignment_id": assignment_id,
-                    "original_filename": original_filename,
-                }
-                _write_batch_analytics(run_dir, profile, run_id)
-                _write_batch_reports_zip(run_dir, profile, run_id)
-                _write_run_index_batch(run_dir, run_info)
-                save_run_info(run_dir, run_info)
-                return {"run_id": run_id}
+                try:
+                    summary = run_batch(
+                        submissions_dir=extracted,
+                        out_root=run_dir,
+                        profile=profile,
+                        keep_individual_runs=True,
+                        assignment_id=assignment_id,
+                        scoring_mode=scoring_mode,
+                    )
+                    run_info = {
+                        "id": run_id,
+                        "mode": "batch",
+                        "profile": profile,
+                        "scoring_mode": scoring_mode.value,
+                        "created_at": initial_run_info["created_at"],
+                        "summary": "batch_summary.json",
+                        "batch_summary": summary,
+                        "assignment_id": assignment_id,
+                        "original_filename": original_filename,
+                        "status": "completed",
+                    }
+                    _write_batch_analytics(run_dir, profile, run_id)
+                    _write_batch_reports_zip(run_dir, profile, run_id)
+                    _write_run_index_batch(run_dir, run_info)
+                    save_run_info(run_dir, run_info)
+                    return {"run_id": run_id}
+                except Exception as exc:
+                    failed_info = dict(initial_run_info, status="failed", error=str(exc))
+                    save_run_info(run_dir, failed_info)
+                    raise
 
             job_id = job_manager.submit_job("batch_mark", _run_batch_job)
             return jsonify({"job_id": job_id, "status": "accepted", "run_id": run_id}), 202

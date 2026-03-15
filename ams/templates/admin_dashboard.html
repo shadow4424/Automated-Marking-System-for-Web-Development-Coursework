@@ -83,5 +83,14 @@
             <span class="btn btn-primary btn-sm">View Assignments</span>
         </div>
     </a>
+    <a href="{{ url_for('runs') }}" class="card" style="text-decoration:none; color:inherit; display:block;">
+        <div class="card-header">
+            <h2 class="card-title">Run History</h2>
+        </div>
+        <p class="text-secondary">View all marking runs across the entire system for auditing and oversight.</p>
+        <div style="margin-top:var(--space-md);">
+            <span class="btn btn-primary btn-sm">View Runs</span>
+        </div>
+    </a>
 </div>
 {% endblock %}

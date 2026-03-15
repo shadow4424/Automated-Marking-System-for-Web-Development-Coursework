@@ -4,8 +4,15 @@
 {% block content %}
 <div class="page-header">
     <h1>Run History</h1>
+    {% if user_role == 'admin' %}
+    <p class="text-secondary">System-wide view — all runs across every user and assignment.</p>
+    {% else %}
     <p class="text-secondary">Track single submissions and batch cohorts in one place.</p>
+    {% endif %}
     <div class="page-header-actions">
+        {% if user_role == 'admin' %}
+        <a href="{{ url_for('admin.dashboard') }}" class="btn btn-ghost btn-sm">&larr; Back to Dashboard</a>
+        {% endif %}
         <a href="{{ url_for('mark') }}" class="btn btn-primary">New Mark</a>
         <a href="{{ url_for('batch') }}" class="btn btn-secondary">New Batch</a>
     </div>
@@ -33,7 +40,12 @@
         data-search="{{ r.id }} {{ r.student_id|default('') }} {{ r.assignment_id|default('') }} {{ r.original_filename|default('') }}">
 
         <div class="run-card-score">
-            {% if r.threat_flagged %}
+            {% set status = r.get('status', 'completed') %}
+            {% if status == 'pending' %}
+            <span class="score-badge badge-muted" style="font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">...</span>
+            {% elif status == 'failed' %}
+            <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">FAIL</span>
+            {% elif r.threat_flagged %}
             <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">THREAT</span>
             {% else %}
             {% set score = r.get('score') %}
@@ -57,12 +69,20 @@
                     {{ r.mode or 'mark' }}
                 </span>
                 <span>{{ r.profile or 'unknown' }}</span>
+                {% if status == 'pending' %}
+                <span class="badge badge-warning">Pending</span>
+                {% elif status == 'failed' %}
+                <span class="badge" style="background:#dc2626;color:#fff;">Failed</span>
+                {% endif %}
                 {% if r.threat_flagged %}
                 <span class="badge" style="background:#dc2626;color:#fff;">Security Threat</span>
                 {% endif %}
             </div>
             <div class="run-card-meta">
                 <span>ID {{ r.id[:24] }}...</span>
+                {% if r.assignment_id %}
+                <span>Assignment: {{ r.assignment_id }}</span>
+                {% endif %}
                 {% if r.student_id %}
                 <span>{{ r.student_id }}</span>
                 {% endif %}
