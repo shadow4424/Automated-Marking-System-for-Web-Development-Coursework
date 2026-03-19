@@ -250,24 +250,39 @@ def get_assignment(assignment_id: str) -> dict | None:
 
 
 def list_assignments(teacher_id: str | None = None) -> list[dict]:
-    """List all assignments, optionally filtered by teacher."""
+    """List all assignments, optionally filtered by teacher.
+
+    Sorting: active/upcoming assignments first (alphanumeric by ID),
+    then past-due assignments at the bottom (also alphanumeric by ID).
+    """
+    from datetime import datetime
+
     conn = get_db()
     try:
         if teacher_id:
             rows = conn.execute(
-                "SELECT * FROM assignments WHERE teacherID = ? ORDER BY created_at DESC",
+                "SELECT * FROM assignments WHERE teacherID = ?",
                 (teacher_id,),
             ).fetchall()
         else:
-            rows = conn.execute(
-                "SELECT * FROM assignments ORDER BY created_at DESC"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM assignments").fetchall()
+
         result = []
         for r in rows:
             d = dict(r)
             d["assigned_students"] = json.loads(d.get("assigned_students", "[]"))
             d["marks_released"] = bool(d.get("marks_released", 0))
             result.append(d)
+
+        # Sort: active/upcoming first, past-due last, alphanumeric within each group
+        now = datetime.now().strftime("%Y-%m-%dT%H:%M")
+
+        def sort_key(a: dict) -> tuple:
+            due = a.get("due_date", "")
+            is_past_due = 1 if (due and due < now) else 0
+            return (is_past_due, a.get("assignmentID", ""))
+
+        result.sort(key=sort_key)
         return result
     finally:
         conn.close()
