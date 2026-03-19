@@ -1,11 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Batch Marking - AMS{% endblock %}
+{% block title %}Batch Marking — AMS{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <h1>Batch Marking</h1>
     <p class="text-secondary">
-        Upload a ZIP containing multiple student submissions. Each submission should be a direct child of the batch ZIP.
+        Upload a ZIP containing multiple student submissions or submit from a GitHub repository.
+        Each submission should follow the format <code>studentID_assignmentID.zip</code>.
     </p>
 </div>
 
@@ -17,7 +18,7 @@
                     Assignment ID <span class="required">*</span>
                 </label>
                 <input type="text" id="assignment_id" name="assignment_id" class="form-input" required
-                    pattern="[a-zA-Z0-9_\-]{2,30}" placeholder="e.g., webdev_001">
+                    pattern="[a-zA-Z0-9_\-]{2,30}" placeholder="e.g., webdev_001" title="2-30 alphanumeric characters">
                 <p class="form-hint">Shared identifier for all submissions in this batch</p>
             </div>
 
@@ -28,28 +29,80 @@
                     <option value="{{ prof }}">{{ prof|capitalize }}</option>
                     {% endfor %}
                 </select>
+                <p class="form-hint">Determines which components are evaluated</p>
             </div>
         </div>
 
+        {# ── Submission method radio buttons ── #}
         <div class="form-group">
-            <label class="form-label" for="scoring_mode">Scoring Mode</label>
-            <select id="scoring_mode" name="scoring_mode" class="form-select">
-                <option value="static_only">Static Analysis Only</option>
-                <option value="static_plus_llm" selected>Static + LLM Feedback (Recommended)</option>
-            </select>
+            <label class="form-label">Submission Method</label>
+            <div class="submission-method-radios">
+                <label class="radio-label">
+                    <input type="radio" name="submission_method" value="upload" checked id="methodUpload">
+                    Upload ZIP
+                </label>
+                <label class="radio-label">
+                    <input type="radio" name="submission_method" value="github" id="methodGithub">
+                    GitHub Repository
+                </label>
+            </div>
         </div>
 
-        <div class="form-group">
-            <label class="form-label" for="submission">
-                Batch ZIP File <span class="required">*</span>
-            </label>
-            <input type="file" id="submission" name="submission" class="form-file-input" accept=".zip" required>
-            <p class="form-hint">
-                Maximum file size: 25 MB. Student IDs will be extracted from filenames.
-            </p>
+        {# ── ZIP upload section ── #}
+        <div id="uploadSection">
+            <div class="form-group">
+                <label class="form-label" for="submission">Batch ZIP File</label>
+                <input type="file" id="submission" name="submission" class="form-file-input" accept=".zip">
+                <p class="form-hint">
+                    Maximum file size: 25 MB. Each submission inside the ZIP should be named
+                    <code>studentID_assignmentID.zip</code>.
+                </p>
+            </div>
         </div>
 
-        <button type="submit" class="btn btn-primary btn-lg btn-block"
+        {# ── GitHub submission section ── #}
+        <div id="githubSection" style="display:none;">
+            <div class="form-group">
+                <label class="form-label">Connect your Account</label>
+                {% if github_connected %}
+                <div class="github-connected-status" id="githubConnectedState">
+                    <span class="github-status-dot github-status-active"></span>
+                    <span>Connected as <strong>{{ github_user }}</strong></span>
+                    <button type="button" class="btn btn-sm btn-outline" id="githubDisconnectBtn">Disconnect</button>
+                </div>
+                {% else %}
+                <div id="githubDisconnectedState">
+                    <a href="{{ url_for('github_login') }}" class="btn btn-secondary" id="githubConnectBtn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right:4px">
+                            <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                        </svg>
+                        Connect to GitHub
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="grid grid-2" id="githubRepoSection" {% if not github_connected %}style="display:none;"{% endif %}>
+                <div class="form-group">
+                    <label class="form-label" for="github_repo_select">
+                        Repository <span class="required">*</span>
+                    </label>
+                    <select id="github_repo_select" name="github_repo" class="form-select" disabled>
+                        <option value="">Select a repository…</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="github_branch_select">
+                        Branch <span class="required">*</span>
+                    </label>
+                    <select id="github_branch_select" name="github_branch" class="form-select" disabled>
+                        <option value="">Select a branch…</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg btn-block" id="markSubmitBtn"
             {% if sandbox_status is defined and not sandbox_status.enforced and sandbox_status.mode == 'docker' %}disabled title="Docker sandbox must be running to process submissions"{% endif %}>
             Upload &amp; Run Batch
         </button>
@@ -57,4 +110,6 @@
 </div>
 {% endblock %}
 
-{% block scripts %}{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/github-submissions.js') }}" defer></script>
+{% endblock %}

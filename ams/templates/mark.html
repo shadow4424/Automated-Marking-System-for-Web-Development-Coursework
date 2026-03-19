@@ -166,16 +166,8 @@
                 </select>
                 <p class="form-hint">Determines which components are evaluated</p>
             </div>
-
-            <div class="form-group">
-                <label class="form-label" for="scoring_mode">Scoring Mode</label>
-                <select id="scoring_mode" name="scoring_mode" class="form-select">
-                    <option value="static_only">Static Analysis Only</option>
-                    <option value="static_plus_llm" selected>Static + LLM Feedback (Recommended)</option>
-                </select>
-                <p class="form-hint">Static-only is faster; LLM provides detailed feedback</p>
-            </div>
         </div>
+        <input type="hidden" name="scoring_mode" value="static_plus_llm">
 
         {# ── Submission method radio buttons ── #}
         <div class="form-group">
