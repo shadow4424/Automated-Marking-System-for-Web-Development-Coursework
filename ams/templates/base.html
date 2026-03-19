@@ -28,17 +28,20 @@
                     {# ── Role-based navigation ── #}
                     {% set effective_role = view_as_role or user_role %}
 
-                    {% if effective_role == 'admin' %}
+                    {# Admin-only navigation (not viewing as another role) #}
+                    {% if user_role == 'admin' and not view_as_role %}
                     <a href="{{ url_for('admin.dashboard') }}"
                         class="nav-link {% if request.endpoint and request.endpoint == 'admin.dashboard' %}active{% endif %}">Dashboard</a>
                     <a href="{{ url_for('admin.users_page') }}"
                         class="nav-link {% if request.endpoint and request.endpoint in ('admin.users_page', 'admin.create_account_page') %}active{% endif %}">Users</a>
+                    <a href="{{ url_for('admin.assignments_page') }}"
+                        class="nav-link {% if request.endpoint and request.endpoint == 'admin.assignments_page' %}active{% endif %}">Assignments</a>
                     {% endif %}
 
-                    {% if effective_role in ('admin', 'teacher') %}
+                    {# Teacher navigation (real teachers OR admin viewing as teacher) #}
+                    {% if effective_role == 'teacher' %}
                     <a href="{{ url_for('teacher.dashboard') }}"
-                        class="nav-link {% if request.endpoint and request.endpoint.startswith('teacher.') %}active{% endif %}">
-                        {% if effective_role == 'admin' %}Teacher{% else %}Dashboard{% endif %}</a>
+                        class="nav-link {% if request.endpoint and request.endpoint.startswith('teacher.') %}active{% endif %}">Dashboard</a>
                     <a href="{{ url_for('mark') }}"
                         class="nav-link {% if request.endpoint == 'mark' %}active{% endif %}">Mark</a>
                     <a href="{{ url_for('batch') }}"
@@ -51,6 +54,7 @@
                     {% endif %}
                     {% endif %}
 
+                    {# Student navigation (real students OR admin viewing as student) #}
                     {% if effective_role == 'student' %}
                     <a href="{{ url_for('student.dashboard') }}"
                         class="nav-link {% if request.endpoint == 'student.dashboard' %}active{% endif %}">Dashboard</a>
