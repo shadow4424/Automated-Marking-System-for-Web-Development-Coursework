@@ -6,7 +6,7 @@
 <div class="page-header">
     <nav class="text-sm text-muted">
         {% if batch_submission_id %}
-        <a href="{{ back_url }}" class="btn btn-ghost btn-sm">Back to Batch Results</a>
+        <a href="{{ back_url }}" class="btn btn-ghost btn-sm">Back to Assignment</a>
         {% else %}
         <a href="{{ url_for('runs') }}">Runs</a> / {{ run_id[:24] }}...
         {% endif %}
@@ -885,108 +885,7 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
 {% endif %}{# end hide_grades #}
 {% endif %}
 
-{# Batch Summary #}
-{% if batch %}
-<section class="mb-xl">
-    <h2 class="mb-md">Batch Summary</h2>
-    <div class="grid grid-auto mb-lg">
-        <div class="card stat-card">
-            <div class="stat-value">{{ batch.summary.total_submissions|default(0) }}</div>
-            <div class="stat-label">Total</div>
-        </div>
-        <div class="card stat-card">
-            <div class="stat-value text-success">{{ batch.summary.succeeded|default(0) }}</div>
-            <div class="stat-label">Succeeded</div>
-        </div>
-        <div class="card stat-card">
-            <div class="stat-value text-danger">{{ batch.summary.failed|default(0) }}</div>
-            <div class="stat-label">Failed</div>
-        </div>
-        {% if batch.summary.invalid|default(0) > 0 %}
-        <div class="card stat-card">
-            <div class="stat-value text-warning">{{ batch.summary.invalid }}</div>
-            <div class="stat-label">Invalid Name</div>
-        </div>
-        {% endif %}
-        <div class="card stat-card">
-            <div class="stat-value">{{ ((batch.summary.overall_stats.mean|default(0)) * 100)|round|int }}%</div>
-            <div class="stat-label">Avg Score</div>
-        </div>
-    </div>
 
-    {% if run.assignment_id %}
-    <a href="{{ url_for('teacher.view_analytics', assignment_id=run.assignment_id) }}" class="btn btn-primary">📊 View Assignment Analytics</a>
-    {% endif %}
-</section>
-
-{# Submission List #}
-<section>
-    <h2 class="mb-md">Submissions</h2>
-    <div class="table-container">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Student</th>
-                    <th>Score</th>
-                    <th>Status</th>
-                    <th>Threats</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for sub in batch.records %}
-                <tr>
-                    <td>{{ sub.student_id|default(sub.id) }}</td>
-                    <td>
-                        {% set score = (sub.overall|default(0)) * 100 %}
-                        {% if score is not none %}
-                        <span
-                            class="badge {% if score >= 70 %}badge-success{% elif score >= 40 %}badge-warning{% else %}badge-danger{% endif %}">
-                            {{ score|round|int }}%
-                        </span>
-                        {% else %}–{% endif %}
-                    </td>
-                    <td>
-                        {% if sub.status == 'invalid_student_id' %}
-                        <span class="badge badge-warning" title="{{ sub.validation_error|default('Student ID must contain only letters and digits') }}">Invalid Student ID</span>
-                        {% elif sub.status == 'invalid_assignment_id' %}
-                        <span class="badge badge-warning" title="{{ sub.validation_error|default('Assignment ID in filename does not match') }}">Invalid Assignment ID</span>
-                        {% elif sub.invalid %}
-                        <span class="badge badge-warning" title="{{ sub.validation_error|default('Filename does not match studentID_assignmentID.zip') }}">Invalid Name</span>
-                        {% elif sub.error or sub.status == 'error' %}
-                        <span class="badge badge-danger">Error</span>
-                        {% elif score >= 70 %}
-                        <span class="badge badge-success">Excellent</span>
-                        {% elif score >= 40 %}
-                        <span class="badge badge-warning">Pass</span>
-                        {% else %}
-                        <span class="badge badge-danger">Fail</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if sub.threat_count %}
-                        <span class="badge badge-danger" title="{{ sub.threat_count }} threat finding(s)">{{ sub.threat_count }}</span>
-                        {% else %}
-                        <span class="text-secondary">—</span>
-                        {% endif %}
-                    </td>
-                    <td class="actions-cell">
-                        {% if not sub.invalid %}
-                        <a href="{{ url_for('batch_submission_view', run_id=run_id, submission_id=sub.id) }}"
-                            class="btn btn-primary btn-sm" title="View in browser">👁️ View</a>
-                        <a href="{{ url_for('batch_submission_report', run_id=run_id, submission_id=sub.id) }}"
-                            class="btn btn-ghost btn-sm" title="Download JSON">⬇️ Download</a>
-                        {% else %}
-                        <span class="text-secondary text-sm" title="{{ sub.validation_error|default('Invalid filename format') }}">—</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</section>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}

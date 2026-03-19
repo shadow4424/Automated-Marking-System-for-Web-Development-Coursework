@@ -204,19 +204,21 @@ def list_runs(runs_root: Path) -> list[dict]:
                     pass
             
             # For batch runs, try to load average score from batch_summary.json
-            if info.get("mode") == "batch" and info.get("score") is None:
+            if info.get("mode") == "batch":
                 batch_summary_path = run_dir / "batch_summary.json"
                 if batch_summary_path.exists():
                     try:
                         batch_summary = json.loads(batch_summary_path.read_text(encoding="utf-8"))
-                        overall_stats = batch_summary.get("summary", {}).get("overall_stats", {}) or {}
-                        mean_score = overall_stats.get("mean")
-                        if mean_score is not None:
-                            # Store score as percentage (0-100) for dashboard display
-                            info["score"] = mean_score * 100
+                        if info.get("score") is None:
+                            overall_stats = batch_summary.get("summary", {}).get("overall_stats", {}) or {}
+                            mean_score = overall_stats.get("mean")
+                            if mean_score is not None:
+                                # Store score as percentage (0-100) for dashboard display
+                                info["score"] = mean_score * 100
                     except Exception:
                         pass
             
+            # Load submissions list — prefer run_index.json, fall back to batch_summary.json
             index_path = run_dir / "run_index.json"
             if index_path.exists():
                 try:
@@ -224,6 +226,28 @@ def list_runs(runs_root: Path) -> list[dict]:
                     info["submissions"] = index.get("submissions", [])
                 except Exception:
                     info["submissions"] = []
+            elif info.get("mode") == "batch":
+                # Fallback: build submissions from batch_summary.json records
+                batch_summary_path = run_dir / "batch_summary.json"
+                if batch_summary_path.exists():
+                    try:
+                        batch_summary = json.loads(batch_summary_path.read_text(encoding="utf-8"))
+                        info["submissions"] = []
+                        for rec in batch_summary.get("records", []):
+                            student_val = rec.get("student_id") or rec.get("id", "Unknown")
+                            info["submissions"].append({
+                                "student_name": student_val,
+                                "student_id": student_val,
+                            })
+                    except Exception:
+                        pass
+            
+            # Ensure every submission entry has usable student_name and student_id
+            for sub in info.get("submissions", []):
+                if not sub.get("student_name"):
+                    sub["student_name"] = sub.get("student_id") or "Unknown"
+                if not sub.get("student_id"):
+                    sub["student_id"] = sub.get("student_name") or "Unknown"
             runs.append(info)
     
     # Sort by run id (timestamp-based) descending

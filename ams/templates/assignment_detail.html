@@ -167,7 +167,9 @@
             <tbody>
                 {% for r in runs %}
                 <tr>
-                    <td><code>{{ r.student_id or '—' }}</code></td>
+                    <td>
+                        <code>{{ r.student_id if r.student_id and r.student_id != 'batch' else '—' }}</code>
+                    </td>
                     <td><span class="badge {% if r.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">{{ r.mode or 'mark' }}</span></td>
                     <td>
                         {% if r.threat_flagged %}
@@ -180,14 +182,34 @@
                     </td>
                     <td>{{ r.created_at[:10] if r.created_at else '—' }}</td>
                     <td>
-                        {% if r.threat_flagged %}
+                        {% set status = r.get('status', 'completed') %}
+                        {% if status == 'pending' %}
+                        <span class="badge badge-warning">Pending</span>
+                        {% elif status == 'failed' %}
+                        <span class="badge badge-danger">Failed</span>
+                        {% elif r.threat_flagged %}
                         <span class="badge" style="background:#dc2626;color:#fff;">Threat</span>
                         {% else %}
-                        <span class="badge badge-success">OK</span>
+                            {% set score = r.get('score') %}
+                            {% if score is not none %}
+                                {% if score >= 70 %}
+                                <span class="badge badge-success">Excellent</span>
+                                {% elif score >= 40 %}
+                                <span class="badge badge-warning">Pass</span>
+                                {% else %}
+                                <span class="badge badge-danger">Fail</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge badge-secondary">Unknown</span>
+                            {% endif %}
                         {% endif %}
                     </td>
                     <td>
+                        {% if r.mode == 'batch' and r.get('_batch_submission_id') %}
+                        <a href="{{ url_for('batch_submission_view', run_id=r.id, submission_id=r._batch_submission_id) }}" class="btn btn-ghost btn-sm">View →</a>
+                        {% else %}
                         <a href="{{ url_for('run_detail', run_id=r.id) }}" class="btn btn-ghost btn-sm">View →</a>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}

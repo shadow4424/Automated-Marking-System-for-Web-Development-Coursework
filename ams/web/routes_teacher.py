@@ -120,10 +120,24 @@ def assignment_detail(assignment_id: str):
     # Gather runs that belong to this assignment
     runs_root = get_runs_root(current_app)
     all_runs = list_runs(runs_root)
-    assignment_runs = [
+    assignment_runs_raw = [
         r for r in all_runs
         if r.get("assignment_id") == assignment_id
     ]
+
+    # Expand batch runs into individual per-student rows
+    assignment_runs = []
+    for r in assignment_runs_raw:
+        if r.get("mode") == "batch" and r.get("submissions"):
+            # Create one row per individual submission in this batch
+            for sub in r.get("submissions", []):
+                sub_row = dict(r)  # shallow copy of batch run metadata
+                sub_row["student_id"] = sub.get("student_id") or sub.get("student_name") or "Unknown"
+                sub_row["_batch_submission_id"] = sub.get("submission_id") or sub.get("student_id") or sub.get("student_name")
+                # Use individual score if available, otherwise keep batch average
+                assignment_runs.append(sub_row)
+        else:
+            assignment_runs.append(r)
 
     return render_template(
         "assignment_detail.html",

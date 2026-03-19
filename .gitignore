@@ -12,6 +12,8 @@ ams_runs/
 ams_eval_runs/
 ams_batch_runs/
 ams_web_runs/
+ams_analytics/
+ams/ams_analytics/
 
 # Database files
 ams_users.db

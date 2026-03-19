@@ -26,10 +26,14 @@
             <div class="navbar-nav">
                 {% if is_authenticated %}
                     {# ── Role-based navigation ── #}
-                    {% set effective_role = view_as_role or user_role %}
+                    {% if request.blueprint == 'admin' and user_role == 'admin' %}
+                        {% set effective_role = 'admin' %}
+                    {% else %}
+                        {% set effective_role = view_as_role or user_role %}
+                    {% endif %}
 
-                    {# Admin-only navigation (not viewing as another role) #}
-                    {% if user_role == 'admin' and not view_as_role %}
+                    {# Admin-only navigation (not viewing as another role, or currently on an admin page) #}
+                    {% if effective_role == 'admin' %}
                     <a href="{{ url_for('admin.dashboard') }}"
                         class="nav-link {% if request.endpoint and request.endpoint == 'admin.dashboard' %}active{% endif %}">Dashboard</a>
                     <a href="{{ url_for('admin.users_page') }}"

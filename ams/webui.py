@@ -910,12 +910,14 @@ def _register_routes(app: Flask) -> None:
                 context["threat_file_contents"] = _load_threat_file_contents(
                     context["report"].get("findings", []), run_dir
                 )
+            return render_template("run_detail.html", **context)
         else:
-            summary_path = run_dir / run_info.get("summary", "batch_summary.json")
-            if summary_path.exists():
-                context["batch"] = json.loads(summary_path.read_text(encoding="utf-8"))
-
-        return render_template("run_detail.html", **context)
+            # Batch runs: redirect to assignment detail page (batch summary removed)
+            assignment_id = run_info.get("assignment_id", "")
+            if assignment_id:
+                return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+            # Fallback: redirect to runs list if no assignment ID
+            return redirect(url_for("runs"))
 
     @app.route("/runs/<run_id>/override-threat", methods=["POST"])
     @teacher_or_admin_required
@@ -1030,12 +1032,39 @@ def _register_routes(app: Flask) -> None:
             json.loads(report_path.read_text(encoding="utf-8"))
         )
 
+        # Extract real student_id from batch_summary or report metadata
+        # (submission_id is the full stem like "testStudent_test_assignment1",
+        #  we need just the parsed student part e.g. "testStudent")
+        real_student_id = submission_id  # fallback
+        real_assignment_id = run_info.get("assignment_id", "")
+
+        # Try report metadata first (most reliable — set during pipeline run)
+        report_meta = report.get("metadata", {}).get("submission_metadata", {})
+        if report_meta.get("student_id"):
+            real_student_id = report_meta["student_id"]
+        if report_meta.get("assignment_id"):
+            real_assignment_id = report_meta["assignment_id"]
+
+        # Fallback: try batch_summary.json records
+        if real_student_id == submission_id:
+            batch_path = run_dir / "batch_summary.json"
+            if batch_path.exists():
+                try:
+                    batch_data = json.loads(batch_path.read_text(encoding="utf-8"))
+                    for rec in batch_data.get("records", []):
+                        if rec.get("id") == submission_id:
+                            real_student_id = rec.get("student_id", submission_id)
+                            real_assignment_id = rec.get("assignment_id", real_assignment_id)
+                            break
+                except Exception:
+                    pass
+
         # Create a pseudo run_info for this submission
         submission_run_info = {
             "mode": "mark",
             "profile": run_info.get("profile", "frontend"),
-            "assignment_id": run_info.get("assignment_id", ""),
-            "student_id": submission_id,
+            "assignment_id": real_assignment_id,
+            "student_id": real_student_id,
             "created_at": run_info.get("created_at", ""),
         }
 
@@ -1050,7 +1079,7 @@ def _register_routes(app: Flask) -> None:
                 report.get("findings", []), submission_dir
             ),
             batch_submission_id=submission_id,  # Flag to show back button
-            back_url=url_for('run_detail', run_id=run_id),
+            back_url=url_for('teacher.assignment_detail', assignment_id=run_info.get('assignment_id', '')) if run_info.get('assignment_id') else url_for('runs'),
         )
 
     @app.route("/batch/<run_id>/submissions/<submission_id>/report.json")
