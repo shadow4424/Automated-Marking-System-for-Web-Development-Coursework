@@ -12,7 +12,7 @@ from flask import (
     session,
 )
 
-from ams.core.db import get_assignment, list_assignments_for_student
+from ams.core.db import get_assignment, list_assignments, list_assignments_for_student, list_users
 from ams.io.web_storage import get_runs_root, list_runs
 from ams.web.auth import get_current_user, login_required
 
@@ -23,12 +23,29 @@ student_bp = Blueprint("student", __name__, url_prefix="/student")
 #  Helpers
 # ---------------------------------------------------------------------------
 
-def _resolve_student_id() -> str | None:
-    """Return the current student's user ID, or None if admin view-as."""
+def _get_preview_student() -> dict | None:
+    """Return the first student in the database for admin preview, or None."""
+    students = list_users(role="student")
+    return students[0] if students else None
+
+
+def _resolve_student_id() -> tuple[str | None, dict | None]:
+    """Return (student_id, preview_student) for the student dashboard.
+
+    - For real students: returns (their_id, None)
+    - For admin viewing as student: returns (preview_student_id, preview_student_dict)
+      This allows the admin to see a real student's experience.
+    - If no students exist in preview mode: returns (None, None)
+    """
     user = get_current_user()
-    if user["role"] == "student" or session.get("view_as_role") == "student":
-        return user["userID"] if user["role"] == "student" else None
-    return None
+    if user["role"] == "student":
+        return user["userID"], None
+    if session.get("view_as_role") == "student":
+        preview = _get_preview_student()
+        if preview:
+            return preview["userID"], preview
+        return None, None
+    return None, None
 
 
 def _gather_student_runs(student_id: str) -> tuple[list[dict], set[str]]:
@@ -101,14 +118,18 @@ def _split_assignments(
 @student_bp.route("/")
 @login_required
 def dashboard():
-    student_id = _resolve_student_id()
+    student_id, preview_student = _resolve_student_id()
 
     assignments: list[dict] = []
     my_runs: list[dict] = []
     submitted_aids: set[str] = set()
+
     if student_id:
         assignments = list_assignments_for_student(student_id)
         my_runs, submitted_aids = _gather_student_runs(student_id)
+    elif session.get("view_as_role") == "student":
+        # Admin preview with no students - show all assignments for UI demo
+        assignments = list_assignments()
 
     todo, completed = _split_assignments(assignments, submitted_aids)
 
@@ -120,20 +141,25 @@ def dashboard():
         my_runs=my_runs,
         recent_runs=my_runs[:3],
         student_id=student_id,
+        preview_student=preview_student,
     )
 
 
 @student_bp.route("/coursework")
 @login_required
 def coursework():
-    student_id = _resolve_student_id()
+    student_id, preview_student = _resolve_student_id()
 
     assignments: list[dict] = []
     my_runs: list[dict] = []
     submitted_aids: set[str] = set()
+
     if student_id:
         assignments = list_assignments_for_student(student_id)
         my_runs, submitted_aids = _gather_student_runs(student_id)
+    elif session.get("view_as_role") == "student":
+        # Admin preview with no students - show all assignments for UI demo
+        assignments = list_assignments()
 
     todo, completed = _split_assignments(assignments, submitted_aids)
 
@@ -144,4 +170,5 @@ def coursework():
         completed=completed,
         my_runs=my_runs,
         student_id=student_id,
+        preview_student=preview_student,
     )

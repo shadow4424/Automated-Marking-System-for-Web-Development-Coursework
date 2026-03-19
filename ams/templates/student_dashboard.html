@@ -8,13 +8,18 @@
     <p class="text-secondary">Welcome back. Here is your overview.</p>
     {% if view_as_role == 'student' %}
     <div class="alert alert-info" style="margin-top:var(--space-sm);">
-        You are viewing as <strong>Student</strong>.
+        <strong>Admin Preview Mode</strong> —
+        {% if preview_student %}
+            Viewing as <strong>{{ preview_student.firstName }} {{ preview_student.lastName }}</strong> ({{ preview_student.userID }})
+        {% else %}
+            No students exist yet. Showing UI preview with all assignments.
+        {% endif %}
         <a href="{{ url_for('admin.view_as', role='admin') }}" class="btn btn-ghost btn-sm" style="margin-left:var(--space-sm);">Back to Admin</a>
     </div>
     {% endif %}
 </div>
 
-{% if student_id %}
+{% if student_id or view_as_role == 'student' %}
 <!-- Stats -->
 <div class="stat-grid-4" style="margin-bottom:var(--space-xl);">
     <div class="card stat-card stat-card--default">
@@ -119,11 +124,11 @@
 </div>
 
 {% else %}
-<!-- Admin view-as mode with no student ID -->
+<!-- No student context at all -->
 <div class="empty-state">
     <div class="empty-state-icon">&#128100;</div>
-    <p class="empty-state-title">Student View Preview</p>
-    <p class="empty-state-text">You are viewing the student dashboard layout as an admin. No personal data is shown.</p>
+    <p class="empty-state-title">Access Restricted</p>
+    <p class="empty-state-text">Please log in as a student to view this dashboard.</p>
 </div>
 {% endif %}
 {% endblock %}

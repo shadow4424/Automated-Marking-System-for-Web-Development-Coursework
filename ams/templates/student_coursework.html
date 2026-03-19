@@ -6,13 +6,24 @@
 <div class="page-header">
     <h1>My Coursework</h1>
     <p class="text-secondary">Your assignments and submission history.</p>
+    {% if view_as_role == 'student' %}
+    <div class="alert alert-info" style="margin-top:var(--space-sm);">
+        <strong>Admin Preview Mode</strong> —
+        {% if preview_student %}
+            Viewing as <strong>{{ preview_student.firstName }} {{ preview_student.lastName }}</strong> ({{ preview_student.userID }})
+        {% else %}
+            No students exist yet. Showing UI preview with all assignments.
+        {% endif %}
+        <a href="{{ url_for('admin.view_as', role='admin') }}" class="btn btn-ghost btn-sm" style="margin-left:var(--space-sm);">Back to Admin</a>
+    </div>
+    {% endif %}
     <div class="page-header-actions">
         <a href="{{ url_for('student.dashboard') }}" class="btn btn-ghost btn-sm">&larr; Back to Dashboard</a>
         <a href="{{ url_for('mark') }}" class="btn btn-primary btn-sm">Upload Submission</a>
     </div>
 </div>
 
-{% if student_id %}
+{% if student_id or view_as_role == 'student' %}
 <!-- To-Do Assignments -->
 <div class="card" style="margin-bottom:var(--space-xl);">
     <div class="card-header">
@@ -178,11 +189,11 @@
 </div>
 
 {% else %}
-<!-- Admin view-as mode with no student ID -->
+<!-- No student context at all -->
 <div class="empty-state">
     <div class="empty-state-icon">&#128100;</div>
-    <p class="empty-state-title">Student Coursework Preview</p>
-    <p class="empty-state-text">You are viewing the student coursework layout as an admin. No personal data is shown.</p>
+    <p class="empty-state-title">Access Restricted</p>
+    <p class="empty-state-text">Please log in as a student to view this page.</p>
 </div>
 {% endif %}
 {% endblock %}
