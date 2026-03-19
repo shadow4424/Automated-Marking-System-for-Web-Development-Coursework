@@ -1,14 +1,20 @@
 {% extends "base.html" %}
-{% block title %}{% if user_role == 'student' %}Submit Coursework{% else %}Mark Submission{% endif %} — AMS{% endblock %}
+{% block title %}{% if effective_role == 'student' %}Submit Coursework{% else %}Mark Submission{% endif %} — AMS{% endblock %}
 
 {% block content %}
-{% if user_role == 'student' %}
+{% if effective_role == 'student' %}
 {# ──────────────────── STUDENT VIEW ──────────────────── #}
 <div class="page-header">
     <h1>Submit Coursework</h1>
     <p class="text-secondary">
         Select your assignment and upload your work as a ZIP file or connect via GitHub.
     </p>
+    {% if view_as_role == 'student' %}
+    <div class="alert alert-info" style="margin-top:var(--space-sm);">
+        <strong>Admin Preview Mode</strong> — Viewing student submission interface.
+        <a href="{{ url_for('admin.view_as', role='admin') }}" class="btn btn-ghost btn-sm" style="margin-left:var(--space-sm);">Back to Admin</a>
+    </div>
+    {% endif %}
 </div>
 
 <div class="card">
@@ -248,7 +254,7 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/github-submissions.js') }}" defer></script>
-{% if user_role == 'student' and student_assignments %}
+{% if effective_role == 'student' and student_assignments %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var sel = document.getElementById('assignment_id');

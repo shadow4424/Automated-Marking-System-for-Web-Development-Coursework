@@ -9,11 +9,7 @@
     {% if view_as_role == 'student' %}
     <div class="alert alert-info" style="margin-top:var(--space-sm);">
         <strong>Admin Preview Mode</strong> —
-        {% if preview_student %}
-            Viewing as <strong>{{ preview_student.firstName }} {{ preview_student.lastName }}</strong> ({{ preview_student.userID }})
-        {% else %}
-            No students exist yet. Showing UI preview with all assignments.
-        {% endif %}
+        Using demo student account. No real student data is displayed.
         <a href="{{ url_for('admin.view_as', role='admin') }}" class="btn btn-ghost btn-sm" style="margin-left:var(--space-sm);">Back to Admin</a>
     </div>
     {% endif %}

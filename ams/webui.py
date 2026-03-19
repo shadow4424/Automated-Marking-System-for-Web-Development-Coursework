@@ -34,7 +34,13 @@ from flask import (
     url_for,
 )
 
-from ams.core.db import init_db, get_assignment, list_assignments_for_student
+from ams.core.db import (
+    init_db,
+    get_assignment,
+    list_assignments,
+    list_assignments_for_student,
+    PREVIEW_STUDENT_ID,
+)
 from ams.core.pipeline import AssessmentPipeline
 from ams.core.config import (
     ScoringMode,
@@ -328,22 +334,42 @@ def _register_routes(app: Flask) -> None:
             github_connected = bool(session.get("github_token"))
             github_user = session.get("github_user", "")
             user_role = session.get("user_role", "")
+            view_as_role = session.get("view_as_role")
+            effective_role = view_as_role or user_role
             user_id = session.get("user_id", "")
             student_assignments = []
-            if user_role == "student":
+            is_preview = False
+
+            # For students OR admins viewing as student, load available assignments
+            if effective_role == "student":
                 now = datetime.now().strftime("%Y-%m-%dT%H:%M")
-                student_assignments = [
-                    a for a in list_assignments_for_student(user_id)
-                    if not a.get("due_date") or a["due_date"] >= now
-                ]
+                if user_role == "student":
+                    # Real student - show their assigned assignments
+                    student_assignments = [
+                        a for a in list_assignments_for_student(user_id)
+                        if not a.get("due_date") or a["due_date"] >= now
+                    ]
+                else:
+                    # Admin viewing as student - use preview student, show all assignments
+                    is_preview = True
+                    student_assignments = [
+                        a for a in list_assignments()
+                        if not a.get("due_date") or a["due_date"] >= now
+                    ]
+
+            # For preview mode, use the dedicated preview student ID
+            effective_student_id = PREVIEW_STUDENT_ID if is_preview else user_id
+
             return render_template(
                 "mark.html",
                 profiles=PROFILES.keys(),
                 github_connected=github_connected,
                 github_user=github_user,
                 user_role=user_role,
-                user_id=user_id,
+                effective_role=effective_role,
+                user_id=effective_student_id,
                 student_assignments=student_assignments,
+                is_preview=is_preview,
             )
 
         # ── Sandbox enforcement ──────────────────────────────────────

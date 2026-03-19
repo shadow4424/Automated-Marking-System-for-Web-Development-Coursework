@@ -25,6 +25,10 @@ _ROOT_ADMIN_ID = "admin123"
 _ROOT_ADMIN_PASSWORD = "Pass123"
 _ROOT_ADMIN_EMAIL = "admin@ams.local"
 
+# Preview/demo student for admin view-as mode (not a real student)
+PREVIEW_STUDENT_ID = "_preview_student_"
+_PREVIEW_STUDENT_EMAIL = "preview@ams.local"
+
 # ---------------------------------------------------------------------------
 #  Schema
 # ---------------------------------------------------------------------------
@@ -76,7 +80,7 @@ def get_db() -> sqlite3.Connection:
 # ---------------------------------------------------------------------------
 
 def init_db() -> None:
-    """Create tables if they don't exist and ensure the root admin is present."""
+    """Create tables if they don't exist and ensure system accounts are present."""
     conn = get_db()
     try:
         conn.executescript(_SCHEMA_SQL)
@@ -104,6 +108,26 @@ def init_db() -> None:
                 ),
             )
             logger.info("Root admin account provisioned (%s).", _ROOT_ADMIN_ID)
+
+        # Provision preview student for admin view-as mode
+        row = conn.execute(
+            "SELECT userID FROM users WHERE userID = ?", (PREVIEW_STUDENT_ID,)
+        ).fetchone()
+        if row is None:
+            conn.execute(
+                "INSERT INTO users (userID, firstName, lastName, email, password_hash, role) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    PREVIEW_STUDENT_ID,
+                    "Preview",
+                    "Student",
+                    _PREVIEW_STUDENT_EMAIL,
+                    generate_password_hash(""),  # No login allowed
+                    "student",
+                ),
+            )
+            logger.info("Preview student account provisioned (%s).", PREVIEW_STUDENT_ID)
+
         conn.commit()
     finally:
         conn.close()
@@ -141,17 +165,27 @@ def get_user(user_id: str) -> dict | None:
         conn.close()
 
 
+def get_preview_student() -> dict | None:
+    """Return the dedicated preview student account for admin view-as mode."""
+    return get_user(PREVIEW_STUDENT_ID)
+
+
 def list_users(role: str | None = None) -> list[dict]:
-    """Return all users, optionally filtered by role."""
+    """Return all users, optionally filtered by role.
+
+    Excludes system accounts (preview student) from listings.
+    """
     conn = get_db()
     try:
         if role:
             rows = conn.execute(
-                "SELECT * FROM users WHERE role = ? ORDER BY userID", (role,)
+                "SELECT * FROM users WHERE role = ? AND userID != ? ORDER BY userID",
+                (role, PREVIEW_STUDENT_ID),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM users ORDER BY role, userID"
+                "SELECT * FROM users WHERE userID != ? ORDER BY role, userID",
+                (PREVIEW_STUDENT_ID,),
             ).fetchall()
         return [dict(r) for r in rows]
     finally:

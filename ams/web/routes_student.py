@@ -12,7 +12,13 @@ from flask import (
     session,
 )
 
-from ams.core.db import get_assignment, list_assignments, list_assignments_for_student, list_users
+from ams.core.db import (
+    get_assignment,
+    get_preview_student,
+    list_assignments,
+    list_assignments_for_student,
+    PREVIEW_STUDENT_ID,
+)
 from ams.io.web_storage import get_runs_root, list_runs
 from ams.web.auth import get_current_user, login_required
 
@@ -23,28 +29,19 @@ student_bp = Blueprint("student", __name__, url_prefix="/student")
 #  Helpers
 # ---------------------------------------------------------------------------
 
-def _get_preview_student() -> dict | None:
-    """Return the first student in the database for admin preview, or None."""
-    students = list_users(role="student")
-    return students[0] if students else None
-
-
 def _resolve_student_id() -> tuple[str | None, dict | None]:
-    """Return (student_id, preview_student) for the student dashboard.
+    """Return (student_id, preview_info) for the student dashboard.
 
     - For real students: returns (their_id, None)
-    - For admin viewing as student: returns (preview_student_id, preview_student_dict)
-      This allows the admin to see a real student's experience.
-    - If no students exist in preview mode: returns (None, None)
+    - For admin viewing as student: returns (PREVIEW_STUDENT_ID, preview_student_dict)
+      Uses a dedicated dummy account - no real student data is accessed.
     """
     user = get_current_user()
     if user["role"] == "student":
         return user["userID"], None
     if session.get("view_as_role") == "student":
-        preview = _get_preview_student()
-        if preview:
-            return preview["userID"], preview
-        return None, None
+        preview = get_preview_student()
+        return PREVIEW_STUDENT_ID, preview
     return None, None
 
 
@@ -124,11 +121,14 @@ def dashboard():
     my_runs: list[dict] = []
     submitted_aids: set[str] = set()
 
-    if student_id:
+    is_preview = preview_student is not None
+
+    if student_id and not is_preview:
+        # Real student - load their actual data
         assignments = list_assignments_for_student(student_id)
         my_runs, submitted_aids = _gather_student_runs(student_id)
-    elif session.get("view_as_role") == "student":
-        # Admin preview with no students - show all assignments for UI demo
+    elif is_preview:
+        # Admin preview mode - show all assignments for UI demo, no runs
         assignments = list_assignments()
 
     todo, completed = _split_assignments(assignments, submitted_aids)
@@ -154,11 +154,14 @@ def coursework():
     my_runs: list[dict] = []
     submitted_aids: set[str] = set()
 
-    if student_id:
+    is_preview = preview_student is not None
+
+    if student_id and not is_preview:
+        # Real student - load their actual data
         assignments = list_assignments_for_student(student_id)
         my_runs, submitted_aids = _gather_student_runs(student_id)
-    elif session.get("view_as_role") == "student":
-        # Admin preview with no students - show all assignments for UI demo
+    elif is_preview:
+        # Admin preview mode - show all assignments for UI demo, no runs
         assignments = list_assignments()
 
     todo, completed = _split_assignments(assignments, submitted_aids)
