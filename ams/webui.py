@@ -69,7 +69,7 @@ from ams.io.web_storage import (
 )
 from ams.web.helpers import validate_is_zipfile
 from ams.tools.batch import run_batch
-from ams.analytics import build_teacher_analytics
+from ams.analytics import generate_assignment_analytics
 from ams.core.job_manager import job_manager
 
 logger = logging.getLogger(__name__)
@@ -781,7 +781,7 @@ def _register_routes(app: Flask) -> None:
                         "original_filename": original_filename,
                         "status": "completed",
                     }
-                    _write_batch_analytics(run_dir, profile, run_id)
+
                     _write_batch_reports_zip(run_dir, profile, run_id)
                     _write_run_index_batch(run_dir, run_info)
                     save_run_info(run_dir, run_info)
@@ -914,9 +914,7 @@ def _register_routes(app: Flask) -> None:
             summary_path = run_dir / run_info.get("summary", "batch_summary.json")
             if summary_path.exists():
                 context["batch"] = json.loads(summary_path.read_text(encoding="utf-8"))
-            analytics_path = run_dir / "analytics" / _analytics_filenames(run_id)["json"]
-            if analytics_path.exists():
-                context["analytics"] = json.loads(analytics_path.read_text(encoding="utf-8"))
+
         return render_template("run_detail.html", **context)
 
     @app.route("/runs/<run_id>/override-threat", methods=["POST"])
@@ -981,38 +979,7 @@ def _register_routes(app: Flask) -> None:
         job_id = job_manager.submit_job("threat_override", _run_override_job)
         return jsonify({"job_id": job_id, "status": "accepted", "run_id": run_id}), 202
 
-    @app.route("/batch/<run_id>/analytics")
-    @login_required
-    def batch_analytics(run_id: str):
-        runs_root = get_runs_root(app)
-        run_dir = find_run_by_id(runs_root, run_id)
-        if run_dir is None:
-            return "Run not found", 404
-        run_info = load_run_info(run_dir)
 
-        # Students can only see analytics after marks are released
-        user = get_current_user()
-        assignment_id = run_info.get("assignment_id", "")
-        assignment = get_assignment(assignment_id) if assignment_id else None
-        marks_released = assignment["marks_released"] if assignment else True
-        if user and user["role"] == "student" and not marks_released:
-            flash("Analytics are not yet available for this assignment.", "warning")
-            return redirect(url_for("student.dashboard"))
-
-        analytics_info = _ensure_batch_analytics(run_dir, run_id)
-        if not analytics_info:
-            return "Analytics not found", 404
-        analytics_path = analytics_info["paths"]["json"]
-        analytics = json.loads(analytics_path.read_text(encoding="utf-8"))
-        batch_summary_path = run_dir / run_info.get("summary", "batch_summary.json")
-        batch_summary = json.loads(batch_summary_path.read_text(encoding="utf-8")) if batch_summary_path.exists() else {}
-        return render_template(
-            "batch_analytics.html",
-            run=run_info,
-            analytics=analytics,
-            batch_summary=batch_summary,
-            run_id=run_id,
-        )
 
     @app.route("/runs/<run_id>/artifacts/<path:relpath>")
     @login_required
@@ -1184,18 +1151,7 @@ def _register_routes(app: Flask) -> None:
                             except Exception:
                                 pass
 
-                # ── 4. Batch analytics (if applicable) ──
-                if mode == "batch":
-                    analytics_suffixes = ["json", "csv", "component", "needs", "runtime"]
-                    for suffix in analytics_suffixes:
-                        glob_pattern = f"batch_analytics_{run_id}.*" if suffix == "json" else f"*_{suffix}_{run_id}.*"
-                        for analytics_file in run_dir.glob(glob_pattern):
-                            if analytics_file.is_file():
-                                try:
-                                    rel_path = analytics_file.relative_to(run_dir)
-                                    zf.write(analytics_file, arcname=f"analytics/{rel_path}")
-                                except Exception:
-                                    pass
+
 
             # Prepare response
             zip_buffer.seek(0)
@@ -1220,8 +1176,7 @@ def _register_routes(app: Flask) -> None:
         run_dir = find_run_by_id(runs_root, run_id)
         if run_dir is None:
             return "Run not found", 404
-        if filename.startswith(("batch_analytics_", "component_breakdown_", "needs_attention_")):
-            _ensure_batch_analytics(run_dir, run_id)
+
         target = _resolve_download_path(run_dir, filename)
         try:
             target.resolve().relative_to(run_dir.resolve())
@@ -1458,120 +1413,7 @@ def _register_routes(app: Flask) -> None:
 app = create_app()
 
 
-def _analytics_filenames(run_id: str) -> dict[str, str]:
-    return {
-        "json": f"batch_analytics_{run_id}.json",
-        "csv": f"batch_analytics_{run_id}.csv",
-        "component": f"component_breakdown_{run_id}.csv",
-        "needs": f"needs_attention_{run_id}.csv",
-        "runtime": f"runtime_health_{run_id}.csv",
-    }
 
-
-def _ensure_batch_analytics(run_dir: Path, run_id: str, force: bool = False) -> dict | None:
-    summary_path = run_dir / "batch_summary.json"
-    if not summary_path.exists():
-        return None
-    analytics_dir = run_dir / "analytics"
-    analytics_dir.mkdir(parents=True, exist_ok=True)
-    names = _analytics_filenames(run_id)
-    analytics_json = analytics_dir / names["json"]
-    analytics_csv = analytics_dir / names["csv"]
-    comp_csv = analytics_dir / names["component"]
-    needs_csv = analytics_dir / names["needs"]
-    if not force and analytics_json.exists() and analytics_csv.exists() and comp_csv.exists() and needs_csv.exists():
-        return {
-            "analytics": json.loads(analytics_json.read_text(encoding="utf-8")),
-            "paths": {"json": analytics_json, "csv": analytics_csv, "component": comp_csv, "needs": needs_csv},
-        }
-    batch_summary = json.loads(summary_path.read_text(encoding="utf-8"))
-
-    # Enrich records with findings/environment for analytics v2
-    records = batch_summary.get("records", []) or []
-    for rec in records:
-        rpath = rec.get("report_path")
-        if rpath and Path(rpath).exists():
-            try:
-                rep = json.loads(Path(rpath).read_text(encoding="utf-8"))
-                rec["findings"] = rep.get("findings", []) or []
-                rec["environment"] = rep.get("environment", {}) or {}
-            except Exception:
-                rec["findings"] = []
-        else:
-            rec["findings"] = []
-    batch_summary["records"] = records
-
-    analytics = build_teacher_analytics(batch_summary)
-    analytics_json.write_text(json.dumps(analytics, indent=2), encoding="utf-8")
-
-    records = batch_summary.get("records", []) or []
-    with analytics_csv.open("w", newline="", encoding="utf-8") as fh:
-        fh.write("submission_id,overall,html,css,js,php,sql,status,primary_reason\n")
-        for rec in sorted(records, key=lambda r: r.get("id", "")):
-            comps = rec.get("components", {}) or {}
-            fh.write(
-                "{id},{overall},{html},{css},{js},{php},{sql},{status},{reason}\n".format(
-                    id=rec.get("id", ""),
-                    overall=rec.get("overall", ""),
-                    html=comps.get("html", ""),
-                    css=comps.get("css", ""),
-                    js=comps.get("js", ""),
-                    php=comps.get("php", ""),
-                    sql=comps.get("sql", ""),
-                    status=rec.get("status", ""),
-                    reason=rec.get("primary_reason", ""),
-                )
-            )
-
-    comps = analytics.get("components", {}) or {}
-    with comp_csv.open("w", newline="", encoding="utf-8") as fh:
-        fh.write("component,average,pct_zero,pct_full\n")
-        for comp_name in ["html", "css", "js", "php", "sql"]:
-            comp = comps.get(comp_name, {}) or {}
-            fh.write(
-                "{name},{avg},{zero},{full}\n".format(
-                    name=comp_name,
-                    avg=comp.get("average", ""),
-                    zero=comp.get("pct_zero", ""),
-                    full=comp.get("pct_full", ""),
-                )
-            )
-
-    needs = analytics.get("needs_attention", []) or []
-    with needs_csv.open("w", newline="", encoding="utf-8") as fh:
-        fh.write("submission_id,overall,status,flags,reason\n")
-        for entry in needs:
-            fh.write(
-                "{id},{overall},{status},{flags},{reason}\n".format(
-                    id=entry.get("submission_id", ""),
-                    overall=entry.get("overall", ""),
-                    status=entry.get("status", ""),
-                    flags=";".join(entry.get("flags", [])),
-                    reason=entry.get("reason", ""),
-                )
-            )
-
-    runtime_csv = analytics_dir / names["runtime"]
-    runtime = analytics.get("runtime_health", {}) or {}
-    with runtime_csv.open("w", newline="", encoding="utf-8") as fh:
-        fh.write("behavioural_pass,behavioural_fail,behavioural_timeout,behavioural_skipped,browser_pass,browser_fail,browser_timeout,console_error_pct\n")
-        fh.write(
-            "{bp},{bf},{bt},{bs},{rp},{rf},{rt},{cpct}\n".format(
-                bp=runtime.get("behavioural", {}).get("pass", 0),
-                bf=runtime.get("behavioural", {}).get("fail", 0),
-                bt=runtime.get("behavioural", {}).get("timeout", 0),
-                bs=runtime.get("behavioural", {}).get("skipped", 0),
-                rp=runtime.get("browser", {}).get("pass", 0),
-                rf=runtime.get("browser", {}).get("fail", 0),
-                rt=runtime.get("browser", {}).get("timeout", 0),
-                cpct=runtime.get("console_error_pct", 0),
-            )
-        )
-
-    return {
-        "analytics": analytics,
-        "paths": {"json": analytics_json, "csv": analytics_csv, "component": comp_csv, "needs": needs_csv, "runtime": runtime_csv},
-    }
 
 
 def _resolve_download_path(run_dir: Path, filename: str) -> Path:
@@ -1634,8 +1476,7 @@ def _build_batch_readme(run_id: str, profile: str, batch_summary: Mapping[str, o
     return "\n".join(lines) + "\n"
 
 
-def _write_batch_analytics(run_dir: Path, profile: str, run_id: str) -> None:
-    _ensure_batch_analytics(run_dir, run_id, force=True)
+
 
 
 def _write_batch_reports_zip(run_dir: Path, profile: str, run_id: str) -> None:
@@ -1644,7 +1485,7 @@ def _write_batch_reports_zip(run_dir: Path, profile: str, run_id: str) -> None:
         return
     batch_summary = json.loads(summary_path.read_text(encoding="utf-8"))
     records = batch_summary.get("records", []) or []
-    _ensure_batch_analytics(run_dir, run_id)
+
     zip_path = run_dir / f"batch_reports_{profile}_{run_id}.zip"
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:

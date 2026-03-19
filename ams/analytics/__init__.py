@@ -1,5 +1,5 @@
 from __future__ import annotations
 
-from .batch_analytics import build_teacher_analytics
+from .assignment_analytics import generate_assignment_analytics, FINDING_LABELS
 
-__all__ = ["build_teacher_analytics"]
+__all__ = ["generate_assignment_analytics", "FINDING_LABELS"]

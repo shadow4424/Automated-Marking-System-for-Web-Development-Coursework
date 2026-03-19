@@ -16,6 +16,7 @@
     </p>
     <div class="page-header-actions">
         <a href="{{ url_for('teacher.dashboard') }}" class="btn btn-ghost btn-sm">← Back to Dashboard</a>
+        <a href="{{ url_for('teacher.view_analytics', assignment_id=assignment.assignmentID) }}" class="btn btn-primary btn-sm">Analytics</a>
         {% if assignment.marks_released %}
         <form method="POST" action="{{ url_for('teacher.withhold', assignment_id=assignment.assignmentID) }}" style="display:inline;">
             <button type="submit" class="btn btn-ghost btn-sm">Withhold Marks</button>

@@ -914,7 +914,9 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
         </div>
     </div>
 
-    <a href="{{ url_for('batch_analytics', run_id=run_id) }}" class="btn btn-primary">📊 View Analytics</a>
+    {% if run.assignment_id %}
+    <a href="{{ url_for('teacher.view_analytics', assignment_id=run.assignment_id) }}" class="btn btn-primary">📊 View Assignment Analytics</a>
+    {% endif %}
 </section>
 
 {# Submission List #}
