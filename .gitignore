@@ -13,6 +13,11 @@ ams_eval_runs/
 ams_batch_runs/
 ams_web_runs/
 
+# Database files
+ams_users.db
+ams_users.db-wal
+ams_users.db-shm
+
 # LLM cache
 cache.db
 demo_out/

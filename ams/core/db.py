@@ -17,8 +17,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 logger = logging.getLogger(__name__)
 
-# Default database path — sits next to the package root
-_DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "ams_users.db"
+# Default database path — stored in project root (not inside package)
+_DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "ams_users.db"
 
 # Root admin defaults
 _ROOT_ADMIN_ID = "admin123"
