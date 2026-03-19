@@ -1,0 +1,200 @@
+from __future__ import annotations
+
+import json
+from collections import Counter
+from pathlib import Path
+
+from flask import Flask
+
+from ams.io.web_storage import list_runs, save_run_info
+from ams.tools.batch import aggregate_batch
+from ams.web.routes_student import _gather_student_runs
+from ams.webui import _replace_existing_submissions, _write_run_index_batch
+
+
+def _write_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _components(score: float) -> dict[str, float | None]:
+    return {
+        "html": score,
+        "css": score,
+        "js": score,
+        "php": None,
+        "sql": None,
+    }
+
+
+def _make_report(student_id: str, assignment_id: str, original_filename: str, score: float) -> dict:
+    return {
+        "scores": {
+            "overall": score,
+            "by_component": {
+                "html": {"score": score},
+                "css": {"score": score},
+                "js": {"score": score},
+            },
+        },
+        "findings": [],
+        "metadata": {
+            "submission_metadata": {
+                "student_id": student_id,
+                "assignment_id": assignment_id,
+                "original_filename": original_filename,
+                "timestamp": "2026-03-19T12:00:00Z",
+            },
+            "student_identity": {
+                "student_id": student_id,
+                "name_normalized": student_id,
+            },
+        },
+    }
+
+
+def _make_mark_run(
+    runs_root: Path,
+    *,
+    run_id: str,
+    created_at: str,
+    student_id: str,
+    assignment_id: str,
+) -> Path:
+    run_dir = runs_root / assignment_id / student_id / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    save_run_info(
+        run_dir,
+        {
+            "id": run_id,
+            "mode": "mark",
+            "profile": "frontend",
+            "created_at": created_at,
+            "student_id": student_id,
+            "assignment_id": assignment_id,
+            "original_filename": f"{student_id}_{assignment_id}.zip",
+            "status": "completed",
+        },
+    )
+    return run_dir
+
+
+def _make_batch_run(
+    runs_root: Path,
+    *,
+    run_id: str,
+    created_at: str,
+    assignment_id: str,
+    students: list[tuple[str, float]],
+) -> Path:
+    run_dir = runs_root / assignment_id / "batch" / run_id
+    records: list[dict] = []
+
+    for student_id, score in students:
+        submission_id = f"{student_id}_{assignment_id}"
+        report_path = run_dir / "runs" / submission_id / "report.json"
+        _write_json(
+            report_path,
+            _make_report(student_id, assignment_id, f"{submission_id}.zip", score),
+        )
+        records.append(
+            {
+                "id": submission_id,
+                "student_id": student_id,
+                "assignment_id": assignment_id,
+                "original_filename": f"{submission_id}.zip",
+                "upload_timestamp": created_at,
+                "overall": score,
+                "components": _components(score),
+                "status": "ok",
+                "report_path": str(report_path),
+            }
+        )
+
+    summary = aggregate_batch(records, {}, Counter(), profile="frontend")
+    _write_json(run_dir / "batch_summary.json", {"records": records, "summary": summary})
+
+    run_info = {
+        "id": run_id,
+        "mode": "batch",
+        "profile": "frontend",
+        "created_at": created_at,
+        "assignment_id": assignment_id,
+        "status": "completed",
+        "summary": "batch_summary.json",
+        "batch_summary": {"records": records, "summary": summary},
+    }
+    save_run_info(run_dir, run_info)
+    _write_run_index_batch(run_dir, run_info)
+    return run_dir
+
+
+def test_list_runs_keeps_latest_submission_per_student_and_assignment(tmp_path: Path) -> None:
+    _make_mark_run(
+        tmp_path,
+        run_id="20260319-090000_mark_frontend_old",
+        created_at="2026-03-19T09:00:00Z",
+        student_id="student1",
+        assignment_id="assignment1",
+    )
+    _make_mark_run(
+        tmp_path,
+        run_id="20260319-100000_mark_frontend_new",
+        created_at="2026-03-19T10:00:00Z",
+        student_id="student1",
+        assignment_id="assignment1",
+    )
+
+    runs = list_runs(tmp_path)
+
+    assert [run["id"] for run in runs] == ["20260319-100000_mark_frontend_new"]
+
+
+def test_replace_existing_submissions_prunes_old_batch_record(tmp_path: Path) -> None:
+    run_dir = _make_batch_run(
+        tmp_path,
+        run_id="20260319-090000_batch_frontend_old",
+        created_at="2026-03-19T09:00:00Z",
+        assignment_id="assignment1",
+        students=[("student1", 0.45), ("student2", 0.85)],
+    )
+
+    _replace_existing_submissions(
+        tmp_path,
+        [("assignment1", "student1")],
+        current_run_id="20260319-100000_mark_frontend_new",
+    )
+
+    batch_summary = json.loads((run_dir / "batch_summary.json").read_text(encoding="utf-8"))
+    assert [record["student_id"] for record in batch_summary["records"]] == ["student2"]
+    assert not (run_dir / "runs" / "student1_assignment1").exists()
+    assert (run_dir / "runs" / "student2_assignment1").exists()
+
+    run_index = json.loads((run_dir / "run_index.json").read_text(encoding="utf-8"))
+    assert [submission["student_id"] for submission in run_index["submissions"]] == ["student2"]
+
+
+def test_gather_student_runs_includes_batch_submission_details(tmp_path: Path, monkeypatch) -> None:
+    _make_batch_run(
+        tmp_path,
+        run_id="20260319-090000_batch_frontend_visible",
+        created_at="2026-03-19T09:00:00Z",
+        assignment_id="assignment1",
+        students=[("student1", 0.72)],
+    )
+
+    app = Flask(__name__)
+    app.config["AMS_RUNS_ROOT"] = tmp_path
+
+    monkeypatch.setattr(
+        "ams.web.routes_student.get_assignment",
+        lambda assignment_id: {"assignmentID": assignment_id, "marks_released": True},
+    )
+
+    with app.app_context():
+        runs, submitted_assignments = _gather_student_runs("student1")
+
+    assert submitted_assignments == {"assignment1"}
+    assert len(runs) == 1
+    assert runs[0]["_batch_submission_id"] == "student1_assignment1"
+    assert runs[0]["_submission_record"]["student_id"] == "student1"

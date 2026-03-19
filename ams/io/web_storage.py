@@ -170,6 +170,91 @@ def load_run_info(run_dir: Path):
     return json.loads(info_path.read_text(encoding="utf-8"))
 
 
+def _submission_identity(run: Mapping[str, object], submission: Mapping[str, object] | None = None) -> tuple[str, str] | None:
+    submission = submission or {}
+    student_id = str(submission.get("student_id") or run.get("student_id") or "").strip()
+    assignment_id = str(submission.get("assignment_id") or run.get("assignment_id") or "").strip()
+    if not student_id or not assignment_id:
+        return None
+    return assignment_id, student_id
+
+
+def _submission_ref(run: Mapping[str, object], submission: Mapping[str, object] | None = None) -> tuple[str, str | None]:
+    submission = submission or {}
+    submission_id = submission.get("submission_id")
+    if isinstance(submission_id, str) and submission_id.strip():
+        return str(run.get("id") or ""), submission_id
+    return str(run.get("id") or ""), None
+
+
+def _submission_sort_key(run: Mapping[str, object], submission: Mapping[str, object] | None = None) -> tuple[str, str, str]:
+    run_id, submission_id = _submission_ref(run, submission)
+    return (
+        str(run.get("created_at") or ""),
+        run_id,
+        submission_id or "",
+    )
+
+
+def _filter_latest_submissions(runs: list[dict]) -> list[dict]:
+    latest_by_identity: dict[tuple[str, str], tuple[tuple[str, str, str], tuple[str, str | None]]] = {}
+
+    for run in runs:
+        submissions = list(run.get("submissions", []) or [])
+        if run.get("mode") == "batch" and submissions:
+            for submission in submissions:
+                identity = _submission_identity(run, submission)
+                if identity is None:
+                    continue
+                candidate = (_submission_sort_key(run, submission), _submission_ref(run, submission))
+                current = latest_by_identity.get(identity)
+                if current is None or candidate[0] > current[0]:
+                    latest_by_identity[identity] = candidate
+            continue
+
+        identity = _submission_identity(run, submissions[0] if submissions else None)
+        if identity is None:
+            continue
+        candidate = (_submission_sort_key(run, submissions[0] if submissions else None), _submission_ref(run, submissions[0] if submissions else None))
+        current = latest_by_identity.get(identity)
+        if current is None or candidate[0] > current[0]:
+            latest_by_identity[identity] = candidate
+
+    filtered_runs: list[dict] = []
+    for run in runs:
+        submissions = list(run.get("submissions", []) or [])
+        if run.get("mode") == "batch":
+            kept_submissions: list[dict] = []
+            for submission in submissions:
+                identity = _submission_identity(run, submission)
+                if identity is None:
+                    kept_submissions.append(submission)
+                    continue
+                latest = latest_by_identity.get(identity)
+                if latest and latest[1] == _submission_ref(run, submission):
+                    kept_submissions.append(submission)
+
+            if submissions and not kept_submissions:
+                continue
+
+            run_copy = dict(run)
+            run_copy["submissions"] = kept_submissions
+            filtered_runs.append(run_copy)
+            continue
+
+        identity = _submission_identity(run, submissions[0] if submissions else None)
+        if identity is None:
+            filtered_runs.append(run)
+            continue
+
+        latest = latest_by_identity.get(identity)
+        if latest and latest[1] == _submission_ref(run, submissions[0] if submissions else None):
+            filtered_runs.append(run)
+
+    filtered_runs.sort(key=lambda r: r.get("id", ""), reverse=True)
+    return filtered_runs
+
+
 def list_runs(runs_root: Path) -> list[dict]:
     """List all runs, searching recursively through the nested directory structure."""
     runs: list[dict] = []
@@ -181,6 +266,8 @@ def list_runs(runs_root: Path) -> list[dict]:
         run_dir = run_info_path.parent
         info = load_run_info(run_dir)
         if info:
+            if info.get("active") is False:
+                continue
             info["id"] = run_dir.name
             info["_run_dir"] = str(run_dir)  # Store full path for lookups
             
@@ -236,11 +323,28 @@ def list_runs(runs_root: Path) -> list[dict]:
                         for rec in batch_summary.get("records", []):
                             student_val = rec.get("student_id") or rec.get("id", "Unknown")
                             info["submissions"].append({
+                                "submission_id": rec.get("id"),
                                 "student_name": student_val,
                                 "student_id": student_val,
+                                "assignment_id": rec.get("assignment_id") or info.get("assignment_id"),
+                                "original_filename": rec.get("original_filename"),
+                                "upload_timestamp": rec.get("upload_timestamp") or info.get("created_at"),
                             })
                     except Exception:
                         pass
+            elif info.get("mode") == "mark" and info.get("student_id") and info.get("assignment_id"):
+                info["submissions"] = [{
+                    "submission_id": info.get("id"),
+                    "student_name": info.get("student_id"),
+                    "student_id": info.get("student_id"),
+                    "assignment_id": info.get("assignment_id"),
+                    "original_filename": info.get("original_filename"),
+                    "upload_timestamp": info.get("created_at"),
+                }]
+            elif info.get("mode") == "batch":
+                pending_submissions = info.get("pending_submissions", []) or []
+                if isinstance(pending_submissions, list):
+                    info["submissions"] = [dict(sub) for sub in pending_submissions]
             
             # Ensure every submission entry has usable student_name and student_id
             for sub in info.get("submissions", []):
@@ -251,8 +355,7 @@ def list_runs(runs_root: Path) -> list[dict]:
             runs.append(info)
     
     # Sort by run id (timestamp-based) descending
-    runs.sort(key=lambda r: r.get("id", ""), reverse=True)
-    return runs
+    return _filter_latest_submissions(runs)
 
 
 def find_run_by_id(runs_root: Path, run_id: str) -> Optional[Path]:

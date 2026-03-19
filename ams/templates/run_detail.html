@@ -31,11 +31,16 @@
         <a href="{{ url_for('download', run_id=run_id, filename='batch_reports.zip') }}"
             class="btn btn-primary btn-sm">Download All</a>
         {% else %}
+            {% if batch_submission_id %}
+        <a href="{{ url_for('batch_submission_report', run_id=run_id, submission_id=batch_submission_id) }}" class="btn btn-secondary btn-sm">
+            Download JSON</a>
+            {% else %}
         <a href="{{ url_for('download', run_id=run_id, filename='report.json') }}" class="btn btn-secondary btn-sm">
             Download JSON</a>
         <a href="{{ url_for('download', run_id=run_id, filename='summary.txt') }}" class="btn btn-secondary btn-sm">
             Download Summary</a>
         <a href="{{ url_for('download_bundle', run_id=run_id) }}" class="btn btn-primary btn-sm">Download All</a>
+            {% endif %}
         {% endif %}
     </div>
 </div>

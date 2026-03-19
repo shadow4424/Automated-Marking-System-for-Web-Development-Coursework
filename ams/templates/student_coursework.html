@@ -169,7 +169,11 @@
             </div>
             <div class="run-card-actions">
                 {% if run._marks_released %}
+                    {% if run.get('_batch_submission_id') %}
+                <a href="{{ url_for('batch_submission_view', run_id=run.id, submission_id=run._batch_submission_id) }}" class="btn btn-secondary btn-sm">View Report</a>
+                    {% else %}
                 <a href="{{ url_for('run_detail', run_id=run.id) }}" class="btn btn-secondary btn-sm">View Report</a>
+                    {% endif %}
                 {% endif %}
             </div>
         </div>

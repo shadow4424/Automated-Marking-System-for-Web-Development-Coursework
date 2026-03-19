@@ -67,19 +67,21 @@ def _gather_student_runs(student_id: str) -> tuple[list[dict], set[str]]:
                 if aid:
                     submitted_aids.add(aid)
         elif run.get("mode") == "batch":
-            batch_summary = run.get("batch_summary", [])
-            if isinstance(batch_summary, list):
-                for rec in batch_summary:
-                    if rec.get("student_id") == student_id:
-                        aid = run.get("assignment_id", "")
-                        assignment = get_assignment(aid) if aid else None
-                        student_run = dict(run)
-                        student_run["_submission_record"] = rec
-                        student_run["_marks_released"] = assignment["marks_released"] if assignment else False
-                        my_runs.append(student_run)
-                        if aid:
-                            submitted_aids.add(aid)
-                        break
+            for rec in run.get("submissions", []) or []:
+                if rec.get("student_id") != student_id:
+                    continue
+                aid = rec.get("assignment_id") or run.get("assignment_id", "")
+                assignment = get_assignment(aid) if aid else None
+                student_run = dict(run)
+                student_run["_submission_record"] = rec
+                student_run["_batch_submission_id"] = (
+                    rec.get("submission_id") or rec.get("student_id") or rec.get("student_name")
+                )
+                student_run["_marks_released"] = assignment["marks_released"] if assignment else False
+                my_runs.append(student_run)
+                if aid:
+                    submitted_aids.add(aid)
+                break
 
     return my_runs, submitted_aids
 

@@ -16,6 +16,7 @@ import logging
 import shutil
 import tempfile
 import zipfile
+from collections import Counter
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -68,7 +69,7 @@ from ams.io.web_storage import (
     validate_file_type,
 )
 from ams.web.helpers import validate_is_zipfile
-from ams.tools.batch import run_batch
+from ams.tools.batch import aggregate_batch, discover_batch_items, run_batch, validate_submission_filename, write_outputs
 from ams.analytics import generate_assignment_analytics
 from ams.core.job_manager import job_manager
 
@@ -244,6 +245,209 @@ def _load_threat_file_contents(findings: list, run_dir: Path) -> dict:
         file_data[key]["threat_lines"].sort()
 
     return file_data
+
+
+def _submission_identity(student_id: str | None, assignment_id: str | None) -> tuple[str, str] | None:
+    student_val = (student_id or "").strip()
+    assignment_val = (assignment_id or "").strip()
+    if not student_val or not assignment_val:
+        return None
+    return assignment_val, student_val
+
+
+def _discover_pending_batch_submissions(submissions_root: Path, assignment_id: str, upload_timestamp: str) -> list[dict]:
+    pending_by_identity: dict[tuple[str, str], dict] = {}
+
+    for item in discover_batch_items(submissions_root):
+        is_valid, parsed_student_id, parsed_assignment_id = validate_submission_filename(item.path.name)
+        if not is_valid or parsed_assignment_id != assignment_id:
+            continue
+
+        student_id = MetadataValidator.sanitize_identifier(parsed_student_id)
+        identity = _submission_identity(student_id, assignment_id)
+        if identity is None:
+            continue
+
+        pending_by_identity[identity] = {
+            "submission_id": item.id,
+            "student_name": student_id,
+            "student_id": student_id,
+            "assignment_id": assignment_id,
+            "original_filename": item.path.name,
+            "upload_timestamp": upload_timestamp,
+            "status": "pending",
+        }
+
+    return sorted(pending_by_identity.values(), key=lambda sub: (sub.get("student_id", ""), sub.get("submission_id", "")))
+
+
+def _batch_report_path(run_dir: Path, record: Mapping[str, object]) -> Path | None:
+    report_path = record.get("report_path")
+    if isinstance(report_path, str) and report_path:
+        candidate = Path(report_path)
+        if candidate.exists():
+            return candidate
+
+    submission_id = record.get("id")
+    if isinstance(submission_id, str) and submission_id:
+        candidate = run_dir / "runs" / submission_id / "report.json"
+        if candidate.exists():
+            return candidate
+
+    return None
+
+
+def _collect_batch_stats(run_dir: Path, records: list[dict]) -> tuple[dict[str, dict[str, object]], Counter[str]]:
+    finding_stats: dict[str, dict[str, object]] = {}
+    failure_reason_counts: Counter[str] = Counter()
+
+    for record in records:
+        failure_label = str(
+            record.get("validation_error")
+            or record.get("error")
+            or record.get("status")
+            or ""
+        ).strip()
+        if failure_label and failure_label.lower() != "ok":
+            failure_reason_counts[failure_label[:80]] += 1
+
+        report_path = _batch_report_path(run_dir, record)
+        if report_path is None:
+            continue
+
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        seen_finding_ids: set[str] = set()
+        for finding in report.get("findings", []) or []:
+            finding_id = finding.get("id")
+            if not finding_id:
+                continue
+            stats = finding_stats.setdefault(
+                finding_id,
+                {"event_count": 0, "affected_submissions": set()},
+            )
+            stats["event_count"] = int(stats.get("event_count", 0)) + 1
+            seen_finding_ids.add(finding_id)
+
+        submission_id = str(record.get("id") or "")
+        for finding_id in seen_finding_ids:
+            finding_stats[finding_id]["affected_submissions"].add(submission_id)
+
+    return finding_stats, failure_reason_counts
+
+
+def _rebuild_batch_outputs(run_dir: Path, run_info: dict, records: list[dict]) -> None:
+    if not records:
+        shutil.rmtree(run_dir, ignore_errors=True)
+        return
+
+    profile = run_info.get("profile", "frontend")
+    finding_stats, failure_reason_counts = _collect_batch_stats(run_dir, records)
+    summary = aggregate_batch(records, finding_stats, failure_reason_counts, profile=profile)
+    write_outputs(run_dir, records, summary, finding_stats, profile=profile)
+
+    updated_run_info = dict(run_info)
+    updated_run_info["batch_summary"] = {"records": records, "summary": summary}
+    save_run_info(run_dir, updated_run_info)
+    _write_run_index_batch(run_dir, updated_run_info)
+
+    try:
+        _write_batch_reports_zip(run_dir, profile, updated_run_info.get("id", run_dir.name))
+    except Exception:
+        logger.warning("Failed to refresh batch_reports.zip for %s", run_dir, exc_info=True)
+
+
+def _replace_existing_submissions(
+    runs_root: Path,
+    submissions: list[tuple[str, str]],
+    *,
+    current_run_id: str,
+) -> None:
+    replacement_keys = {key for key in submissions if key[0] and key[1]}
+    if not replacement_keys:
+        return
+
+    for run_info_path in list(runs_root.rglob("run_info.json")):
+        run_dir = run_info_path.parent
+        if run_dir.name == current_run_id:
+            continue
+
+        run_info = load_run_info(run_dir)
+        if not run_info:
+            continue
+
+        if run_info.get("mode") == "mark":
+            identity = _submission_identity(
+                str(run_info.get("student_id") or ""),
+                str(run_info.get("assignment_id") or ""),
+            )
+            if identity not in replacement_keys:
+                continue
+
+            if run_info.get("status") == "pending":
+                updated_run_info = dict(run_info)
+                updated_run_info["active"] = False
+                updated_run_info["superseded_by"] = current_run_id
+                save_run_info(run_dir, updated_run_info)
+            else:
+                shutil.rmtree(run_dir, ignore_errors=True)
+            continue
+
+        if run_info.get("mode") != "batch":
+            continue
+
+        batch_summary_path = run_dir / "batch_summary.json"
+        if not batch_summary_path.exists():
+            pending_submissions = run_info.get("pending_submissions", []) or []
+            if not isinstance(pending_submissions, list):
+                continue
+
+            remaining_pending = [
+                dict(submission)
+                for submission in pending_submissions
+                if _submission_identity(
+                    str(submission.get("student_id") or ""),
+                    str(submission.get("assignment_id") or run_info.get("assignment_id") or ""),
+                ) not in replacement_keys
+            ]
+            if len(remaining_pending) == len(pending_submissions):
+                continue
+
+            updated_run_info = dict(run_info)
+            updated_run_info["pending_submissions"] = remaining_pending
+            save_run_info(run_dir, updated_run_info)
+            continue
+
+        try:
+            batch_summary = json.loads(batch_summary_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        records = batch_summary.get("records", []) or []
+        remaining_records: list[dict] = []
+        removed_submission_ids: list[str] = []
+        for record in records:
+            identity = _submission_identity(
+                str(record.get("student_id") or ""),
+                str(record.get("assignment_id") or run_info.get("assignment_id") or ""),
+            )
+            if identity in replacement_keys:
+                submission_id = record.get("id")
+                if isinstance(submission_id, str) and submission_id:
+                    removed_submission_ids.append(submission_id)
+                continue
+            remaining_records.append(record)
+
+        if len(remaining_records) == len(records):
+            continue
+
+        for submission_id in removed_submission_ids:
+            shutil.rmtree(run_dir / "runs" / submission_id, ignore_errors=True)
+
+        _rebuild_batch_outputs(run_dir, run_info, remaining_records)
 
 
 def create_app(config: Mapping[str, object] | None = None) -> Flask:
@@ -598,6 +802,11 @@ def _register_routes(app: Flask) -> None:
             if using_github:
                 initial_run_info["github_repo"] = github_repo
             save_run_info(run_dir, initial_run_info)
+            _replace_existing_submissions(
+                runs_root,
+                [(assignment_id, student_id)],
+                current_run_id=run_id,
+            )
 
             def _run_mark_job() -> dict:
                 """Executed in the thread pool."""
@@ -809,6 +1018,13 @@ def _register_routes(app: Flask) -> None:
             extracted = run_dir / "batch_inputs"
             extracted.mkdir(parents=True, exist_ok=True)
             safe_extract_zip(upload_zip, extracted, max_size_mb=MAX_UPLOAD_MB)
+            batch_inputs_root = find_submission_root(extracted)
+            created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            pending_submissions = _discover_pending_batch_submissions(
+                batch_inputs_root,
+                assignment_id,
+                created_at,
+            )
             
             # Run batch with metadata context — off the request thread
             initial_run_info = {
@@ -816,15 +1032,27 @@ def _register_routes(app: Flask) -> None:
                 "mode": "batch",
                 "profile": profile,
                 "scoring_mode": scoring_mode.value,
-                "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "created_at": created_at,
                 "assignment_id": assignment_id,
                 "original_filename": original_filename,
                 "source": "github" if using_github else "upload",
                 "status": "pending",
+                "pending_submissions": pending_submissions,
             }
             if using_github:
                 initial_run_info["github_repo"] = github_repo
             save_run_info(run_dir, initial_run_info)
+            _replace_existing_submissions(
+                runs_root,
+                [
+                    (
+                        str(submission.get("assignment_id") or ""),
+                        str(submission.get("student_id") or ""),
+                    )
+                    for submission in pending_submissions
+                ],
+                current_run_id=run_id,
+            )
 
             def _run_batch_job() -> dict:
                 """Executed in the thread pool."""
@@ -1130,6 +1358,23 @@ def _register_routes(app: Flask) -> None:
                 except Exception:
                     pass
 
+        user = get_current_user()
+        if user and user["role"] == "student" and real_student_id != user["userID"]:
+            flash("You do not have access to this submission.", "error")
+            return redirect(url_for("student.dashboard"))
+
+        assignment = get_assignment(real_assignment_id) if real_assignment_id else None
+        marks_released = assignment["marks_released"] if assignment else True
+        back_url = (
+            url_for("student.coursework")
+            if user and user["role"] == "student"
+            else (
+                url_for("teacher.assignment_detail", assignment_id=run_info.get("assignment_id", ""))
+                if run_info.get("assignment_id")
+                else url_for("runs")
+            )
+        )
+
         # Create a pseudo run_info for this submission
         submission_run_info = {
             "mode": "mark",
@@ -1146,11 +1391,12 @@ def _register_routes(app: Flask) -> None:
             run=submission_run_info,
             run_id=run_id,
             report=report,
+            marks_released=marks_released,
             threat_file_contents=_load_threat_file_contents(
                 report.get("findings", []), submission_dir
             ),
             batch_submission_id=submission_id,  # Flag to show back button
-            back_url=url_for('teacher.assignment_detail', assignment_id=run_info.get('assignment_id', '')) if run_info.get('assignment_id') else url_for('runs'),
+            back_url=back_url,
         )
 
     @app.route("/batch/<run_id>/submissions/<submission_id>/report.json")
@@ -1168,6 +1414,16 @@ def _register_routes(app: Flask) -> None:
         if not report_path.exists():
             return "Report not found", 404
         run_info = load_run_info(run_dir) or {}
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except Exception:
+            return "Report not found", 404
+        report_meta = report.get("metadata", {}).get("submission_metadata", {})
+        real_student_id = str(report_meta.get("student_id") or "")
+        user = get_current_user()
+        if user and user["role"] == "student" and real_student_id and real_student_id != user["userID"]:
+            flash("You do not have access to this submission.", "error")
+            return redirect(url_for("student.dashboard"))
         profile = run_info.get("profile", "")
         dl_name = f"report_{submission_id}_{profile}_{run_id}.json"
         return send_file(report_path, as_attachment=True, download_name=dl_name)
