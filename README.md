@@ -139,4 +139,5 @@ Useful if package dependencies have changed.
 ```bash
 export AMS_GITHUB_CLIENT_ID="Iv23lirU52ENG3gWfdVe"
 export AMS_GITHUB_CLIENT_SECRET="06c9d1271b4eb1cc1d92d04f4e7c6fd533e9cb05"
+export AMS_GITHUB_OAUTH_CALLBACK="http://localhost:5000/api/github/callback"
 ```bash
