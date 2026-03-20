@@ -28,7 +28,7 @@ def test_web_mark_and_batch_same_score(tmp_path: Path) -> None:
     # Run via batch path
     submissions_dir = tmp_path / "subs"
     submissions_dir.mkdir()
-    (submissions_dir / "s1.zip").write_bytes(zip_bytes)
+    (submissions_dir / "s1_assignment1.zip").write_bytes(zip_bytes)
     batch_out = tmp_path / "batch_out"
     summary = run_batch(submissions_dir=submissions_dir, out_root=batch_out, profile="frontend", keep_individual_runs=True)
     batch_summary = json.loads((batch_out / "batch_summary.json").read_text(encoding="utf-8"))

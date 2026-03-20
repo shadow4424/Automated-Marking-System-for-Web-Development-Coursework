@@ -15,7 +15,7 @@ Unlike traditional automated markers that look for exact outputs, AMS combines *
 - **Browser Automation & Vision**: Uses Playwright to simulate user interactions and LLM Vision capabilities to test visual layout, responsiveness, and dynamic DOM updates.
 - **Multi-Language Static Analysis**: Robust AST-based static analysis to detect necessary structures (e.g., HTML semantics, CSS rules, JavaScript control flow, PHP database queries) without enforcing rigid one-size-fits-all solutions.
 - **AI-Assisted Feedback**: Leverages advanced LLMs (local or API-driven) to summarise deterministic findings into clear, pedagogical feedback—crucially, without letting the AI dictate the final mark.
-- **Batch Analytics**: Evaluate entire cohorts simultaneously. Built-in analytics tools generate score distributions, highlight common failure modes, and provide detailed CSV exports for moderation.
+- **Assignment Analytics**: Open a single assignment analytics view that refreshes from all current submissions for that assignment and highlights cohort patterns for moderation.
 - **Web UI & CLI**: Instructors can use the intuitive `Flask`-based Web UI for quick, visual reviews, or rely on the powerful CLI for scriptable batch operations.
 
 ## Architecture Pipeline
@@ -44,7 +44,7 @@ Submissions flow through a rigorous, rule-based pipeline:
    cd Automated-Marking-System-for-Web-Development-Coursework
    ```
 2. **Install the package and dependencies:**
-   To install the CLI and all necessary extras (including UI and plotting tools):
+   To install the CLI and all necessary extras (including the Web UI and demo tooling):
    ```bash
    pip install -e .[demo,dev]
    ```
@@ -65,7 +65,7 @@ If you start the `ams` CLI without the Docker image available, it will display a
 ## Usage Guide
 
 ### 1. The Examiner Quick Path (Demo)
-Run a full end-to-end demonstration. This command processes sample batch submissions, calculates scores, generates analytics, and produces charts.
+Run a full end-to-end demonstration. This command processes a sample submission, calculates scores, and produces a full report.
 ```bash
 AMS_RUNS_ROOT=demo_out ams demo --profile fullstack
 ```
@@ -76,7 +76,7 @@ Start the simple teacher-facing web application to upload and review individual 
 FLASK_ENV=development python -m ams.webui
 ```
 Then, open your browser to `http://localhost:5000`.
-- *Note: In the UI, navigate to "Run History" to review the latest batch runs and download detailed CSV analytics.*
+- *Note: In the UI, open an assignment and use the `Analytics` button to view fresh assignment-wide analytics.*
 
 ### 3. Command Line Interface (CLI)
 The CLI allows integration with scripts and CI/CD systems.
@@ -90,12 +90,6 @@ ams mark path/to/submission_dir -w path/to/workspace -o report.json --profile fr
 Process a directory filled with student zip files or folders. Overrides global target paths.
 ```bash
 ams batch path/to/input_folder --profile fullstack -o ams_batch_runs/run_name
-```
-
-**Export Figures & Analytics:**
-After a batch run, generate visualisations to help with moderation.
-```bash
-ams export-figures --run-id <run_id> --runs-root ams_batch_runs --out output_figures/
 ```
 
 ## Contributing and Development

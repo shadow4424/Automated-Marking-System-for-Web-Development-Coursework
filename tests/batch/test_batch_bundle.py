@@ -25,19 +25,19 @@ def _make_bundle(tmp_path: Path, include_bad: bool = False) -> Path:
             "app.js": "document.body.addEventListener('click', ()=>{});",
         }
     )
-    student_b_dir = tmp_path / "studentB"
+    student_b_dir = tmp_path / "studentB_assignment1"
     student_b_dir.mkdir()
     (student_b_dir / "index.html").write_text("<!doctype html><html><body><form><input><a>y</a></form></body></html>", encoding="utf-8")
     (student_b_dir / "style.css").write_text("body { color: blue; }", encoding="utf-8")
     (student_b_dir / "app.js").write_text("document.body.addEventListener('click', ()=>{});", encoding="utf-8")
 
     with zipfile.ZipFile(bundle, "w") as zf:
-        zf.writestr("studentA.zip", student_a)
+        zf.writestr("studentA_assignment1.zip", student_a)
         for path in student_b_dir.rglob("*"):
             arc = path.relative_to(tmp_path)
             zf.write(path, arc.as_posix())
         if include_bad:
-            zf.writestr("bad.zip", b"not-a-zip")
+            zf.writestr("studentC_assignment1.zip", b"not-a-zip")
     return bundle
 
 

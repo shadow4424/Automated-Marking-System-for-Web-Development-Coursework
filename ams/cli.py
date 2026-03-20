@@ -55,7 +55,7 @@ def _create_parser() -> argparse.ArgumentParser:
 
     batch_parser = subparsers.add_parser(
         "batch",
-        help="Run marking over a folder of submissions and produce cohort analytics",
+        help="Run marking over a folder of submissions and produce batch reports",
     )
     batch_parser.add_argument("submissions_dir", type=Path, help="Folder containing submission dirs or .zip files")
     batch_parser.add_argument("--profile", choices=["frontend", "fullstack"], required=True)
@@ -66,12 +66,7 @@ def _create_parser() -> argparse.ArgumentParser:
         help="Output directory (default ams_batch_runs/<timestamp>)",
     )
 
-    export_parser = subparsers.add_parser("export-figures", help="Export figures/tables from a batch run")
-    export_parser.add_argument("--run-id", required=True, help="Run ID of batch analytics")
-    export_parser.add_argument("--runs-root", type=Path, default=Path("ams_batch_runs"), help="Root directory containing batch runs")
-    export_parser.add_argument("--out", "-o", type=Path, default=Path("figures"), help="Output directory for figures/tables")
-
-    subparsers.add_parser("demo", help="Build and run a full demo (batch, analytics, figures, evaluation)")
+    subparsers.add_parser("demo", help="Build and run a full demo assessment")
 
     return parser
 
@@ -127,12 +122,6 @@ def main(argv: list[str] | None = None) -> None:
         )
         failed = result["summary"]["failed"]
         raise SystemExit(0 if failed == 0 else 1)
-    elif args.command == "export-figures":
-        from .tools.export_figures import export_figures
-
-        export_figures(run_id=args.run_id, runs_root=Path(args.runs_root), out_dir=Path(args.out))
-        print(f"Figures exported to {args.out}")
-        return
     elif args.command == "demo":
         from .tools.demo_full_system import run_demo
 

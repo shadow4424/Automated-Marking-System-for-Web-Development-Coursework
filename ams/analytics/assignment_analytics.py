@@ -1,297 +1,482 @@
-"""Assignment-level analytics engine.
-
-Aggregates every submission for a given assignment ID and builds
-teacher-facing analytics (score distribution, component readiness,
-student issues, needs attention list).
-
-Public API::
-
-    analytics_dict = generate_assignment_analytics(assignment_id)
-
-The function collects every *completed* run whose ``assignment_id``
-matches, picks the **latest successful run per student**, then
-delegates to :func:`build_teacher_analytics` for the actual
-aggregation.
-"""
+"""Assignment-level analytics engine."""
 from __future__ import annotations
 
 import json
 import logging
 import statistics
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Sequence
 
+from ams.core.aggregation import aggregate_findings_to_checks, compute_check_stats
 from ams.core.db import get_assignment
-from ams.io.web_storage import get_runs_root, list_runs
+from ams.core.profiles import get_relevant_components
+from ams.io.metadata import MetadataValidator
+from ams.io.web_storage import get_runs_root, load_run_info
 
 logger = logging.getLogger(__name__)
 
-# ── Finding labels (carried over from batch_analytics) ──────────────
-FINDING_LABELS = {
-    "PHP.MISSING_FILES": ("Missing required backend files (PHP)", ""),
-    "SQL.MISSING_FILES": ("Missing required backend files (SQL)", ""),
-    "CSS.MISSING_FILES": ("CSS missing", "CSS files required but not found"),
-    "JS.MISSING_FILES": ("JavaScript missing", "JS files required but not found"),
-    "HTML.MISSING_FILES": ("HTML missing", "HTML files required but not found"),
-    "PHP.REQ.MISSING_FILES": ("Missing required backend files (PHP)", ""),
-    "SQL.REQ.MISSING_FILES": ("Missing required backend files (SQL)", ""),
-    "CSS.REQ.MISSING_FILES": ("CSS missing", "CSS files required but not found"),
-    "JS.REQ.MISSING_FILES": ("JavaScript missing", "JS files required but not found"),
-    "HTML.REQ.MISSING_FILES": ("HTML missing", "HTML files required but not found"),
-    "CONFIG.MISSING_REQUIRED_RULES": ("Configuration issue", "Required component has no required rules configured"),
-    "CONSISTENCY.JS_MISSING_HTML_ID": ("Cross-file consistency", "JS references HTML ID that does not exist"),
-    "CONSISTENCY.JS_MISSING_HTML_CLASS": ("Cross-file consistency", "JS references HTML class that does not exist"),
-    "CONSISTENCY.CSS_MISSING_HTML_ID": ("Cross-file consistency", "CSS references HTML ID that does not exist"),
-    "CONSISTENCY.CSS_MISSING_HTML_CLASS": ("Cross-file consistency", "CSS references HTML class that does not exist"),
-    "CONSISTENCY.PHP_EXPECTS_MISSING_FORM_FIELD": ("Cross-file consistency", "PHP accesses form field not defined in HTML"),
-    "CONSISTENCY.FORM_FIELD_UNUSED_IN_PHP": ("Cross-file consistency", "HTML form field not accessed in PHP"),
-    "CONSISTENCY.MISSING_LINK_TARGET": ("Cross-file consistency", "Link target does not exist"),
-    "CONSISTENCY.MISSING_FORM_ACTION_TARGET": ("Cross-file consistency", "Form action target does not exist"),
-    "BEHAVIOUR.PHP_SMOKE_FAIL": ("Runtime/behavioural issues", "PHP entrypoint execution failed"),
-    "BEHAVIOUR.PHP_SMOKE_TIMEOUT": ("Runtime/behavioural issues", "PHP smoke test timed out"),
-    "BEHAVIOUR.PHP_FORM_RUN_FAIL": ("Runtime/behavioural issues", "PHP form injection failed"),
-    "BEHAVIOUR.PHP_FORM_RUN_TIMEOUT": ("Runtime/behavioural issues", "PHP form injection timed out"),
-    "BEHAVIOUR.SQL_EXEC_FAIL": ("Runtime/behavioural issues", "SQL execution failed"),
-    "BEHAVIOUR.SQL_EXEC_TIMEOUT": ("Runtime/behavioural issues", "SQL execution timed out"),
-    "BROWSER.PAGE_LOAD_FAIL": ("Browser/runtime issues", "Browser page load failed"),
-    "BROWSER.PAGE_LOAD_TIMEOUT": ("Browser/runtime issues", "Browser page load timed out"),
-    "BROWSER.CONSOLE_ERRORS_PRESENT": ("Browser/runtime issues", "Console errors observed"),
+COMPONENT_ORDER = ["html", "css", "js", "php", "sql"]
+SMALL_COHORT_THRESHOLD = 5
+SEVERITY_PRIORITY = {"FAIL": 3, "WARN": 2, "SKIPPED": 1, "PASS": 0}
+GRADE_ORDER = {"unknown": 0, "failing": 1, "poor": 2, "partial": 3, "good": 4, "full marks": 5}
+REQUIREMENT_TITLES = {
+    "html": "Required HTML structure",
+    "css": "Required CSS requirements",
+    "js": "Required JavaScript behaviour",
+    "php": "Required PHP/backend processing",
+    "sql": "Required SQL/database behaviour",
+}
+SIGNAL_DESCRIPTIONS = {
+    "missing_backend": "Required backend files or backend rubric checks are missing.",
+    "missing_frontend": "Required HTML, CSS, or JavaScript artefacts are missing.",
+    "syntax": "Submissions contain syntax or parse issues that can distort scoring.",
+    "behavioural_runtime": "Runtime or deterministic execution checks are failing.",
+    "browser_runtime": "Browser loading or client-side execution issues were observed.",
+    "consistency": "Cross-file links between HTML, CSS, JavaScript, or PHP are inconsistent.",
+    "other": "Other repeated rubric-level issues were detected across the cohort.",
+    "behavioural_skipped": "Runtime checks were skipped, reducing confidence in automatic interpretation.",
+    "browser_skipped": "Browser checks were skipped or unavailable, reducing confidence in UI-related interpretation.",
 }
 
+FINDING_LABELS = {
+    "PHP.MISSING_FILES": ("Missing required backend files (PHP)", "Required PHP files were not found."),
+    "SQL.MISSING_FILES": ("Missing required backend files (SQL)", "Required SQL files were not found."),
+    "CSS.MISSING_FILES": ("CSS missing", "CSS files required but not found."),
+    "JS.MISSING_FILES": ("JavaScript missing", "JavaScript files required but not found."),
+    "HTML.MISSING_FILES": ("HTML missing", "HTML files required but not found."),
+    "PHP.REQ.MISSING_FILES": ("Missing required backend files (PHP)", "Required PHP files were not found."),
+    "SQL.REQ.MISSING_FILES": ("Missing required backend files (SQL)", "Required SQL files were not found."),
+    "CSS.REQ.MISSING_FILES": ("CSS missing", "CSS files required but not found."),
+    "JS.REQ.MISSING_FILES": ("JavaScript missing", "JavaScript files required but not found."),
+    "HTML.REQ.MISSING_FILES": ("HTML missing", "HTML files required but not found."),
+    "CONFIG.MISSING_REQUIRED_RULES": ("Configuration issue", "A required component has no required rules configured."),
+    "CONSISTENCY.JS_MISSING_HTML_ID": ("Cross-file consistency", "JavaScript references an HTML id that does not exist."),
+    "CONSISTENCY.JS_MISSING_HTML_CLASS": ("Cross-file consistency", "JavaScript references an HTML class that does not exist."),
+    "CONSISTENCY.CSS_MISSING_HTML_ID": ("Cross-file consistency", "CSS references an HTML id that does not exist."),
+    "CONSISTENCY.CSS_MISSING_HTML_CLASS": ("Cross-file consistency", "CSS references an HTML class that does not exist."),
+    "CONSISTENCY.PHP_EXPECTS_MISSING_FORM_FIELD": ("Cross-file consistency", "PHP accesses a form field that is not defined in HTML."),
+    "CONSISTENCY.FORM_FIELD_UNUSED_IN_PHP": ("Cross-file consistency", "HTML form field is not accessed in PHP."),
+    "CONSISTENCY.MISSING_LINK_TARGET": ("Cross-file consistency", "A link target does not exist."),
+    "CONSISTENCY.MISSING_FORM_ACTION_TARGET": ("Cross-file consistency", "A form action target does not exist."),
+    "BEHAVIOUR.PHP_SMOKE_FAIL": ("Runtime check failed", "PHP smoke test failed."),
+    "BEHAVIOUR.PHP_SMOKE_TIMEOUT": ("Runtime check timed out", "PHP smoke test timed out."),
+    "BEHAVIOUR.PHP_FORM_RUN_FAIL": ("Runtime check failed", "PHP form execution failed."),
+    "BEHAVIOUR.PHP_FORM_RUN_TIMEOUT": ("Runtime check timed out", "PHP form execution timed out."),
+    "BEHAVIOUR.SQL_EXEC_FAIL": ("Runtime check failed", "SQL execution failed."),
+    "BEHAVIOUR.SQL_EXEC_TIMEOUT": ("Runtime check timed out", "SQL execution timed out."),
+    "BROWSER.PAGE_LOAD_FAIL": ("Browser page load failed", "The browser could not load the page successfully."),
+    "BROWSER.PAGE_LOAD_TIMEOUT": ("Browser page load timed out", "The browser timed out while loading the page."),
+    "BROWSER.CONSOLE_ERRORS_PRESENT": ("Browser console errors", "Console errors were observed during browser checks."),
+}
 
-# ---------------------------------------------------------------------------
-#  Public API
-# ---------------------------------------------------------------------------
 
 def generate_assignment_analytics(
     assignment_id: str,
     *,
     app: Any | None = None,
 ) -> Dict[str, object]:
-    """Build analytics for *assignment_id* from all matching runs.
-
-    Parameters
-    ----------
-    assignment_id:
-        Assignment to analyse.
-    app:
-        Flask app instance (used to locate ``runs_root``).
-        If ``None``, falls back to the default location.
-
-    Returns
-    -------
-    dict
-        The analytics payload (suitable for JSON serialisation and
-        template rendering).
-    """
     assignment = get_assignment(assignment_id)
     if assignment is None:
         raise ValueError(f"Assignment '{assignment_id}' not found")
 
     profile = assignment.get("profile", "frontend")
-
-    # ── Gather runs belonging to this assignment ──────────────────────
     if app is not None:
         runs_root = get_runs_root(app)
     else:
-        # Fallback for CLI / testing — use default path
         runs_root = Path("ams_web_runs")
         runs_root.mkdir(parents=True, exist_ok=True)
 
-    all_runs = list_runs(runs_root)
-    assignment_runs = [
-        r for r in all_runs
-        if r.get("assignment_id") == assignment_id
-    ]
-
-    # ── Collect the latest successful run per student ─────────────────
-    records = _collect_student_records(assignment_runs, runs_root)
-
-    # ── Build analytics from the collected records ────────────────────
-    total = len(records) or 1
-    analytics = _build_analytics(records, profile, total)
+    records, scan = _collect_assignment_records(runs_root, assignment_id)
+    analytics = _build_analytics(
+        records=records,
+        profile=profile,
+        assigned_students=assignment.get("assigned_students", []) or [],
+        scan=scan,
+    )
     analytics["assignment_id"] = assignment_id
-    analytics["total_submissions_considered"] = len(assignment_runs)
-
+    analytics["generated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    analytics["submission_count"] = len(records)
+    analytics["teaching_insight_context"]["assignment_id"] = assignment_id
     return analytics
 
 
-def _collect_student_records(
-    assignment_runs: List[dict],
-    runs_root: Path,
-) -> List[dict]:
-    """For each student, pick the latest completed run and extract a record dict."""
-    from ams.io.web_storage import find_run_by_id, load_run_info
+def _assignment_search_root(runs_root: Path, assignment_id: str) -> Path:
+    candidate = runs_root / MetadataValidator.sanitize_identifier(assignment_id)
+    return candidate if candidate.exists() else runs_root
 
-    # Group runs by student_id
-    runs_by_student: Dict[str, List[dict]] = defaultdict(list)
-    for run in assignment_runs:
-        student_id = run.get("student_id", "")
-        if not student_id or student_id == "batch":
-            # Batch runs don't have a meaningful student_id at the top level —
-            # expand them by reading their batch_summary records instead.
-            _expand_batch_run(run, runs_root, runs_by_student)
+
+def _collect_assignment_records(runs_root: Path, assignment_id: str) -> tuple[List[dict], dict]:
+    latest_by_student: dict[str, tuple[tuple[str, str, str], dict]] = {}
+    search_root = _assignment_search_root(runs_root, assignment_id)
+    scan = {"candidate_records": 0, "inactive_submissions": 0}
+
+    for run_info_path in search_root.rglob("run_info.json"):
+        run_dir = run_info_path.parent
+        run_info = load_run_info(run_dir)
+        if not run_info or run_info.get("assignment_id") != assignment_id:
             continue
-        runs_by_student[student_id].append(run)
+
+        if run_info.get("active") is False:
+            scan["inactive_submissions"] += _count_run_submissions(run_dir, run_info, assignment_id)
+            continue
+
+        records_from_run = _records_from_run(run_dir, run_info, assignment_id)
+        scan["candidate_records"] += len(records_from_run)
+
+        for record in records_from_run:
+            student_id = str(record.get("student_id") or "").strip()
+            if not student_id:
+                continue
+            sort_key = (
+                str(record.get("_created_at") or ""),
+                str(record.get("run_id") or ""),
+                str(record.get("_submission_id") or ""),
+            )
+            current = latest_by_student.get(student_id)
+            if current is None or sort_key > current[0]:
+                latest_by_student[student_id] = (sort_key, record)
+
+    records = [record for _, record in latest_by_student.values()]
+    for record in records:
+        record.pop("_created_at", None)
+        record.pop("_submission_id", None)
+    records.sort(key=lambda rec: rec.get("student_id", ""))
+    scan["superseded_records"] = max(scan["candidate_records"] - len(records), 0)
+    return records, scan
+
+
+def _count_run_submissions(run_dir: Path, run_info: Mapping[str, object], assignment_id: str) -> int:
+    mode = str(run_info.get("mode") or "")
+    if mode == "mark":
+        return 1
+    if mode != "batch":
+        return 0
+
+    summary_path = run_dir / "batch_summary.json"
+    summary_data = _load_json(summary_path) if summary_path.exists() else None
+    if summary_data is not None:
+        return sum(
+            1
+            for entry in summary_data.get("records", []) or []
+            if str(entry.get("assignment_id") or run_info.get("assignment_id") or "") == assignment_id
+        )
+
+    pending = run_info.get("pending_submissions", []) or []
+    if isinstance(pending, list):
+        return sum(
+            1
+            for entry in pending
+            if str(entry.get("assignment_id") or run_info.get("assignment_id") or "") == assignment_id
+        )
+    return 0
+
+
+def _records_from_run(run_dir: Path, run_info: Mapping[str, object], assignment_id: str) -> List[dict]:
+    mode = str(run_info.get("mode") or "")
+    if mode == "mark":
+        record = _record_from_mark_run(run_dir, run_info, assignment_id)
+        return [record] if record is not None else []
+    if mode == "batch":
+        return _records_from_submission_batch(run_dir, run_info, assignment_id)
+    return []
+
+
+def _load_json(path: Path) -> dict | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _normalize_submission_status(value: object) -> str:
+    status = str(value or "").strip().lower()
+    if status in {"", "ok", "success", "succeeded", "completed", "complete"}:
+        return "ok"
+    if status in {"pending", "queued", "running"}:
+        return "pending"
+    return status
+
+
+def _record_from_mark_run(run_dir: Path, run_info: Mapping[str, object], assignment_id: str) -> dict | None:
+    report_path = run_dir / "report.json"
+    report = _load_json(report_path)
+    student_id = str(run_info.get("student_id") or "").strip()
+
+    if report is not None:
+        submission_meta = report.get("metadata", {}).get("submission_metadata", {}) or {}
+        record_assignment_id = str(submission_meta.get("assignment_id") or run_info.get("assignment_id") or "")
+        if record_assignment_id != assignment_id:
+            return None
+        student_id = str(submission_meta.get("student_id") or student_id).strip()
+        if not student_id:
+            return None
+        return _report_to_record(
+            report=report,
+            student_id=student_id,
+            assignment_id=assignment_id,
+            report_path=report_path,
+            run_id=str(run_info.get("id") or run_dir.name),
+            created_at=str(run_info.get("created_at") or ""),
+            submission_id=str(run_info.get("id") or run_dir.name),
+            status=_normalize_submission_status(run_info.get("status") or "ok"),
+            source_mode="mark",
+        )
+
+    if str(run_info.get("assignment_id") or "") != assignment_id or not student_id:
+        return None
+    return _empty_record(
+        student_id=student_id,
+        assignment_id=assignment_id,
+        run_id=str(run_info.get("id") or run_dir.name),
+        created_at=str(run_info.get("created_at") or ""),
+        submission_id=str(run_info.get("id") or run_dir.name),
+        status=_normalize_submission_status(run_info.get("status") or "failed"),
+        report_path="",
+        original_filename=str(run_info.get("original_filename") or ""),
+        error=str(run_info.get("error") or ""),
+        source_mode="mark",
+    )
+
+
+def _records_from_submission_batch(run_dir: Path, run_info: Mapping[str, object], assignment_id: str) -> List[dict]:
+    summary_path = run_dir / "batch_summary.json"
+    summary_data = _load_json(summary_path)
+    if summary_data is None:
+        pending = run_info.get("pending_submissions", []) or []
+        if not isinstance(pending, list):
+            return []
+        return [
+            _empty_record(
+                student_id=str(entry.get("student_id") or "").strip(),
+                assignment_id=assignment_id,
+                run_id=str(run_info.get("id") or run_dir.name),
+                created_at=str(run_info.get("created_at") or ""),
+                submission_id=str(entry.get("submission_id") or entry.get("student_id") or ""),
+                status=_normalize_submission_status(entry.get("status") or "pending"),
+                report_path="",
+                original_filename=str(entry.get("original_filename") or ""),
+                error=str(entry.get("error") or ""),
+                source_mode="batch",
+            )
+            for entry in pending
+            if str(entry.get("assignment_id") or run_info.get("assignment_id") or "") == assignment_id
+            and str(entry.get("student_id") or "").strip()
+        ]
 
     records: List[dict] = []
-    for student_id, student_runs in runs_by_student.items():
-        # Sort descending by created_at so we pick the latest first
-        student_runs.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+    created_at = str(run_info.get("created_at") or "")
+    run_id = str(run_info.get("id") or run_dir.name)
 
-        for run in student_runs:
-            record = _run_to_record(run, runs_root)
-            if record is not None:
-                records.append(record)
-                break  # use only the latest successful run per student
+    for entry in summary_data.get("records", []) or []:
+        entry_assignment_id = str(entry.get("assignment_id") or run_info.get("assignment_id") or "")
+        if entry_assignment_id != assignment_id:
+            continue
+        student_id = str(entry.get("student_id") or "").strip()
+        if not student_id:
+            continue
+
+        report_path = _resolve_batch_report_path(run_dir, entry)
+        report = _load_json(report_path) if report_path is not None else None
+        if report is not None:
+            submission_meta = report.get("metadata", {}).get("submission_metadata", {}) or {}
+            student_id = str(submission_meta.get("student_id") or student_id).strip()
+            if not student_id:
+                continue
+            record = _report_to_record(
+                report=report,
+                student_id=student_id,
+                assignment_id=assignment_id,
+                report_path=report_path,
+                run_id=run_id,
+                created_at=created_at,
+                submission_id=str(entry.get("id") or ""),
+                status=_normalize_submission_status(entry.get("status") or "ok"),
+                source_mode="batch",
+            )
+            if entry.get("error"):
+                record["error"] = str(entry.get("error"))
+            records.append(record)
+            continue
+
+        records.append(
+            _empty_record(
+                student_id=student_id,
+                assignment_id=assignment_id,
+                run_id=run_id,
+                created_at=created_at,
+                submission_id=str(entry.get("id") or student_id),
+                status=_normalize_submission_status(entry.get("status") or "failed"),
+                report_path=str(report_path) if report_path is not None else "",
+                original_filename=str(entry.get("original_filename") or ""),
+                error=str(entry.get("error") or entry.get("validation_error") or ""),
+                source_mode="batch",
+                overall=entry.get("overall"),
+                components=entry.get("components", {}),
+            )
+        )
 
     return records
 
 
-def _expand_batch_run(
-    run: dict,
-    runs_root: Path,
-    runs_by_student: Dict[str, List[dict]],
-) -> None:
-    """Expand a batch run into individual per-student entries."""
-    from ams.io.web_storage import find_run_by_id
+def _resolve_batch_report_path(run_dir: Path, entry: Mapping[str, object]) -> Path | None:
+    raw_report_path = entry.get("report_path")
+    if isinstance(raw_report_path, str) and raw_report_path:
+        candidate = Path(raw_report_path)
+        if candidate.exists():
+            return candidate
 
-    run_id = run.get("id", "")
-    run_dir = find_run_by_id(runs_root, run_id)
-    if run_dir is None:
-        return
-
-    summary_path = run_dir / "batch_summary.json"
-    if not summary_path.exists():
-        return
-
-    try:
-        batch_data = json.loads(summary_path.read_text(encoding="utf-8"))
-    except Exception:
-        return
-
-    for rec in batch_data.get("records", []):
-        sid = rec.get("student_id", "")
-        if not sid:
-            continue
-        # Synthesize a run-like dict for this student's batch entry
-        synthetic_run = {
-            "id": run_id,
-            "student_id": sid,
-            "assignment_id": run.get("assignment_id", ""),
-            "mode": "batch",
-            "profile": run.get("profile", ""),
-            "created_at": run.get("created_at", ""),
-            "status": rec.get("status", ""),
-            "_batch_record": rec,  # attach original record for direct extraction
-        }
-        runs_by_student[sid].append(synthetic_run)
+    submission_id = entry.get("id")
+    if isinstance(submission_id, str) and submission_id:
+        candidate = run_dir / "runs" / submission_id / "report.json"
+        if candidate.exists():
+            return candidate
+    return None
 
 
-def _run_to_record(run: dict, runs_root: Path) -> Optional[dict]:
-    """Convert a run dict into the analytics record format.
-
-    Returns ``None`` if the run doesn't contain usable results.
-    """
-    from ams.io.web_storage import find_run_by_id
-
-    # If this is a pre-extracted batch record, use it directly
-    batch_rec = run.get("_batch_record")
-    if batch_rec is not None:
-        return _batch_record_to_analytics_record(batch_rec, run, runs_root)
-
-    run_id = run.get("id", "")
-    run_dir = find_run_by_id(runs_root, run_id)
-    if run_dir is None:
-        return None
-
-    # For single mark runs — read report.json
-    report_path = run_dir / "report.json"
-    if not report_path.exists():
-        return None
-
-    try:
-        report = json.loads(report_path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-
-    scores = report.get("scores", {})
-    comps = scores.get("by_component", {}) or {}
-    findings = report.get("findings", []) or []
+def _report_to_record(
+    *,
+    report: Mapping[str, object],
+    student_id: str,
+    assignment_id: str,
+    report_path: Path,
+    run_id: str,
+    created_at: str,
+    submission_id: str,
+    status: str,
+    source_mode: str,
+) -> dict:
+    scores = report.get("scores", {}) or {}
+    component_scores = scores.get("by_component", {}) or {}
+    findings = list(report.get("findings", []) or [])
+    checks, check_stats, diagnostics = _ensure_check_payload(report, findings)
 
     return {
-        "id": run.get("student_id", run_id),
-        "student_id": run.get("student_id", ""),
-        "assignment_id": run.get("assignment_id", ""),
+        "id": student_id or submission_id or run_id,
+        "student_id": student_id,
+        "assignment_id": assignment_id,
+        "submission_id": submission_id or student_id or run_id,
         "overall": scores.get("overall"),
-        "components": {k: comps.get(k, {}).get("score") for k in ("html", "css", "js", "php", "sql")},
-        "status": "ok",
+        "components": {name: component_scores.get(name, {}).get("score") for name in COMPONENT_ORDER},
+        "status": status or "ok",
         "findings": findings,
+        "checks": checks,
+        "check_stats": check_stats,
+        "diagnostics": diagnostics,
+        "required_rules": _extract_required_rules(findings),
+        "score_evidence": dict(report.get("score_evidence", {}) or {}),
+        "behavioural_evidence": list(report.get("behavioural_evidence", []) or []),
+        "browser_evidence": list(report.get("browser_evidence", []) or []),
+        "environment": dict(report.get("environment", {}) or {}),
         "report_path": str(report_path),
         "run_id": run_id,
+        "source_mode": source_mode,
+        "_created_at": created_at,
+        "_submission_id": submission_id,
+        "error": "",
     }
 
 
-def _batch_record_to_analytics_record(
-    rec: dict,
-    run: dict,
-    runs_root: Path,
-) -> Optional[dict]:
-    """Convert a batch_summary record into an analytics record.
-
-    Enriches with findings from the individual report if available.
-    """
-    from ams.io.web_storage import find_run_by_id
-
-    if rec.get("status") not in ("ok", "invalid_filename", "invalid_student_id", "invalid_assignment_id"):
-        if "error" in rec:
-            return None  # skip pipeline errors
-
-    run_id = run.get("id", "")
-    run_dir = find_run_by_id(runs_root, run_id)
-
-    findings: list = []
-    report_path_str = rec.get("report_path", "")
-    if report_path_str and Path(report_path_str).exists():
-        try:
-            rep = json.loads(Path(report_path_str).read_text(encoding="utf-8"))
-            findings = rep.get("findings", []) or []
-        except Exception:
-            pass
-    elif run_dir is not None:
-        # Try sub-run directory
-        sub_dir = run_dir / "runs" / rec.get("id", "")
-        sub_report = sub_dir / "report.json"
-        if sub_report.exists():
-            try:
-                rep = json.loads(sub_report.read_text(encoding="utf-8"))
-                findings = rep.get("findings", []) or []
-            except Exception:
-                pass
-
+def _empty_record(
+    *,
+    student_id: str,
+    assignment_id: str,
+    run_id: str,
+    created_at: str,
+    submission_id: str,
+    status: str,
+    report_path: str,
+    original_filename: str,
+    error: str,
+    source_mode: str,
+    overall: object = None,
+    components: Mapping[str, object] | None = None,
+) -> dict:
+    component_map = dict(components or {})
     return {
-        "id": rec.get("student_id") or rec.get("id", ""),
-        "student_id": rec.get("student_id", ""),
-        "assignment_id": rec.get("assignment_id", run.get("assignment_id", "")),
-        "overall": rec.get("overall"),
-        "components": rec.get("components", {}),
-        "status": rec.get("status", "ok"),
-        "findings": findings,
-        "report_path": report_path_str,
+        "id": student_id or submission_id or run_id,
+        "student_id": student_id,
+        "assignment_id": assignment_id,
+        "submission_id": submission_id or student_id or run_id,
+        "overall": overall,
+        "components": {name: component_map.get(name) for name in COMPONENT_ORDER},
+        "status": status or "failed",
+        "findings": [],
+        "checks": [],
+        "check_stats": {"total": 0, "passed": 0, "failed": 0, "warnings": 0, "skipped": 0},
+        "diagnostics": [],
+        "required_rules": {},
+        "score_evidence": {},
+        "behavioural_evidence": [],
+        "browser_evidence": [],
+        "environment": {},
+        "report_path": report_path,
         "run_id": run_id,
+        "source_mode": source_mode,
+        "_created_at": created_at,
+        "_submission_id": submission_id,
+        "error": error or original_filename,
     }
 
 
-# ---------------------------------------------------------------------------
-#  Analytics aggregation (adapted from batch_analytics.py)
-# ---------------------------------------------------------------------------
+def _ensure_check_payload(report: Mapping[str, object], findings: List[dict]) -> tuple[List[dict], dict, List[dict]]:
+    raw_checks = report.get("checks")
+    raw_stats = report.get("check_stats")
+    raw_diagnostics = report.get("diagnostics")
 
-def _build_analytics(records: List[dict], profile: str, total: int) -> Dict[str, object]:
-    """Build the full analytics dict from a list of student records."""
+    if isinstance(raw_checks, list) and isinstance(raw_stats, Mapping):
+        return [dict(check) for check in raw_checks], dict(raw_stats), list(raw_diagnostics or [])
+
+    checks, diagnostics = aggregate_findings_to_checks(findings)
+    return [check.to_dict() for check in checks], compute_check_stats(checks), diagnostics
+
+
+def _extract_required_rules(findings: List[dict]) -> Dict[str, Dict[str, dict]]:
+    required_by_component: Dict[str, Dict[str, dict]] = defaultdict(dict)
+
+    for finding in findings:
+        finding_id = str(finding.get("id") or "")
+        if not finding_id.endswith(".REQ.PASS") and not finding_id.endswith(".REQ.FAIL"):
+            continue
+        evidence = dict(finding.get("evidence", {}) or {})
+        rule_id = str(evidence.get("rule_id") or "").strip()
+        if not rule_id:
+            continue
+
+        component = str(finding.get("category") or rule_id.split(".", 1)[0] or "").strip().lower()
+        if not component:
+            continue
+
+        status = "PASS" if finding_id.endswith(".REQ.PASS") else "FAIL"
+        current = required_by_component[component].get(rule_id)
+        if current is not None and current.get("status") == "FAIL":
+            continue
+        required_by_component[component][rule_id] = {
+            "rule_id": rule_id,
+            "status": status,
+            "weight": _coerce_float(evidence.get("weight")),
+            "message": str(finding.get("message") or ""),
+        }
+
+    return {component: dict(rule_map) for component, rule_map in required_by_component.items()}
+
+
+def _build_analytics(
+    *,
+    records: List[dict],
+    profile: str,
+    assigned_students: Sequence[str],
+    scan: Mapping[str, int],
+) -> Dict[str, object]:
+    relevant_components = [component for component in COMPONENT_ORDER if component in get_relevant_components(profile)]
+    enriched_records = [_enrich_record(record, profile) for record in records]
+    total_records = len(enriched_records)
+    small_cohort = _small_cohort_state(total_records)
     overall_scores = [
-        float(r["overall"]) for r in records
-        if r.get("overall") is not None
+        float(record["overall"])
+        for record in enriched_records
+        if isinstance(record.get("overall"), (int, float))
     ]
 
     overall_stats: Dict[str, float] | None = None
@@ -314,207 +499,1087 @@ def _build_analytics(records: List[dict], profile: str, total: int) -> Dict[str,
         elif score == 1.0:
             buckets["one"] += 1
 
-    component_readiness = _component_readiness(records)
-    student_issues, runner_limits = _student_and_runner_issues(records, total)
-    needs_attention = _needs_attention(records, profile)
+    coverage = _coverage_summary(enriched_records, assigned_students, scan)
+    components = _component_readiness(enriched_records, relevant_components)
+    signals, student_issues, runner_limitations = _cohort_signals(enriched_records, total_records)
+    top_failing_rules = _top_failing_rules(enriched_records, total_records)
+    requirement_coverage = _requirement_coverage(enriched_records, relevant_components, total_records)
+    reliability = _reliability_summary(enriched_records, total_records)
+    score_composition = _score_composition(enriched_records, total_records)
+    needs_attention = _needs_attention(enriched_records)
+    for index, signal in enumerate(signals):
+        signal["default_visible"] = index < int(small_cohort.get("signal_limit", 6) or 6)
+    for index, rule in enumerate(top_failing_rules):
+        rule["default_visible"] = index < int(small_cohort.get("rule_limit", 8) or 8)
+    teaching_insight_context = _teaching_insight_context(
+        profile=profile,
+        coverage=coverage,
+        requirement_coverage=requirement_coverage,
+        top_failing_rules=top_failing_rules,
+        reliability=reliability,
+        total_records=total_records,
+        small_cohort=small_cohort,
+    )
+    teaching_insights = _teaching_insights(
+        context=teaching_insight_context,
+    )
 
     return {
         "profile": profile,
+        "small_cohort": small_cohort,
         "overall": {
             "mean": overall_stats.get("mean") if overall_stats else None,
             "median": overall_stats.get("median") if overall_stats else None,
             "min": overall_stats.get("min") if overall_stats else None,
             "max": overall_stats.get("max") if overall_stats else None,
-            "total": len(records),
+            "total": total_records,
             "buckets": {
                 "No attempt (0%)": buckets["zero"],
-                "Partial (1–50%)": buckets["gt_0_to_0_5"],
-                "Good partial (51–99%)": buckets["gt_0_5_to_1"],
+                "Partial (1-50%)": buckets["gt_0_to_0_5"],
+                "Good partial (51-99%)": buckets["gt_0_5_to_1"],
                 "Full marks (100%)": buckets["one"],
             },
         },
-        "components": component_readiness,
+        "coverage": coverage,
+        "components": components,
+        "signals": signals,
         "student_issues": student_issues,
-        "runner_limitations": runner_limits,
+        "runner_limitations": runner_limitations,
+        "top_failing_rules": top_failing_rules,
+        "requirement_coverage": requirement_coverage,
+        "reliability": reliability,
+        "score_composition": score_composition,
         "needs_attention": needs_attention,
+        "teaching_insights": teaching_insights,
+        "teaching_insight_context": teaching_insight_context,
     }
 
 
-def _component_readiness(records: List[Mapping[str, object]]) -> Dict[str, dict]:
-    comps = ["html", "css", "js", "php", "sql"]
-    result: Dict[str, dict] = {}
-    for comp in comps:
+def _coverage_summary(records: List[dict], assigned_students: Sequence[str], scan: Mapping[str, int]) -> dict:
+    assigned_unique = sorted({str(student).strip() for student in assigned_students if str(student).strip()})
+    active_students = sorted({str(record.get("student_id") or "").strip() for record in records if record.get("student_id")})
+    missing_students = sorted(student for student in assigned_unique if student not in active_students)
+
+    fully_evaluated = sum(1 for record in records if record.get("evaluation_state") == "fully_evaluated")
+    partially_evaluated = sum(1 for record in records if record.get("evaluation_state") == "partially_evaluated")
+    not_analysable = sum(1 for record in records if record.get("evaluation_state") == "not_analysable")
+    assigned_count = len(assigned_unique)
+    active_count = len(active_students)
+
+    return {
+        "assigned_students": assigned_count,
+        "active_in_scope": len(records),
+        "active_students": active_count,
+        "missing_assigned": len(missing_students),
+        "missing_students": missing_students,
+        "fully_evaluated": fully_evaluated,
+        "partially_evaluated": partially_evaluated,
+        "not_analysable": not_analysable,
+        "inactive_or_superseded": int(scan.get("inactive_submissions", 0)) + int(scan.get("superseded_records", 0)),
+        "coverage_percent": round((active_count / assigned_count) * 100) if assigned_count else 0,
+    }
+
+
+def _small_cohort_state(total_records: int) -> dict:
+    enabled = 0 < total_records < SMALL_COHORT_THRESHOLD
+    return {
+        "enabled": enabled,
+        "threshold": SMALL_COHORT_THRESHOLD,
+        "rule_limit": 5 if enabled else 8,
+        "signal_limit": 4 if enabled else 6,
+        "note": (
+            f"Small cohort: only {total_records} active submission{' is' if total_records == 1 else 's are'} in scope, "
+            "so raw counts should be interpreted before percentages."
+            if enabled
+            else ""
+        ),
+    }
+
+
+def _component_readiness(records: List[Mapping[str, object]], relevant_components: Sequence[str]) -> List[dict]:
+    result: List[dict] = []
+    for component in relevant_components:
         scores: List[float] = []
-        for rec in records:
-            score = rec.get("components", {}).get(comp)
+        for record in records:
+            score = record.get("components", {}).get(component)
             if isinstance(score, (int, float)):
                 scores.append(float(score))
-        n = len(scores)
-        zeros = len([s for s in scores if s == 0])
-        full = len([s for s in scores if s == 1])
-        half = len([s for s in scores if s == 0.5])
-        avg = sum(scores) / n if n else None
-        result[comp] = {
-            "average": avg,
-            "pct_zero": (zeros / n * 100) if n else None,
-            "pct_half": (half / n * 100) if n else None,
-            "pct_full": (full / n * 100) if n else None,
-            "skipped": len([1 for rec in records if rec.get("components", {}).get(comp) == "SKIPPED"]),
-        }
+
+        count = len(scores)
+        zeros = len([score for score in scores if score == 0])
+        half = len([score for score in scores if score == 0.5])
+        full = len([score for score in scores if score == 1])
+        avg = sum(scores) / count if count else None
+        result.append(
+            {
+                "component": component,
+                "title": REQUIREMENT_TITLES.get(component, component.upper()),
+                "average": avg,
+                "pct_zero": (zeros / count * 100) if count else None,
+                "pct_half": (half / count * 100) if count else None,
+                "pct_full": (full / count * 100) if count else None,
+                "skipped": len([1 for record in records if record.get("components", {}).get(component) == "SKIPPED"]),
+            }
+        )
     return result
 
 
-def _needs_attention(records: List[Mapping[str, object]], profile: str) -> List[dict]:
+def _enrich_record(record: dict, profile: str) -> dict:
+    del profile
+    record_copy = dict(record)
+    runtime_flags = _runtime_flags(record_copy)
+    problem_outcomes = _problem_outcomes(record_copy)
+    matched_rules = [outcome for outcome in problem_outcomes if outcome["status"] in {"FAIL", "WARN", "SKIPPED"}]
+
+    evaluation_state = _evaluation_state(record_copy, runtime_flags)
+    confidence_level, confidence_reasons = _confidence(record_copy, runtime_flags, evaluation_state)
+    overall = record_copy.get("overall")
+
+    if overall is None:
+        grade = "unknown"
+    elif overall == 0:
+        grade = "failing"
+    elif overall < 0.5:
+        grade = "poor"
+    elif overall < 0.7:
+        grade = "partial"
+    elif overall < 1.0:
+        grade = "good"
+    else:
+        grade = "full marks"
+
+    flags: List[str] = []
+    if record_copy.get("status") != "ok":
+        flags.append("submission not analysable")
+    if overall is None:
+        flags.append("no score")
+    elif isinstance(overall, (int, float)) and overall < 0.5:
+        flags.append("low score")
+    if runtime_flags["runtime_skipped"]:
+        flags.append("runtime checks skipped")
+    if runtime_flags["browser_skipped"]:
+        flags.append("browser checks skipped")
+    if runtime_flags["runtime_issue"]:
+        flags.append("runtime issue")
+    if runtime_flags["browser_issue"]:
+        flags.append("browser issue")
+    if runtime_flags["consistency_issue"]:
+        flags.append("consistency issue")
+
+    reason = _primary_reason(record_copy, runtime_flags)
+    severity = _attention_severity(record_copy, runtime_flags, confidence_level, overall)
+    manual_review = severity in {"high", "medium"} or confidence_level != "high"
+    review_note = _manual_review_note(record_copy, runtime_flags, confidence_level, overall)
+    limitation_details = list(confidence_reasons)
+    if runtime_flags["runtime_issue"] and "Runtime failures or timeouts were detected." not in limitation_details:
+        limitation_details.append("Runtime failures or timeouts were detected.")
+    if runtime_flags["browser_issue"] and "Browser failures, timeouts, or console errors were detected." not in limitation_details:
+        limitation_details.append("Browser failures, timeouts, or console errors were detected.")
+
+    matched_rule_ids = [outcome["id"] for outcome in matched_rules]
+    matched_rule_labels = [outcome["label"] for outcome in matched_rules]
+    matched_rule_messages = [str(outcome.get("message") or "") for outcome in matched_rules if str(outcome.get("message") or "").strip()]
+    reason_detail = ", ".join(matched_rule_labels[:2]) if matched_rule_labels else ", ".join(confidence_reasons[:2])
+
+    record_copy.update(
+        {
+            "runtime_flags": runtime_flags,
+            "problem_outcomes": matched_rules,
+            "matched_rule_ids": matched_rule_ids,
+            "matched_rule_labels": matched_rule_labels,
+            "matched_rule_messages": matched_rule_messages[:3],
+            "matched_rules": matched_rules[:5],
+            "confidence": confidence_level,
+            "confidence_reasons": confidence_reasons,
+            "evaluation_state": evaluation_state,
+            "grade": grade,
+            "flags": flags,
+            "reason": reason,
+            "reason_detail": reason_detail or reason,
+            "severity": severity,
+            "manual_review_recommended": manual_review,
+            "review_note": review_note,
+            "limitation_details": limitation_details[:4],
+            "sort_overall": float(overall) if isinstance(overall, (int, float)) else -1.0,
+            "sort_grade": GRADE_ORDER.get(grade, 0),
+        }
+    )
+    return record_copy
+
+
+def _runtime_flags(record: Mapping[str, object]) -> dict:
+    findings = list(record.get("findings", []) or [])
+    finding_ids = {str(finding.get("id") or "") for finding in findings}
+    environment = dict(record.get("environment", {}) or {})
+
+    runtime_skipped = any(fid.startswith("BEHAVIOUR.") and "SKIPPED" in fid for fid in finding_ids)
+    browser_skipped = any(fid.startswith("BROWSER.") and "SKIPPED" in fid for fid in finding_ids)
+    runtime_issue = any(
+        fid.startswith("BEHAVIOUR.") and any(token in fid for token in ("FAIL", "TIMEOUT", "ERROR"))
+        for fid in finding_ids
+    )
+    browser_issue = any(
+        fid.startswith("BROWSER.") and any(token in fid for token in ("FAIL", "TIMEOUT"))
+        for fid in finding_ids
+    ) or "BROWSER.CONSOLE_ERRORS_PRESENT" in finding_ids
+
+    runtime_unavailable = not environment.get("behavioural_tests_run", True)
+    browser_unavailable = not environment.get("browser_tests_run", True)
+    consistency_issue = any(fid.startswith("CONSISTENCY.") for fid in finding_ids)
+
+    return {
+        "runtime_skipped": runtime_skipped or runtime_unavailable,
+        "browser_skipped": browser_skipped or browser_unavailable,
+        "runtime_issue": runtime_issue,
+        "browser_issue": browser_issue,
+        "runtime_unavailable": runtime_unavailable,
+        "browser_unavailable": browser_unavailable,
+        "consistency_issue": consistency_issue,
+    }
+
+
+def _problem_outcomes(record: Mapping[str, object]) -> List[dict]:
+    outcomes: list[dict] = []
+    seen: set[str] = set()
+
+    if record.get("status") != "ok":
+        outcomes.append(
+            {
+                "id": "submission.not_analysable",
+                "label": "Submission not analysable",
+                "status": "FAIL",
+                "component": "pipeline",
+                "message": str(record.get("error") or record.get("status") or "Automatic analysis did not complete."),
+                "weight": None,
+            }
+        )
+        seen.add("submission.not_analysable")
+
+    for check in record.get("checks", []) or []:
+        status = str(check.get("status") or "").upper()
+        if status not in {"FAIL", "WARN"}:
+            continue
+        check_id = str(check.get("check_id") or "").strip()
+        if not check_id or check_id in seen:
+            continue
+        seen.add(check_id)
+        outcomes.append(
+            {
+                "id": check_id,
+                "label": _label_for_identifier(check_id),
+                "status": status,
+                "component": str(check.get("component") or "other"),
+                "message": _first_non_empty(check.get("messages", []) or []),
+                "weight": _coerce_float(check.get("weight")),
+            }
+        )
+
+    for finding in record.get("findings", []) or []:
+        finding_id = str(finding.get("id") or "").strip()
+        severity = str(finding.get("severity") or "").upper()
+        if severity not in {"FAIL", "WARN", "SKIPPED"}:
+            continue
+        if not (finding_id.startswith("BEHAVIOUR.") or finding_id.startswith("BROWSER.")):
+            continue
+        if finding_id in seen:
+            continue
+        seen.add(finding_id)
+        outcomes.append(
+            {
+                "id": finding_id,
+                "label": _label_for_identifier(finding_id),
+                "status": severity,
+                "component": str(finding.get("category") or "runtime"),
+                "message": str(finding.get("message") or _description_for_identifier(finding_id)),
+                "weight": None,
+            }
+        )
+
+    outcomes.sort(key=lambda item: (-SEVERITY_PRIORITY.get(item["status"], 0), item["id"]))
+    return outcomes
+
+
+def _evaluation_state(record: Mapping[str, object], runtime_flags: Mapping[str, bool]) -> str:
+    if record.get("status") != "ok" or record.get("overall") is None:
+        return "not_analysable"
+    if runtime_flags["runtime_skipped"] or runtime_flags["browser_skipped"] or runtime_flags["runtime_unavailable"] or runtime_flags["browser_unavailable"]:
+        return "partially_evaluated"
+    return "fully_evaluated"
+
+
+def _confidence(record: Mapping[str, object], runtime_flags: Mapping[str, bool], evaluation_state: str) -> tuple[str, List[str]]:
+    reasons: List[str] = []
+    if evaluation_state == "not_analysable":
+        reasons.append("Automatic analysis did not complete cleanly.")
+        if record.get("error"):
+            reasons.append(str(record.get("error")))
+        return "low", reasons
+
+    if runtime_flags["runtime_skipped"]:
+        reasons.append("Runtime checks were skipped or unavailable.")
+    if runtime_flags["browser_skipped"]:
+        reasons.append("Browser checks were skipped or unavailable.")
+    if runtime_flags["runtime_issue"]:
+        reasons.append("Runtime checks reported failures or timeouts.")
+    if runtime_flags["browser_issue"]:
+        reasons.append("Browser checks reported failures, timeouts, or console errors.")
+
+    if runtime_flags["runtime_issue"] or runtime_flags["browser_issue"]:
+        return "medium", reasons
+    if evaluation_state == "partially_evaluated":
+        return "medium", reasons or ["Some checks were skipped, so reliability is reduced."]
+    return "high", ["Static, runtime, and browser signals completed without known limitations."]
+
+
+def _attention_severity(record: Mapping[str, object], runtime_flags: Mapping[str, bool], confidence_level: str, overall: object) -> str:
+    if record.get("status") != "ok" or overall is None:
+        return "high"
+    if isinstance(overall, (int, float)) and overall < 0.5:
+        return "high"
+    if runtime_flags["runtime_issue"] or runtime_flags["browser_issue"]:
+        return "high"
+    if confidence_level != "high" or runtime_flags["consistency_issue"]:
+        return "medium"
+    return "low"
+
+
+def _manual_review_note(record: Mapping[str, object], runtime_flags: Mapping[str, bool], confidence_level: str, overall: object) -> str:
+    if record.get("status") != "ok" or overall is None:
+        return "Submission could not be fully analysed automatically."
+    if runtime_flags["runtime_skipped"] or runtime_flags["browser_skipped"]:
+        return "Some automated checks were skipped, so manual review is recommended."
+    if runtime_flags["runtime_issue"] or runtime_flags["browser_issue"]:
+        return "Runtime or browser evidence changed how this result should be interpreted."
+    if isinstance(overall, (int, float)) and overall < 0.5:
+        return "Low score should be checked against the detailed report before release."
+    if confidence_level != "high":
+        return "Reliability is reduced, so manual review is recommended."
+    return "Repeated rubric issues suggest this submission should be reviewed."
+
+
+def _needs_attention(records: List[Mapping[str, object]]) -> List[dict]:
     attention: List[dict] = []
-    for rec in sorted(records, key=lambda r: r.get("id", "")):
-        pipeline_status = rec.get("status", "ok")
-        overall = rec.get("overall")
-        comps = rec.get("components", {})
-        flags: List[str] = []
+    for record in records:
+        if not record.get("manual_review_recommended") and not record.get("flags"):
+            continue
+        attention.append(
+            {
+                "submission_id": record.get("submission_id"),
+                "student_id": record.get("student_id", ""),
+                "overall": record.get("overall"),
+                "score_percent": round(float(record.get("overall", 0) or 0) * 100) if isinstance(record.get("overall"), (int, float)) else None,
+                "grade": record.get("grade", "unknown"),
+                "flags": list(record.get("flags", []) or []),
+                "reason": record.get("reason", "other"),
+                "reason_detail": record.get("reason_detail", ""),
+                "severity": record.get("severity", "low"),
+                "confidence": record.get("confidence", "high"),
+                "evaluation_state": record.get("evaluation_state", "fully_evaluated"),
+                "manual_review_recommended": bool(record.get("manual_review_recommended")),
+                "review_note": record.get("review_note", ""),
+                "limitation_details": list(record.get("limitation_details", []) or []),
+                "evidence_excerpt": _first_non_empty(
+                    list(record.get("matched_rule_messages", []) or [])
+                    + list(record.get("confidence_reasons", []) or [])
+                    + [record.get("review_note", "")]
+                ),
+                "matched_rule_ids": list(record.get("matched_rule_ids", []) or []),
+                "matched_rule_labels": list(record.get("matched_rule_labels", []) or []),
+                "matched_rule_messages": list(record.get("matched_rule_messages", []) or []),
+                "matched_rules": list(record.get("matched_rules", []) or []),
+                "run_id": record.get("run_id", ""),
+                "source_mode": record.get("source_mode", "mark"),
+                "confidence_rank": {"high": 3, "medium": 2, "low": 1}.get(str(record.get("confidence", "high")).lower(), 0),
+                "sort_overall": record.get("sort_overall", -1.0),
+                "sort_grade": record.get("sort_grade", 0),
+            }
+        )
 
-        if pipeline_status != "ok":
-            flags.append("pipeline error")
-        if overall is None or overall == 0:
-            flags.append("no score")
-        elif isinstance(overall, (int, float)) and overall < 0.5:
-            flags.append("low score")
-
-        if profile == "fullstack":
-            for comp in ["php", "sql"]:
-                if comps.get(comp) == 0:
-                    flags.append(f"{comp} missing")
-
-        findings = rec.get("findings", []) or []
-        fail_ids = {f.get("id", "") for f in findings if f.get("severity") in ("FAIL", "WARN")}
-        if any(fid.startswith("BEHAVIOUR.") and "SKIPPED" not in fid for fid in fail_ids):
-            flags.append("runtime failure")
-        if any(fid.startswith("CONSISTENCY.") for fid in fail_ids):
-            flags.append("consistency issues")
-
-        reason = _primary_reason(rec)
-
-        if overall is None:
-            grade = "unknown"
-        elif overall == 0:
-            grade = "failing"
-        elif overall < 0.5:
-            grade = "poor"
-        elif overall < 0.7:
-            grade = "partial"
-        elif overall < 1.0:
-            grade = "good"
-        else:
-            grade = "full marks"
-
-        if flags or reason != "other":
-            attention.append({
-                "submission_id": rec.get("id"),
-                "student_id": rec.get("student_id", ""),
-                "overall": overall,
-                "grade": grade,
-                "flags": flags,
-                "reason": reason,
-                "report_path": rec.get("report_path"),
-                "run_id": rec.get("run_id", ""),
-            })
+    attention.sort(
+        key=lambda item: (
+            {"high": 0, "medium": 1, "low": 2}.get(str(item.get("severity") or "low"), 3),
+            float(item.get("sort_overall") or -1.0),
+            str(item.get("student_id") or ""),
+        )
+    )
     return attention
 
 
-def _primary_reason(rec: Mapping[str, object]) -> str:
-    findings = rec.get("findings", []) or []
+def _primary_reason(record: Mapping[str, object], runtime_flags: Mapping[str, bool]) -> str:
+    if record.get("status") != "ok" or record.get("overall") is None:
+        return "submission not analysable"
+    if runtime_flags["runtime_skipped"] or runtime_flags["browser_skipped"]:
+        return "reduced evaluation confidence"
+    if runtime_flags["runtime_issue"]:
+        return "behavioural runtime issue"
+    if runtime_flags["browser_issue"]:
+        return "browser runtime issue"
+
+    findings = record.get("findings", []) or []
     priorities: Sequence[tuple[str, str]] = [
         ("missing", "missing required files"),
-        ("BEHAVIOUR.", "behavioural runtime issue"),
         ("SYNTAX", "syntax issue"),
-        ("BROWSER.", "browser runtime issue"),
         ("CONSISTENCY.", "consistency issue"),
     ]
     for prefix, label in priorities:
-        for f in findings:
-            if f.get("finding_category") == "missing" and prefix == "missing":
+        for finding in findings:
+            if finding.get("finding_category") == "missing" and prefix == "missing":
                 return label
-            if prefix in f.get("id", ""):
+            if prefix in str(finding.get("id") or ""):
                 return label
+
+    overall = record.get("overall")
+    if isinstance(overall, (int, float)) and overall < 0.5:
+        return "low score"
     return "other"
 
 
-def _student_and_runner_issues(
-    records: List[Mapping[str, object]],
-    total: int,
-) -> tuple[List[dict], List[dict]]:
-    categories = defaultdict(list)
-    runner_limits = defaultdict(list)
-    for rec in records:
-        sid = rec.get("id")
-        findings = rec.get("findings", []) or []
-        for f in findings:
-            fid = f.get("id", "")
-            cat = f.get("finding_category")
-            severity = f.get("severity")
-            if fid.startswith("BEHAVIOUR.") and "SKIPPED" in fid:
-                runner_limits["behavioural"].append(sid)
-                continue
-            if fid.startswith("BROWSER.PAGE_LOAD") and "SKIPPED" in fid:
-                runner_limits["browser"].append(sid)
-                continue
-            if severity not in {"WARN", "FAIL"}:
-                continue
-            if fid == "BROWSER.CONSOLE_ERRORS_PRESENT":
-                categories["browser_runtime"].append((sid, fid))
-                continue
-            if cat == "missing":
-                if fid.startswith("PHP.") or fid.startswith("SQL."):
-                    categories["missing_backend"].append((sid, fid))
-                else:
-                    categories["missing_frontend"].append((sid, fid))
-                continue
-            if fid.startswith("CONSISTENCY."):
-                categories["consistency"].append((sid, fid))
-                continue
-            if fid.startswith("BEHAVIOUR."):
-                categories["behavioural"].append((sid, fid))
-                continue
-            if fid.startswith("BROWSER."):
-                categories["browser_runtime"].append((sid, fid))
-                continue
-            if fid.endswith("SYNTAX_ERROR") or fid.endswith("PARSE_ERROR"):
-                categories["syntax"].append((sid, fid))
-                continue
-            categories["other"].append((sid, fid))
+def _cohort_signals(records: List[Mapping[str, object]], total: int) -> tuple[List[dict], List[dict], List[dict]]:
+    categories: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
+    runner_limits: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
+    labels_by_rule: dict[str, str] = {}
+    messages_by_rule: dict[str, str] = {}
 
-    def _summary(cat: str, entries: list[tuple[str, str]]) -> dict:
+    for record in records:
+        student_id = str(record.get("student_id") or "")
+        for outcome in record.get("problem_outcomes", []) or []:
+            outcome_id = str(outcome.get("id") or "")
+            status = str(outcome.get("status") or "")
+            labels_by_rule.setdefault(outcome_id, str(outcome.get("label") or outcome_id))
+            message = str(outcome.get("message") or "").strip()
+            if message:
+                messages_by_rule.setdefault(outcome_id, message)
+            if outcome_id == "submission.not_analysable":
+                runner_limits["behavioural_skipped"].append((student_id, outcome_id, status))
+                continue
+            if outcome_id.startswith("BEHAVIOUR.") and status == "SKIPPED":
+                runner_limits["behavioural_skipped"].append((student_id, outcome_id, status))
+                continue
+            if outcome_id.startswith("BROWSER.") and status == "SKIPPED":
+                runner_limits["browser_skipped"].append((student_id, outcome_id, status))
+                continue
+            if status not in {"WARN", "FAIL"}:
+                continue
+            if outcome_id.startswith("BROWSER."):
+                categories["browser_runtime"].append((student_id, outcome_id, status))
+            elif outcome_id.startswith("BEHAVIOUR."):
+                categories["behavioural_runtime"].append((student_id, outcome_id, status))
+            elif outcome_id.startswith("CONSISTENCY."):
+                categories["consistency"].append((student_id, outcome_id, status))
+            elif ".MISSING_FILES" in outcome_id:
+                if outcome_id.startswith("PHP.") or outcome_id.startswith("SQL."):
+                    categories["missing_backend"].append((student_id, outcome_id, status))
+                else:
+                    categories["missing_frontend"].append((student_id, outcome_id, status))
+            elif "SYNTAX" in outcome_id or "PARSE" in outcome_id:
+                categories["syntax"].append((student_id, outcome_id, status))
+            else:
+                categories["other"].append((student_id, outcome_id, status))
+
+    def _summary(category_name: str, entries: list[tuple[str, str, str]], kind: str) -> dict:
         if not entries:
             return {}
-        subs = [s for s, _ in entries]
-        ids = [fid for _, fid in entries]
+        students = sorted({student_id for student_id, _, _ in entries if student_id})
+        rules = sorted({rule_id for _, rule_id, _ in entries})
+        worst_status = "FAIL" if any(status == "FAIL" for _, _, status in entries) else "WARN"
+        evidence_examples = [messages_by_rule[rule_id] for rule_id in rules if rule_id in messages_by_rule][:2]
         return {
-            "category": cat,
-            "students_affected": len(set(subs)),
-            "percent": (len(set(subs)) / total * 100) if total else 0,
-            "finding_ids": sorted(set(ids)),
-            "examples": list(dict.fromkeys(subs))[:3],
+            "id": category_name,
+            "kind": kind,
+            "title": category_name.replace("_", " ").title(),
+            "description": SIGNAL_DESCRIPTIONS.get(category_name, ""),
+            "incident_count": len(entries),
+            "incident_unit": "limitation incidents" if kind == "reliability" else "signal incidents",
+            "students_affected": len(students),
+            "submissions_affected": len(students),
+            "percent": (len(students) / total * 100) if total else 0,
+            "related_rules": rules,
+            "related_rule_labels": [labels_by_rule.get(rule_id, rule_id) for rule_id in rules[:4]],
+            "affected_students": students,
+            "examples": students[:3],
+            "evidence_examples": evidence_examples,
+            "severity": worst_status,
         }
 
     student_sections = [
-        _summary("missing_backend", categories["missing_backend"]),
-        _summary("missing_frontend", categories["missing_frontend"]),
-        _summary("syntax", categories["syntax"]),
-        _summary("behavioural_runtime", categories["behavioural"]),
-        _summary("browser_runtime", categories["browser_runtime"]),
-        _summary("consistency", categories["consistency"]),
-        _summary("other", categories["other"]),
+        _summary("missing_backend", categories["missing_backend"], "cohort_issue"),
+        _summary("missing_frontend", categories["missing_frontend"], "cohort_issue"),
+        _summary("syntax", categories["syntax"], "cohort_issue"),
+        _summary("behavioural_runtime", categories["behavioural_runtime"], "cohort_issue"),
+        _summary("browser_runtime", categories["browser_runtime"], "cohort_issue"),
+        _summary("consistency", categories["consistency"], "cohort_issue"),
+        _summary("other", categories["other"], "cohort_issue"),
     ]
-    student_sections = [s for s in student_sections if s]
+    student_sections = [section for section in student_sections if section]
 
     runner_sections = [
-        _summary("behavioural_skipped", [(s, "BEHAVIOUR.SKIPPED") for s in runner_limits["behavioural"]]),
-        _summary("browser_skipped", [(s, "BROWSER.PAGE_LOAD_SKIPPED") for s in runner_limits["browser"]]),
+        _summary("behavioural_skipped", runner_limits["behavioural_skipped"], "reliability"),
+        _summary("browser_skipped", runner_limits["browser_skipped"], "reliability"),
     ]
-    runner_sections = [r for r in runner_sections if r]
-    return student_sections, runner_sections
+    runner_sections = [section for section in runner_sections if section]
+
+    signals = sorted(
+        student_sections + runner_sections,
+        key=lambda item: (-int(item.get("students_affected", 0)), item.get("title", "")),
+    )
+    return signals, student_sections, runner_sections
 
 
-__all__ = [
-    "generate_assignment_analytics",
-    "FINDING_LABELS",
-]
+def _top_failing_rules(records: List[Mapping[str, object]], total: int) -> List[dict]:
+    rules: dict[str, dict] = {}
+    for record in records:
+        student_id = str(record.get("student_id") or "")
+        for outcome in record.get("problem_outcomes", []) or []:
+            status = str(outcome.get("status") or "")
+            if status not in {"FAIL", "WARN"}:
+                continue
+            outcome_id = str(outcome.get("id") or "")
+            if outcome_id == "submission.not_analysable":
+                continue
+            entry = rules.setdefault(
+                outcome_id,
+                {
+                    "rule_id": outcome_id,
+                    "label": str(outcome.get("label") or outcome_id),
+                    "component": str(outcome.get("component") or "other"),
+                    "students": set(),
+                    "statuses": set(),
+                    "weights": [],
+                    "messages": [],
+                    "fail_incidents": 0,
+                    "warning_incidents": 0,
+                    "confidence_affecting": outcome_id.startswith("BEHAVIOUR.") or outcome_id.startswith("BROWSER."),
+                },
+            )
+            entry["students"].add(student_id)
+            entry["statuses"].add(status)
+            if status == "FAIL":
+                entry["fail_incidents"] += 1
+            elif status == "WARN":
+                entry["warning_incidents"] += 1
+            weight = _coerce_float(outcome.get("weight"))
+            if weight is not None:
+                entry["weights"].append(weight)
+            message = str(outcome.get("message") or "")
+            if message and message not in entry["messages"]:
+                entry["messages"].append(message)
+
+    results: List[dict] = []
+    for outcome_id, entry in rules.items():
+        students = sorted(student for student in entry["students"] if student)
+        worst_status = "FAIL" if "FAIL" in entry["statuses"] else "WARN"
+        weights = list(entry["weights"])
+        submissions_affected = len(students)
+        impact_type = (
+            "weighted"
+            if weights
+            else ("fail_level" if worst_status == "FAIL" else "warning_level")
+        )
+        results.append(
+            {
+                "rule_id": outcome_id,
+                "label": entry["label"],
+                "component": entry["component"],
+                "severity": worst_status,
+                "students_affected": submissions_affected,
+                "submissions_affected": submissions_affected,
+                "percent": (submissions_affected / total * 100) if total else 0,
+                "incident_count": int(entry["fail_incidents"]) + int(entry["warning_incidents"]),
+                "fail_incidents": int(entry["fail_incidents"]),
+                "warning_incidents": int(entry["warning_incidents"]),
+                "impact_type": impact_type,
+                "score_impact": (
+                    f"Weighted rule ({max(weights):.2f})"
+                    if weights
+                    else ("Fail-level issue" if worst_status == "FAIL" else "Warning-level issue")
+                ),
+                "confidence_affecting": bool(entry["confidence_affecting"]),
+                "examples": students[:3],
+                "affected_students": students,
+                "messages": entry["messages"][:2],
+            }
+        )
+
+    results.sort(
+        key=lambda item: (
+            -int(item.get("students_affected", 0)),
+            -SEVERITY_PRIORITY.get(str(item.get("severity") or "WARN"), 0),
+            -int(item.get("incident_count", 0)),
+            str(item.get("rule_id") or ""),
+        )
+    )
+    return results
+
+
+def _requirement_coverage(records: List[Mapping[str, object]], relevant_components: Sequence[str], total: int) -> List[dict]:
+    coverage_rows: List[dict] = []
+    for component in relevant_components:
+        met_students: list[str] = []
+        partial_students: list[str] = []
+        unmet_students: list[str] = []
+        not_evaluable_students: list[str] = []
+        rule_count = 0
+
+        for record in records:
+            student_id = str(record.get("student_id") or "")
+            outcomes = dict((record.get("required_rules", {}) or {}).get(component, {}) or {})
+            rule_count = max(rule_count, len(outcomes))
+
+            if record.get("status") != "ok" or record.get("overall") is None:
+                not_evaluable_students.append(student_id)
+                continue
+            if not outcomes:
+                not_evaluable_students.append(student_id)
+                continue
+
+            passed = sum(1 for outcome in outcomes.values() if outcome.get("status") == "PASS")
+            total_rules = len(outcomes)
+            if passed == total_rules:
+                met_students.append(student_id)
+            elif passed == 0:
+                unmet_students.append(student_id)
+            else:
+                partial_students.append(student_id)
+
+        coverage_rows.append(
+            {
+                "component": component,
+                "title": REQUIREMENT_TITLES.get(component, component.upper()),
+                "rule_count": rule_count,
+                "students_met": len(met_students),
+                "students_partial": len(partial_students),
+                "students_unmet": len(unmet_students),
+                "students_not_evaluable": len(not_evaluable_students),
+                "met_percent": (len(met_students) / total * 100) if total else 0,
+                "met_examples": met_students[:3],
+                "unmet_examples": unmet_students[:3],
+            }
+        )
+    return coverage_rows
+
+
+def _reliability_summary(records: List[Mapping[str, object]], total: int) -> dict:
+    fully_evaluated = sum(1 for record in records if record.get("evaluation_state") == "fully_evaluated")
+    partially_evaluated = sum(1 for record in records if record.get("evaluation_state") == "partially_evaluated")
+    not_analysable = sum(1 for record in records if record.get("evaluation_state") == "not_analysable")
+    runtime_skipped = sum(1 for record in records if record.get("runtime_flags", {}).get("runtime_skipped"))
+    browser_skipped = sum(1 for record in records if record.get("runtime_flags", {}).get("browser_skipped"))
+    runtime_issue_submissions = sum(1 for record in records if record.get("runtime_flags", {}).get("runtime_issue"))
+    browser_issue_submissions = sum(1 for record in records if record.get("runtime_flags", {}).get("browser_issue"))
+    manual_review = sum(1 for record in records if record.get("manual_review_recommended"))
+    high_confidence = sum(1 for record in records if record.get("confidence") == "high")
+    medium_confidence = sum(1 for record in records if record.get("confidence") == "medium")
+    low_confidence = sum(1 for record in records if record.get("confidence") == "low")
+
+    limitation_breakdown: List[dict] = []
+    for category_id, label, count in [
+        ("analysis_failure", "Not analysable submissions", not_analysable),
+        ("runtime_skipped", "Runtime checks skipped or unavailable", runtime_skipped),
+        ("browser_skipped", "Browser checks skipped or unavailable", browser_skipped),
+        ("runtime_issue", "Runtime failures or timeouts", runtime_issue_submissions),
+        ("browser_issue", "Browser failures, timeouts, or console errors", browser_issue_submissions),
+    ]:
+        if count:
+            limitation_breakdown.append(
+                {
+                    "id": category_id,
+                    "label": label,
+                    "incident_count": int(count),
+                    "incident_unit": "limitation incidents",
+                }
+            )
+
+    return {
+        "fully_evaluated": fully_evaluated,
+        "fully_evaluated_submissions": fully_evaluated,
+        "partially_evaluated": partially_evaluated,
+        "partially_evaluated_submissions": partially_evaluated,
+        "not_analysable": not_analysable,
+        "not_analysable_submissions": not_analysable,
+        "runtime_skipped": runtime_skipped,
+        "runtime_issue_submissions": runtime_issue_submissions,
+        "browser_skipped": browser_skipped,
+        "browser_issue_submissions": browser_issue_submissions,
+        "browser_limited": browser_skipped + browser_issue_submissions,
+        "manual_review": manual_review,
+        "manual_review_submissions": manual_review,
+        "limitation_incidents": sum(item["incident_count"] for item in limitation_breakdown),
+        "limitation_categories": len(limitation_breakdown),
+        "limitation_breakdown": limitation_breakdown,
+        "confidence": {
+            "high": high_confidence,
+            "medium": medium_confidence,
+            "low": low_confidence,
+            "high_percent": (high_confidence / total * 100) if total else 0,
+            "medium_percent": (medium_confidence / total * 100) if total else 0,
+            "low_percent": (low_confidence / total * 100) if total else 0,
+        },
+    }
+
+
+def _score_composition(records: List[Mapping[str, object]], total: int) -> List[dict]:
+    sources = [
+        {
+            "id": "static_analysis",
+            "label": "Static analysis",
+            "description": "Required rules, structural checks, and static rubric findings that contribute baseline evidence.",
+            "predicate": lambda record: bool(record.get("required_rules")) or int((record.get("check_stats") or {}).get("total", 0)) > 0,
+            "outcomes": lambda record: [
+                outcome
+                for outcome in record.get("problem_outcomes", []) or []
+                if not str(outcome.get("id") or "").startswith(("BEHAVIOUR.", "BROWSER.", "CONSISTENCY."))
+                and ".QUALITY." not in str(outcome.get("id") or "")
+                and ".SECURITY." not in str(outcome.get("id") or "")
+                and str(outcome.get("id") or "") != "submission.not_analysable"
+            ],
+            "skipped_incidents": lambda record: 0,
+            "confidence_reduced": lambda record: record.get("status") != "ok" and (
+                bool(record.get("required_rules")) or int((record.get("check_stats") or {}).get("total", 0)) > 0
+            ),
+        },
+        {
+            "id": "runtime_checks",
+            "label": "Behavioural and runtime checks",
+            "description": "Runtime execution checks that validate backend behaviour or deterministic execution paths.",
+            "predicate": lambda record: bool(record.get("behavioural_evidence")) or any(
+                str(outcome.get("id") or "").startswith("BEHAVIOUR.") for outcome in record.get("problem_outcomes", []) or []
+            ),
+            "outcomes": lambda record: [
+                outcome
+                for outcome in record.get("problem_outcomes", []) or []
+                if str(outcome.get("id") or "").startswith("BEHAVIOUR.")
+            ],
+            "skipped_incidents": lambda record: 1 if record.get("runtime_flags", {}).get("runtime_skipped") else 0,
+            "confidence_reduced": lambda record: bool(
+                record.get("runtime_flags", {}).get("runtime_skipped")
+                or record.get("runtime_flags", {}).get("runtime_issue")
+            ),
+        },
+        {
+            "id": "browser_checks",
+            "label": "Browser interaction checks",
+            "description": "Browser automation and client-side checks that validate page loading and front-end behaviour.",
+            "predicate": lambda record: bool(record.get("browser_evidence")) or any(
+                str(outcome.get("id") or "").startswith("BROWSER.") for outcome in record.get("problem_outcomes", []) or []
+            ),
+            "outcomes": lambda record: [
+                outcome
+                for outcome in record.get("problem_outcomes", []) or []
+                if str(outcome.get("id") or "").startswith("BROWSER.")
+            ],
+            "skipped_incidents": lambda record: 1 if record.get("runtime_flags", {}).get("browser_skipped") else 0,
+            "confidence_reduced": lambda record: bool(
+                record.get("runtime_flags", {}).get("browser_skipped")
+                or record.get("runtime_flags", {}).get("browser_issue")
+            ),
+        },
+        {
+            "id": "penalties",
+            "label": "Penalties and quality checks",
+            "description": "Consistency, quality, or security findings that can drag performance down or trigger moderation review.",
+            "predicate": lambda record: any(
+                token in str(outcome.get("id") or "")
+                for outcome in record.get("problem_outcomes", []) or []
+                for token in ("CONSISTENCY.", ".QUALITY.", ".SECURITY.")
+            ),
+            "outcomes": lambda record: [
+                outcome
+                for outcome in record.get("problem_outcomes", []) or []
+                if any(
+                    token in str(outcome.get("id") or "")
+                    for token in ("CONSISTENCY.", ".QUALITY.", ".SECURITY.")
+                )
+            ],
+            "skipped_incidents": lambda record: 0,
+            "confidence_reduced": lambda record: bool(record.get("runtime_flags", {}).get("consistency_issue")),
+        },
+        {
+            "id": "skipped_logic",
+            "label": "Skipped or unavailable checks",
+            "description": "Confidence-reducing gaps where runtime, browser, or full pipeline evaluation was unavailable.",
+            "predicate": lambda record: record.get("evaluation_state") != "fully_evaluated",
+            "outcomes": lambda record: [
+                outcome
+                for outcome in record.get("problem_outcomes", []) or []
+                if str(outcome.get("status") or "") == "SKIPPED" or str(outcome.get("id") or "") == "submission.not_analysable"
+            ],
+            "skipped_incidents": lambda record: int(bool(record.get("runtime_flags", {}).get("runtime_skipped")))
+            + int(bool(record.get("runtime_flags", {}).get("browser_skipped"))),
+            "confidence_reduced": lambda record: record.get("confidence") != "high",
+        },
+    ]
+
+    rows: List[dict] = []
+    for source in sources:
+        students: set[str] = set()
+        fail_incidents = 0
+        warning_incidents = 0
+        skipped_incidents = 0
+        confidence_reduced_students: set[str] = set()
+        for record in records:
+            if not source["predicate"](record):
+                continue
+            student_id = str(record.get("student_id") or "")
+            if student_id:
+                students.add(student_id)
+            outcomes = list(source["outcomes"](record))
+            fail_incidents += sum(1 for outcome in outcomes if str(outcome.get("status") or "") == "FAIL")
+            warning_incidents += sum(1 for outcome in outcomes if str(outcome.get("status") or "") == "WARN")
+            skipped_incidents += int(source["skipped_incidents"](record))
+            if source["confidence_reduced"](record) and student_id:
+                confidence_reduced_students.add(student_id)
+
+        counted = len(students)
+        rows.append(
+            {
+                "id": source["id"],
+                "label": source["label"],
+                "description": source["description"],
+                "students_affected": counted,
+                "submissions_affected": counted,
+                "percent": (counted / total * 100) if total else 0,
+                "fail_incidents": fail_incidents,
+                "warning_incidents": warning_incidents,
+                "skipped_incidents": skipped_incidents,
+                "confidence_reduced_submissions": len(confidence_reduced_students),
+                "examples": sorted(students)[:3],
+            }
+        )
+    return rows
+
+
+def _teaching_insights(
+    *,
+    context: Mapping[str, object],
+) -> List[dict]:
+    insights: List[dict] = []
+    assigned_students = int(context.get("assigned_students", 0))
+    active_in_scope = int(context.get("active_in_scope", 0))
+    missing_assigned = int(context.get("missing_assigned", 0))
+    coverage_percent = int(context.get("coverage_percent", 0))
+    partially_evaluated = int(context.get("partially_evaluated", 0))
+    not_analysable = int(context.get("not_analysable", 0))
+    manual_review = int(context.get("manual_review", 0))
+    limitation_incidents = int(context.get("limitation_incidents", 0))
+    small_cohort_enabled = bool(context.get("small_cohort_enabled"))
+    strongest = dict(context.get("strongest_requirement", {}) or {})
+    weakest = dict(context.get("weakest_requirement", {}) or {})
+    top_rule = dict(context.get("top_failing_rule", {}) or {})
+    major_limitations = list(context.get("major_limitations", []) or [])
+
+    if assigned_students:
+        if active_in_scope == 0:
+            coverage_text = "No assigned students currently have an active submission in scope."
+            coverage_priority = "high"
+        elif missing_assigned == 0:
+            coverage_text = "All assigned students currently have an active submission in scope."
+            coverage_priority = "low"
+        else:
+            coverage_text = (
+                f"{active_in_scope} of {assigned_students} assigned students currently have an active submission in scope; "
+                f"{missing_assigned} are still missing."
+            )
+            coverage_priority = "medium"
+        insights.append(
+            {
+                "insight_type": "coverage",
+                "priority": coverage_priority,
+                "text": coverage_text,
+                "supporting_metric_keys": [
+                    "assigned_students",
+                    "active_in_scope",
+                    "missing_assigned",
+                    "coverage_percent",
+                ],
+            }
+        )
+
+    if strongest and weakest:
+        if strongest.get("title") == weakest.get("title"):
+            requirement_text = f"{strongest.get('title', 'Requirement coverage')} is the only requirement area with enough evaluable evidence to summarise so far."
+        elif small_cohort_enabled:
+            requirement_text = (
+                f"{strongest.get('title', 'Requirement coverage')} is strongest ({strongest.get('students_met', 0)} fully met), "
+                f"while {weakest.get('title', 'Requirement coverage')} is weakest ({weakest.get('students_met', 0)} fully met)."
+            )
+        else:
+            requirement_text = (
+                f"{strongest.get('title', 'Requirement coverage')} is currently the strongest requirement area by full attainment, "
+                f"while {weakest.get('title', 'Requirement coverage')} is the weakest."
+            )
+        insights.append(
+            {
+                "insight_type": "requirement_balance",
+                "priority": "medium",
+                "text": requirement_text,
+                "supporting_metric_keys": [
+                    "strongest_requirement",
+                    "weakest_requirement",
+                ],
+            }
+        )
+
+    if top_rule:
+        affected = int(top_rule.get("submissions_affected", top_rule.get("students_affected", 0)) or 0)
+        top_rule_text = (
+            f"{top_rule.get('label', 'The top failing rule')} ({top_rule.get('rule_id', '')}) is the most common rule-level issue, "
+            f"affecting {affected} active submission{'s' if affected != 1 else ''}"
+        )
+        if not small_cohort_enabled and coverage_percent:
+            top_rule_text += f" ({int(round(float(top_rule.get('percent', 0) or 0)))}%)."
+        else:
+            top_rule_text += "."
+        insights.append(
+            {
+                "insight_type": "rule_pattern",
+                "priority": "medium" if affected <= 1 else "high",
+                "text": top_rule_text,
+                "supporting_metric_keys": [
+                    "top_failing_rule",
+                    "active_in_scope",
+                ],
+            }
+        )
+
+    if manual_review or partially_evaluated or not_analysable or limitation_incidents:
+        reliability_text = (
+            f"Manual review is recommended for {manual_review} active submission{'s' if manual_review != 1 else ''}; "
+            f"{partially_evaluated} were partially evaluated and {not_analysable} were not analysable."
+        )
+        if major_limitations:
+            reliability_text += f" The main confidence risk is {major_limitations[0].get('label', 'runner limitations').lower()}."
+        insights.append(
+            {
+                "insight_type": "reliability",
+                "priority": "high",
+                "text": reliability_text,
+                "supporting_metric_keys": [
+                    "manual_review",
+                    "partially_evaluated",
+                    "not_analysable",
+                    "limitation_incidents",
+                    "major_limitations",
+                ],
+            }
+        )
+    else:
+        insights.append(
+            {
+                "insight_type": "reliability",
+                "priority": "low",
+                "text": "Automated evaluation confidence is currently high across the active submissions in scope.",
+                "supporting_metric_keys": [
+                    "manual_review",
+                    "partially_evaluated",
+                    "not_analysable",
+                    "limitation_incidents",
+                ],
+            }
+        )
+
+    return insights[:4]
+
+
+def _teaching_insight_context(
+    *,
+    profile: str,
+    coverage: Mapping[str, object],
+    requirement_coverage: Sequence[Mapping[str, object]],
+    top_failing_rules: Sequence[Mapping[str, object]],
+    reliability: Mapping[str, object],
+    total_records: int,
+    small_cohort: Mapping[str, object],
+) -> dict:
+    strongest = None
+    weakest = None
+    if requirement_coverage:
+        strongest_row = max(
+            requirement_coverage,
+            key=lambda row: (float(row.get("met_percent", 0) or 0), int(row.get("students_met", 0) or 0), str(row.get("title") or "")),
+        )
+        weakest_row = min(
+            requirement_coverage,
+            key=lambda row: (float(row.get("met_percent", 0) or 0), int(row.get("students_met", 0) or 0), str(row.get("title") or "")),
+        )
+        strongest = {
+            "component": strongest_row.get("component"),
+            "title": strongest_row.get("title"),
+            "students_met": int(strongest_row.get("students_met", 0) or 0),
+            "met_percent": round(float(strongest_row.get("met_percent", 0) or 0), 2),
+        }
+        weakest = {
+            "component": weakest_row.get("component"),
+            "title": weakest_row.get("title"),
+            "students_met": int(weakest_row.get("students_met", 0) or 0),
+            "met_percent": round(float(weakest_row.get("met_percent", 0) or 0), 2),
+        }
+
+    top_rule = None
+    if top_failing_rules:
+        first_rule = dict(top_failing_rules[0])
+        top_rule = {
+            "rule_id": first_rule.get("rule_id"),
+            "label": first_rule.get("label"),
+            "component": first_rule.get("component"),
+            "severity": first_rule.get("severity"),
+            "submissions_affected": int(first_rule.get("submissions_affected", first_rule.get("students_affected", 0)) or 0),
+            "percent": round(float(first_rule.get("percent", 0) or 0), 2),
+        }
+
+    return {
+        "profile": profile,
+        "assigned_students": int(coverage.get("assigned_students", 0) or 0),
+        "active_in_scope": int(coverage.get("active_in_scope", total_records) or 0),
+        "coverage_percent": int(coverage.get("coverage_percent", 0) or 0),
+        "missing_assigned": int(coverage.get("missing_assigned", 0) or 0),
+        "fully_evaluated": int(reliability.get("fully_evaluated", 0) or 0),
+        "partially_evaluated": int(reliability.get("partially_evaluated", 0) or 0),
+        "not_analysable": int(reliability.get("not_analysable", 0) or 0),
+        "manual_review": int(reliability.get("manual_review", 0) or 0),
+        "limitation_incidents": int(reliability.get("limitation_incidents", 0) or 0),
+        "limitation_categories": int(reliability.get("limitation_categories", 0) or 0),
+        "major_limitations": [
+            {
+                "id": item.get("id"),
+                "label": item.get("label"),
+                "incident_count": int(item.get("incident_count", 0) or 0),
+            }
+            for item in list(reliability.get("limitation_breakdown", []) or [])[:2]
+        ],
+        "strongest_requirement": strongest,
+        "weakest_requirement": weakest,
+        "top_failing_rule": top_rule,
+        "small_cohort_enabled": bool(small_cohort.get("enabled")),
+        "small_cohort_threshold": int(small_cohort.get("threshold", SMALL_COHORT_THRESHOLD) or SMALL_COHORT_THRESHOLD),
+        "small_cohort_note": str(small_cohort.get("note") or ""),
+    }
+
+
+def _label_for_identifier(identifier: str) -> str:
+    label, _ = FINDING_LABELS.get(identifier, ("", ""))
+    return label or identifier.replace(".", " / ").replace("_", " ").strip().title()
+
+
+def _description_for_identifier(identifier: str) -> str:
+    _, description = FINDING_LABELS.get(identifier, ("", ""))
+    return description
+
+
+def _first_non_empty(values: Sequence[object]) -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _coerce_float(value: object) -> float | None:
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+__all__ = ["generate_assignment_analytics", "FINDING_LABELS"]

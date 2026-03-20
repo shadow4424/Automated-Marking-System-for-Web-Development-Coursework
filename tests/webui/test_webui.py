@@ -5,12 +5,9 @@ import json
 import zipfile
 from pathlib import Path
 
-import pytest
-
 from ams.core.pipeline import AssessmentPipeline
 from ams.io.web_storage import create_run_dir, save_run_info
-from ams.tools.batch import run_batch
-from ams.webui import create_app, _write_batch_analytics, _write_batch_reports_zip, _write_run_index_mark
+from ams.webui import create_app, _write_batch_reports_zip, _write_run_index_batch, _write_run_index_mark
 
 
 def _make_zip(files: dict[str, str]) -> bytes:
@@ -24,8 +21,8 @@ def _make_zip(files: dict[str, str]) -> bytes:
 def _client(tmp_path: Path):
     app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
     client = app.test_client()
-    # Authenticate as admin so RBAC decorators don't redirect
     from tests.webui.conftest import authenticate_client
+
     authenticate_client(client)
     return client, tmp_path
 
@@ -33,7 +30,6 @@ def _client(tmp_path: Path):
 def test_webui_home_ok(tmp_path: Path):
     client, _ = _client(tmp_path)
     res = client.get("/")
-    # Authenticated home redirects to role-based dashboard
     assert res.status_code == 302
 
 
@@ -74,36 +70,74 @@ def test_webui_mark_zip_happy_path_creates_run_and_shows_scores(tmp_path: Path):
     assert any(runs_root.iterdir())
 
 
-def test_webui_batch_zip_happy_path_creates_run_and_lists_outputs(tmp_path: Path):
+def test_webui_batch_run_redirects_to_assignment_and_keeps_batch_downloads(tmp_path: Path):
     client, runs_root = _client(tmp_path)
-    submissions_dir = tmp_path / "subs"
-    submissions_dir.mkdir()
-    (submissions_dir / "s1").mkdir()
-    (submissions_dir / "s1" / "index.html").write_text("<!doctype html><html><body><form><input><a href='#'>x</a></form></body></html>", encoding="utf-8")
-    (submissions_dir / "s1" / "style.css").write_text("body { color: red; }", encoding="utf-8")
-    (submissions_dir / "s1" / "app.js").write_text("document.body.addEventListener('click', ()=>{});", encoding="utf-8")
-    (submissions_dir / "s2").mkdir()
-    (submissions_dir / "s2" / "index.html").write_text("<!doctype html><html><body><form><input><a href='#'>x</a></form></body></html>", encoding="utf-8")
+    run_id = "20260319-100000_batch_frontend_demo"
+    run_dir = runs_root / "assignment1" / "batch" / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
 
-    run_id, run_dir = create_run_dir(runs_root, mode="batch", profile="frontend")
-    summary = run_batch(submissions_dir=submissions_dir, out_root=run_dir, profile="frontend", keep_individual_runs=True)
-    run_info = {
-        "id": run_id,
-        "mode": "batch",
-        "profile": "frontend",
-        "created_at": "now",
-        "summary": "batch_summary.json",
-        "batch_summary": summary,
+    report_path = run_dir / "runs" / "student1_assignment1" / "report.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        json.dumps(
+            {
+                "metadata": {
+                    "submission_metadata": {
+                        "student_id": "student1",
+                        "assignment_id": "assignment1",
+                        "original_filename": "student1_assignment1.zip",
+                        "timestamp": "2026-03-19T10:00:00Z",
+                    },
+                    "student_identity": {"student_id": "student1", "name_normalized": "student1"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    batch_summary = {
+        "records": [
+            {
+                "id": "student1_assignment1",
+                "student_id": "student1",
+                "assignment_id": "assignment1",
+                "original_filename": "student1_assignment1.zip",
+                "upload_timestamp": "2026-03-19T10:00:00Z",
+                "overall": 0.8,
+                "components": {"html": 0.8, "css": 0.8, "js": 0.8, "php": None, "sql": None},
+                "status": "ok",
+                "report_path": str(report_path),
+            }
+        ],
+        "summary": {
+            "total_submissions": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "overall_stats": {"mean": 0.8, "median": 0.8, "min": 0.8, "max": 0.8},
+            "profile": "frontend",
+        },
     }
-    _write_batch_analytics(run_dir, "frontend", run_id)
+    (run_dir / "batch_summary.json").write_text(json.dumps(batch_summary), encoding="utf-8")
+    (run_dir / "batch_summary.csv").write_text("id,overall\nstudent1_assignment1,0.8\n", encoding="utf-8")
+    save_run_info(
+        run_dir,
+        {
+            "id": run_id,
+            "mode": "batch",
+            "profile": "frontend",
+            "created_at": "now",
+            "assignment_id": "assignment1",
+            "summary": "batch_summary.json",
+            "batch_summary": batch_summary,
+        },
+    )
+    _write_run_index_batch(run_dir, {"id": run_id, "mode": "batch", "profile": "frontend"})
     _write_batch_reports_zip(run_dir, "frontend", run_id)
-    _write_run_index_mark(run_dir, run_info, run_dir / "batch_summary.json")
-    save_run_info(run_dir, run_info)
 
     detail = client.get(f"/runs/{run_id}")
-    assert detail.status_code == 200
-    assert b"Batch Summary" in detail.data
-    assert any(runs_root.iterdir())
+    assert detail.status_code == 302
+    assert detail.headers["Location"].endswith("/teacher/assignment/assignment1")
+
     dl = client.get(f"/download/{run_id}/batch_summary.json")
     assert dl.status_code == 200
     cd = dl.headers["Content-Disposition"].encode("utf-8")
@@ -113,7 +147,6 @@ def test_webui_batch_zip_happy_path_creates_run_and_lists_outputs(tmp_path: Path
 
 def test_webui_download_only_allows_whitelist(tmp_path: Path):
     client, runs_root = _client(tmp_path)
-    # Create a fake run with a report.json
     run_dir = runs_root / "fake"
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "run_info.json").write_text(json.dumps({"id": "fake", "mode": "mark", "profile": "frontend"}), encoding="utf-8")

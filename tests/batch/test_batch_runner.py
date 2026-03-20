@@ -49,14 +49,14 @@ def test_run_batch_success_and_failure(tmp_path: Path) -> None:
     submissions = tmp_path / "subs"
     submissions.mkdir()
 
-    good_dir = submissions / "good1"
+    good_dir = submissions / "good1_assignment1"
     good_dir.mkdir()
     create_frontend_good(good_dir)
 
-    partial_zip = submissions / "partial.zip"
+    partial_zip = submissions / "partial1_assignment1.zip"
     create_frontend_partial_zip(partial_zip, tmp_path)
 
-    bad_zip = submissions / "bad.zip"
+    bad_zip = submissions / "bad1_assignment1.zip"
     create_bad_zip(bad_zip)
 
     out_root = tmp_path / "out"
@@ -86,8 +86,8 @@ def test_run_batch_success_and_failure(tmp_path: Path) -> None:
     assert len(records) == 3
 
     runs_root = out_root / "runs"
-    assert (runs_root / "good1" / "report.json").exists()
-    assert (runs_root / "partial" / "report.json").exists()
+    assert (runs_root / "good1_assignment1" / "report.json").exists()
+    assert (runs_root / "partial1_assignment1" / "report.json").exists()
 
     # Aggregate stats should have mean/median for succeeded
     overall_stats = summary["overall_stats"]
@@ -121,11 +121,11 @@ def test_run_batch_without_keep_individual_runs(tmp_path: Path) -> None:
     submissions = tmp_path / "subs"
     submissions.mkdir()
 
-    good_dir = submissions / "good1"
+    good_dir = submissions / "good1_assignment1"
     good_dir.mkdir()
     create_frontend_good(good_dir)
 
-    partial_zip = submissions / "partial.zip"
+    partial_zip = submissions / "partial1_assignment1.zip"
     create_frontend_partial_zip(partial_zip, tmp_path)
 
     out_root = tmp_path / "out_no_keep"

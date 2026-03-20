@@ -4,7 +4,6 @@ Provides routes for:
 - Single-submission marking (``/mark``)
 - Batch processing multiple submissions (``/batch``)
 - Run history and report viewing (``/runs``, ``/runs/<run_id>``)
-- Batch analytics dashboards (``/batch/<run_id>/analytics``)
 - Artifact and report downloads
 
 Start locally with: ``python -m flask --app ams.webui run --debug``
@@ -70,7 +69,6 @@ from ams.io.web_storage import (
 )
 from ams.web.helpers import validate_is_zipfile
 from ams.tools.batch import aggregate_batch, discover_batch_items, run_batch, validate_submission_filename, write_outputs
-from ams.analytics import generate_assignment_analytics
 from ams.core.job_manager import job_manager
 
 logger = logging.getLogger(__name__)
@@ -85,15 +83,8 @@ ALLOWED_DOWNLOADS = {
     "failure_reasons_frequency.csv",
     "score_buckets.csv",
     "component_means.csv",
-    "batch_analytics.json",
-    "batch_analytics_",
-    "component_breakdown_",
-    "needs_attention_",
     "batch_reports",
     "runtime_health_",
-    "score_distribution",
-    "component_readiness",
-    "needs_attention_top_reasons",
     "evaluation_summary",
     "evaluation_results",
 }
@@ -1289,7 +1280,7 @@ def _register_routes(app: Flask) -> None:
         run_dir = find_run_by_id(runs_root, run_id)
         if run_dir is None:
             return "Run not found", 404
-        allowed_roots = {"artifacts", "analytics", "runs", "reports", "evaluation", "submission"}
+        allowed_roots = {"artifacts", "runs", "reports", "evaluation", "submission"}
         rel_parts = Path(relpath).parts
         if not rel_parts or rel_parts[0] not in allowed_roots:
             return "Not allowed", 403
@@ -1437,7 +1428,7 @@ def _register_routes(app: Flask) -> None:
           - report.html, report.json, summary.txt (top-level reports)
           - submission/  (student code, full tree)
           - artifacts/   (screenshots only — .png, .jpg, .jpeg, .gif, .webp)
-          - batch files  (batch_summary.*, findings_frequency.*, analytics)
+          - batch files  (batch_summary.*, findings_frequency.*, score summaries)
 
         Excluded:
           - uploaded_extract/  (duplicate of submission)
@@ -1550,13 +1541,8 @@ def _register_routes(app: Flask) -> None:
         elif filename.startswith("batch_summary"):
             suffix = ".csv" if filename.endswith(".csv") else ".json"
             dl_name = f"batch_summary_{profile}_{run_id}{suffix}"
-        elif filename.startswith("batch_analytics"):
-            suffix = ".csv" if filename.endswith(".csv") else ".json"
-            dl_name = f"batch_analytics_{profile}_{run_id}{suffix}"
-        elif filename.startswith("component_means") or filename.startswith("component_breakdown"):
-            dl_name = f"component_breakdown_{profile}_{run_id}.csv"
-        elif filename.startswith("needs_attention"):
-            dl_name = f"needs_attention_{profile}_{run_id}.csv"
+        elif filename.startswith("component_means"):
+            dl_name = f"component_means_{profile}_{run_id}.csv"
         elif filename.startswith("batch_reports"):
             dl_name = f"batch_reports_{profile}_{run_id}.zip"
         elif filename.startswith("findings_frequency"):
@@ -1778,33 +1764,22 @@ def _resolve_download_path(run_dir: Path, filename: str) -> Path:
     candidate = run_dir / filename
     if candidate.exists():
         return candidate.resolve()
-    
-    # Check analytics directory
-    analytics_dir = run_dir / "analytics"
-    candidate = analytics_dir / filename
-    if candidate.exists():
-        return candidate.resolve()
-    
+
     # Check evaluation directory
     evaluation_dir = run_dir / "evaluation"
     candidate = evaluation_dir / filename
     if candidate.exists():
         return candidate.resolve()
-    
+
     # For files like "batch_reports.zip", search for matching prefix pattern
     base_name = filename.rsplit(".", 1)[0]  # e.g., "batch_reports"
     ext = filename.rsplit(".", 1)[-1] if "." in filename else ""
-    
+
     # Search run_dir for files starting with the base name
     for f in run_dir.glob(f"{base_name}*.{ext}"):
         if f.is_file():
             return f.resolve()
-    
-    # Search analytics dir
-    for f in analytics_dir.glob(f"{base_name}*.{ext}"):
-        if f.is_file():
-            return f.resolve()
-    
+
     # Fallback to original path
     return (run_dir / filename).resolve()
 
@@ -1825,7 +1800,11 @@ def _build_batch_readme(run_id: str, profile: str, batch_summary: Mapping[str, o
         "",
         "Contents:",
         f"- {run_id}/batch_summary.json",
-        f"- {run_id}/analytics/",
+        f"- {run_id}/batch_summary.csv",
+        f"- {run_id}/findings_frequency.csv",
+        f"- {run_id}/failure_reasons_frequency.csv",
+        f"- {run_id}/score_buckets.csv",
+        f"- {run_id}/component_means.csv",
         f"- {run_id}/evaluation/ (if present)",
         f"- {run_id}/submissions/<submission_id>/report.json",
     ]
@@ -1846,12 +1825,16 @@ def _write_batch_reports_zip(run_dir: Path, profile: str, run_id: str) -> None:
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(summary_path, f"{run_id}/batch_summary.json")
-        analytics_dir = run_dir / "analytics"
-        if analytics_dir.exists():
-            for file in sorted(analytics_dir.rglob("*")):
-                if file.is_file():
-                    arc = f"{run_id}/analytics/{file.relative_to(analytics_dir).as_posix()}"
-                    zf.write(file, arc)
+        for filename in (
+            "batch_summary.csv",
+            "findings_frequency.csv",
+            "failure_reasons_frequency.csv",
+            "score_buckets.csv",
+            "component_means.csv",
+        ):
+            file = run_dir / filename
+            if file.is_file():
+                zf.write(file, f"{run_id}/{filename}")
         readme = _build_batch_readme(run_id, profile, batch_summary)
         zf.writestr(f"{run_id}/README.txt", readme)
         evaluation_dir = run_dir / "evaluation"
