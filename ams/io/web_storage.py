@@ -196,6 +196,32 @@ def _submission_sort_key(run: Mapping[str, object], submission: Mapping[str, obj
     )
 
 
+def _normalize_status(value: object) -> str:
+    status = str(value or "").strip().lower()
+    if status in {"", "ok", "success", "succeeded", "completed", "complete"}:
+        return "ok"
+    return status
+
+
+def _submission_is_active_candidate(run: Mapping[str, object], submission: Mapping[str, object] | None = None) -> bool:
+    if submission is not None:
+        if submission.get("invalid") is True:
+            return False
+        return not _normalize_status(submission.get("status")).startswith("invalid")
+    return not _normalize_status(run.get("status")).startswith("invalid")
+
+
+def _assignment_ids_from_submissions(run: Mapping[str, object]) -> list[str]:
+    return sorted(
+        {
+            str(submission.get("assignment_id") or "").strip()
+            for submission in list(run.get("submissions", []) or [])
+            if str(submission.get("assignment_id") or "").strip()
+            and _submission_is_active_candidate(run, submission)
+        }
+    )
+
+
 def _filter_latest_submissions(runs: list[dict]) -> list[dict]:
     latest_by_identity: dict[tuple[str, str], tuple[tuple[str, str, str], tuple[str, str | None]]] = {}
 
@@ -203,6 +229,8 @@ def _filter_latest_submissions(runs: list[dict]) -> list[dict]:
         submissions = list(run.get("submissions", []) or [])
         if run.get("mode") == "batch" and submissions:
             for submission in submissions:
+                if not _submission_is_active_candidate(run, submission):
+                    continue
                 identity = _submission_identity(run, submission)
                 if identity is None:
                     continue
@@ -212,6 +240,8 @@ def _filter_latest_submissions(runs: list[dict]) -> list[dict]:
                     latest_by_identity[identity] = candidate
             continue
 
+        if not _submission_is_active_candidate(run):
+            continue
         identity = _submission_identity(run, submissions[0] if submissions else None)
         if identity is None:
             continue
@@ -225,7 +255,11 @@ def _filter_latest_submissions(runs: list[dict]) -> list[dict]:
         submissions = list(run.get("submissions", []) or [])
         if run.get("mode") == "batch":
             kept_submissions: list[dict] = []
+            had_active_candidates = False
             for submission in submissions:
+                if not _submission_is_active_candidate(run, submission):
+                    continue
+                had_active_candidates = True
                 identity = _submission_identity(run, submission)
                 if identity is None:
                     kept_submissions.append(submission)
@@ -235,6 +269,11 @@ def _filter_latest_submissions(runs: list[dict]) -> list[dict]:
                     kept_submissions.append(submission)
 
             if submissions and not kept_submissions:
+                if had_active_candidates:
+                    continue
+                run_copy = dict(run)
+                run_copy["submissions"] = []
+                filtered_runs.append(run_copy)
                 continue
 
             run_copy = dict(run)
@@ -242,6 +281,8 @@ def _filter_latest_submissions(runs: list[dict]) -> list[dict]:
             filtered_runs.append(run_copy)
             continue
 
+        if not _submission_is_active_candidate(run):
+            continue
         identity = _submission_identity(run, submissions[0] if submissions else None)
         if identity is None:
             filtered_runs.append(run)
@@ -270,6 +311,7 @@ def list_runs(runs_root: Path) -> list[dict]:
                 continue
             info["id"] = run_dir.name
             info["_run_dir"] = str(run_dir)  # Store full path for lookups
+            batch_summary_data: dict | None = None
             
             # Try to load score from report.json (single runs)
             report_path = run_dir / "report.json"
@@ -295,15 +337,15 @@ def list_runs(runs_root: Path) -> list[dict]:
                 batch_summary_path = run_dir / "batch_summary.json"
                 if batch_summary_path.exists():
                     try:
-                        batch_summary = json.loads(batch_summary_path.read_text(encoding="utf-8"))
+                        batch_summary_data = json.loads(batch_summary_path.read_text(encoding="utf-8"))
                         if info.get("score") is None:
-                            overall_stats = batch_summary.get("summary", {}).get("overall_stats", {}) or {}
+                            overall_stats = batch_summary_data.get("summary", {}).get("overall_stats", {}) or {}
                             mean_score = overall_stats.get("mean")
                             if mean_score is not None:
                                 # Store score as percentage (0-100) for dashboard display
                                 info["score"] = mean_score * 100
                     except Exception:
-                        pass
+                        batch_summary_data = None
             
             # Load submissions list — prefer run_index.json, fall back to batch_summary.json
             index_path = run_dir / "run_index.json"
@@ -315,12 +357,10 @@ def list_runs(runs_root: Path) -> list[dict]:
                     info["submissions"] = []
             elif info.get("mode") == "batch":
                 # Fallback: build submissions from batch_summary.json records
-                batch_summary_path = run_dir / "batch_summary.json"
-                if batch_summary_path.exists():
+                if batch_summary_data is not None:
                     try:
-                        batch_summary = json.loads(batch_summary_path.read_text(encoding="utf-8"))
                         info["submissions"] = []
-                        for rec in batch_summary.get("records", []):
+                        for rec in batch_summary_data.get("records", []):
                             student_val = rec.get("student_id") or rec.get("id", "Unknown")
                             info["submissions"].append({
                                 "submission_id": rec.get("id"),
@@ -329,6 +369,9 @@ def list_runs(runs_root: Path) -> list[dict]:
                                 "assignment_id": rec.get("assignment_id") or info.get("assignment_id"),
                                 "original_filename": rec.get("original_filename"),
                                 "upload_timestamp": rec.get("upload_timestamp") or info.get("created_at"),
+                                "status": rec.get("status"),
+                                "invalid": rec.get("invalid"),
+                                "error": rec.get("error") or rec.get("validation_error"),
                             })
                     except Exception:
                         pass
@@ -340,6 +383,8 @@ def list_runs(runs_root: Path) -> list[dict]:
                     "assignment_id": info.get("assignment_id"),
                     "original_filename": info.get("original_filename"),
                     "upload_timestamp": info.get("created_at"),
+                    "status": info.get("status"),
+                    "invalid": False,
                 }]
             elif info.get("mode") == "batch":
                 pending_submissions = info.get("pending_submissions", []) or []
@@ -352,6 +397,33 @@ def list_runs(runs_root: Path) -> list[dict]:
                     sub["student_name"] = sub.get("student_id") or "Unknown"
                 if not sub.get("student_id"):
                     sub["student_id"] = sub.get("student_name") or "Unknown"
+                if sub.get("invalid") is None:
+                    sub["invalid"] = False
+
+            if info.get("mode") == "batch" and batch_summary_data is not None and info.get("submissions"):
+                summary_by_id = {
+                    str(record.get("id") or ""): record
+                    for record in batch_summary_data.get("records", []) or []
+                    if str(record.get("id") or "")
+                }
+                for sub in info.get("submissions", []):
+                    record = summary_by_id.get(str(sub.get("submission_id") or ""))
+                    if not record:
+                        continue
+                    if not sub.get("status"):
+                        sub["status"] = record.get("status")
+                    if sub.get("invalid") is False and record.get("invalid") is True:
+                        sub["invalid"] = True
+                    if not sub.get("error"):
+                        sub["error"] = record.get("error") or record.get("validation_error")
+                    if not sub.get("assignment_id"):
+                        sub["assignment_id"] = record.get("assignment_id")
+
+            assignment_ids = _assignment_ids_from_submissions(info)
+            if assignment_ids:
+                info["_assignment_ids"] = assignment_ids
+                if len(assignment_ids) == 1 and str(info.get("assignment_id") or "").strip() not in assignment_ids:
+                    info["assignment_id"] = assignment_ids[0]
             runs.append(info)
     
     # Sort by run id (timestamp-based) descending

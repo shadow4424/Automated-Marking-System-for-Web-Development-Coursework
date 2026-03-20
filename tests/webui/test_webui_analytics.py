@@ -113,6 +113,28 @@ def _write_batch_run(
             },
         },
     )
+    _write_json(
+        run_dir / "run_index.json",
+        {
+            "run_id": run_id,
+            "mode": "batch",
+            "profile": "frontend",
+            "created_at": created_at,
+            "overall": None,
+            "status": "ok",
+            "submissions": [
+                {
+                    "submission_id": record["id"],
+                    "student_name": None,
+                    "student_id": record["student_id"],
+                    "assignment_id": record["assignment_id"],
+                    "original_filename": record["original_filename"],
+                    "upload_timestamp": record["upload_timestamp"],
+                }
+                for record in records
+            ],
+        },
+    )
     save_run_info(
         run_dir,
         {
@@ -121,6 +143,67 @@ def _write_batch_run(
             "profile": "frontend",
             "created_at": created_at,
             "assignment_id": assignment_id,
+            "status": "completed",
+            "summary": "batch_summary.json",
+        },
+    )
+
+
+def _write_invalid_batch_run(
+    runs_root: Path,
+    *,
+    run_assignment_id: str,
+    submission_assignment_id: str,
+    run_id: str,
+    created_at: str,
+    students: list[str],
+) -> None:
+    run_dir = runs_root / run_assignment_id / "batch" / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    records = []
+    for student_id in students:
+        submission_id = f"{student_id}_{submission_assignment_id}"
+        records.append(
+            {
+                "id": submission_id,
+                "student_id": student_id,
+                "assignment_id": submission_assignment_id,
+                "original_filename": f"{submission_id}.zip",
+                "upload_timestamp": created_at,
+                "overall": 0.0,
+                "components": {"html": None, "css": None, "js": None, "php": None, "sql": None},
+                "status": "invalid_assignment_id",
+                "invalid": True,
+                "validation_error": (
+                    f"Assignment ID '{submission_assignment_id}' does not match "
+                    f"the expected assignment '{run_assignment_id}'"
+                ),
+                "report_path": None,
+            }
+        )
+
+    _write_json(
+        run_dir / "batch_summary.json",
+        {
+            "records": records,
+            "summary": {
+                "total_submissions": len(records),
+                "succeeded": 0,
+                "failed": 0,
+                "invalid": len(records),
+                "profile": "frontend",
+            },
+        },
+    )
+    save_run_info(
+        run_dir,
+        {
+            "id": run_id,
+            "mode": "batch",
+            "profile": "frontend",
+            "created_at": created_at,
+            "assignment_id": run_assignment_id,
             "status": "completed",
             "summary": "batch_summary.json",
         },
@@ -369,6 +452,72 @@ def test_assignment_detail_has_single_analytics_entry_point(tmp_path: Path, monk
     assert b"Regenerate Analytics" not in response.data
 
 
+def test_assignment_detail_keeps_valid_submissions_visible_when_invalid_batch_exists(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _write_mark_run(
+        tmp_path,
+        assignment_id="assignment1",
+        student_id="student1",
+        run_id="20260319-090000_mark_frontend_student1",
+        created_at="2026-03-19T09:00:00Z",
+        score=0.67,
+    )
+    _write_mark_run(
+        tmp_path,
+        assignment_id="assignment1",
+        student_id="student2",
+        run_id="20260319-091500_mark_frontend_student2",
+        created_at="2026-03-19T09:15:00Z",
+        score=0.51,
+    )
+    _write_invalid_batch_run(
+        tmp_path,
+        run_assignment_id="Assignment1",
+        submission_assignment_id="assignment1",
+        run_id="20260320-100000_batch_frontend_invalid",
+        created_at="2026-03-20T10:00:00Z",
+        students=["student1", "student2"],
+    )
+
+    app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
+    client = app.test_client()
+    authenticate_client(client)
+
+    monkeypatch.setattr(
+        "ams.web.routes_teacher.get_assignment",
+        lambda assignment_id: {
+            "assignmentID": assignment_id,
+            "title": "Coursework 1",
+            "description": "Build a site",
+            "profile": "frontend",
+            "marks_released": False,
+            "assigned_students": ["student1", "student2"],
+            "due_date": "",
+            "teacherID": "admin123",
+        },
+    )
+    monkeypatch.setattr(
+        "ams.web.routes_teacher.get_user",
+        lambda student_id: {
+            "userID": student_id,
+            "firstName": student_id,
+            "lastName": "",
+            "email": f"{student_id}@example.com",
+        },
+    )
+    monkeypatch.setattr("ams.web.routes_teacher.list_users", lambda role=None: [])
+
+    response = client.get("/teacher/assignment/assignment1")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "No submissions yet" not in body
+    assert "student1" in body
+    assert "student2" in body
+
+
 def test_teaching_insights_json_falls_back_to_deterministic_copy_when_llm_output_is_invalid(
     tmp_path: Path,
     monkeypatch,
@@ -447,7 +596,13 @@ def test_teaching_insights_json_uses_llm_wording_by_default_when_provider_succee
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
+    app = create_app(
+        {
+            "TESTING": True,
+            "AMS_RUNS_ROOT": tmp_path,
+            "AMS_ENABLE_ANALYTICS_LLM_SUMMARY": True,
+        }
+    )
     client = app.test_client()
     authenticate_client(client)
 
@@ -506,6 +661,123 @@ def test_teaching_insights_json_uses_llm_wording_by_default_when_provider_succee
     payload = response.get_json()
     assert payload["source"] == "llm"
     assert payload["insights"][0]["text"] == "Every assigned student currently has an active submission in scope."
+
+
+def test_assignment_analytics_page_renders_llm_summary_when_provider_succeeds(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    app = create_app(
+        {
+            "TESTING": True,
+            "AMS_RUNS_ROOT": tmp_path,
+            "AMS_ENABLE_ANALYTICS_LLM_SUMMARY": True,
+        }
+    )
+    client = app.test_client()
+    authenticate_client(client)
+
+    monkeypatch.setattr(
+        "ams.web.routes_teacher.get_assignment",
+        lambda assignment_id: {
+            "assignmentID": assignment_id,
+            "title": "Coursework 1",
+            "profile": "frontend",
+            "marks_released": False,
+            "assigned_students": ["student1"],
+        },
+    )
+    monkeypatch.setattr(
+        "ams.web.routes_teacher.generate_assignment_analytics",
+        lambda *_args, **_kwargs: {
+            "generated_at": "2026-03-20T01:14:00Z",
+            "submission_count": 1,
+            "overall": {
+                "total": 1,
+                "mean": 0.67,
+                "median": 0.67,
+                "min": 0.67,
+                "max": 0.67,
+                "buckets": {
+                    "No attempt (0%)": 0,
+                    "Partial (1-50%)": 0,
+                    "Good partial (51-99%)": 1,
+                    "Full marks (100%)": 0,
+                },
+            },
+            "coverage": {
+                "assigned_students": 1,
+                "active_in_scope": 1,
+                "active_students": 1,
+                "missing_assigned": 0,
+                "missing_students": [],
+                "fully_evaluated": 1,
+                "partially_evaluated": 0,
+                "not_analysable": 0,
+                "inactive_or_superseded": 0,
+                "coverage_percent": 100,
+            },
+            "reliability": {
+                "fully_evaluated": 1,
+                "fully_evaluated_submissions": 1,
+                "partially_evaluated": 0,
+                "partially_evaluated_submissions": 0,
+                "not_analysable": 0,
+                "not_analysable_submissions": 0,
+                "manual_review": 0,
+                "manual_review_submissions": 0,
+                "limitation_incidents": 0,
+                "limitation_categories": 0,
+                "limitation_breakdown": [],
+                "confidence": {"high": 1, "medium": 0, "low": 0},
+            },
+            "components": [],
+            "needs_attention": [],
+            "signals": [],
+            "top_failing_rules": [],
+            "requirement_coverage": [],
+            "score_composition": [],
+            "teaching_insights": [
+                {
+                    "insight_type": "coverage",
+                    "priority": "low",
+                    "text": "All assigned students currently have an active submission in scope.",
+                    "supporting_metric_keys": ["assigned_students", "active_in_scope"],
+                }
+            ],
+            "teaching_insight_context": {
+                "assignment_id": "assignment1",
+                "assigned_students": 1,
+                "active_in_scope": 1,
+            },
+        },
+    )
+
+    class FakeProvider:
+        model_name = "fake"
+
+        def complete(self, *args, **kwargs):
+            return SimpleNamespace(
+                content=json.dumps(
+                    {
+                        "insights": [
+                            {
+                                "text": "Every assigned student currently has an active submission in scope."
+                            }
+                        ]
+                    }
+                ),
+                success=True,
+                error=None,
+            )
+
+    monkeypatch.setattr("ams.web.routes_teacher.get_llm_provider", lambda: FakeProvider())
+
+    response = client.get("/teacher/assignment/assignment1/analytics")
+
+    assert response.status_code == 200
+    assert b"Every assigned student currently has an active submission in scope." in response.data
+    assert b"LLM-enhanced wording" in response.data
 
 
 def test_assignment_analytics_rule_export_respects_rule_filters(tmp_path: Path, monkeypatch) -> None:

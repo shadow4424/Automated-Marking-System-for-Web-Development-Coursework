@@ -70,6 +70,15 @@ def _format_freshness_label(value: str | None) -> tuple[str, str]:
     return f"Updated {exact}", exact
 
 
+def _submission_matches_assignment(submission: Mapping[str, Any], assignment_id: str) -> bool:
+    if submission.get("invalid") is True:
+        return False
+    status = str(submission.get("status") or "").strip().lower()
+    if status.startswith("invalid"):
+        return False
+    return str(submission.get("assignment_id") or "").strip() == assignment_id
+
+
 def _filtered_needs_attention_rows(analytics: dict, args) -> list[dict]:
     rows = list(analytics.get("needs_attention", []) or [])
     severity = str(args.get("severity", "")).strip().lower()
@@ -228,6 +237,8 @@ def _validate_enhanced_teaching_insights(
 
 
 def _llm_summary_enabled() -> bool:
+    if current_app.testing and "AMS_ENABLE_ANALYTICS_LLM_SUMMARY" not in current_app.config:
+        return False
     value = current_app.config.get("AMS_ENABLE_ANALYTICS_LLM_SUMMARY", True)
     if isinstance(value, str):
         return value.strip().lower() not in {"0", "false", "no", "off"}
@@ -355,12 +366,16 @@ def assignment_detail(assignment_id: str):
 
     runs_root = get_runs_root(current_app)
     all_runs = list_runs(runs_root)
-    assignment_runs_raw = [run for run in all_runs if run.get("assignment_id") == assignment_id]
-
     assignment_runs = []
-    for run in assignment_runs_raw:
-        if run.get("mode") == "batch" and run.get("submissions"):
-            for submission in run.get("submissions", []):
+    for run in all_runs:
+        matching_submissions = [
+            submission
+            for submission in list(run.get("submissions", []) or [])
+            if _submission_matches_assignment(submission, assignment_id)
+        ]
+
+        if run.get("mode") == "batch":
+            for submission in matching_submissions:
                 submission_row = dict(run)
                 submission_row["student_id"] = submission.get("student_id") or submission.get("student_name") or "Unknown"
                 submission_row["_batch_submission_id"] = (
@@ -368,8 +383,11 @@ def assignment_detail(assignment_id: str):
                     or submission.get("student_id")
                     or submission.get("student_name")
                 )
+                submission_row["_submission_record"] = submission
                 assignment_runs.append(submission_row)
-        else:
+            continue
+
+        if str(run.get("assignment_id") or "").strip() == assignment_id or matching_submissions:
             assignment_runs.append(run)
 
     return render_template(
@@ -419,11 +437,14 @@ def view_analytics(assignment_id: str):
     missing_count = int(coverage.get("missing_assigned") or max(assigned_count - submitted_count, 0))
     coverage_percent = int(coverage.get("coverage_percent") or (round((submitted_count / assigned_count) * 100) if assigned_count else 0))
     updated_label, updated_exact = _format_freshness_label(analytics.get("generated_at"))
+    teaching_insights, teaching_summary_source = _maybe_enhance_teaching_insights(analytics)
 
     return render_template(
         "assignment_analytics.html",
         assignment=assignment,
         analytics=analytics,
+        teaching_insights=teaching_insights,
+        teaching_summary_source=teaching_summary_source,
         assigned_count=assigned_count,
         submitted_count=submitted_count,
         missing_count=missing_count,

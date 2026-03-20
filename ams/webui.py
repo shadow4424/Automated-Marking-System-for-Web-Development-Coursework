@@ -1901,6 +1901,9 @@ def _write_run_index_batch(run_dir: Path, run_info: dict) -> None:
             "assignment_id": rec.get("assignment_id"),
             "original_filename": rec.get("original_filename"),
             "upload_timestamp": rec.get("upload_timestamp"),
+            "status": rec.get("status"),
+            "invalid": bool(rec.get("invalid")),
+            "error": rec.get("error") or rec.get("validation_error"),
         }
         rpath = rec.get("report_path")
         if rpath and Path(rpath).exists():

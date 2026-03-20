@@ -15,7 +15,7 @@
 {% set top_rules = analytics.top_failing_rules|default([], true) %}
 {% set requirements = analytics.requirement_coverage|default([], true) %}
 {% set score_composition = analytics.score_composition|default([], true) %}
-{% set insights = analytics.teaching_insights|default([], true) %}
+{% set insights = teaching_insights|default(analytics.teaching_insights|default([], true), true) %}
 {% set small_cohort = analytics.small_cohort|default({}, true) %}
 {% set small_cohort_enabled = small_cohort.enabled|default(false, true) %}
 {% set has_submissions = submitted_count > 0 %}
@@ -486,7 +486,7 @@
                 <h2 class="card-title">Teaching insight summary</h2>
                 <p class="analytics-section-note">Short assignment results summary</p>
             </div>
-            <span id="teaching-summary-status" class="badge badge-secondary">{% if llm_summary_enabled %}Enhancing wording...{% else %}Deterministic wording{% endif %}</span>
+            <span id="teaching-summary-status" class="badge badge-secondary">{% if teaching_summary_source|default('deterministic', true) == 'llm' %}LLM-enhanced wording{% elif llm_summary_enabled %}Deterministic wording{% else %}Deterministic wording{% endif %}</span>
         </div>
         {% if insights %}
         <ol id="teaching-summary-list" class="analytics-summary-list">
@@ -1215,10 +1215,6 @@
         var toggleRules = document.getElementById('toggle-rules');
         var toggleSignals = document.getElementById('toggle-signals');
         var rulesNoResults = document.getElementById('rules-no-results');
-        var summaryList = document.getElementById('teaching-summary-list');
-        var summaryStatus = document.getElementById('teaching-summary-status');
-        var summaryEndpoint = {{ url_for('teacher.teaching_insights_json', assignment_id=assignment.assignmentID)|tojson }};
-        var llmSummaryEnabled = {{ 'true' if llm_summary_enabled else 'false' }};
         var attentionState = { signalLabel: '', signalRules: [], signalStudents: [] };
         var showAllRules = false;
         var showAllSignals = false;
@@ -1460,33 +1456,10 @@
             });
         }
 
-        function enhanceTeachingSummary() {
-            if (llmSummaryEnabled !== true || !summaryList || !summaryEndpoint || !window.fetch) return;
-            window.fetch(summaryEndpoint, { headers: { 'Accept': 'application/json' } })
-                .then(function (response) {
-                    if (!response.ok) throw new Error('Teaching summary enhancement failed');
-                    return response.json();
-                })
-                .then(function (payload) {
-                    if (!payload || !Array.isArray(payload.insights) || !payload.insights.length) return;
-                    var items = Array.prototype.slice.call(summaryList.querySelectorAll('li'));
-                    payload.insights.forEach(function (insight, index) {
-                        if (!items[index] || !insight || !insight.text) return;
-                        var priority = insight.priority ? String(insight.priority) : 'medium';
-                        items[index].innerHTML = '<strong>' + priority.charAt(0).toUpperCase() + priority.slice(1) + ' priority:</strong> ' + insight.text;
-                    });
-                    if (summaryStatus) summaryStatus.textContent = payload.source === 'llm' ? 'LLM-enhanced wording' : 'Deterministic wording';
-                })
-                .catch(function () {
-                    if (summaryStatus) summaryStatus.textContent = 'Deterministic wording';
-                });
-        }
-
         renderAttention();
         renderRuleRows();
         renderSignalCards();
         updateRulesExportLink();
-        enhanceTeachingSummary();
     }());
 </script>
 {% endblock %}

@@ -161,6 +161,7 @@ def _count_run_submissions(run_dir: Path, run_info: Mapping[str, object], assign
             1
             for entry in summary_data.get("records", []) or []
             if str(entry.get("assignment_id") or run_info.get("assignment_id") or "") == assignment_id
+            and _batch_entry_is_active(entry)
         )
 
     pending = run_info.get("pending_submissions", []) or []
@@ -197,6 +198,12 @@ def _normalize_submission_status(value: object) -> str:
     if status in {"pending", "queued", "running"}:
         return "pending"
     return status
+
+
+def _batch_entry_is_active(entry: Mapping[str, object]) -> bool:
+    if entry.get("invalid") is True:
+        return False
+    return not _normalize_submission_status(entry.get("status")).startswith("invalid")
 
 
 def _record_from_mark_run(run_dir: Path, run_info: Mapping[str, object], assignment_id: str) -> dict | None:
@@ -272,6 +279,8 @@ def _records_from_submission_batch(run_dir: Path, run_info: Mapping[str, object]
     for entry in summary_data.get("records", []) or []:
         entry_assignment_id = str(entry.get("assignment_id") or run_info.get("assignment_id") or "")
         if entry_assignment_id != assignment_id:
+            continue
+        if not _batch_entry_is_active(entry):
             continue
         student_id = str(entry.get("student_id") or "").strip()
         if not student_id:

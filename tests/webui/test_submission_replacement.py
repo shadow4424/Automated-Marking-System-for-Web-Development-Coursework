@@ -129,6 +129,79 @@ def _make_batch_run(
     return run_dir
 
 
+def _make_invalid_batch_run(
+    runs_root: Path,
+    *,
+    run_id: str,
+    created_at: str,
+    run_assignment_id: str,
+    submission_assignment_id: str,
+    students: list[str],
+) -> Path:
+    run_dir = runs_root / run_assignment_id / "batch" / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    records = []
+    for student_id in students:
+        submission_id = f"{student_id}_{submission_assignment_id}"
+        records.append(
+            {
+                "id": submission_id,
+                "student_id": student_id,
+                "assignment_id": submission_assignment_id,
+                "original_filename": f"{submission_id}.zip",
+                "upload_timestamp": created_at,
+                "overall": 0.0,
+                "components": _components(0.0),
+                "status": "invalid_assignment_id",
+                "invalid": True,
+                "validation_error": (
+                    f"Assignment ID '{submission_assignment_id}' does not match "
+                    f"the expected assignment '{run_assignment_id}'"
+                ),
+                "report_path": None,
+            }
+        )
+
+    summary = aggregate_batch(records, {}, Counter({"InvalidAssignmentId": len(students)}), profile="frontend")
+    _write_json(run_dir / "batch_summary.json", {"records": records, "summary": summary})
+    _write_json(
+        run_dir / "run_index.json",
+        {
+            "run_id": run_id,
+            "mode": "batch",
+            "profile": "frontend",
+            "created_at": created_at,
+            "overall": None,
+            "status": "ok",
+            "submissions": [
+                {
+                    "submission_id": record["id"],
+                    "student_name": None,
+                    "student_id": record["student_id"],
+                    "assignment_id": record["assignment_id"],
+                    "original_filename": record["original_filename"],
+                    "upload_timestamp": record["upload_timestamp"],
+                }
+                for record in records
+            ],
+        },
+    )
+
+    run_info = {
+        "id": run_id,
+        "mode": "batch",
+        "profile": "frontend",
+        "created_at": created_at,
+        "assignment_id": run_assignment_id,
+        "status": "completed",
+        "summary": "batch_summary.json",
+        "batch_summary": {"records": records, "summary": summary},
+    }
+    save_run_info(run_dir, run_info)
+    _write_run_index_batch(run_dir, run_info)
+    return run_dir
+
+
 def test_list_runs_keeps_latest_submission_per_student_and_assignment(tmp_path: Path) -> None:
     _make_mark_run(
         tmp_path,
@@ -148,6 +221,37 @@ def test_list_runs_keeps_latest_submission_per_student_and_assignment(tmp_path: 
     runs = list_runs(tmp_path)
 
     assert [run["id"] for run in runs] == ["20260319-100000_mark_frontend_new"]
+
+
+def test_list_runs_does_not_let_invalid_batch_hide_valid_submissions(tmp_path: Path) -> None:
+    _make_mark_run(
+        tmp_path,
+        run_id="20260319-090000_mark_frontend_student1",
+        created_at="2026-03-19T09:00:00Z",
+        student_id="student1",
+        assignment_id="assignment1",
+    )
+    _make_mark_run(
+        tmp_path,
+        run_id="20260319-091500_mark_frontend_student2",
+        created_at="2026-03-19T09:15:00Z",
+        student_id="student2",
+        assignment_id="assignment1",
+    )
+    _make_invalid_batch_run(
+        tmp_path,
+        run_id="20260320-100000_batch_frontend_invalid",
+        created_at="2026-03-20T10:00:00Z",
+        run_assignment_id="Assignment1",
+        submission_assignment_id="assignment1",
+        students=["student1", "student2"],
+    )
+
+    runs = list_runs(tmp_path)
+
+    visible = {(run.get("assignment_id"), run.get("student_id")) for run in runs if run.get("mode") == "mark"}
+    assert ("assignment1", "student1") in visible
+    assert ("assignment1", "student2") in visible
 
 
 def test_replace_existing_submissions_prunes_old_batch_record(tmp_path: Path) -> None:
