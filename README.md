@@ -136,5 +136,7 @@ Useful if package dependencies have changed.
 ```
 
 **5. Client Code For GitHub Integration:**
-Client ID - Iv23lirU52ENG3gWfdVe
-Client Secret - 06c9d1271b4eb1cc1d92d04f4e7c6fd533e9cb05
+```bash
+export AMS_GITHUB_CLIENT_ID="Iv23lirU52ENG3gWfdVe"
+export AMS_GITHUB_CLIENT_SECRET="06c9d1271b4eb1cc1d92d04f4e7c6fd533e9cb05"
+```bash
