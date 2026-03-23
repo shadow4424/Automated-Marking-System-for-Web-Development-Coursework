@@ -15,7 +15,6 @@ import logging
 import shutil
 import tempfile
 import zipfile
-from collections import Counter
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -68,7 +67,7 @@ from ams.io.web_storage import (
     validate_file_type,
 )
 from ams.web.helpers import validate_is_zipfile
-from ams.tools.batch import aggregate_batch, discover_batch_items, run_batch, validate_submission_filename, write_outputs
+from ams.tools.batch import discover_batch_items, run_batch, validate_submission_filename, write_outputs
 from ams.core.job_manager import job_manager
 
 logger = logging.getLogger(__name__)
@@ -79,10 +78,6 @@ ALLOWED_DOWNLOADS = {
     "summary.txt",
     "batch_summary.json",
     "batch_summary.csv",
-    "findings_frequency.csv",
-    "failure_reasons_frequency.csv",
-    "score_buckets.csv",
-    "component_means.csv",
     "batch_reports",
     "runtime_health_",
     "evaluation_summary",
@@ -288,60 +283,16 @@ def _batch_report_path(run_dir: Path, record: Mapping[str, object]) -> Path | No
     return None
 
 
-def _collect_batch_stats(run_dir: Path, records: list[dict]) -> tuple[dict[str, dict[str, object]], Counter[str]]:
-    finding_stats: dict[str, dict[str, object]] = {}
-    failure_reason_counts: Counter[str] = Counter()
-
-    for record in records:
-        failure_label = str(
-            record.get("validation_error")
-            or record.get("error")
-            or record.get("status")
-            or ""
-        ).strip()
-        if failure_label and failure_label.lower() != "ok":
-            failure_reason_counts[failure_label[:80]] += 1
-
-        report_path = _batch_report_path(run_dir, record)
-        if report_path is None:
-            continue
-
-        try:
-            report = json.loads(report_path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-
-        seen_finding_ids: set[str] = set()
-        for finding in report.get("findings", []) or []:
-            finding_id = finding.get("id")
-            if not finding_id:
-                continue
-            stats = finding_stats.setdefault(
-                finding_id,
-                {"event_count": 0, "affected_submissions": set()},
-            )
-            stats["event_count"] = int(stats.get("event_count", 0)) + 1
-            seen_finding_ids.add(finding_id)
-
-        submission_id = str(record.get("id") or "")
-        for finding_id in seen_finding_ids:
-            finding_stats[finding_id]["affected_submissions"].add(submission_id)
-
-    return finding_stats, failure_reason_counts
-
-
 def _rebuild_batch_outputs(run_dir: Path, run_info: dict, records: list[dict]) -> None:
     if not records:
         shutil.rmtree(run_dir, ignore_errors=True)
         return
 
     profile = run_info.get("profile", "frontend")
-    finding_stats, failure_reason_counts = _collect_batch_stats(run_dir, records)
-    summary = aggregate_batch(records, finding_stats, failure_reason_counts, profile=profile)
-    write_outputs(run_dir, records, summary, finding_stats, profile=profile)
+    write_outputs(run_dir, records, profile=profile)
 
     updated_run_info = dict(run_info)
-    updated_run_info["batch_summary"] = {"records": records, "summary": summary}
+    updated_run_info["batch_summary"] = {"records": records}
     save_run_info(run_dir, updated_run_info)
     _write_run_index_batch(run_dir, updated_run_info)
 
@@ -451,13 +402,18 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
         app.config["SECRET_KEY"] = secrets.token_hex(32)
     app.secret_key = app.config["SECRET_KEY"]
     
-    # Cleanup old workspaces on startup (prevents disk bloat)
-    try:
-        from ams.io.workspace import cleanup_old_runs
-        cleanup_old_runs()
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Workspace cleanup failed: {e}")
+    # Web runs are persisted submission records, so startup cleanup must be opt-in.
+    if app.config.get("AMS_ENABLE_STARTUP_RUN_CLEANUP", False):
+        try:
+            from ams.io.workspace import WorkspaceManager
+
+            max_age_hours = app.config.get("AMS_STARTUP_RUN_MAX_AGE_HOURS")
+            WorkspaceManager(get_runs_root(app)).cleanup_old_runs(
+                max_age_hours=int(max_age_hours) if max_age_hours is not None else None
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Workspace cleanup failed: {e}")
     
     # Register Jinja filters
     app.jinja_env.filters["clean_path"] = _clean_path
@@ -1048,7 +1004,7 @@ def _register_routes(app: Flask) -> None:
             def _run_batch_job() -> dict:
                 """Executed in the thread pool."""
                 try:
-                    summary = run_batch(
+                    batch_data = run_batch(
                         submissions_dir=extracted,
                         out_root=run_dir,
                         profile=profile,
@@ -1063,7 +1019,7 @@ def _register_routes(app: Flask) -> None:
                         "scoring_mode": scoring_mode.value,
                         "created_at": initial_run_info["created_at"],
                         "summary": "batch_summary.json",
-                        "batch_summary": summary,
+                        "batch_summary": batch_data,
                         "assignment_id": assignment_id,
                         "original_filename": original_filename,
                         "source": "github" if using_github else "upload",
@@ -1158,6 +1114,537 @@ def _register_routes(app: Flask) -> None:
         flash(f"Run '{run_id[:24]}…' deleted.", "success")
         return redirect(url_for("runs"))
 
+    def _assignment_has_unresolved_threats(assignment_id: str) -> bool:
+        for run in list_runs(get_runs_root(app)):
+            if run.get("mode") == "batch":
+                for submission in list(run.get("submissions", []) or []):
+                    if str(submission.get("assignment_id") or "").strip() != assignment_id:
+                        continue
+                    if submission.get("invalid") is True:
+                        continue
+                    if str(submission.get("status") or "").strip().lower().startswith("invalid"):
+                        continue
+                    if submission.get("threat_flagged") or submission.get("threat_count"):
+                        return True
+                continue
+            if str(run.get("assignment_id") or "").strip() == assignment_id and run.get("threat_flagged"):
+                return True
+        return False
+
+    def _flash_assignment_threat_state(assignment_id: str, resolved_message: str) -> None:
+        flash(resolved_message, "success")
+        if _assignment_has_unresolved_threats(assignment_id):
+            flash(
+                "Other threat-flagged submissions still need attention before grades can be released.",
+                "warning",
+            )
+        else:
+            flash("No threat-flagged submissions remain. Grades can now be released.", "success")
+
+    def _load_batch_summary_records(run_dir: Path) -> dict | None:
+        summary_path = run_dir / "batch_summary.json"
+        if not summary_path.exists():
+            return None
+        try:
+            batch_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        if not isinstance(batch_summary, dict):
+            return None
+        records = batch_summary.get("records", []) or []
+        if not isinstance(records, list):
+            return None
+        batch_summary["records"] = list(records)
+        return batch_summary
+
+    def _persist_batch_outputs(run_dir: Path, run_info: dict, records: list[dict]) -> dict:
+        profile = str(run_info.get("profile") or "frontend")
+        write_outputs(run_dir, records, profile=profile)
+        updated_batch_summary = _load_batch_summary_records(run_dir) or {"records": list(records)}
+        updated_run_info = dict(run_info)
+        updated_run_info["batch_summary"] = updated_batch_summary
+        updated_run_info["summary"] = "batch_summary.json"
+        save_run_info(run_dir, updated_run_info)
+        _write_run_index_batch(run_dir, updated_run_info)
+        _write_batch_reports_zip(run_dir, profile, str(updated_run_info.get("id") or run_dir.name))
+        return updated_run_info
+
+    def _safe_delete_within_run(run_dir: Path, candidate: Path | str | None) -> None:
+        if not candidate:
+            return
+        path = Path(candidate)
+        if not path.is_absolute():
+            path = (Path.cwd() / path).resolve()
+        else:
+            path = path.resolve()
+        try:
+            path.relative_to(run_dir.resolve())
+        except Exception:
+            return
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+        elif path.exists():
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+
+    def _rerun_timestamp(value: object) -> datetime:
+        text = str(value or "").strip()
+        if text:
+            try:
+                return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(timezone.utc)
+            except ValueError:
+                pass
+        return datetime.now(timezone.utc)
+
+    def _build_rerun_metadata(
+        *,
+        student_id: object,
+        assignment_id: object,
+        original_filename: object,
+        timestamp: object,
+        source: object = "",
+        github_repo: object = "",
+    ) -> dict:
+        uploader_extra: dict[str, str] = {}
+        if str(source or "").strip():
+            uploader_extra["source"] = str(source)
+        if str(github_repo or "").strip():
+            uploader_extra["github_repo"] = str(github_repo)
+        metadata = SubmissionMetadata(
+            student_id=MetadataValidator.sanitize_identifier(str(student_id or "unknown")),
+            assignment_id=MetadataValidator.sanitize_identifier(str(assignment_id or "unknown_assignment")),
+            timestamp=_rerun_timestamp(timestamp),
+            original_filename=MetadataValidator.sanitize_filename(str(original_filename or "submission.zip")),
+            uploader_metadata=uploader_extra,
+        )
+        return metadata.to_dict()
+
+    def _build_pipeline(run_info: Mapping[str, object]) -> AssessmentPipeline:
+        scoring_mode_str = str(run_info.get("scoring_mode") or "static_plus_llm")
+        try:
+            scoring_mode = ScoringMode(scoring_mode_str)
+        except ValueError:
+            scoring_mode = ScoringMode("static_plus_llm")
+        return AssessmentPipeline(scoring_mode=scoring_mode)
+
+    def _clear_rerun_outputs(workspace_path: Path) -> None:
+        for filename in ("report.json", "report.html", "summary.txt"):
+            _safe_delete_within_run(workspace_path, workspace_path / filename)
+        for dirname in ("artifacts", "evaluation", "reports"):
+            _safe_delete_within_run(workspace_path, workspace_path / dirname)
+
+    def _prepare_source_tree(source_root: Path, staging_root: Path) -> Path:
+        if staging_root.exists():
+            shutil.rmtree(staging_root, ignore_errors=True)
+        shutil.copytree(source_root, staging_root, dirs_exist_ok=True)
+        return find_submission_root(staging_root)
+
+    def _prepare_zip_source(zip_path: Path, extract_root: Path) -> Path:
+        if extract_root.exists():
+            shutil.rmtree(extract_root, ignore_errors=True)
+        extract_root.mkdir(parents=True, exist_ok=True)
+        safe_extract_zip(zip_path, extract_root, max_size_mb=MAX_UPLOAD_MB)
+        return find_submission_root(extract_root)
+
+    def _resolve_mark_rerun_source(run_dir: Path, run_info: Mapping[str, object]) -> Path:
+        uploaded_extract = run_dir / "uploaded_extract"
+        if uploaded_extract.exists():
+            return find_submission_root(uploaded_extract)
+
+        original_filename = str(run_info.get("original_filename") or "").strip()
+        if original_filename:
+            upload_zip = run_dir / original_filename
+            if upload_zip.exists():
+                return _prepare_zip_source(upload_zip, run_dir / "rerun_source")
+
+        zip_candidates = list(run_dir.glob("*.zip"))
+        if zip_candidates:
+            return _prepare_zip_source(zip_candidates[0], run_dir / "rerun_source")
+
+        submission_root = run_dir / "submission"
+        if submission_root.exists():
+            return _prepare_source_tree(submission_root, run_dir / "rerun_source")
+
+        raise FileNotFoundError("Stored submission content is unavailable.")
+
+    def _resolve_batch_rerun_source(run_dir: Path, submission_id: str, record: Mapping[str, object]) -> tuple[Path, Path]:
+        submission_dir = run_dir / "runs" / submission_id
+        extracted_dir = submission_dir / "extracted"
+        if extracted_dir.exists():
+            return submission_dir, find_submission_root(extracted_dir)
+
+        source_value = str(record.get("path") or "").strip()
+        if source_value:
+            source_path = Path(source_value)
+            if not source_path.is_absolute():
+                source_path = (Path.cwd() / source_path).resolve()
+            else:
+                source_path = source_path.resolve()
+            if source_path.is_file():
+                return submission_dir, _prepare_zip_source(source_path, submission_dir / "rerun_source")
+            if source_path.is_dir():
+                return submission_dir, _prepare_source_tree(source_path, submission_dir / "rerun_source")
+
+        submission_root = submission_dir / "submission"
+        if submission_root.exists():
+            return submission_dir, _prepare_source_tree(submission_root, submission_dir / "rerun_source")
+
+        raise FileNotFoundError("Stored submission content is unavailable.")
+
+    def _apply_batch_report(record: dict, report_path: Path, report: Mapping[str, object], assignment_id: str) -> None:
+        meta = report.get("metadata", {}) or {}
+        submission_meta = meta.get("submission_metadata", {}) or {}
+        scores = report.get("scores", {}) or {}
+        findings = report.get("findings", []) or []
+        by_component = scores.get("by_component", {}) or {}
+
+        record["report_path"] = str(report_path)
+        record["student_id"] = submission_meta.get("student_id") or record.get("student_id")
+        record["assignment_id"] = submission_meta.get("assignment_id") or record.get("assignment_id") or assignment_id
+        record["original_filename"] = submission_meta.get("original_filename") or record.get("original_filename")
+        record["overall"] = scores.get("overall")
+        record["components"] = {
+            component: ((by_component.get(component) or {}).get("score"))
+            for component in ("html", "css", "js", "php", "sql")
+        }
+        record["status"] = "ok"
+        record["rerun_pending"] = False
+        record["invalid"] = False
+        record.pop("error", None)
+        record.pop("validation_error", None)
+
+        threat_count = sum(1 for finding in findings if finding.get("severity") == "THREAT")
+        if threat_count:
+            record["threat_count"] = threat_count
+            record["threat_flagged"] = True
+        else:
+            record.pop("threat_count", None)
+            record["threat_flagged"] = False
+
+    def _rerun_mark_submission(run_dir: Path, run_info: Mapping[str, object]) -> dict:
+        submission_source = _resolve_mark_rerun_source(run_dir, run_info)
+        metadata = _build_rerun_metadata(
+            student_id=run_info.get("student_id"),
+            assignment_id=run_info.get("assignment_id"),
+            original_filename=run_info.get("original_filename"),
+            timestamp=run_info.get("created_at"),
+            source=run_info.get("source"),
+            github_repo=run_info.get("github_repo"),
+        )
+        _clear_rerun_outputs(run_dir)
+        try:
+            report_path = _build_pipeline(run_info).run(
+                submission_path=submission_source,
+                workspace_path=run_dir,
+                profile=str(run_info.get("profile") or "frontend"),
+                metadata=metadata,
+                skip_threat_scan=True,
+            )
+        except Exception as exc:
+            failed_run_info = dict(run_info)
+            failed_run_info["status"] = "failed"
+            failed_run_info["error"] = str(exc)
+            failed_run_info["last_rerun_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            failed_run_info.pop("rerun_pending", None)
+            save_run_info(run_dir, failed_run_info)
+            raise
+        updated_run_info = dict(run_info)
+        updated_run_info["report"] = report_path.name
+        updated_run_info["summary"] = "summary.txt"
+        updated_run_info["status"] = "completed"
+        updated_run_info["last_rerun_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        updated_run_info.pop("rerun_pending", None)
+        updated_run_info.pop("error", None)
+        updated_run_info.pop("threat_override", None)
+        updated_run_info.pop("threat_override_at", None)
+        save_run_info(run_dir, updated_run_info)
+        _write_run_index_mark(run_dir, updated_run_info, report_path)
+        return updated_run_info
+
+    def _rerun_batch_submission(run_dir: Path, run_info: Mapping[str, object], submission_id: str) -> dict:
+        batch_summary = _load_batch_summary_records(run_dir)
+        if batch_summary is None:
+            raise FileNotFoundError("Batch summary could not be loaded.")
+        records = list(batch_summary.get("records", []) or [])
+        target = next((record for record in records if str(record.get("id") or "") == submission_id), None)
+        if target is None:
+            raise FileNotFoundError("Batch submission record not found.")
+
+        submission_dir, submission_source = _resolve_batch_rerun_source(run_dir, submission_id, target)
+        metadata = _build_rerun_metadata(
+            student_id=target.get("student_id"),
+            assignment_id=target.get("assignment_id") or run_info.get("assignment_id"),
+            original_filename=target.get("original_filename"),
+            timestamp=target.get("upload_timestamp") or run_info.get("created_at"),
+            source=run_info.get("source"),
+            github_repo=run_info.get("github_repo"),
+        )
+        _clear_rerun_outputs(submission_dir)
+        try:
+            report_path = _build_pipeline(run_info).run(
+                submission_path=submission_source,
+                workspace_path=submission_dir,
+                profile=str(run_info.get("profile") or "frontend"),
+                metadata=metadata,
+                skip_threat_scan=True,
+            )
+        except Exception as exc:
+            target["report_path"] = None
+            target["status"] = "error"
+            target["rerun_pending"] = False
+            target["overall"] = None
+            target["components"] = {
+                component: None for component in ("html", "css", "js", "php", "sql")
+            }
+            target["error"] = str(exc)
+            target["invalid"] = False
+            failed_run_info = dict(run_info)
+            failed_run_info["status"] = "failed"
+            failed_run_info["last_rerun_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            _persist_batch_outputs(run_dir, failed_run_info, records)
+            raise
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        _apply_batch_report(target, report_path, report, str(run_info.get("assignment_id") or ""))
+        updated_run_info = dict(run_info)
+        updated_run_info["status"] = "completed"
+        updated_run_info["last_rerun_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        updated_run_info.pop("error", None)
+        updated_run_info = _persist_batch_outputs(run_dir, updated_run_info, records)
+        save_run_info(run_dir, updated_run_info)
+        return target
+
+    def _is_async_job_request() -> bool:
+        return request.headers.get("X-AMS-Async") == "1"
+
+    def _build_rerun_job_response(
+        *,
+        job_id: str,
+        run_id: str,
+        label: str,
+        assignment_id: str,
+        view_url: str,
+        refresh_url: str,
+    ):
+        payload = {
+            "job_id": job_id,
+            "status": "accepted",
+            "run_id": run_id,
+            "assignment_id": assignment_id,
+            "label": label,
+            "view_url": view_url,
+            "refresh_url": refresh_url,
+        }
+        if _is_async_job_request():
+            return jsonify(payload), 202
+        flash(f"{label} queued. The submission will update when background processing finishes.", "success")
+        return redirect(refresh_url)
+
+    def _queue_mark_submission_rerun(
+        run_dir: Path,
+        run_info: Mapping[str, object],
+        *,
+        view_url: str,
+        refresh_url: str,
+    ):
+        current_status = str(run_info.get("status") or "").strip().lower()
+        if current_status == "pending":
+            raise RuntimeError("Submission is already queued for rerun.")
+
+        queued_run_info = dict(run_info)
+        if "threat_flagged" not in queued_run_info:
+            report_path = run_dir / str(run_info.get("report") or "report.json")
+            if report_path.exists():
+                try:
+                    report = json.loads(report_path.read_text(encoding="utf-8"))
+                    findings = report.get("findings", []) or []
+                    meta = report.get("metadata", {}) or {}
+                    queued_run_info["threat_flagged"] = any(
+                        finding.get("severity") == "THREAT" for finding in findings
+                    ) and not meta.get("threat_override", False)
+                except Exception:
+                    pass
+        queued_run_info["status"] = "pending"
+        queued_run_info["rerun_pending"] = True
+        queued_run_info["last_rerun_requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        queued_run_info.pop("error", None)
+        save_run_info(run_dir, queued_run_info)
+
+        def _run_mark_rerun_job() -> dict:
+            updated = _rerun_mark_submission(run_dir, queued_run_info)
+            return {
+                "run_id": str(updated.get("id") or run_dir.name),
+                "assignment_id": str(updated.get("assignment_id") or ""),
+                "view_url": view_url,
+                "refresh_url": refresh_url,
+            }
+
+        job_id = job_manager.submit_job("submission_rerun", _run_mark_rerun_job)
+        assignment_id = str(queued_run_info.get("assignment_id") or "")
+        label = f"Rerun: {queued_run_info.get('student_id') or run_dir.name}"
+        return _build_rerun_job_response(
+            job_id=job_id,
+            run_id=str(queued_run_info.get("id") or run_dir.name),
+            label=label,
+            assignment_id=assignment_id,
+            view_url=view_url,
+            refresh_url=refresh_url,
+        )
+
+    def _queue_batch_submission_rerun(
+        run_dir: Path,
+        run_info: Mapping[str, object],
+        submission_id: str,
+        *,
+        view_url: str,
+        refresh_url: str,
+    ):
+        batch_summary = _load_batch_summary_records(run_dir)
+        if batch_summary is None:
+            raise FileNotFoundError("Batch summary could not be loaded.")
+
+        records = list(batch_summary.get("records", []) or [])
+        target = next((record for record in records if str(record.get("id") or "") == submission_id), None)
+        if target is None:
+            raise FileNotFoundError("Batch submission record not found.")
+        if str(target.get("status") or "").strip().lower() == "pending":
+            raise RuntimeError("Submission is already queued for rerun.")
+
+        target["status"] = "pending"
+        target["rerun_pending"] = True
+        target["overall"] = None
+        target["components"] = {
+            component: None for component in ("html", "css", "js", "php", "sql")
+        }
+        target.pop("error", None)
+        target.pop("validation_error", None)
+
+        queued_run_info = dict(run_info)
+        queued_run_info["status"] = "pending"
+        queued_run_info["last_rerun_requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        queued_run_info.pop("error", None)
+        _persist_batch_outputs(run_dir, queued_run_info, records)
+
+        def _run_batch_rerun_job() -> dict:
+            updated = _rerun_batch_submission(run_dir, queued_run_info, submission_id)
+            return {
+                "run_id": str(queued_run_info.get("id") or run_dir.name),
+                "submission_id": submission_id,
+                "assignment_id": str(updated.get("assignment_id") or queued_run_info.get("assignment_id") or ""),
+                "student_id": str(updated.get("student_id") or submission_id),
+                "view_url": view_url,
+                "refresh_url": refresh_url,
+            }
+
+        job_id = job_manager.submit_job("submission_rerun", _run_batch_rerun_job)
+        assignment_id = str(target.get("assignment_id") or queued_run_info.get("assignment_id") or "")
+        label = f"Rerun: {target.get('student_id') or submission_id}"
+        return _build_rerun_job_response(
+            job_id=job_id,
+            run_id=str(queued_run_info.get("id") or run_dir.name),
+            label=label,
+            assignment_id=assignment_id,
+            view_url=view_url,
+            refresh_url=refresh_url,
+        )
+
+    @app.route("/teacher/assignment/<assignment_id>/threats/delete", methods=["POST"])
+    @teacher_or_admin_required
+    def assignment_threat_delete(assignment_id: str):
+        run_id = str(request.form.get("run_id") or "").strip()
+        submission_id = str(request.form.get("submission_id") or "").strip()
+        if not run_id:
+            flash("Threat resolution failed: missing run ID.", "error")
+            return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+
+        runs_root = get_runs_root(app)
+        run_dir = find_run_by_id(runs_root, run_id)
+        if run_dir is None:
+            flash("Threat resolution failed: submission not found.", "error")
+            return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+
+        run_info = load_run_info(run_dir) or {}
+        if run_info.get("mode") == "batch":
+            if not submission_id:
+                flash("Threat resolution failed: missing batch submission ID.", "error")
+                return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+
+            batch_summary = _load_batch_summary_records(run_dir)
+            if batch_summary is None:
+                flash("Threat resolution failed: batch summary could not be loaded.", "error")
+                return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+
+            records = list(batch_summary.get("records", []) or [])
+            target = next((record for record in records if str(record.get("id") or "") == submission_id), None)
+            if target is None:
+                flash("Threat resolution failed: flagged submission record not found.", "error")
+                return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+
+            _safe_delete_within_run(run_dir, run_dir / "runs" / submission_id)
+            _safe_delete_within_run(run_dir, target.get("path"))
+            remaining = [record for record in records if str(record.get("id") or "") != submission_id]
+            _persist_batch_outputs(run_dir, run_info, remaining)
+            _flash_assignment_threat_state(
+                assignment_id,
+                f"Flagged submission for '{target.get('student_id') or submission_id}' deleted.",
+            )
+            return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+
+        shutil.rmtree(run_dir, ignore_errors=True)
+        _flash_assignment_threat_state(
+            assignment_id,
+            f"Flagged submission for '{run_info.get('student_id') or run_id}' deleted.",
+        )
+        return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+
+    @app.route("/teacher/assignment/<assignment_id>/submissions/rerun", methods=["POST"])
+    @app.route("/teacher/assignment/<assignment_id>/threats/reprocess", methods=["POST"])
+    @teacher_or_admin_required
+    def assignment_submission_rerun(assignment_id: str):
+        run_id = str(request.form.get("run_id") or "").strip()
+        submission_id = str(request.form.get("submission_id") or "").strip()
+        if not run_id:
+            if _is_async_job_request():
+                return jsonify({"error": "Rerun failed: missing run ID."}), 400
+            flash("Rerun failed: missing run ID.", "error")
+            return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+
+        runs_root = get_runs_root(app)
+        run_dir = find_run_by_id(runs_root, run_id)
+        if run_dir is None:
+            if _is_async_job_request():
+                return jsonify({"error": "Rerun failed: submission not found."}), 404
+            flash("Rerun failed: submission not found.", "error")
+            return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+
+        run_info = load_run_info(run_dir) or {}
+        try:
+            if run_info.get("mode") == "batch":
+                if not submission_id:
+                    if _is_async_job_request():
+                        return jsonify({"error": "Rerun failed: missing batch submission ID."}), 400
+                    flash("Rerun failed: missing batch submission ID.", "error")
+                    return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+                return _queue_batch_submission_rerun(
+                    run_dir,
+                    run_info,
+                    submission_id,
+                    view_url=url_for("batch_submission_view", run_id=run_id, submission_id=submission_id),
+                    refresh_url=url_for("teacher.assignment_detail", assignment_id=assignment_id),
+                )
+            return _queue_mark_submission_rerun(
+                run_dir,
+                run_info,
+                view_url=url_for("run_detail", run_id=run_id),
+                refresh_url=url_for("teacher.assignment_detail", assignment_id=assignment_id),
+            )
+        except Exception as exc:
+            if _is_async_job_request():
+                return jsonify({"error": str(exc)}), 400
+            flash(f"Rerun failed: {exc}", "error")
+            return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+
     @app.route("/runs/<run_id>")
     @login_required
     def run_detail(run_id: str):
@@ -1175,6 +1662,8 @@ def _register_routes(app: Flask) -> None:
             if run_student_id != user["userID"]:
                 # Check batch submissions too
                 batch_summary = run_info.get("batch_summary", [])
+                if isinstance(batch_summary, Mapping):
+                    batch_summary = batch_summary.get("records", [])
                 found = False
                 if isinstance(batch_summary, list):
                     for rec in batch_summary:
@@ -1193,7 +1682,8 @@ def _register_routes(app: Flask) -> None:
         context = {"run": run_info, "run_id": run_id, "marks_released": marks_released}
         if run_info.get("mode") == "mark":
             report_path = run_dir / run_info.get("report", "report.json")
-            if report_path.exists():
+            run_status = str(run_info.get("status") or "").strip().lower()
+            if run_status not in {"pending", "failed", "error"} and report_path.exists():
                 context["report"] = _ensure_check_stats(
                     json.loads(report_path.read_text(encoding="utf-8"))
                 )
@@ -1209,15 +1699,45 @@ def _register_routes(app: Flask) -> None:
             # Fallback: redirect to runs list if no assignment ID
             return redirect(url_for("runs"))
 
+    @app.route("/runs/<run_id>/rerun", methods=["POST"])
+    @teacher_or_admin_required
+    def run_submission_rerun(run_id: str):
+        runs_root = get_runs_root(app)
+        run_dir = find_run_by_id(runs_root, run_id)
+        if run_dir is None:
+            if _is_async_job_request():
+                return jsonify({"error": "Submission not found."}), 404
+            flash("Rerun failed: submission not found.", "error")
+            return redirect(url_for("runs"))
+
+        run_info = load_run_info(run_dir) or {}
+        if run_info.get("mode") != "mark":
+            assignment_id = str(run_info.get("assignment_id") or "").strip()
+            if _is_async_job_request():
+                return jsonify({"error": "Use the assignment submission rerun action for batch submissions."}), 400
+            flash("Rerun failed: use the assignment submission rerun action for batch submissions.", "error")
+            if assignment_id:
+                return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+            return redirect(url_for("runs"))
+
+        try:
+            return _queue_mark_submission_rerun(
+                run_dir,
+                run_info,
+                view_url=url_for("run_detail", run_id=run_id),
+                refresh_url=url_for("run_detail", run_id=run_id),
+            )
+        except Exception as exc:
+            if _is_async_job_request():
+                return jsonify({"error": str(exc)}), 400
+            flash(f"Rerun failed: {exc}", "error")
+            return redirect(url_for("run_detail", run_id=run_id))
+
     @app.route("/runs/<run_id>/override-threat", methods=["POST"])
     @teacher_or_admin_required
     def override_threat(run_id: str):
-        """Re-run the marking pipeline for a threat-blocked submission, bypassing the threat scan.
-
-        The original ZIP file is re-extracted and passed through the full
-        assessment pipeline with ``skip_threat_scan=True``.  Returns a job ID
-        that the client can poll via ``/api/jobs/<job_id>``.
-        """
+        """Backward-compatible alias for the standard single-submission rerun."""
+        return run_submission_rerun(run_id)
         runs_root = get_runs_root(app)
         run_dir = find_run_by_id(runs_root, run_id)
         if run_dir is None:
@@ -1314,13 +1834,25 @@ def _register_routes(app: Flask) -> None:
         except Exception:
             return "Not allowed", 403
         
-        if not report_path.exists():
-            return "Report not found", 404
-        
         run_info = load_run_info(run_dir) or {}
-        report = _ensure_check_stats(
-            json.loads(report_path.read_text(encoding="utf-8"))
+        batch_summary = _load_batch_summary_records(run_dir) or {}
+        record = next(
+            (
+                item
+                for item in list(batch_summary.get("records", []) or [])
+                if str(item.get("id") or "") == submission_id
+            ),
+            None,
         )
+        record_status = str((record or {}).get("status") or "ok").strip().lower()
+
+        report = None
+        if record_status not in {"pending", "failed", "error"}:
+            if not report_path.exists():
+                return "Report not found", 404
+            report = _ensure_check_stats(
+                json.loads(report_path.read_text(encoding="utf-8"))
+            )
 
         # Extract real student_id from batch_summary or report metadata
         # (submission_id is the full stem like "testStudent_test_assignment1",
@@ -1329,25 +1861,23 @@ def _register_routes(app: Flask) -> None:
         real_assignment_id = run_info.get("assignment_id", "")
 
         # Try report metadata first (most reliable — set during pipeline run)
-        report_meta = report.get("metadata", {}).get("submission_metadata", {})
+        report_meta = (report or {}).get("metadata", {}).get("submission_metadata", {})
         if report_meta.get("student_id"):
             real_student_id = report_meta["student_id"]
+        elif record and record.get("student_id"):
+            real_student_id = str(record.get("student_id"))
         if report_meta.get("assignment_id"):
             real_assignment_id = report_meta["assignment_id"]
+        elif record and record.get("assignment_id"):
+            real_assignment_id = str(record.get("assignment_id"))
 
         # Fallback: try batch_summary.json records
         if real_student_id == submission_id:
-            batch_path = run_dir / "batch_summary.json"
-            if batch_path.exists():
-                try:
-                    batch_data = json.loads(batch_path.read_text(encoding="utf-8"))
-                    for rec in batch_data.get("records", []):
-                        if rec.get("id") == submission_id:
-                            real_student_id = rec.get("student_id", submission_id)
-                            real_assignment_id = rec.get("assignment_id", real_assignment_id)
-                            break
-                except Exception:
-                    pass
+            for rec in batch_summary.get("records", []) or []:
+                if rec.get("id") == submission_id:
+                    real_student_id = rec.get("student_id", submission_id)
+                    real_assignment_id = rec.get("assignment_id", real_assignment_id)
+                    break
 
         user = get_current_user()
         if user and user["role"] == "student" and real_student_id != user["userID"]:
@@ -1373,6 +1903,7 @@ def _register_routes(app: Flask) -> None:
             "assignment_id": real_assignment_id,
             "student_id": real_student_id,
             "created_at": run_info.get("created_at", ""),
+            "status": record_status,
         }
 
         # submission_dir doubles as the "run_dir" for threat file loading
@@ -1384,7 +1915,7 @@ def _register_routes(app: Flask) -> None:
             report=report,
             marks_released=marks_released,
             threat_file_contents=_load_threat_file_contents(
-                report.get("findings", []), submission_dir
+                (report or {}).get("findings", []), submission_dir
             ),
             batch_submission_id=submission_id,  # Flag to show back button
             back_url=back_url,
@@ -1419,6 +1950,32 @@ def _register_routes(app: Flask) -> None:
         dl_name = f"report_{submission_id}_{profile}_{run_id}.json"
         return send_file(report_path, as_attachment=True, download_name=dl_name)
 
+    @app.route("/batch/<run_id>/submissions/<submission_id>/rerun", methods=["POST"])
+    @teacher_or_admin_required
+    def batch_submission_rerun(run_id: str, submission_id: str):
+        runs_root = get_runs_root(app)
+        run_dir = find_run_by_id(runs_root, run_id)
+        if run_dir is None:
+            if _is_async_job_request():
+                return jsonify({"error": "Submission not found."}), 404
+            flash("Rerun failed: submission not found.", "error")
+            return redirect(url_for("runs"))
+
+        run_info = load_run_info(run_dir) or {}
+        try:
+            return _queue_batch_submission_rerun(
+                run_dir,
+                run_info,
+                submission_id,
+                view_url=url_for("batch_submission_view", run_id=run_id, submission_id=submission_id),
+                refresh_url=url_for("batch_submission_view", run_id=run_id, submission_id=submission_id),
+            )
+        except Exception as exc:
+            if _is_async_job_request():
+                return jsonify({"error": str(exc)}), 400
+            flash(f"Rerun failed: {exc}", "error")
+            return redirect(url_for("batch_submission_view", run_id=run_id, submission_id=submission_id))
+
     @app.route("/run/<run_id>/bundle")
     @login_required
     def download_bundle(run_id: str):
@@ -1428,7 +1985,7 @@ def _register_routes(app: Flask) -> None:
           - report.html, report.json, summary.txt (top-level reports)
           - submission/  (student code, full tree)
           - artifacts/   (screenshots only — .png, .jpg, .jpeg, .gif, .webp)
-          - batch files  (batch_summary.*, findings_frequency.*, score summaries)
+          - batch files  (batch_summary.* and per-submission reports)
 
         Excluded:
           - uploaded_extract/  (duplicate of submission)
@@ -1467,7 +2024,6 @@ def _register_routes(app: Flask) -> None:
                     top_level_files.extend([
                         "batch_summary.json",
                         "batch_summary.csv",
-                        "findings_frequency.csv",
                     ])
 
                 for filename in top_level_files:
@@ -1541,16 +2097,8 @@ def _register_routes(app: Flask) -> None:
         elif filename.startswith("batch_summary"):
             suffix = ".csv" if filename.endswith(".csv") else ".json"
             dl_name = f"batch_summary_{profile}_{run_id}{suffix}"
-        elif filename.startswith("component_means"):
-            dl_name = f"component_means_{profile}_{run_id}.csv"
         elif filename.startswith("batch_reports"):
             dl_name = f"batch_reports_{profile}_{run_id}.zip"
-        elif filename.startswith("findings_frequency"):
-            dl_name = f"findings_frequency_{profile}_{run_id}.csv"
-        elif filename.startswith("failure_reasons_frequency"):
-            dl_name = f"failure_reasons_{profile}_{run_id}.csv"
-        elif filename.startswith("score_buckets"):
-            dl_name = f"score_buckets_{profile}_{run_id}.csv"
         return send_file(target, as_attachment=True, download_name=dl_name)
 
     # ── Threats dashboard ────────────────────────────────────────────
@@ -1785,26 +2333,15 @@ def _resolve_download_path(run_dir: Path, filename: str) -> Path:
 
 
 def _build_batch_readme(run_id: str, profile: str, batch_summary: Mapping[str, object]) -> str:
-    summary = batch_summary.get("summary", {}) or {}
-    total = summary.get("total_submissions", "")
-    succeeded = summary.get("succeeded", "")
-    failed = summary.get("failed", "")
     lines = [
         "Automated Marking System - Batch Reports",
         "",
         f"Run ID: {run_id}",
         f"Profile: {profile}",
-        f"Total submissions: {total}",
-        f"Succeeded: {succeeded}",
-        f"Failed: {failed}",
         "",
         "Contents:",
         f"- {run_id}/batch_summary.json",
         f"- {run_id}/batch_summary.csv",
-        f"- {run_id}/findings_frequency.csv",
-        f"- {run_id}/failure_reasons_frequency.csv",
-        f"- {run_id}/score_buckets.csv",
-        f"- {run_id}/component_means.csv",
         f"- {run_id}/evaluation/ (if present)",
         f"- {run_id}/submissions/<submission_id>/report.json",
     ]
@@ -1825,13 +2362,7 @@ def _write_batch_reports_zip(run_dir: Path, profile: str, run_id: str) -> None:
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(summary_path, f"{run_id}/batch_summary.json")
-        for filename in (
-            "batch_summary.csv",
-            "findings_frequency.csv",
-            "failure_reasons_frequency.csv",
-            "score_buckets.csv",
-            "component_means.csv",
-        ):
+        for filename in ("batch_summary.csv",):
             file = run_dir / filename
             if file.is_file():
                 zf.write(file, f"{run_id}/{filename}")
@@ -1901,6 +2432,10 @@ def _write_run_index_batch(run_dir: Path, run_info: dict) -> None:
             "assignment_id": rec.get("assignment_id"),
             "original_filename": rec.get("original_filename"),
             "upload_timestamp": rec.get("upload_timestamp"),
+            "overall": rec.get("overall"),
+            "components": rec.get("components") or {},
+            "threat_count": rec.get("threat_count"),
+            "threat_flagged": bool(rec.get("threat_flagged") or rec.get("threat_count")),
             "status": rec.get("status"),
             "invalid": bool(rec.get("invalid")),
             "error": rec.get("error") or rec.get("validation_error"),
@@ -1912,11 +2447,28 @@ def _write_run_index_batch(run_dir: Path, run_info: dict) -> None:
                 meta = rep.get("metadata", {}) or {}
                 submission_meta = meta.get("submission_metadata") or {}
                 ident = meta.get("student_identity", {}) or {}
+                scores = rep.get("scores", {}) or {}
+                findings = rep.get("findings", []) or []
                 entry["student_name"] = ident.get("name_normalized") or ident.get("name_raw")
                 entry["student_id"] = submission_meta.get("student_id") or ident.get("student_id") or entry["student_id"]
                 entry["assignment_id"] = submission_meta.get("assignment_id") or entry["assignment_id"]
                 entry["original_filename"] = submission_meta.get("original_filename") or meta.get("original_filename") or entry["original_filename"]
                 entry["upload_timestamp"] = submission_meta.get("timestamp") or entry["upload_timestamp"]
+                if scores.get("overall") is not None:
+                    entry["overall"] = scores.get("overall")
+                by_component = scores.get("by_component") or {}
+                if isinstance(by_component, dict):
+                    entry["components"] = {
+                        component: (component_scores or {}).get("score")
+                        for component, component_scores in by_component.items()
+                    }
+                entry["threat_flagged"] = any(
+                    finding.get("severity") == "THREAT" for finding in findings
+                ) and not meta.get("threat_override", False)
+                if entry["threat_flagged"]:
+                    entry["threat_count"] = sum(
+                        1 for finding in findings if finding.get("severity") == "THREAT"
+                    )
             except Exception:
                 pass
         submissions.append(entry)

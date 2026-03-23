@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import json
-from collections import Counter
 from pathlib import Path
 
 from flask import Flask
 
 from ams.io.web_storage import list_runs, save_run_info
-from ams.tools.batch import aggregate_batch
 from ams.web.routes_student import _gather_student_runs
 from ams.webui import _replace_existing_submissions, _write_run_index_batch
 
@@ -111,8 +109,7 @@ def _make_batch_run(
             }
         )
 
-    summary = aggregate_batch(records, {}, Counter(), profile="frontend")
-    _write_json(run_dir / "batch_summary.json", {"records": records, "summary": summary})
+    _write_json(run_dir / "batch_summary.json", {"records": records})
 
     run_info = {
         "id": run_id,
@@ -122,7 +119,7 @@ def _make_batch_run(
         "assignment_id": assignment_id,
         "status": "completed",
         "summary": "batch_summary.json",
-        "batch_summary": {"records": records, "summary": summary},
+        "batch_summary": {"records": records},
     }
     save_run_info(run_dir, run_info)
     _write_run_index_batch(run_dir, run_info)
@@ -162,8 +159,7 @@ def _make_invalid_batch_run(
             }
         )
 
-    summary = aggregate_batch(records, {}, Counter({"InvalidAssignmentId": len(students)}), profile="frontend")
-    _write_json(run_dir / "batch_summary.json", {"records": records, "summary": summary})
+    _write_json(run_dir / "batch_summary.json", {"records": records})
     _write_json(
         run_dir / "run_index.json",
         {
@@ -195,7 +191,7 @@ def _make_invalid_batch_run(
         "assignment_id": run_assignment_id,
         "status": "completed",
         "summary": "batch_summary.json",
-        "batch_summary": {"records": records, "summary": summary},
+        "batch_summary": {"records": records},
     }
     save_run_info(run_dir, run_info)
     _write_run_index_batch(run_dir, run_info)

@@ -11,8 +11,6 @@ def test_batch_reports_zip_includes_batch_outputs_without_legacy_analytics_folde
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     (run_dir / "batch_summary.csv").write_text("id,overall\ns1,1.0\n", encoding="utf-8")
-    (run_dir / "findings_frequency.csv").write_text("finding_id,event_count\nHTML.OK,1\n", encoding="utf-8")
-    (run_dir / "score_buckets.csv").write_text("bucket,count\none,1\n", encoding="utf-8")
 
     runs_subdir = run_dir / "runs" / "s1"
     runs_subdir.mkdir(parents=True)
@@ -21,7 +19,6 @@ def test_batch_reports_zip_includes_batch_outputs_without_legacy_analytics_folde
 
     summary = {
         "records": [{"id": "s1", "report_path": str(report_path)}],
-        "summary": {"total_submissions": 1, "failed": 0, "succeeded": 1},
     }
     (run_dir / "batch_summary.json").write_text(json.dumps(summary), encoding="utf-8")
 
@@ -34,7 +31,5 @@ def test_batch_reports_zip_includes_batch_outputs_without_legacy_analytics_folde
 
     assert "runid/batch_summary.json" in names
     assert "runid/batch_summary.csv" in names
-    assert "runid/findings_frequency.csv" in names
-    assert "runid/score_buckets.csv" in names
     assert "runid/submissions/s1/report.json" in names
     assert not any(name.startswith("runid/analytics/") for name in names)

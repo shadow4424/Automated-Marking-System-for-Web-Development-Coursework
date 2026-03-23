@@ -315,7 +315,8 @@ def list_runs(runs_root: Path) -> list[dict]:
             
             # Try to load score from report.json (single runs)
             report_path = run_dir / "report.json"
-            if report_path.exists():
+            run_status = str(info.get("status") or "").strip().lower()
+            if report_path.exists() and run_status not in {"pending", "failed", "error"}:
                 try:
                     report = json.loads(report_path.read_text(encoding="utf-8"))
                     scores = report.get("scores", {})
@@ -332,18 +333,12 @@ def list_runs(runs_root: Path) -> list[dict]:
                 except Exception:
                     pass
             
-            # For batch runs, try to load average score from batch_summary.json
+            # For batch runs, load batch record metadata if present.
             if info.get("mode") == "batch":
                 batch_summary_path = run_dir / "batch_summary.json"
                 if batch_summary_path.exists():
                     try:
                         batch_summary_data = json.loads(batch_summary_path.read_text(encoding="utf-8"))
-                        if info.get("score") is None:
-                            overall_stats = batch_summary_data.get("summary", {}).get("overall_stats", {}) or {}
-                            mean_score = overall_stats.get("mean")
-                            if mean_score is not None:
-                                # Store score as percentage (0-100) for dashboard display
-                                info["score"] = mean_score * 100
                     except Exception:
                         batch_summary_data = None
             
@@ -369,6 +364,10 @@ def list_runs(runs_root: Path) -> list[dict]:
                                 "assignment_id": rec.get("assignment_id") or info.get("assignment_id"),
                                 "original_filename": rec.get("original_filename"),
                                 "upload_timestamp": rec.get("upload_timestamp") or info.get("created_at"),
+                                "overall": rec.get("overall"),
+                                "components": rec.get("components") or {},
+                                "threat_count": rec.get("threat_count"),
+                                "threat_flagged": bool(rec.get("threat_flagged") or rec.get("threat_count")),
                                 "status": rec.get("status"),
                                 "invalid": rec.get("invalid"),
                                 "error": rec.get("error") or rec.get("validation_error"),
@@ -383,8 +382,10 @@ def list_runs(runs_root: Path) -> list[dict]:
                     "assignment_id": info.get("assignment_id"),
                     "original_filename": info.get("original_filename"),
                     "upload_timestamp": info.get("created_at"),
+                    "overall": (float(info.get("score")) / 100.0) if info.get("score") is not None else None,
                     "status": info.get("status"),
                     "invalid": False,
+                    "threat_flagged": bool(info.get("threat_flagged")),
                 }]
             elif info.get("mode") == "batch":
                 pending_submissions = info.get("pending_submissions", []) or []
@@ -418,6 +419,14 @@ def list_runs(runs_root: Path) -> list[dict]:
                         sub["error"] = record.get("error") or record.get("validation_error")
                     if not sub.get("assignment_id"):
                         sub["assignment_id"] = record.get("assignment_id")
+                    if sub.get("overall") is None:
+                        sub["overall"] = record.get("overall")
+                    if not sub.get("components"):
+                        sub["components"] = record.get("components") or {}
+                    if not sub.get("threat_count"):
+                        sub["threat_count"] = record.get("threat_count")
+                    if not sub.get("threat_flagged"):
+                        sub["threat_flagged"] = bool(record.get("threat_flagged") or record.get("threat_count"))
 
             assignment_ids = _assignment_ids_from_submissions(info)
             if assignment_ids:

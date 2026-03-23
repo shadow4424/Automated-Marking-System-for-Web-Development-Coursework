@@ -64,57 +64,24 @@ def test_run_batch_success_and_failure(tmp_path: Path) -> None:
 
     summary_json = out_root / "batch_summary.json"
     summary_csv = out_root / "batch_summary.csv"
-    freq_csv = out_root / "findings_frequency.csv"
-    failure_csv = out_root / "failure_reasons_frequency.csv"
-    bucket_csv = out_root / "score_buckets.csv"
-    comp_csv = out_root / "component_means.csv"
     assert summary_json.exists()
     assert summary_csv.exists()
-    assert freq_csv.exists()
-    assert failure_csv.exists()
-    assert bucket_csv.exists()
-    assert comp_csv.exists()
+    assert not (out_root / "findings_frequency.csv").exists()
+    assert not (out_root / "failure_reasons_frequency.csv").exists()
+    assert not (out_root / "score_buckets.csv").exists()
+    assert not (out_root / "component_means.csv").exists()
 
     data = json.loads(summary_json.read_text(encoding="utf-8"))
     records = data["records"]
-    summary = data["summary"]
 
-    # All discovered items counted in totals (including failures)
-    assert summary["total_submissions"] == 3
-    assert summary["failed"] == 1
-    assert summary["succeeded"] == 2
     assert len(records) == 3
+    assert "summary" not in data
+    assert len([r for r in records if r.get("status") == "ok"]) == 2
+    assert len([r for r in records if r.get("status") == "error"]) == 1
 
     runs_root = out_root / "runs"
     assert (runs_root / "good1_assignment1" / "report.json").exists()
     assert (runs_root / "partial1_assignment1" / "report.json").exists()
-
-    # Aggregate stats should have mean/median for succeeded
-    overall_stats = summary["overall_stats"]
-    assert overall_stats is not None
-    assert overall_stats["mean"] is not None
-
-    # Failure reasons aggregated
-    failure_freq = summary["failure_reason_frequency"]
-    assert any("Zip entry would escape extraction directory" in k for k in failure_freq.keys())
-    # Failure CSV content
-    failure_lines = failure_csv.read_text(encoding="utf-8").splitlines()
-    assert failure_lines[0] == "reason,count"
-    assert any("Zip entry would escape extraction directory" in line for line in failure_lines)
-    # Bucket CSV content
-    bucket_lines = bucket_csv.read_text(encoding="utf-8").splitlines()
-    assert bucket_lines[0] == "bucket,count"
-    for name in ["zero", "gt_0_to_0_5", "gt_0_5_to_1", "one"]:
-        assert any(line.startswith(f"{name},") for line in bucket_lines[1:])
-    # Component means CSV content
-    comp_lines = comp_csv.read_text(encoding="utf-8").splitlines()
-    assert comp_lines[0] == "component,mean"
-    assert any(line.startswith("html,") for line in comp_lines[1:])
-    assert any(line.startswith("js,") for line in comp_lines[1:])
-    php_line = next(line for line in comp_lines if line.startswith("php,"))
-    sql_line = next(line for line in comp_lines if line.startswith("sql,"))
-    assert php_line == "php,"
-    assert sql_line == "sql,"
 
 
 def test_run_batch_without_keep_individual_runs(tmp_path: Path) -> None:
@@ -133,13 +100,11 @@ def test_run_batch_without_keep_individual_runs(tmp_path: Path) -> None:
 
     assert (out_root / "batch_summary.json").exists()
     assert (out_root / "batch_summary.csv").exists()
-    assert (out_root / "findings_frequency.csv").exists()
+    assert not (out_root / "findings_frequency.csv").exists()
 
     # Runs directory should not persist
     runs_dir = out_root / "runs"
     assert not runs_dir.exists() or not any(runs_dir.iterdir())
 
-    summary = result["summary"]
-    assert summary["total_submissions"] == 2
-    assert summary["failed"] == 0
-    assert summary["succeeded"] == 2
+    assert len(result["records"]) == 2
+    assert all(record.get("status") == "ok" for record in result["records"])

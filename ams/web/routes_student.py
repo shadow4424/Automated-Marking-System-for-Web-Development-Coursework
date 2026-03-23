@@ -77,6 +77,9 @@ def _gather_student_runs(student_id: str) -> tuple[list[dict], set[str]]:
                 student_run["_batch_submission_id"] = (
                     rec.get("submission_id") or rec.get("student_id") or rec.get("student_name")
                 )
+                overall = rec.get("overall")
+                student_run["score"] = float(overall) * 100 if isinstance(overall, (int, float)) else None
+                student_run["assignment_id"] = aid
                 student_run["_marks_released"] = assignment["marks_released"] if assignment else False
                 my_runs.append(student_run)
                 if aid:

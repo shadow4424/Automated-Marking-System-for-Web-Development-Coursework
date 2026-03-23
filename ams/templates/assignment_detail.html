@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ assignment.title }} — AMS{% endblock %}
+{% block title %}{{ assignment.title }} - AMS{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -15,7 +15,7 @@
         {% endif %}
     </p>
     <div class="page-header-actions">
-        <a href="{{ url_for('teacher.dashboard') }}" class="btn btn-ghost btn-sm">← Back to Dashboard</a>
+        <a href="{{ url_for('teacher.dashboard') }}" class="btn btn-ghost btn-sm">&larr; Back to Dashboard</a>
         <a href="{{ url_for('teacher.view_analytics', assignment_id=assignment.assignmentID) }}" class="btn btn-primary btn-sm">Analytics</a>
         {% if assignment.marks_released %}
         <form method="POST" action="{{ url_for('teacher.withhold', assignment_id=assignment.assignmentID) }}" style="display:inline;">
@@ -23,7 +23,16 @@
         </form>
         {% else %}
         <form method="POST" action="{{ url_for('teacher.release', assignment_id=assignment.assignmentID) }}" style="display:inline;">
-            <button type="submit" class="btn btn-success btn-sm">Release Marks</button>
+            <button
+                type="submit"
+                class="btn btn-success btn-sm"
+                {% if has_unresolved_threats %}
+                disabled
+                title="Resolve all threat-flagged submissions before releasing grades."
+                aria-disabled="true"
+                {% endif %}>
+                Release Marks
+            </button>
         </form>
         {% endif %}
         <form method="POST" action="{{ url_for('teacher.delete_assignment_route', assignment_id=assignment.assignmentID) }}" style="display:inline;" onsubmit="return confirm('Delete assignment {{ assignment.assignmentID }}? This cannot be undone.');">
@@ -31,6 +40,49 @@
         </form>
     </div>
 </div>
+
+{% if has_unresolved_threats %}
+<div class="card" style="margin-bottom:var(--space-lg); border-left:4px solid #dc2626; background:#fff3f2;">
+    <div class="card-header" style="align-items:flex-start; gap:var(--space-md);">
+        <div>
+            <h2 class="card-title" style="color:#991b1b;">Grade release blocked</h2>
+            <p class="text-secondary" style="margin:var(--space-xs) 0 0 0; color:#7f1d1d;">
+                At least one submission is flagged as a threat. Review each flagged submission before grades can be released.
+            </p>
+        </div>
+        <span class="badge" style="background:#dc2626;color:#fff;">{{ threat_rows|length }} unresolved threat{{ 's' if threat_rows|length != 1 else '' }}</span>
+    </div>
+    <div style="display:grid; gap:var(--space-sm);">
+        {% for threat in threat_rows %}
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:var(--space-sm); padding:var(--space-sm) 0; border-top:1px solid rgba(220,38,38,0.12);">
+            <div style="display:flex; flex-direction:column; gap:0.3rem;">
+                <strong><code>{{ threat.student_id }}</code></strong>
+                <span class="text-secondary" style="color:#7f1d1d;">
+                    {{ threat.mode|capitalize }} submission{% if threat.threat_count %} with {{ threat.threat_count }} threat finding{{ 's' if threat.threat_count != 1 else '' }}{% endif %}.
+                </span>
+                <a href="{{ threat.detail_url }}" class="btn btn-ghost btn-sm" style="width:max-content;">Review submission</a>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:var(--space-xs); align-items:center;">
+                <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" style="display:inline;" data-job-form="rerun">
+                    <input type="hidden" name="run_id" value="{{ threat.run_id }}">
+                    {% if threat.submission_id %}
+                    <input type="hidden" name="submission_id" value="{{ threat.submission_id }}">
+                    {% endif %}
+                    <button type="submit" class="btn btn-warning btn-sm">Re-run submission</button>
+                </form>
+                <form method="POST" action="{{ url_for('assignment_threat_delete', assignment_id=assignment.assignmentID) }}" style="display:inline;" onsubmit="return confirm('Delete the flagged submission for {{ threat.student_id }}?');">
+                    <input type="hidden" name="run_id" value="{{ threat.run_id }}">
+                    {% if threat.submission_id %}
+                    <input type="hidden" name="submission_id" value="{{ threat.submission_id }}">
+                    {% endif %}
+                    <button type="submit" class="btn btn-danger btn-sm">Delete flagged submission</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 
 {% if assignment.description %}
 <div class="card" style="margin-bottom:var(--space-lg);">
@@ -41,7 +93,6 @@
 </div>
 {% endif %}
 
-<!-- Stats Row -->
 <div class="stat-grid-4" style="margin-bottom:var(--space-xl);">
     <div class="card stat-card stat-card--default">
         <div class="stat-value">{{ student_details|length }}</div>
@@ -56,13 +107,12 @@
         <div class="stat-label">Profile</div>
     </div>
     <div class="card stat-card stat-card--warning">
-        <div class="stat-value">{{ assignment.due_date[:10] if assignment.due_date else '—' }}</div>
+        <div class="stat-value">{{ assignment.due_date[:10] if assignment.due_date else '-' }}</div>
         <div class="stat-label">Due Date</div>
     </div>
 </div>
 
 <div class="grid-2" style="gap:var(--space-xl);">
-    <!-- Assigned Students -->
     <div class="card">
         <div class="card-header">
             <h2 class="card-title">Assigned Students</h2>
@@ -96,7 +146,6 @@
         </div>
         {% endif %}
 
-        <!-- Edit Students -->
         <details style="margin-top:var(--space-md);">
             <summary class="btn btn-ghost btn-sm">Edit Student Allocation</summary>
             <form method="POST" action="{{ url_for('teacher.update_students', assignment_id=assignment.assignmentID) }}" style="margin-top:var(--space-sm);">
@@ -119,7 +168,6 @@
         </details>
     </div>
 
-    <!-- Assignment Info -->
     <div class="card">
         <div class="card-header">
             <h2 class="card-title">Assignment Info</h2>
@@ -132,7 +180,7 @@
             <dt class="text-secondary">Profile</dt>
             <dd><span class="badge badge-secondary">{{ assignment.profile }}</span></dd>
             <dt class="text-secondary">Due Date</dt>
-            <dd>{{ assignment.due_date[:16].replace('T', ' ') if assignment.due_date else '—' }}</dd>
+            <dd>{{ assignment.due_date[:16].replace('T', ' ') if assignment.due_date else '-' }}</dd>
             <dt class="text-secondary">Marks</dt>
             <dd>
                 {% if assignment.marks_released %}
@@ -145,7 +193,6 @@
     </div>
 </div>
 
-<!-- Submissions Table -->
 <div class="card" style="margin-top:var(--space-xl);">
     <div class="card-header">
         <h2 class="card-title">Submissions</h2>
@@ -166,31 +213,37 @@
             </thead>
             <tbody>
                 {% for r in runs %}
+                {% set submission = r.get('_submission_record') %}
+                {% set status = r.get('status', 'completed') %}
+                {% set row_score = r.get('score') %}
+                {% if row_score is none and submission and submission.get('overall') is not none %}
+                    {% set row_score = submission.get('overall') * 100 %}
+                {% endif %}
+                {% set detail_url = url_for('batch_submission_view', run_id=r.id, submission_id=r._batch_submission_id) if r.mode == 'batch' and r.get('_batch_submission_id') else url_for('run_detail', run_id=r.id) %}
                 <tr>
-                    <td>
-                        <code>{{ r.student_id if r.student_id and r.student_id != 'batch' else '—' }}</code>
-                    </td>
+                    <td><code>{{ r.student_id if r.student_id and r.student_id != 'batch' else '-' }}</code></td>
                     <td><span class="badge {% if r.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">{{ r.mode or 'mark' }}</span></td>
                     <td>
-                        {% if r.threat_flagged %}
+                        {% if status == 'pending' %}
+                        <span class="badge badge-secondary">Queued</span>
+                        {% elif r.threat_flagged %}
                         <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span>
-                        {% elif r.get('score') is not none %}
-                        <strong>{{ r.score|round|int }}%</strong>
+                        {% elif row_score is not none %}
+                        <strong>{{ row_score|round|int }}%</strong>
                         {% else %}
-                        —
+                        -
                         {% endif %}
                     </td>
-                    <td>{{ r.created_at[:10] if r.created_at else '—' }}</td>
+                    <td>{{ r.created_at[:10] if r.created_at else '-' }}</td>
                     <td>
-                        {% set status = r.get('status', 'completed') %}
                         {% if status == 'pending' %}
                         <span class="badge badge-warning">Pending</span>
+                        {% elif r.threat_flagged or status == 'threat' %}
+                        <span class="badge" style="background:#dc2626;color:#fff;">Threat</span>
                         {% elif status == 'failed' %}
                         <span class="badge badge-danger">Failed</span>
-                        {% elif r.threat_flagged %}
-                        <span class="badge" style="background:#dc2626;color:#fff;">Threat</span>
                         {% else %}
-                            {% set score = r.get('score') %}
+                            {% set score = row_score %}
                             {% if score is not none %}
                                 {% if score >= 70 %}
                                 <span class="badge badge-success">Excellent</span>
@@ -205,11 +258,16 @@
                         {% endif %}
                     </td>
                     <td>
-                        {% if r.mode == 'batch' and r.get('_batch_submission_id') %}
-                        <a href="{{ url_for('batch_submission_view', run_id=r.id, submission_id=r._batch_submission_id) }}" class="btn btn-ghost btn-sm">View →</a>
-                        {% else %}
-                        <a href="{{ url_for('run_detail', run_id=r.id) }}" class="btn btn-ghost btn-sm">View →</a>
-                        {% endif %}
+                        <div style="display:flex; flex-wrap:wrap; gap:var(--space-xs);">
+                            <a href="{{ detail_url }}" class="btn btn-ghost btn-sm">View &rarr;</a>
+                            <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" style="display:inline;" data-job-form="rerun">
+                                <input type="hidden" name="run_id" value="{{ r.id }}">
+                                {% if r.mode == 'batch' and r.get('_batch_submission_id') %}
+                                <input type="hidden" name="submission_id" value="{{ r._batch_submission_id }}">
+                                {% endif %}
+                                <button type="submit" class="btn btn-secondary btn-sm">Rerun Submission</button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}

@@ -79,6 +79,104 @@ def _submission_matches_assignment(submission: Mapping[str, Any], assignment_id:
     return str(submission.get("assignment_id") or "").strip() == assignment_id
 
 
+def _batch_submission_display_status(submission: Mapping[str, Any]) -> str:
+    if submission.get("threat_flagged") or submission.get("threat_count"):
+        return "threat"
+    status = str(submission.get("status") or "").strip().lower()
+    if status in {"pending", "queued", "running"}:
+        return "pending"
+    if status in {"failed", "error"} or submission.get("invalid") is True:
+        return "failed"
+    return "completed"
+
+
+def _build_assignment_run_rows(assignment_id: str) -> list[dict]:
+    runs_root = get_runs_root(current_app)
+    all_runs = list_runs(runs_root)
+    assignment_runs: list[dict] = []
+
+    for run in all_runs:
+        matching_submissions = [
+            submission
+            for submission in list(run.get("submissions", []) or [])
+            if _submission_matches_assignment(submission, assignment_id)
+        ]
+
+        if run.get("mode") == "batch":
+            for submission in matching_submissions:
+                submission_row = dict(run)
+                submission_row["student_id"] = submission.get("student_id") or submission.get("student_name") or "Unknown"
+                submission_row["assignment_id"] = submission.get("assignment_id") or run.get("assignment_id")
+                submission_row["created_at"] = submission.get("upload_timestamp") or run.get("created_at")
+                submission_row["_batch_submission_id"] = (
+                    submission.get("submission_id")
+                    or submission.get("student_id")
+                    or submission.get("student_name")
+                )
+                submission_row["_submission_record"] = submission
+                overall = submission.get("overall")
+                submission_row["score"] = float(overall) * 100 if isinstance(overall, (int, float)) else None
+                submission_row["status"] = _batch_submission_display_status(submission)
+                submission_row["threat_flagged"] = bool(submission.get("threat_flagged") or submission.get("threat_count"))
+                assignment_runs.append(submission_row)
+            continue
+
+        if str(run.get("assignment_id") or "").strip() == assignment_id or matching_submissions:
+            run_row = dict(run)
+            if matching_submissions and "_submission_record" not in run_row:
+                run_row["_submission_record"] = matching_submissions[0]
+            if matching_submissions and not run_row.get("student_id"):
+                run_row["student_id"] = matching_submissions[0].get("student_id") or matching_submissions[0].get("student_name")
+            run_row["threat_flagged"] = bool(
+                run_row.get("threat_flagged")
+                or any(
+                    bool(submission.get("threat_flagged") or submission.get("threat_count"))
+                    for submission in matching_submissions
+                )
+            )
+            assignment_runs.append(run_row)
+
+    assignment_runs.sort(
+        key=lambda row: (
+            str(row.get("created_at") or ""),
+            str(row.get("student_id") or ""),
+            str(row.get("id") or ""),
+        ),
+        reverse=True,
+    )
+    return assignment_runs
+
+
+def _build_threat_resolution_rows(assignment_runs: Sequence[Mapping[str, Any]]) -> list[dict]:
+    threat_rows: list[dict] = []
+    for row in assignment_runs:
+        submission = row.get("_submission_record") if isinstance(row.get("_submission_record"), Mapping) else {}
+        threat_flagged = bool(
+            row.get("threat_flagged")
+            or (isinstance(submission, Mapping) and (submission.get("threat_flagged") or submission.get("threat_count")))
+            or str(row.get("status") or "").strip().lower() == "threat"
+        )
+        if not threat_flagged:
+            continue
+        threat_rows.append(
+            {
+                "run_id": str(row.get("id") or ""),
+                "student_id": str(row.get("student_id") or "Unknown"),
+                "mode": str(row.get("mode") or "mark"),
+                "submission_id": str(row.get("_batch_submission_id") or ""),
+                "detail_url": (
+                    url_for("batch_submission_view", run_id=row.get("id"), submission_id=row.get("_batch_submission_id"))
+                    if row.get("mode") == "batch" and row.get("_batch_submission_id")
+                    else url_for("run_detail", run_id=row.get("id"))
+                ),
+                "threat_count": int(
+                    submission.get("threat_count") or 0
+                ) if isinstance(submission, Mapping) else 0,
+            }
+        )
+    return threat_rows
+
+
 def _filtered_needs_attention_rows(analytics: dict, args) -> list[dict]:
     rows = list(analytics.get("needs_attention", []) or [])
     severity = str(args.get("severity", "")).strip().lower()
@@ -363,32 +461,8 @@ def assignment_detail(assignment_id: str):
             student_details.append({"userID": sid, "firstName": sid, "lastName": "", "email": ""})
 
     all_students = list_users(role="student")
-
-    runs_root = get_runs_root(current_app)
-    all_runs = list_runs(runs_root)
-    assignment_runs = []
-    for run in all_runs:
-        matching_submissions = [
-            submission
-            for submission in list(run.get("submissions", []) or [])
-            if _submission_matches_assignment(submission, assignment_id)
-        ]
-
-        if run.get("mode") == "batch":
-            for submission in matching_submissions:
-                submission_row = dict(run)
-                submission_row["student_id"] = submission.get("student_id") or submission.get("student_name") or "Unknown"
-                submission_row["_batch_submission_id"] = (
-                    submission.get("submission_id")
-                    or submission.get("student_id")
-                    or submission.get("student_name")
-                )
-                submission_row["_submission_record"] = submission
-                assignment_runs.append(submission_row)
-            continue
-
-        if str(run.get("assignment_id") or "").strip() == assignment_id or matching_submissions:
-            assignment_runs.append(run)
+    assignment_runs = _build_assignment_run_rows(assignment_id)
+    threat_rows = _build_threat_resolution_rows(assignment_runs)
 
     return render_template(
         "assignment_detail.html",
@@ -396,12 +470,22 @@ def assignment_detail(assignment_id: str):
         student_details=student_details,
         all_students=all_students,
         runs=assignment_runs,
+        threat_rows=threat_rows,
+        has_unresolved_threats=bool(threat_rows),
     )
 
 
 @teacher_bp.route("/assignment/<assignment_id>/release", methods=["POST"])
 @teacher_or_admin_required
 def release(assignment_id: str):
+    threat_rows = _build_threat_resolution_rows(_build_assignment_run_rows(assignment_id))
+    if threat_rows:
+        flash(
+            "Grades cannot be released while threat-flagged submissions remain. "
+            "Delete or re-run the flagged submissions first.",
+            "error",
+        )
+        return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
     release_marks(assignment_id)
     flash(f"Marks released for '{assignment_id}'.", "success")
     return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))

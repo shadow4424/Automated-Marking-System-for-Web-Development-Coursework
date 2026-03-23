@@ -3,8 +3,6 @@ from __future__ import annotations
 import csv
 import json
 import re
-import statistics
-from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 import shutil
@@ -96,9 +94,6 @@ def run_batch(
 
         items = discover_batch_items(working_dir)
         records: List[dict] = []
-        # Track both event count and which submissions contain each finding
-        finding_stats: Dict[str, Dict[str, object]] = {}  # {finding_id: {"event_count": int, "affected_submissions": set}}
-        failure_reason_counts: Counter[str] = Counter()
 
         for item in items:
             record = _process_one_submission(
@@ -107,126 +102,25 @@ def run_batch(
                 pipeline=pipeline,
                 profile=profile,
                 keep_individual_runs=keep_individual_runs,
-                finding_stats=finding_stats,
-                failure_reason_counts=failure_reason_counts,
                 assignment_id=assignment_id,
             )
             records.append(record)
 
-        summary = aggregate_batch(records, finding_stats, failure_reason_counts, profile=profile)
-        write_outputs(out_root, records, summary, finding_stats, profile=profile)
+        write_outputs(out_root, records, profile=profile)
+        print("Batch complete.")
 
-        total = summary["total_submissions"]
-        succeeded = summary["succeeded"]
-        failed = summary["failed"]
-        overall_stats = summary.get("overall_stats") or {}
-        mean_val = overall_stats.get("mean")
-        median_val = overall_stats.get("median")
-        print(f"Batch complete. Total: {total}, Succeeded: {succeeded}, Failed: {failed}")
-        if mean_val is not None and median_val is not None:
-            print(f"Overall mean: {mean_val:.2f}, median: {median_val:.2f}")
-        top_findings = summary.get("top_findings", [])[:5]
-        if top_findings:
-            print("Top findings:")
-            for entry in top_findings:
-                fid = entry[0]
-                count = entry[1]
-                print(f"- {fid}: {count}")
-
-        return {"records": records, "summary": summary}
+        return {"records": records}
     finally:
         if temp_ctx is not None:
             temp_ctx.cleanup()
 
 
-def aggregate_batch(records: List[dict], finding_stats: Dict[str, Dict[str, object]], failure_reason_counts: Counter[str], profile: str) -> dict:
-    total = len(records)
-    invalid = sum(1 for r in records if r.get("invalid"))
-    # succeeded = ran through the pipeline without error; failed = pipeline error (not invalid name)
-    succeeded = sum(1 for r in records if r.get("status") == "ok")
-    failed = sum(1 for r in records if "error" in r)
-    # Include both successfully graded and invalid (grade 0) records in score statistics
-    processed_records = [r for r in records if r.get("overall") is not None and "error" not in r]
-
-    overall_scores = [float(r["overall"]) for r in processed_records if r.get("overall") is not None]
-    overall_stats = None
-    if overall_scores:
-        overall_stats = {
-            "mean": statistics.mean(overall_scores),
-            "median": statistics.median(overall_scores),
-            "min": min(overall_scores),
-            "max": max(overall_scores),
-        }
-
-    profile_components = ["html", "css", "js"] if profile == "frontend" else ["html", "css", "js", "php", "sql"]
-    component_stats: Dict[str, Optional[float]] = {}
-    for component in profile_components:
-        scores = [
-            r["components"].get(component)
-            for r in processed_records
-            if r.get("components")
-            and isinstance(r["components"].get(component), (int, float))
-        ]
-        component_stats[component] = statistics.mean(scores) if scores else None
-    for comp in ["html", "css", "js", "php", "sql"]:
-        if comp not in component_stats:
-            component_stats[comp] = None
-
-    buckets = {
-        "zero": 0,
-        "gt_0_to_0_5": 0,
-        "gt_0_5_to_1": 0,
-        "one": 0,
-    }
-    for score in overall_scores:
-        if score == 0.0:
-            buckets["zero"] += 1
-        elif 0.0 < score <= 0.5:
-            buckets["gt_0_to_0_5"] += 1
-        elif 0.5 < score < 1.0:
-            buckets["gt_0_5_to_1"] += 1
-        elif score == 1.0:
-            buckets["one"] += 1
-
-    top_findings = []
-    total = len(records)
-    for finding_id, stats in finding_stats.items():
-        event_count = stats.get("event_count", 0)
-        affected_count = len(stats.get("affected_submissions", set()))
-        percent_affected = (affected_count / total * 100) if total > 0 else 0
-        top_findings.append((finding_id, event_count, affected_count, min(100, round(percent_affected))))
-    # Sort by event count (descending), then by finding_id
-    top_findings = sorted(top_findings, key=lambda x: (-x[1], x[0]))[:20]
-    
-    top_failure_reasons = sorted(failure_reason_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:10]
-
-    return {
-        "total_submissions": total,
-        "succeeded": succeeded,
-        "failed": failed,
-        "invalid": invalid,
-        "overall_stats": overall_stats,
-        "component_stats": component_stats,
-        "buckets": buckets,
-        "finding_frequency": {fid: stats.get("event_count", 0) for fid, stats in finding_stats.items()},
-        "top_findings": top_findings,
-        "failure_reason_frequency": dict(failure_reason_counts),
-        "top_failure_reasons": top_failure_reasons,
-        "profile": profile,
-    }
-
-
 def write_outputs(
     out_root: Path,
     records: List[dict],
-    summary: dict,
-    finding_stats: Dict[str, Dict[str, object]],
     profile: str = "frontend",
 ) -> None:
-    batch_summary = {
-        "records": records,
-        "summary": summary,
-    }
+    batch_summary = {"records": records}
     (out_root / "batch_summary.json").write_text(json.dumps(batch_summary, indent=2), encoding="utf-8")
 
     csv_path = out_root / "batch_summary.csv"
@@ -253,63 +147,12 @@ def write_outputs(
                 }
             )
 
-    freq_path = out_root / "findings_frequency.csv"
-    with freq_path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(["finding_id", "event_count", "affected_submissions", "percent_affected"])
-        total = summary.get("total_submissions", 1)
-        for finding_id, stats in sorted(finding_stats.items(), key=lambda kv: (-kv[1].get("event_count", 0), kv[0]))[:50]:
-            event_count = stats.get("event_count", 0)
-            affected_count = len(stats.get("affected_submissions", set()))
-            percent_affected = (affected_count / total * 100) if total > 0 else 0
-            writer.writerow([finding_id, event_count, affected_count, f"{min(100, round(percent_affected))}%"])
-
-    failure_freq = summary.get("failure_reason_frequency") or {}
-    failure_path = out_root / "failure_reasons_frequency.csv"
-    with failure_path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(["reason", "count"])
-        for reason, count in sorted(failure_freq.items(), key=lambda kv: (-kv[1], kv[0])):
-            writer.writerow([reason, count])
-
-    buckets = summary.get("buckets") or {}
-    bucket_path = out_root / "score_buckets.csv"
-    with bucket_path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(["bucket", "count"])
-        for bucket in ["zero", "gt_0_to_0_5", "gt_0_5_to_1", "one"]:
-            writer.writerow([bucket, buckets.get(bucket, 0)])
-
-    comp_stats = summary.get("component_stats") or {}
-    comp_path = out_root / "component_means.csv"
-    with comp_path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(["component", "mean"])
-        for comp in ["html", "css", "js", "php", "sql"]:
-            value = comp_stats.get(comp)
-            if profile == "frontend" and comp in {"php", "sql"}:
-                writer.writerow([comp, ""])
-            else:
-                writer.writerow([comp, value if value is not None else ""])
-
-
-def _normalise_failure_reason(exc: Exception) -> str:
-    cls_name = exc.__class__.__name__
-    msg = str(exc).strip()
-    if msg:
-        msg = msg.replace("\n", " ")[:80]
-        return f"{cls_name}: {msg}"
-    return cls_name
-
-
 def _process_one_submission(
     item: BatchItem,
     runs_root: Path,
     pipeline: AssessmentPipeline,
     profile: str,
     keep_individual_runs: bool,
-    finding_stats: Dict[str, Dict[str, object]],
-    failure_reason_counts: Counter[str],
     assignment_id: Optional[str] = None,
 ) -> dict:
     # ── Filename validation ────────────────────────────────────────────────────
@@ -334,7 +177,6 @@ def _process_one_submission(
         record["validation_error"] = (
             f"'{item.path.name}' does not match the required format studentID_assignmentID.zip"
         )
-        failure_reason_counts["InvalidFilename"] += 1
         return record
 
     sep = stem.index('_')
@@ -351,7 +193,6 @@ def _process_one_submission(
             f"Student ID '{raw_student_id}' in '{item.path.name}' is invalid: "
             f"must contain only letters and digits (e.g. student1234)"
         )
-        failure_reason_counts["InvalidStudentId"] += 1
         return record
 
     # Step 3: assignmentID must be non-empty and match the batch assignment
@@ -363,7 +204,6 @@ def _process_one_submission(
         record["validation_error"] = (
             f"Assignment ID is missing in '{item.path.name}'"
         )
-        failure_reason_counts["InvalidAssignmentId"] += 1
         return record
 
     if assignment_id and raw_assignment_id != assignment_id:
@@ -376,7 +216,6 @@ def _process_one_submission(
             f"Assignment ID '{raw_assignment_id}' in '{item.path.name}' "
             f"does not match the expected assignment '{assignment_id}'"
         )
-        failure_reason_counts["InvalidAssignmentId"] += 1
         return record
 
     # Both parts are valid — use parsed values for the rest of processing
@@ -433,10 +272,7 @@ def _process_one_submission(
         )
         record["report_path"] = str(report_path)
         report_data = json.loads(report_path.read_text(encoding="utf-8"))
-        
-        # Track which findings appear in this submission
-        submission_finding_ids = set()
-        
+
         # Extract metadata from report if available
         report_metadata = report_data.get("metadata", {}).get("submission_metadata")
         if report_metadata:
@@ -450,21 +286,6 @@ def _process_one_submission(
         comps = scores.get("by_component", {}) or {}
         record["components"] = {k: comps.get(k, {}).get("score") for k in _empty_components().keys()}
         findings = report_data.get("findings", []) or []
-        for f in findings:
-            fid = f.get("id")
-            if fid:
-                # Initialise if not seen before
-                if fid not in finding_stats:
-                    finding_stats[fid] = {"event_count": 0, "affected_submissions": set()}
-                # Increment event count
-                finding_stats[fid]["event_count"] += 1
-                # Track that this submission has this finding
-                submission_finding_ids.add(fid)
-        
-        # Record which submissions this finding appears in
-        for fid in submission_finding_ids:
-            if fid in finding_stats:
-                finding_stats[fid]["affected_submissions"].add(item.id)
         record["status"] = "ok"
         
         # Count threat findings for this submission
@@ -473,11 +294,10 @@ def _process_one_submission(
         )
         if threat_count:
             record["threat_count"] = threat_count
+            record["threat_flagged"] = True
     except Exception as exc:  # pragma: no cover - defensive
         record["error"] = str(exc)
         record["status"] = "error"
-        label = _normalise_failure_reason(exc)
-        failure_reason_counts[label] += 1
     finally:
         if temp_ctx is not None:
             temp_ctx.cleanup()
@@ -489,6 +309,5 @@ __all__ = [
     "discover_batch_items",
     "validate_submission_filename",
     "run_batch",
-    "aggregate_batch",
     "write_outputs",
 ]

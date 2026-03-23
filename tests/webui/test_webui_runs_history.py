@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from time import time
 
 from ams.webui import create_app
 from tests.webui.conftest import authenticate_client
@@ -53,3 +55,39 @@ def test_runs_history_searches_student_fields(tmp_path: Path) -> None:
     assert res.status_code == 200
     body = res.get_data(as_text=True)
     assert "Dale Mccance" in body
+
+
+def test_create_app_does_not_delete_persisted_runs_on_startup_by_default(tmp_path: Path) -> None:
+    run_id = "20250101_mark_frontend_a"
+    _make_run(tmp_path, run_id, "mark", "frontend", 1.0)
+    run_info_path = tmp_path / run_id / "run_info.json"
+    old_mtime = time() - (72 * 3600)
+    os.utime(run_info_path, (old_mtime, old_mtime))
+
+    app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
+    client = app.test_client()
+    authenticate_client(client)
+
+    assert run_info_path.exists()
+    res = client.get("/runs")
+    assert res.status_code == 200
+    assert run_id in res.get_data(as_text=True)
+
+
+def test_create_app_can_cleanup_old_runs_when_explicitly_enabled(tmp_path: Path) -> None:
+    run_id = "20250101_mark_frontend_a"
+    _make_run(tmp_path, run_id, "mark", "frontend", 1.0)
+    run_info_path = tmp_path / run_id / "run_info.json"
+    old_mtime = time() - (72 * 3600)
+    os.utime(run_info_path, (old_mtime, old_mtime))
+
+    create_app(
+        {
+            "TESTING": True,
+            "AMS_RUNS_ROOT": tmp_path,
+            "AMS_ENABLE_STARTUP_RUN_CLEANUP": True,
+            "AMS_STARTUP_RUN_MAX_AGE_HOURS": 24,
+        }
+    )
+
+    assert not run_info_path.exists()

@@ -23,27 +23,46 @@
         {% if run.created_at %}<span>{{ run.created_at[:10] }}</span>{% endif %}
     </div>
     <div class="page-header-actions">
-        {% if run.mode == 'batch' %}
-        <a href="{{ url_for('download', run_id=run_id, filename='batch_summary.json') }}"
-            class="btn btn-secondary btn-sm">Download JSON</a>
-        <a href="{{ url_for('download', run_id=run_id, filename='batch_summary.csv') }}"
-            class="btn btn-secondary btn-sm">Download Summary</a>
-        <a href="{{ url_for('download', run_id=run_id, filename='batch_reports.zip') }}"
-            class="btn btn-primary btn-sm">Download All</a>
-        {% else %}
-            {% if batch_submission_id %}
+        {% if user_role in ['teacher', 'admin'] %}
+        {% if batch_submission_id %}
+        <form method="POST" action="{{ url_for('batch_submission_rerun', run_id=run_id, submission_id=batch_submission_id) }}" style="display:inline;" data-job-form="rerun">
+            <button type="submit" class="btn btn-warning btn-sm">Rerun Submission</button>
+        </form>
+        {% elif run.mode != 'batch' %}
+        <form method="POST" action="{{ url_for('run_submission_rerun', run_id=run_id) }}" style="display:inline;" data-job-form="rerun">
+            <button type="submit" class="btn btn-warning btn-sm">Rerun Submission</button>
+        </form>
+        {% endif %}
+        {% endif %}
+        {% if batch_submission_id and report %}
         <a href="{{ url_for('batch_submission_report', run_id=run_id, submission_id=batch_submission_id) }}" class="btn btn-secondary btn-sm">
             Download JSON</a>
-            {% else %}
+        {% elif run.mode != 'batch' and report %}
         <a href="{{ url_for('download', run_id=run_id, filename='report.json') }}" class="btn btn-secondary btn-sm">
             Download JSON</a>
         <a href="{{ url_for('download', run_id=run_id, filename='summary.txt') }}" class="btn btn-secondary btn-sm">
             Download Summary</a>
         <a href="{{ url_for('download_bundle', run_id=run_id) }}" class="btn btn-primary btn-sm">Download All</a>
-            {% endif %}
         {% endif %}
     </div>
 </div>
+
+{% set run_status = run.status|default('completed')|lower %}
+{% if run_status == 'pending' %}
+<div class="card mb-lg" style="border-left:4px solid #f59e0b; background:#fff7ed; padding:1rem 1.25rem;">
+    <strong style="color:#b45309;">Rerun queued</strong>
+    <p class="mt-xs mb-0" style="color:#9a3412;">
+        This submission is being reprocessed in the background. Results will refresh automatically when the rerun completes.
+    </p>
+</div>
+{% elif run_status in ['failed', 'error'] %}
+<div class="card mb-lg" style="border-left:4px solid #dc2626; background:#fef2f2; padding:1rem 1.25rem;">
+    <strong style="color:#b91c1c;">Latest rerun failed</strong>
+    <p class="mt-xs mb-0" style="color:#991b1b;">
+        The latest rerun did not complete successfully. Re-run the submission again after checking the job status.
+    </p>
+</div>
+{% endif %}
 
 {# Single Run Report #}
 {% if report %}
@@ -59,20 +78,12 @@
         All further checks were skipped for safety. This submission scored
         <strong>0%</strong> and should be reviewed manually.
     </p>
-    {% if not batch_submission_id %}
     <div class="mt-sm" style="border-top:1px solid #fca5a5;padding-top:0.75rem;">
-        <p class="text-sm mb-sm" style="color:#7f1d1d;">
-            <strong>Instructor Override:</strong> If you have independently reviewed this submission and
-            confirmed it does not pose a security risk, you may override the block to run the full assessment.
+        <p class="text-sm mb-0" style="color:#7f1d1d;">
+            Re-run the full automarker pipeline from the header action above. If the submission is still unsafe,
+            it will remain flagged as a threat.
         </p>
-        <button type="button" id="override-threat-btn"
-            class="btn btn-sm"
-            style="background:#dc2626;color:#fff;border:1px solid #b91c1c;"
-            data-run-id="{{ run_id }}">
-            Override Security Block &amp; Reprocess
-        </button>
     </div>
-    {% endif %}
 </div>
 {% endif %}
 
@@ -893,79 +904,3 @@ ai_count=0, vision_count=0, partial_count=0, ux_review_count=0
 
 {% endblock %}
 
-{% block scripts %}
-<script>
-(function () {
-    'use strict';
-
-    var btn = document.getElementById('override-threat-btn');
-    if (!btn) return;
-
-    btn.addEventListener('click', function () {
-        if (!confirm(
-            'WARNING: This submission was flagged as a potential security threat.\n\n' +
-            'Only override if you have independently reviewed the code and confirmed it is safe.\n\n' +
-            'The submission will be fully re-assessed with threat scanning disabled.\n\n' +
-            'Continue?'
-        )) {
-            return;
-        }
-
-        var runId = btn.dataset.runId;
-        btn.disabled = true;
-        btn.textContent = 'Submitting override\u2026';
-
-        fetch('/runs/' + runId + '/override-threat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: '{}'
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-            if (data.error) {
-                alert('Error: ' + data.error);
-                btn.disabled = false;
-                btn.textContent = 'Override Security Block & Reprocess';
-                return;
-            }
-
-            var jobId = data.job_id;
-            btn.textContent = 'Processing\u2026';
-
-            var banner = document.getElementById('threat-alert-banner');
-            var statusEl = document.createElement('p');
-            statusEl.id = 'override-status';
-            statusEl.style.cssText = 'color:#991b1b;margin-top:0.5rem;font-weight:600;';
-            statusEl.textContent = 'Reprocessing submission \u2014 this may take a moment\u2026';
-            banner.appendChild(statusEl);
-
-            function poll() {
-                fetch('/api/jobs/' + jobId)
-                .then(function (r) { return r.json(); })
-                .then(function (status) {
-                    if (status.status === 'completed') {
-                        statusEl.textContent = 'Processing complete. Reloading results\u2026';
-                        setTimeout(function () { location.reload(); }, 800);
-                    } else if (status.status === 'failed') {
-                        statusEl.style.color = '#dc2626';
-                        statusEl.textContent = 'Reprocessing failed: ' + (status.error || 'Unknown error');
-                        btn.disabled = false;
-                        btn.textContent = 'Override Security Block & Reprocess';
-                    } else {
-                        setTimeout(poll, 1500);
-                    }
-                })
-                .catch(function () { setTimeout(poll, 2000); });
-            }
-
-            setTimeout(poll, 1500);
-        })
-        .catch(function (err) {
-            alert('Request failed: ' + err.message);
-            btn.disabled = false;
-            btn.textContent = 'Override Security Block & Reprocess';
-        });
-    });
-}());
-</script>
-{% endblock %}
