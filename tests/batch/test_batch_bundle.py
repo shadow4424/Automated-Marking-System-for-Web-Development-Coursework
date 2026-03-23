@@ -50,8 +50,11 @@ def test_batch_bundle_processes_all(tmp_path: Path) -> None:
     data = json.loads(summary_json.read_text(encoding="utf-8"))
     records = data["records"]
     assert len(records) == 2
-    assert all(r.get("status") == "ok" for r in records)
+    assert all(r.get("status") in {"ok", "llm_error"} for r in records)
     assert all(r.get("overall") is not None for r in records)
+    for record in [r for r in records if r.get("status") == "llm_error"]:
+        assert record.get("llm_error_flagged") is True
+        assert record.get("llm_error_messages")
 
 
 def test_batch_bundle_continues_on_error(tmp_path: Path) -> None:
@@ -63,4 +66,7 @@ def test_batch_bundle_continues_on_error(tmp_path: Path) -> None:
     assert len(records) == 3
     statuses = [r.get("status") for r in records]
     assert statuses.count("error") == 1
-    assert statuses.count("ok") == 2
+    assert statuses.count("ok") + statuses.count("llm_error") == 2
+    for record in [r for r in records if r.get("status") == "llm_error"]:
+        assert record.get("llm_error_flagged") is True
+        assert record.get("llm_error_messages")

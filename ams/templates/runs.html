@@ -47,6 +47,8 @@
             <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">FAIL</span>
             {% elif r.threat_flagged %}
             <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">THREAT</span>
+            {% elif r.llm_error_flagged %}
+            <span class="score-badge" style="background:#fef3c7;color:#92400e;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">LLM</span>
             {% else %}
             {% set score = r.get('score') %}
             {% if score is not none %}
@@ -76,6 +78,9 @@
                 {% endif %}
                 {% if r.threat_flagged %}
                 <span class="badge" style="background:#dc2626;color:#fff;">Security Threat</span>
+                {% endif %}
+                {% if r.llm_error_flagged %}
+                <span class="badge" style="background:#fef3c7;color:#92400e;">LLM Error</span>
                 {% endif %}
             </div>
             <div class="run-card-meta">

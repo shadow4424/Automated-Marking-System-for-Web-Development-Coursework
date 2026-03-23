@@ -4,7 +4,7 @@ import json
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Iterable, Mapping, Optional, Tuple, List
+from typing import Any, Iterable, Mapping, Optional, Tuple, List
 from zipfile import ZipFile
 
 from ams.io.metadata import MetadataValidator, SubmissionMetadata
@@ -203,6 +203,111 @@ def _normalize_status(value: object) -> str:
     return status
 
 
+def _append_unique_review_message(messages: list[str], value: object, *, prefix: str = "") -> None:
+    text = str(value or "").strip()
+    if not text:
+        return
+    if prefix and not text.lower().startswith(prefix.lower()):
+        text = f"{prefix}{text}"
+    if text not in messages:
+        messages.append(text)
+
+
+def extract_review_flags_from_report(report: Mapping[str, Any]) -> dict[str, object]:
+    metadata = report.get("metadata", {}) or {}
+    findings = list(report.get("findings", []) or [])
+
+    threat_override = bool(metadata.get("threat_override"))
+    threat_count = sum(1 for finding in findings if finding.get("severity") == "THREAT")
+
+    llm_messages: list[str] = []
+    explicit_messages = metadata.get("llm_error_messages")
+    if isinstance(explicit_messages, list):
+        for item in explicit_messages:
+            _append_unique_review_message(llm_messages, item)
+    _append_unique_review_message(llm_messages, metadata.get("llm_error_message"))
+    if metadata.get("llm_error_detected") and not llm_messages:
+        llm_messages.append("LLM-assisted marking failed and requires review.")
+
+    for finding in findings:
+        finding_id = str(finding.get("id") or "LLM")
+        evidence = finding.get("evidence", {})
+        if not isinstance(evidence, Mapping):
+            continue
+
+        if finding_id == "LLM.ERROR.REQUIRES_REVIEW":
+            for item in list(evidence.get("llm_error_messages") or []):
+                _append_unique_review_message(llm_messages, item)
+            _append_unique_review_message(llm_messages, evidence.get("llm_error_message"))
+
+        llm_feedback = evidence.get("llm_feedback")
+        if isinstance(llm_feedback, Mapping):
+            meta = llm_feedback.get("meta", {}) or {}
+            if isinstance(meta, Mapping) and meta.get("fallback"):
+                reason = str(meta.get("reason") or "").strip().lower()
+                error = str(meta.get("error") or "").strip()
+                if reason == "llm_error" or error:
+                    _append_unique_review_message(
+                        llm_messages,
+                        error or "LLM feedback generation failed.",
+                        prefix=f"{finding_id}: ",
+                    )
+
+        hybrid_score = evidence.get("hybrid_score")
+        if isinstance(hybrid_score, Mapping):
+            reasoning = str(hybrid_score.get("reasoning") or "").strip()
+            raw_response = hybrid_score.get("raw_response")
+            if isinstance(raw_response, Mapping) and raw_response.get("error"):
+                _append_unique_review_message(
+                    llm_messages,
+                    raw_response.get("error"),
+                    prefix=f"{finding_id}: ",
+                )
+            elif "llm error" in reasoning.lower() or "llm parse error" in reasoning.lower():
+                _append_unique_review_message(
+                    llm_messages,
+                    reasoning,
+                    prefix=f"{finding_id}: ",
+                )
+
+        ux_review = evidence.get("ux_review")
+        if isinstance(ux_review, Mapping):
+            status = str(ux_review.get("status") or "").strip().upper()
+            feedback = str(ux_review.get("feedback") or "").strip()
+            if status == "NOT_EVALUATED" and (
+                feedback.lower().startswith("llm error:")
+                or feedback.lower() == "could not parse model response."
+            ):
+                page_name = str(ux_review.get("page") or evidence.get("page") or finding_id).strip()
+                _append_unique_review_message(
+                    llm_messages,
+                    feedback,
+                    prefix=f"{page_name}: ",
+                )
+
+        vision_analysis = evidence.get("vision_analysis")
+        if isinstance(vision_analysis, Mapping):
+            status = str(vision_analysis.get("status") or "").strip().upper()
+            meta = vision_analysis.get("meta", {}) or {}
+            if status == "NOT_EVALUATED" and isinstance(meta, Mapping):
+                reason = str(meta.get("reason") or "").strip().lower()
+                error = str(meta.get("error") or "").strip()
+                if reason in {"llm_error", "parse_error"} or error:
+                    _append_unique_review_message(
+                        llm_messages,
+                        error or reason or "Vision analysis could not be completed.",
+                        prefix=f"{finding_id}: ",
+                    )
+
+    return {
+        "threat_count": threat_count,
+        "threat_flagged": threat_count > 0 and not threat_override,
+        "llm_error_flagged": bool(llm_messages),
+        "llm_error_messages": llm_messages,
+        "llm_error_message": llm_messages[0] if llm_messages else None,
+    }
+
+
 def _submission_is_active_candidate(run: Mapping[str, object], submission: Mapping[str, object] | None = None) -> bool:
     if submission is not None:
         if submission.get("invalid") is True:
@@ -323,13 +428,20 @@ def list_runs(runs_root: Path) -> list[dict]:
                     if scores and "overall" in scores:
                         # Store score as percentage (0-100) for dashboard display
                         info["score"] = scores["overall"] * 100
-                    # Detect threat-blocked submissions (not overridden)
-                    findings = report.get("findings", [])
-                    has_threats = any(
-                        f.get("severity") == "THREAT" for f in findings
-                    )
-                    override_active = report.get("metadata", {}).get("threat_override", False)
-                    info["threat_flagged"] = has_threats and not override_active
+                    review_flags = extract_review_flags_from_report(report)
+                    info["threat_flagged"] = bool(review_flags.get("threat_flagged"))
+                    if review_flags.get("threat_count"):
+                        info["threat_count"] = int(review_flags.get("threat_count") or 0)
+                    else:
+                        info.pop("threat_count", None)
+                    info["llm_error_flagged"] = bool(review_flags.get("llm_error_flagged"))
+                    info["llm_error_messages"] = list(review_flags.get("llm_error_messages") or [])
+                    if info["llm_error_messages"]:
+                        info["llm_error_message"] = str(info["llm_error_messages"][0])
+                        if run_status in {"ok", "completed", "complete", "success", "succeeded", ""}:
+                            info["status"] = "llm_error"
+                    else:
+                        info.pop("llm_error_message", None)
                 except Exception:
                     pass
             
@@ -368,6 +480,9 @@ def list_runs(runs_root: Path) -> list[dict]:
                                 "components": rec.get("components") or {},
                                 "threat_count": rec.get("threat_count"),
                                 "threat_flagged": bool(rec.get("threat_flagged") or rec.get("threat_count")),
+                                "llm_error_flagged": bool(rec.get("llm_error_flagged")),
+                                "llm_error_message": rec.get("llm_error_message"),
+                                "llm_error_messages": list(rec.get("llm_error_messages") or []),
                                 "status": rec.get("status"),
                                 "invalid": rec.get("invalid"),
                                 "error": rec.get("error") or rec.get("validation_error"),
@@ -386,6 +501,9 @@ def list_runs(runs_root: Path) -> list[dict]:
                     "status": info.get("status"),
                     "invalid": False,
                     "threat_flagged": bool(info.get("threat_flagged")),
+                    "llm_error_flagged": bool(info.get("llm_error_flagged")),
+                    "llm_error_message": info.get("llm_error_message"),
+                    "llm_error_messages": list(info.get("llm_error_messages") or []),
                 }]
             elif info.get("mode") == "batch":
                 pending_submissions = info.get("pending_submissions", []) or []
@@ -427,6 +545,17 @@ def list_runs(runs_root: Path) -> list[dict]:
                         sub["threat_count"] = record.get("threat_count")
                     if not sub.get("threat_flagged"):
                         sub["threat_flagged"] = bool(record.get("threat_flagged") or record.get("threat_count"))
+                    if not sub.get("llm_error_flagged"):
+                        sub["llm_error_flagged"] = bool(record.get("llm_error_flagged"))
+                    if not sub.get("llm_error_message"):
+                        sub["llm_error_message"] = record.get("llm_error_message")
+                    if not sub.get("llm_error_messages"):
+                        sub["llm_error_messages"] = list(record.get("llm_error_messages") or [])
+                    if (
+                        sub.get("llm_error_flagged")
+                        and str(sub.get("status") or "").strip().lower() in {"", "ok", "completed", "complete", "success", "succeeded"}
+                    ):
+                        sub["status"] = "llm_error"
 
             assignment_ids = _assignment_ids_from_submissions(info)
             if assignment_ids:

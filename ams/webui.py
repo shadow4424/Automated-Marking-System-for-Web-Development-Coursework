@@ -53,6 +53,7 @@ from ams.io.metadata import MetadataValidator, SubmissionMetadata
 from ams.io.web_storage import (
     allowed_download,
     create_run_dir,
+    extract_review_flags_from_report,
     find_run_by_id,
     find_submission_root,
     get_runs_root,
@@ -764,6 +765,8 @@ def _register_routes(app: Flask) -> None:
                         profile=profile,
                         metadata=meta_dict,
                     )
+                    report_data = json.loads(report_path.read_text(encoding="utf-8"))
+                    review_flags = extract_review_flags_from_report(report_data)
                     run_info = {
                         "id": run_id,
                         "mode": "mark",
@@ -776,7 +779,12 @@ def _register_routes(app: Flask) -> None:
                         "assignment_id": assignment_id,
                         "original_filename": original_filename,
                         "source": "github" if using_github else "upload",
-                        "status": "completed",
+                        "status": "llm_error" if review_flags.get("llm_error_flagged") else "completed",
+                        "threat_flagged": bool(review_flags.get("threat_flagged")),
+                        "threat_count": int(review_flags.get("threat_count") or 0),
+                        "llm_error_flagged": bool(review_flags.get("llm_error_flagged")),
+                        "llm_error_message": review_flags.get("llm_error_message"),
+                        "llm_error_messages": list(review_flags.get("llm_error_messages") or []),
                     }
                     if using_github:
                         run_info["github_repo"] = github_repo
@@ -1114,7 +1122,7 @@ def _register_routes(app: Flask) -> None:
         flash(f"Run '{run_id[:24]}…' deleted.", "success")
         return redirect(url_for("runs"))
 
-    def _assignment_has_unresolved_threats(assignment_id: str) -> bool:
+    def _assignment_has_unresolved_release_blockers(assignment_id: str) -> bool:
         for run in list_runs(get_runs_root(app)):
             if run.get("mode") == "batch":
                 for submission in list(run.get("submissions", []) or []):
@@ -1124,22 +1132,29 @@ def _register_routes(app: Flask) -> None:
                         continue
                     if str(submission.get("status") or "").strip().lower().startswith("invalid"):
                         continue
-                    if submission.get("threat_flagged") or submission.get("threat_count"):
+                    if (
+                        submission.get("threat_flagged")
+                        or submission.get("threat_count")
+                        or submission.get("llm_error_flagged")
+                    ):
                         return True
                 continue
-            if str(run.get("assignment_id") or "").strip() == assignment_id and run.get("threat_flagged"):
+            if (
+                str(run.get("assignment_id") or "").strip() == assignment_id
+                and (run.get("threat_flagged") or run.get("llm_error_flagged"))
+            ):
                 return True
         return False
 
-    def _flash_assignment_threat_state(assignment_id: str, resolved_message: str) -> None:
+    def _flash_assignment_review_state(assignment_id: str, resolved_message: str) -> None:
         flash(resolved_message, "success")
-        if _assignment_has_unresolved_threats(assignment_id):
+        if _assignment_has_unresolved_release_blockers(assignment_id):
             flash(
-                "Other threat-flagged submissions still need attention before grades can be released.",
+                "Other flagged submissions still need attention before grades can be released.",
                 "warning",
             )
         else:
-            flash("No threat-flagged submissions remain. Grades can now be released.", "success")
+            flash("No flagged submissions remain. Grades can now be released.", "success")
 
     def _load_batch_summary_records(run_dir: Path) -> dict | None:
         summary_path = run_dir / "batch_summary.json"
@@ -1297,8 +1312,8 @@ def _register_routes(app: Flask) -> None:
         meta = report.get("metadata", {}) or {}
         submission_meta = meta.get("submission_metadata", {}) or {}
         scores = report.get("scores", {}) or {}
-        findings = report.get("findings", []) or []
         by_component = scores.get("by_component", {}) or {}
+        review_flags = extract_review_flags_from_report(report)
 
         record["report_path"] = str(report_path)
         record["student_id"] = submission_meta.get("student_id") or record.get("student_id")
@@ -1309,19 +1324,19 @@ def _register_routes(app: Flask) -> None:
             component: ((by_component.get(component) or {}).get("score"))
             for component in ("html", "css", "js", "php", "sql")
         }
-        record["status"] = "ok"
+        record["status"] = "llm_error" if review_flags.get("llm_error_flagged") else "ok"
         record["rerun_pending"] = False
         record["invalid"] = False
         record.pop("error", None)
         record.pop("validation_error", None)
-
-        threat_count = sum(1 for finding in findings if finding.get("severity") == "THREAT")
-        if threat_count:
-            record["threat_count"] = threat_count
-            record["threat_flagged"] = True
+        record["threat_flagged"] = bool(review_flags.get("threat_flagged"))
+        if review_flags.get("threat_count"):
+            record["threat_count"] = int(review_flags.get("threat_count") or 0)
         else:
             record.pop("threat_count", None)
-            record["threat_flagged"] = False
+        record["llm_error_flagged"] = bool(review_flags.get("llm_error_flagged"))
+        record["llm_error_message"] = review_flags.get("llm_error_message")
+        record["llm_error_messages"] = list(review_flags.get("llm_error_messages") or [])
 
     def _rerun_mark_submission(run_dir: Path, run_info: Mapping[str, object]) -> dict:
         submission_source = _resolve_mark_rerun_source(run_dir, run_info)
@@ -1350,10 +1365,20 @@ def _register_routes(app: Flask) -> None:
             failed_run_info.pop("rerun_pending", None)
             save_run_info(run_dir, failed_run_info)
             raise
+        report_data = json.loads(report_path.read_text(encoding="utf-8"))
+        review_flags = extract_review_flags_from_report(report_data)
         updated_run_info = dict(run_info)
         updated_run_info["report"] = report_path.name
         updated_run_info["summary"] = "summary.txt"
-        updated_run_info["status"] = "completed"
+        updated_run_info["status"] = "llm_error" if review_flags.get("llm_error_flagged") else "completed"
+        updated_run_info["threat_flagged"] = bool(review_flags.get("threat_flagged"))
+        if review_flags.get("threat_count"):
+            updated_run_info["threat_count"] = int(review_flags.get("threat_count") or 0)
+        else:
+            updated_run_info.pop("threat_count", None)
+        updated_run_info["llm_error_flagged"] = bool(review_flags.get("llm_error_flagged"))
+        updated_run_info["llm_error_message"] = review_flags.get("llm_error_message")
+        updated_run_info["llm_error_messages"] = list(review_flags.get("llm_error_messages") or [])
         updated_run_info["last_rerun_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         updated_run_info.pop("rerun_pending", None)
         updated_run_info.pop("error", None)
@@ -1453,16 +1478,16 @@ def _register_routes(app: Flask) -> None:
             raise RuntimeError("Submission is already queued for rerun.")
 
         queued_run_info = dict(run_info)
-        if "threat_flagged" not in queued_run_info:
+        if "threat_flagged" not in queued_run_info or "llm_error_flagged" not in queued_run_info:
             report_path = run_dir / str(run_info.get("report") or "report.json")
             if report_path.exists():
                 try:
                     report = json.loads(report_path.read_text(encoding="utf-8"))
-                    findings = report.get("findings", []) or []
-                    meta = report.get("metadata", {}) or {}
-                    queued_run_info["threat_flagged"] = any(
-                        finding.get("severity") == "THREAT" for finding in findings
-                    ) and not meta.get("threat_override", False)
+                    review_flags = extract_review_flags_from_report(report)
+                    queued_run_info["threat_flagged"] = bool(review_flags.get("threat_flagged"))
+                    queued_run_info["llm_error_flagged"] = bool(review_flags.get("llm_error_flagged"))
+                    queued_run_info["llm_error_message"] = review_flags.get("llm_error_message")
+                    queued_run_info["llm_error_messages"] = list(review_flags.get("llm_error_messages") or [])
                 except Exception:
                     pass
         queued_run_info["status"] = "pending"
@@ -1585,14 +1610,14 @@ def _register_routes(app: Flask) -> None:
             _safe_delete_within_run(run_dir, target.get("path"))
             remaining = [record for record in records if str(record.get("id") or "") != submission_id]
             _persist_batch_outputs(run_dir, run_info, remaining)
-            _flash_assignment_threat_state(
+            _flash_assignment_review_state(
                 assignment_id,
                 f"Flagged submission for '{target.get('student_id') or submission_id}' deleted.",
             )
             return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
 
         shutil.rmtree(run_dir, ignore_errors=True)
-        _flash_assignment_threat_state(
+        _flash_assignment_review_state(
             assignment_id,
             f"Flagged submission for '{run_info.get('student_id') or run_id}' deleted.",
         )
@@ -1686,6 +1711,21 @@ def _register_routes(app: Flask) -> None:
             if run_status not in {"pending", "failed", "error"} and report_path.exists():
                 context["report"] = _ensure_check_stats(
                     json.loads(report_path.read_text(encoding="utf-8"))
+                )
+                review_flags = extract_review_flags_from_report(context["report"])
+                context["run"] = dict(
+                    run_info,
+                    threat_flagged=bool(review_flags.get("threat_flagged")),
+                    threat_count=int(review_flags.get("threat_count") or 0),
+                    llm_error_flagged=bool(review_flags.get("llm_error_flagged")),
+                    llm_error_message=review_flags.get("llm_error_message"),
+                    llm_error_messages=list(review_flags.get("llm_error_messages") or []),
+                    status=(
+                        "llm_error"
+                        if review_flags.get("llm_error_flagged")
+                        and run_status in {"", "ok", "completed", "complete", "success", "succeeded"}
+                        else run_info.get("status")
+                    ),
                 )
                 context["threat_file_contents"] = _load_threat_file_contents(
                     context["report"].get("findings", []), run_dir
@@ -1853,6 +1893,15 @@ def _register_routes(app: Flask) -> None:
             report = _ensure_check_stats(
                 json.loads(report_path.read_text(encoding="utf-8"))
             )
+            review_flags = extract_review_flags_from_report(report)
+            if record is not None:
+                record["threat_flagged"] = bool(review_flags.get("threat_flagged"))
+                record["threat_count"] = int(review_flags.get("threat_count") or 0)
+                record["llm_error_flagged"] = bool(review_flags.get("llm_error_flagged"))
+                record["llm_error_message"] = review_flags.get("llm_error_message")
+                record["llm_error_messages"] = list(review_flags.get("llm_error_messages") or [])
+                if record["llm_error_flagged"] and record_status in {"", "ok", "completed", "complete", "success", "succeeded"}:
+                    record_status = "llm_error"
 
         # Extract real student_id from batch_summary or report metadata
         # (submission_id is the full stem like "testStudent_test_assignment1",
@@ -1904,6 +1953,9 @@ def _register_routes(app: Flask) -> None:
             "student_id": real_student_id,
             "created_at": run_info.get("created_at", ""),
             "status": record_status,
+            "llm_error_flagged": bool((record or {}).get("llm_error_flagged")),
+            "llm_error_message": (record or {}).get("llm_error_message"),
+            "llm_error_messages": list((record or {}).get("llm_error_messages") or []),
         }
 
         # submission_dir doubles as the "run_dir" for threat file loading
@@ -2392,6 +2444,7 @@ def _write_run_index_mark(run_dir: Path, run_info: dict, report_path: Path) -> N
     meta = report.get("metadata", {}) or {}
     submission_meta = meta.get("submission_metadata") or {}
     ident = meta.get("student_identity", {}) or {}
+    review_flags = extract_review_flags_from_report(report)
     
     sub_entry = {
         "submission_id": meta.get("submission_name"),
@@ -2400,6 +2453,11 @@ def _write_run_index_mark(run_dir: Path, run_info: dict, report_path: Path) -> N
         "assignment_id": submission_meta.get("assignment_id") or run_info.get("assignment_id"),
         "original_filename": submission_meta.get("original_filename") or meta.get("original_filename") or run_info.get("original_filename"),
         "upload_timestamp": submission_meta.get("timestamp") or run_info.get("created_at"),
+        "threat_count": int(review_flags.get("threat_count") or 0),
+        "threat_flagged": bool(review_flags.get("threat_flagged")),
+        "llm_error_flagged": bool(review_flags.get("llm_error_flagged")),
+        "llm_error_message": review_flags.get("llm_error_message"),
+        "llm_error_messages": list(review_flags.get("llm_error_messages") or []),
     }
     
     index = {
@@ -2408,7 +2466,7 @@ def _write_run_index_mark(run_dir: Path, run_info: dict, report_path: Path) -> N
         "profile": run_info.get("profile"),
         "created_at": run_info.get("created_at"),
         "overall": report.get("scores", {}).get("overall"),
-        "status": "ok",
+        "status": "llm_error" if review_flags.get("llm_error_flagged") else "ok",
         "submissions": [sub_entry],
     }
     (run_dir / "run_index.json").write_text(json.dumps(index, indent=2), encoding="utf-8")
@@ -2436,6 +2494,9 @@ def _write_run_index_batch(run_dir: Path, run_info: dict) -> None:
             "components": rec.get("components") or {},
             "threat_count": rec.get("threat_count"),
             "threat_flagged": bool(rec.get("threat_flagged") or rec.get("threat_count")),
+            "llm_error_flagged": bool(rec.get("llm_error_flagged")),
+            "llm_error_message": rec.get("llm_error_message"),
+            "llm_error_messages": list(rec.get("llm_error_messages") or []),
             "status": rec.get("status"),
             "invalid": bool(rec.get("invalid")),
             "error": rec.get("error") or rec.get("validation_error"),
@@ -2462,13 +2523,15 @@ def _write_run_index_batch(run_dir: Path, run_info: dict) -> None:
                         component: (component_scores or {}).get("score")
                         for component, component_scores in by_component.items()
                     }
-                entry["threat_flagged"] = any(
-                    finding.get("severity") == "THREAT" for finding in findings
-                ) and not meta.get("threat_override", False)
-                if entry["threat_flagged"]:
-                    entry["threat_count"] = sum(
-                        1 for finding in findings if finding.get("severity") == "THREAT"
-                    )
+                review_flags = extract_review_flags_from_report(rep)
+                entry["threat_flagged"] = bool(review_flags.get("threat_flagged"))
+                if review_flags.get("threat_count"):
+                    entry["threat_count"] = int(review_flags.get("threat_count") or 0)
+                entry["llm_error_flagged"] = bool(review_flags.get("llm_error_flagged"))
+                entry["llm_error_message"] = review_flags.get("llm_error_message")
+                entry["llm_error_messages"] = list(review_flags.get("llm_error_messages") or [])
+                if entry["llm_error_flagged"] and str(entry.get("status") or "").strip().lower() in {"", "ok", "completed", "complete", "success", "succeeded"}:
+                    entry["status"] = "llm_error"
             except Exception:
                 pass
         submissions.append(entry)

@@ -381,7 +381,14 @@ def evaluate_partial_credit_batch(
         return _evaluate_batch_internal(items, rule_names)
     except Exception as e:
         logger.warning("Batch partial credit failed, using fallbacks: %s", e)
-        return {rn: HybridScore(static_score=0.0) for rn in rule_names}
+        return {
+            rn: HybridScore(
+                static_score=0.0,
+                reasoning=f"LLM error: {e}",
+                raw_response={"error": str(e)},
+            )
+            for rn in rule_names
+        }
 
 
 def _evaluate_batch_internal(

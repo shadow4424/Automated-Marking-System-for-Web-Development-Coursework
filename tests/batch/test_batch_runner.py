@@ -76,8 +76,12 @@ def test_run_batch_success_and_failure(tmp_path: Path) -> None:
 
     assert len(records) == 3
     assert "summary" not in data
-    assert len([r for r in records if r.get("status") == "ok"]) == 2
+    successful = [r for r in records if r.get("status") in {"ok", "llm_error"}]
+    assert len(successful) == 2
     assert len([r for r in records if r.get("status") == "error"]) == 1
+    for record in [r for r in records if r.get("status") == "llm_error"]:
+        assert record.get("llm_error_flagged") is True
+        assert record.get("llm_error_messages")
 
     runs_root = out_root / "runs"
     assert (runs_root / "good1_assignment1" / "report.json").exists()
@@ -107,4 +111,7 @@ def test_run_batch_without_keep_individual_runs(tmp_path: Path) -> None:
     assert not runs_dir.exists() or not any(runs_dir.iterdir())
 
     assert len(result["records"]) == 2
-    assert all(record.get("status") == "ok" for record in result["records"])
+    assert all(record.get("status") in {"ok", "llm_error"} for record in result["records"])
+    for record in [r for r in result["records"] if r.get("status") == "llm_error"]:
+        assert record.get("llm_error_flagged") is True
+        assert record.get("llm_error_messages")

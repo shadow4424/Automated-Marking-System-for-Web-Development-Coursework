@@ -26,9 +26,9 @@
             <button
                 type="submit"
                 class="btn btn-success btn-sm"
-                {% if has_unresolved_threats %}
+                {% if has_release_blockers %}
                 disabled
-                title="Resolve all threat-flagged submissions before releasing grades."
+                title="Resolve all flagged submissions before releasing grades."
                 aria-disabled="true"
                 {% endif %}>
                 Release Marks
@@ -74,6 +74,52 @@
                     <input type="hidden" name="run_id" value="{{ threat.run_id }}">
                     {% if threat.submission_id %}
                     <input type="hidden" name="submission_id" value="{{ threat.submission_id }}">
+                    {% endif %}
+                    <button type="submit" class="btn btn-danger btn-sm">Delete flagged submission</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if has_unresolved_llm_errors %}
+<div class="card" style="margin-bottom:var(--space-lg); border-left:4px solid #d97706; background:#fffbeb;">
+    <div class="card-header" style="align-items:flex-start; gap:var(--space-md);">
+        <div>
+            <h2 class="card-title" style="color:#92400e;">Grade release blocked</h2>
+            <p class="text-secondary" style="margin:var(--space-xs) 0 0 0; color:#92400e;">
+                One or more submissions failed during LLM-assisted marking. Review, rerun, or delete each flagged submission before grades can be released.
+            </p>
+        </div>
+        <span class="badge" style="background:#d97706;color:#fff;">{{ llm_error_rows|length }} LLM error{{ 's' if llm_error_rows|length != 1 else '' }}</span>
+    </div>
+    <div style="display:grid; gap:var(--space-sm);">
+        {% for flagged in llm_error_rows %}
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:var(--space-sm); padding:var(--space-sm) 0; border-top:1px solid rgba(217,119,6,0.16);">
+            <div style="display:flex; flex-direction:column; gap:0.3rem; max-width:48rem;">
+                <strong><code>{{ flagged.student_id }}</code></strong>
+                <span class="text-secondary" style="color:#92400e;">
+                    {{ flagged.mode|capitalize }} submission flagged as <strong>LLM Error - Requires Review</strong>.
+                </span>
+                <span class="text-secondary" style="color:#78350f;">
+                    {{ flagged.llm_error_message }}
+                </span>
+                <a href="{{ flagged.detail_url }}" class="btn btn-ghost btn-sm" style="width:max-content;">Review submission</a>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:var(--space-xs); align-items:center;">
+                <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" style="display:inline;" data-job-form="rerun">
+                    <input type="hidden" name="run_id" value="{{ flagged.run_id }}">
+                    {% if flagged.submission_id %}
+                    <input type="hidden" name="submission_id" value="{{ flagged.submission_id }}">
+                    {% endif %}
+                    <button type="submit" class="btn btn-warning btn-sm">Re-run submission</button>
+                </form>
+                <form method="POST" action="{{ url_for('assignment_threat_delete', assignment_id=assignment.assignmentID) }}" style="display:inline;" onsubmit="return confirm('Delete the flagged submission for {{ flagged.student_id }}?');">
+                    <input type="hidden" name="run_id" value="{{ flagged.run_id }}">
+                    {% if flagged.submission_id %}
+                    <input type="hidden" name="submission_id" value="{{ flagged.submission_id }}">
                     {% endif %}
                     <button type="submit" class="btn btn-danger btn-sm">Delete flagged submission</button>
                 </form>
@@ -240,6 +286,8 @@
                         <span class="badge badge-warning">Pending</span>
                         {% elif r.threat_flagged or status == 'threat' %}
                         <span class="badge" style="background:#dc2626;color:#fff;">Threat</span>
+                        {% elif r.llm_error_flagged or status == 'llm_error' %}
+                        <span class="badge" style="background:#fef3c7;color:#92400e;">LLM Error - Requires Review</span>
                         {% elif status == 'failed' %}
                         <span class="badge badge-danger">Failed</span>
                         {% else %}

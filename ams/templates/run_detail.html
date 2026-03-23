@@ -87,6 +87,16 @@
 </div>
 {% endif %}
 
+{% if run.llm_error_flagged %}
+<div class="card mb-lg"
+    style="border-left:4px solid #d97706; background:#fffbeb; padding:1rem 1.25rem;">
+    <strong style="color:#b45309; font-size:1.05rem;">LLM Error - Requires Review</strong>
+    <p class="mt-xs mb-0" style="color:#92400e;">
+        {{ run.llm_error_message or "LLM-assisted marking failed for this submission. Re-run the submission from the header action above or delete it if it should not remain in scope." }}
+    </p>
+</div>
+{% endif %}
+
 {# ── Environment Banner ── #}
 {% set env = report.get('environment') %}
 {% if env and (not env.get('php_available', true) or not env.get('browser_available', true) or not

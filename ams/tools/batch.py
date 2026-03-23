@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Tuple
 
 from ams.core.pipeline import AssessmentPipeline
 from ams.core.config import ScoringMode
-from ams.io.web_storage import safe_extract_zip, find_submission_root
+from ams.io.web_storage import extract_review_flags_from_report, safe_extract_zip, find_submission_root
 
 # Submission filename must match: studentID_assignmentID.zip
 # studentID: alphanumeric only, e.g. "student1234" (letters and digits, no special characters)
@@ -285,16 +285,16 @@ def _process_one_submission(
         record["overall"] = scores.get("overall")
         comps = scores.get("by_component", {}) or {}
         record["components"] = {k: comps.get(k, {}).get("score") for k in _empty_components().keys()}
-        findings = report_data.get("findings", []) or []
-        record["status"] = "ok"
-        
-        # Count threat findings for this submission
-        threat_count = sum(
-            1 for f in findings if f.get("severity") == "THREAT"
-        )
-        if threat_count:
-            record["threat_count"] = threat_count
+        review_flags = extract_review_flags_from_report(report_data)
+        record["status"] = "llm_error" if review_flags.get("llm_error_flagged") else "ok"
+        if review_flags.get("threat_count"):
+            record["threat_count"] = int(review_flags.get("threat_count") or 0)
+        if review_flags.get("threat_flagged"):
             record["threat_flagged"] = True
+        if review_flags.get("llm_error_flagged"):
+            record["llm_error_flagged"] = True
+            record["llm_error_message"] = review_flags.get("llm_error_message")
+            record["llm_error_messages"] = list(review_flags.get("llm_error_messages") or [])
     except Exception as exc:  # pragma: no cover - defensive
         record["error"] = str(exc)
         record["status"] = "error"

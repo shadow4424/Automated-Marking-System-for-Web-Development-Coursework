@@ -94,6 +94,8 @@ class AssessmentPipeline:
         context = self._prepare_context(submission_path, workspace_path, profile)
         context.metadata["profile"] = profile
         context.metadata["scoring_mode"] = self.scoring_mode.value
+        context.metadata["llm_error_detected"] = False
+        context.metadata["llm_error_messages"] = []
 
         # ── Record sandbox status in run metadata ────────────────────
         try:
@@ -221,6 +223,9 @@ class AssessmentPipeline:
             if "ux_reviews" not in llm_evidence:
                 llm_evidence["ux_reviews"] = []
             llm_evidence["ux_reviews"].extend(ux_reviews)
+
+        if context.metadata.get("llm_error_detected"):
+            findings.append(self._build_llm_error_review_finding(context, profile))
         
         report_path = workspace_path / "report.json"
         ReportWriter(report_path).write(
@@ -407,6 +412,47 @@ class AssessmentPipeline:
                 "recommendation": "Review manually — LLM analysis unavailable.",
                 "error": True,
             }
+
+    @staticmethod
+    def _record_llm_issue(context: SubmissionContext, message: object) -> None:
+        text = str(message or "").strip()
+        if not text:
+            text = "LLM-assisted marking failed and requires review."
+        messages = context.metadata.setdefault("llm_error_messages", [])
+        if isinstance(messages, list) and text not in messages:
+            messages.append(text)
+        context.metadata["llm_error_detected"] = True
+        context.metadata["llm_error_message"] = (
+            messages[0] if isinstance(messages, list) and messages else text
+        )
+
+    @staticmethod
+    def _build_llm_error_review_finding(
+        context: SubmissionContext,
+        profile: str,
+    ) -> Finding:
+        messages = [
+            str(item).strip()
+            for item in list(context.metadata.get("llm_error_messages", []) or [])
+            if str(item).strip()
+        ]
+        summary = messages[0] if messages else "LLM-assisted marking failed and requires review."
+        return Finding(
+            id="LLM.ERROR.REQUIRES_REVIEW",
+            category="llm",
+            message=f"LLM Error - Requires Review. {summary}",
+            severity=Severity.WARN,
+            evidence={
+                "llm_error_count": len(messages),
+                "llm_error_message": summary,
+                "llm_error_messages": messages,
+            },
+            source="AssessmentPipeline.llm",
+            finding_category=FindingCategory.CONFIG,
+            profile=profile,
+            required=False,
+            tags=["llm_error", "requires_review"],
+        )
 
     def _should_use_llm(self) -> bool:
         """Check if LLM should be used based on scoring mode."""
@@ -601,6 +647,10 @@ class AssessmentPipeline:
                             pc_results[idx] = result
                     except Exception as exc:
                         logger.error("LLM %s chunk %d failed: %s", task_type, idx, exc)
+                        self._record_llm_issue(
+                            context,
+                            f"{'Feedback' if task_type == 'fb' else 'Partial-credit'} LLM task failed: {exc}",
+                        )
 
             # Apply results back to findings (single-threaded, safe)
             for idx, chunk in enumerate(chunks):
@@ -612,6 +662,15 @@ class AssessmentPipeline:
                         fb_dict = fb.model_dump() if hasattr(fb, "model_dump") else fb
                         if isinstance(item["finding"].evidence, dict):
                             item["finding"].evidence["llm_feedback"] = fb_dict
+                        fb_meta = fb_dict.get("meta", {}) if isinstance(fb_dict, dict) else {}
+                        if isinstance(fb_meta, dict) and fb_meta.get("fallback"):
+                            reason = str(fb_meta.get("reason") or "").strip().lower()
+                            error = str(fb_meta.get("error") or "").strip()
+                            if reason == "llm_error" or error:
+                                self._record_llm_issue(
+                                    context,
+                                    f"{fid}: {error or 'LLM feedback generation failed.'}",
+                                )
                         llm_evidence["feedback"].append({
                             "finding_id": fid,
                             "feedback": fb_dict,
@@ -623,6 +682,10 @@ class AssessmentPipeline:
                                 "items": [],
                                 "meta": {"fallback": True, "reason": "llm_error"},
                             }
+                        self._record_llm_issue(
+                            context,
+                            f"{fid}: LLM feedback generation failed.",
+                        )
 
                 score_map = pc_results.get(idx, {})
                 pc_finding_map = chunk_pc_finding_maps[idx]
@@ -632,6 +695,15 @@ class AssessmentPipeline:
                         continue
                     if isinstance(pi["finding"].evidence, dict):
                         pi["finding"].evidence["hybrid_score"] = hybrid_score.to_dict()
+                    reasoning = str(hybrid_score.reasoning or "").strip()
+                    raw_error = ""
+                    if isinstance(hybrid_score.raw_response, dict):
+                        raw_error = str(hybrid_score.raw_response.get("error") or "").strip()
+                    if raw_error or "llm error" in reasoning.lower() or "llm parse error" in reasoning.lower():
+                        self._record_llm_issue(
+                            context,
+                            f"{rule_name}: {raw_error or reasoning or 'LLM partial-credit evaluation failed.'}",
+                        )
                     llm_evidence["partial_credit"].append({
                         "finding_id": rule_name,
                         "hybrid_score": hybrid_score.to_dict(),
@@ -787,6 +859,15 @@ class AssessmentPipeline:
                 rel_screenshot = Path(shot_path.name)
 
             review_dict = review.model_dump()
+            review_feedback = str(review.feedback or "").strip()
+            if review.status == "NOT_EVALUATED" and (
+                review_feedback.lower().startswith("llm error:")
+                or review_feedback.lower() == "could not parse model response."
+            ):
+                self._record_llm_issue(
+                    context,
+                    f"{page_name}: {review_feedback}",
+                )
 
             # Build the finding message: feedback + improvement recommendation
             message_parts = [review.feedback or "No feedback generated."]
@@ -1140,4 +1221,3 @@ def _default_assessors(
 
 
 __all__ = ["AssessmentPipeline"]
-

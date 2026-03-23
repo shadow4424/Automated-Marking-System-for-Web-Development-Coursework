@@ -82,6 +82,8 @@ def _submission_matches_assignment(submission: Mapping[str, Any], assignment_id:
 def _batch_submission_display_status(submission: Mapping[str, Any]) -> str:
     if submission.get("threat_flagged") or submission.get("threat_count"):
         return "threat"
+    if submission.get("llm_error_flagged"):
+        return "llm_error"
     status = str(submission.get("status") or "").strip().lower()
     if status in {"pending", "queued", "running"}:
         return "pending"
@@ -118,6 +120,9 @@ def _build_assignment_run_rows(assignment_id: str) -> list[dict]:
                 submission_row["score"] = float(overall) * 100 if isinstance(overall, (int, float)) else None
                 submission_row["status"] = _batch_submission_display_status(submission)
                 submission_row["threat_flagged"] = bool(submission.get("threat_flagged") or submission.get("threat_count"))
+                submission_row["llm_error_flagged"] = bool(submission.get("llm_error_flagged"))
+                submission_row["llm_error_message"] = submission.get("llm_error_message")
+                submission_row["llm_error_messages"] = list(submission.get("llm_error_messages") or [])
                 assignment_runs.append(submission_row)
             continue
 
@@ -134,6 +139,24 @@ def _build_assignment_run_rows(assignment_id: str) -> list[dict]:
                     for submission in matching_submissions
                 )
             )
+            run_row["llm_error_flagged"] = bool(
+                run_row.get("llm_error_flagged")
+                or any(bool(submission.get("llm_error_flagged")) for submission in matching_submissions)
+            )
+            if not run_row.get("llm_error_messages"):
+                messages: list[str] = []
+                for submission in matching_submissions:
+                    for item in list(submission.get("llm_error_messages") or []):
+                        if str(item).strip() and str(item) not in messages:
+                            messages.append(str(item))
+                if messages:
+                    run_row["llm_error_messages"] = messages
+                    run_row["llm_error_message"] = messages[0]
+            if (
+                run_row.get("llm_error_flagged")
+                and str(run_row.get("status") or "").strip().lower() in {"", "ok", "completed", "complete", "success", "succeeded"}
+            ):
+                run_row["status"] = "llm_error"
             assignment_runs.append(run_row)
 
     assignment_runs.sort(
@@ -175,6 +198,47 @@ def _build_threat_resolution_rows(assignment_runs: Sequence[Mapping[str, Any]]) 
             }
         )
     return threat_rows
+
+
+def _build_llm_error_resolution_rows(assignment_runs: Sequence[Mapping[str, Any]]) -> list[dict]:
+    llm_rows: list[dict] = []
+    for row in assignment_runs:
+        submission = row.get("_submission_record") if isinstance(row.get("_submission_record"), Mapping) else {}
+        llm_error_flagged = bool(
+            row.get("llm_error_flagged")
+            or (isinstance(submission, Mapping) and submission.get("llm_error_flagged"))
+            or str(row.get("status") or "").strip().lower() == "llm_error"
+        )
+        if not llm_error_flagged:
+            continue
+        messages = [
+            str(item).strip()
+            for item in list(row.get("llm_error_messages") or submission.get("llm_error_messages") or [])
+            if str(item).strip()
+        ]
+        first_message = str(
+            row.get("llm_error_message")
+            or (submission.get("llm_error_message") if isinstance(submission, Mapping) else "")
+            or (messages[0] if messages else "")
+        ).strip()
+        if first_message and first_message not in messages:
+            messages.insert(0, first_message)
+        llm_rows.append(
+            {
+                "run_id": str(row.get("id") or ""),
+                "student_id": str(row.get("student_id") or "Unknown"),
+                "mode": str(row.get("mode") or "mark"),
+                "submission_id": str(row.get("_batch_submission_id") or ""),
+                "detail_url": (
+                    url_for("batch_submission_view", run_id=row.get("id"), submission_id=row.get("_batch_submission_id"))
+                    if row.get("mode") == "batch" and row.get("_batch_submission_id")
+                    else url_for("run_detail", run_id=row.get("id"))
+                ),
+                "llm_error_message": first_message or "LLM-assisted marking failed and requires review.",
+                "llm_error_messages": messages,
+            }
+        )
+    return llm_rows
 
 
 def _filtered_needs_attention_rows(analytics: dict, args) -> list[dict]:
@@ -463,6 +527,7 @@ def assignment_detail(assignment_id: str):
     all_students = list_users(role="student")
     assignment_runs = _build_assignment_run_rows(assignment_id)
     threat_rows = _build_threat_resolution_rows(assignment_runs)
+    llm_error_rows = _build_llm_error_resolution_rows(assignment_runs)
 
     return render_template(
         "assignment_detail.html",
@@ -471,18 +536,23 @@ def assignment_detail(assignment_id: str):
         all_students=all_students,
         runs=assignment_runs,
         threat_rows=threat_rows,
+        llm_error_rows=llm_error_rows,
         has_unresolved_threats=bool(threat_rows),
+        has_unresolved_llm_errors=bool(llm_error_rows),
+        has_release_blockers=bool(threat_rows or llm_error_rows),
     )
 
 
 @teacher_bp.route("/assignment/<assignment_id>/release", methods=["POST"])
 @teacher_or_admin_required
 def release(assignment_id: str):
-    threat_rows = _build_threat_resolution_rows(_build_assignment_run_rows(assignment_id))
-    if threat_rows:
+    assignment_runs = _build_assignment_run_rows(assignment_id)
+    threat_rows = _build_threat_resolution_rows(assignment_runs)
+    llm_error_rows = _build_llm_error_resolution_rows(assignment_runs)
+    if threat_rows or llm_error_rows:
         flash(
-            "Grades cannot be released while threat-flagged submissions remain. "
-            "Delete or re-run the flagged submissions first.",
+            "Grades cannot be released while flagged submissions remain. "
+            "Resolve all threat-detected or LLM-error submissions first.",
             "error",
         )
         return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))

@@ -125,6 +125,105 @@ def _seed_batch_threat_run(tmp_path: Path, assignment_id: str = "assignment1", s
     return run_id, submission_id, run_dir
 
 
+def _seed_batch_llm_error_run(tmp_path: Path, assignment_id: str = "assignment1", student_id: str = "student4") -> tuple[str, str, Path]:
+    run_id = "20260323-031500_batch_fullstack_llm"
+    submission_id = f"{student_id}_{assignment_id}"
+    run_dir = tmp_path / assignment_id / "batch" / run_id
+    submission_dir = run_dir / "runs" / submission_id
+    report_path = submission_dir / "report.json"
+    source_zip = run_dir / "batch_inputs" / "batch_submissions" / f"{submission_id}.zip"
+
+    (submission_dir / "submission").mkdir(parents=True, exist_ok=True)
+    (submission_dir / "submission" / "index.html").write_text("<!doctype html><html><body>safe</body></html>", encoding="utf-8")
+    source_zip.parent.mkdir(parents=True, exist_ok=True)
+    source_zip.write_bytes(_make_zip({"index.html": "<!doctype html><html><body>safe</body></html>"}))
+    report_path.write_text(
+        json.dumps(
+            {
+                "scores": {
+                    "overall": 0.52,
+                    "by_component": {
+                        "html": {"score": 0.5},
+                        "css": {"score": 0.6},
+                        "js": {"score": 0.4},
+                        "php": {"score": 0.5},
+                        "sql": {"score": 0.6},
+                    },
+                },
+                "findings": [
+                    {
+                        "id": "CSS.REQ.FAIL",
+                        "severity": "FAIL",
+                        "evidence": {
+                            "llm_feedback": {
+                                "summary": "fallback",
+                                "items": [],
+                                "meta": {"fallback": True, "reason": "llm_error", "error": "Provider timeout"},
+                            }
+                        },
+                    },
+                    {
+                        "id": "LLM.ERROR.REQUIRES_REVIEW",
+                        "severity": "WARN",
+                        "evidence": {
+                            "llm_error_message": "CSS.REQ.FAIL: Provider timeout",
+                            "llm_error_messages": ["CSS.REQ.FAIL: Provider timeout"],
+                        },
+                    },
+                ],
+                "metadata": {
+                    "submission_metadata": {
+                        "student_id": student_id,
+                        "assignment_id": assignment_id,
+                        "original_filename": source_zip.name,
+                        "timestamp": "2026-03-23T03:15:59Z",
+                    },
+                    "student_identity": {"student_id": student_id, "name_normalized": student_id},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "batch_summary.json").write_text(
+        json.dumps(
+            {
+                "records": [
+                    {
+                        "id": submission_id,
+                        "student_id": student_id,
+                        "assignment_id": assignment_id,
+                        "original_filename": source_zip.name,
+                        "upload_timestamp": "2026-03-23T03:15:59Z",
+                        "overall": 0.52,
+                        "components": {"html": 0.5, "css": 0.6, "js": 0.4, "php": 0.5, "sql": 0.6},
+                        "status": "llm_error",
+                        "llm_error_flagged": True,
+                        "llm_error_message": "CSS.REQ.FAIL: Provider timeout",
+                        "llm_error_messages": ["CSS.REQ.FAIL: Provider timeout"],
+                        "path": str(source_zip),
+                        "report_path": str(report_path),
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    save_run_info(
+        run_dir,
+        {
+            "id": run_id,
+            "mode": "batch",
+            "profile": "fullstack",
+            "created_at": "2026-03-23T03:15:55Z",
+            "assignment_id": assignment_id,
+            "status": "completed",
+            "summary": "batch_summary.json",
+        },
+    )
+    _write_run_index_batch(run_dir, {"id": run_id, "mode": "batch", "profile": "fullstack", "created_at": "2026-03-23T03:15:55Z"})
+    return run_id, submission_id, run_dir
+
+
 def _seed_mark_run(tmp_path: Path, assignment_id: str = "assignment1", student_id: str = "student1") -> tuple[str, Path]:
     run_id = "20260323-040000_mark_frontend_demo"
     run_dir = tmp_path / assignment_id / student_id / run_id
@@ -180,6 +279,88 @@ def _seed_mark_run(tmp_path: Path, assignment_id: str = "assignment1", student_i
         "student_id": student_id,
         "assignment_id": assignment_id,
         "original_filename": upload_zip.name,
+    }
+    _write_run_index_mark(run_dir, index_run_info, report_path)
+    return run_id, run_dir
+
+
+def _seed_mark_llm_error_run(tmp_path: Path, assignment_id: str = "assignment1", student_id: str = "student2") -> tuple[str, Path]:
+    run_id = "20260323-041500_mark_frontend_llm"
+    run_dir = tmp_path / assignment_id / student_id / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    upload_zip = run_dir / f"{student_id}_{assignment_id}.zip"
+    upload_zip.write_bytes(_make_zip({"index.html": "<!doctype html><html><body>old</body></html>"}))
+    extracted = run_dir / "uploaded_extract"
+    extracted.mkdir(parents=True, exist_ok=True)
+    (extracted / "index.html").write_text("<!doctype html><html><body>old</body></html>", encoding="utf-8")
+    report_path = run_dir / "report.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "scores": {"overall": 0.33, "by_component": {"html": {"score": 0.33}}},
+                "findings": [
+                    {
+                        "id": "HTML.REQ.FAIL",
+                        "severity": "FAIL",
+                        "evidence": {
+                            "llm_feedback": {
+                                "summary": "fallback",
+                                "items": [],
+                                "meta": {"fallback": True, "reason": "llm_error", "error": "Upstream LLM timeout"},
+                            }
+                        },
+                    },
+                    {
+                        "id": "LLM.ERROR.REQUIRES_REVIEW",
+                        "severity": "WARN",
+                        "evidence": {
+                            "llm_error_message": "HTML.REQ.FAIL: Upstream LLM timeout",
+                            "llm_error_messages": ["HTML.REQ.FAIL: Upstream LLM timeout"],
+                        },
+                    },
+                ],
+                "metadata": {
+                    "submission_metadata": {
+                        "student_id": student_id,
+                        "assignment_id": assignment_id,
+                        "original_filename": upload_zip.name,
+                        "timestamp": "2026-03-23T04:15:00Z",
+                    },
+                    "student_identity": {"student_id": student_id, "name_normalized": student_id},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "summary.txt").write_text("old summary", encoding="utf-8")
+    save_run_info(
+        run_dir,
+        {
+            "id": run_id,
+            "mode": "mark",
+            "profile": "frontend",
+            "scoring_mode": "static_plus_llm",
+            "created_at": "2026-03-23T04:15:00Z",
+            "student_id": student_id,
+            "assignment_id": assignment_id,
+            "original_filename": upload_zip.name,
+            "report": "report.json",
+            "summary": "summary.txt",
+            "status": "llm_error",
+            "llm_error_flagged": True,
+            "llm_error_message": "HTML.REQ.FAIL: Upstream LLM timeout",
+            "llm_error_messages": ["HTML.REQ.FAIL: Upstream LLM timeout"],
+        },
+    )
+    index_run_info = {
+        "id": run_id,
+        "mode": "mark",
+        "profile": "frontend",
+        "created_at": "2026-03-23T04:15:00Z",
+        "student_id": student_id,
+        "assignment_id": assignment_id,
+        "original_filename": upload_zip.name,
+        "status": "llm_error",
     }
     _write_run_index_mark(run_dir, index_run_info, report_path)
     return run_id, run_dir
@@ -510,8 +691,33 @@ def test_assignment_detail_blocks_grade_release_when_threat_submission_exists(tm
     assert blocked.status_code == 200
     assert released == []
     blocked_body = blocked.get_data(as_text=True)
-    assert "Grades cannot be released while threat-flagged submissions remain." in blocked_body
+    assert "Grades cannot be released while flagged submissions remain." in blocked_body
     assert run_id in blocked_body or submission_id in blocked_body
+
+
+def test_assignment_detail_blocks_grade_release_when_llm_error_submission_exists(tmp_path: Path, monkeypatch) -> None:
+    client, _ = _client(tmp_path)
+    run_id, _run_dir = _seed_mark_llm_error_run(tmp_path)
+    _stub_assignment(monkeypatch, "assignment1", ["student2"])
+
+    released: list[str] = []
+    monkeypatch.setattr("ams.web.routes_teacher.release_marks", lambda assignment_id: released.append(assignment_id))
+
+    page = client.get("/teacher/assignment/assignment1")
+    assert page.status_code == 200
+    body = page.get_data(as_text=True)
+    assert "One or more submissions failed during LLM-assisted marking." in body
+    assert "LLM Error - Requires Review" in body
+    assert "Delete flagged submission" in body
+    assert "Re-run submission" in body
+    assert "aria-disabled=\"true\"" in body
+
+    blocked = client.post("/teacher/assignment/assignment1/release", follow_redirects=True)
+    assert blocked.status_code == 200
+    assert released == []
+    blocked_body = blocked.get_data(as_text=True)
+    assert "Grades cannot be released while flagged submissions remain." in blocked_body
+    assert run_id in blocked_body or "student2" in blocked_body
 
 
 def test_deleting_flagged_batch_submission_unblocks_grade_release(tmp_path: Path, monkeypatch) -> None:
@@ -528,12 +734,31 @@ def test_deleting_flagged_batch_submission_unblocks_grade_release(tmp_path: Path
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "Grade release blocked" not in body
-    assert "No threat-flagged submissions remain. Grades can now be released." in body
+    assert "No flagged submissions remain. Grades can now be released." in body
     assert "aria-disabled=\"true\"" not in body
 
     batch_summary = json.loads((run_dir / "batch_summary.json").read_text(encoding="utf-8"))
     assert batch_summary["records"] == []
     assert not (run_dir / "runs" / submission_id).exists()
+
+
+def test_deleting_llm_error_submission_unblocks_grade_release(tmp_path: Path, monkeypatch) -> None:
+    client, _ = _client(tmp_path)
+    run_id, run_dir = _seed_mark_llm_error_run(tmp_path)
+    _stub_assignment(monkeypatch, "assignment1", ["student2"])
+
+    response = client.post(
+        "/teacher/assignment/assignment1/threats/delete",
+        data={"run_id": run_id},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "LLM Error - Requires Review" not in body
+    assert "No flagged submissions remain. Grades can now be released." in body
+    assert "aria-disabled=\"true\"" not in body
+    assert not run_dir.exists()
 
 
 def test_reprocessing_flagged_batch_submission_unblocks_grade_release(tmp_path: Path, monkeypatch) -> None:
@@ -612,6 +837,71 @@ def test_reprocessing_flagged_batch_submission_unblocks_grade_release(tmp_path: 
     assert record["overall"] == 0.82
     assert record["threat_flagged"] is False
     assert "threat_count" not in record
+
+
+def test_reprocessing_llm_error_submission_unblocks_grade_release(tmp_path: Path, monkeypatch) -> None:
+    client, _ = _client(tmp_path)
+    run_id, run_dir = _seed_mark_llm_error_run(tmp_path)
+    _stub_assignment(monkeypatch, "assignment1", ["student2"])
+    queued = _capture_job_submission(monkeypatch)
+    seen_skip_flags: list[bool] = []
+
+    class _RecoveredPipeline:
+        def __init__(self, scoring_mode=None):
+            self.scoring_mode = scoring_mode
+
+        def run(self, submission_path, workspace_path, profile, metadata, skip_threat_scan=False):
+            seen_skip_flags.append(skip_threat_scan)
+            report_path = Path(workspace_path) / "report.json"
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "scores": {"overall": 0.71, "by_component": {"html": {"score": 0.71}}},
+                        "findings": [{"id": "HTML.REQ.PASS", "severity": "INFO"}],
+                        "metadata": {
+                            "submission_metadata": metadata,
+                            "student_identity": {
+                                "student_id": metadata.get("student_id"),
+                                "name_normalized": metadata.get("student_id"),
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (Path(workspace_path) / "summary.txt").write_text("rerun summary", encoding="utf-8")
+            return report_path
+
+    monkeypatch.setattr("ams.webui.AssessmentPipeline", _RecoveredPipeline)
+
+    response = client.post(
+        "/teacher/assignment/assignment1/submissions/rerun",
+        data={"run_id": run_id},
+        headers={"X-AMS-Async": "1"},
+    )
+
+    assert response.status_code == 202
+    payload = response.get_json()
+    assert payload["job_id"] == "job-queued-1"
+    assert payload["refresh_url"].endswith("/teacher/assignment/assignment1")
+
+    queued_run_info = json.loads((run_dir / "run_info.json").read_text(encoding="utf-8"))
+    assert queued_run_info["status"] == "pending"
+    assert queued_run_info["llm_error_flagged"] is True
+
+    queued["func"]()
+
+    response = client.get("/teacher/assignment/assignment1")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "One or more submissions failed during LLM-assisted marking." not in body
+    assert "71%" in body
+    assert "aria-disabled=\"true\"" not in body
+    assert seen_skip_flags == [True]
+
+    run_info = json.loads((run_dir / "run_info.json").read_text(encoding="utf-8"))
+    assert run_info["status"] == "completed"
+    assert run_info["llm_error_flagged"] is False
 
 
 def test_assignment_detail_shows_rerun_action_for_every_submission(tmp_path: Path, monkeypatch) -> None:
