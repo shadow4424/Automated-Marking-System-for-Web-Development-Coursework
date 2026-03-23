@@ -10,6 +10,7 @@ from typing import Mapping
 
 import pytest
 
+from ams.core.config import ScoringMode
 from ams.core.pipeline import AssessmentPipeline
 
 
@@ -40,6 +41,22 @@ def _force_subprocess_sandbox():
     else:
         os.environ["AMS_SANDBOX_MODE"] = prev
     reset_sandbox_config()
+
+
+@pytest.fixture(autouse=True)
+def _disable_batch_llm_by_default(request, monkeypatch):
+    """Force batch tests onto STATIC_ONLY unless a test explicitly opts into LLM."""
+    if request.node.get_closest_marker("uses_llm"):
+        yield
+        return
+
+    class _StaticOnlyBatchPipeline(AssessmentPipeline):
+        def __init__(self, *args, **kwargs):
+            kwargs["scoring_mode"] = ScoringMode.STATIC_ONLY
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr("ams.tools.batch.AssessmentPipeline", _StaticOnlyBatchPipeline)
+    yield
 
 
 @pytest.fixture

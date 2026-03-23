@@ -146,6 +146,83 @@ env.get('behavioural_tests_run', true) or not env.get('browser_tests_run', true)
 </div>
 
 {# ── Statistics Section ── #}
+{% set score_evidence = report.score_evidence|default({}, true) %}
+{% set confidence = score_evidence.confidence|default({}, true) %}
+{% set review = score_evidence.review|default({}, true) %}
+{% set role_mapping = score_evidence.role_mapping|default({}, true) %}
+{% set requirement_results = score_evidence.requirements|default([], true) %}
+
+{% if score_evidence %}
+<section class="mb-xl">
+    <h2 class="section-header mb-md">Assessment Context</h2>
+    <div class="grid grid-auto mb-lg">
+        <div class="card stat-card">
+            <div class="stat-value">{{ score_evidence.profile|default(run.profile|default('Unknown')) }}</div>
+            <div class="stat-label">Resolved Profile</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value">{{ confidence.level|default('unknown')|title }}</div>
+            <div class="stat-label">Confidence</div>
+        </div>
+        <div class="card stat-card">
+            <div class="stat-value">{{ 'Yes' if review.recommended else 'No' }}</div>
+            <div class="stat-label">Manual Review</div>
+        </div>
+    </div>
+
+    {% if role_mapping.roles %}
+    <div class="card mb-lg">
+        <h3 class="mb-sm">Mapped Roles</h3>
+        <p class="text-secondary mb-md">Scoring uses mapped, reachable artefacts rather than every discovered file.</p>
+        <div class="grid grid-auto">
+            {% for role, paths in role_mapping.roles.items() %}
+            {% if paths %}
+            <div>
+                <strong>{{ role|replace('_', ' ')|title }}</strong>
+                <div class="text-sm text-secondary">{{ paths|map('clean_path')|join(', ') }}</div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if requirement_results %}
+    <div class="card">
+        <h3 class="mb-sm">Requirement Ledger</h3>
+        <p class="text-secondary mb-md">Each requirement is scored once per submission. Extra files provide evidence only and do not create extra scoring opportunities.</p>
+        <div style="overflow-x:auto;">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Requirement</th>
+                        <th>Component</th>
+                        <th>Stage</th>
+                        <th>Status</th>
+                        <th>Score</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for requirement in requirement_results %}
+                    <tr>
+                        <td>
+                            <strong>{{ requirement.requirement_id }}</strong>
+                            <div class="text-sm text-secondary">{{ requirement.description }}</div>
+                        </td>
+                        <td>{{ requirement.component|upper }}</td>
+                        <td>{{ requirement.stage|replace('_', ' ')|title }}</td>
+                        <td>{{ requirement.status }}</td>
+                        <td>{{ requirement.score }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+
 {% set findings = report.findings|default([]) %}
 {% set checks = report.checks|default([]) %}
 {% set diagnostics = report.diagnostics|default([]) %}

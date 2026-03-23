@@ -100,6 +100,32 @@ class TestDockerCommandRunnerRun:
         assert not result.timed_out
 
     @patch("ams.sandbox.docker_runner.subprocess.run")
+    def test_run_nonzero_exit_does_not_print_fake_daemon_error(self, mock_run, docker_config, tmp_path, capsys):
+        runner = self._make_runner(docker_config)
+
+        sub = tmp_path / "submission"
+        sub.mkdir()
+        (sub / "contact.php").write_text("<?php broken", encoding="utf-8")
+
+        mock_run.return_value = MagicMock(
+            returncode=255,
+            stdout="",
+            stderr="PHP Parse error: syntax error",
+        )
+
+        result = runner.run(
+            ["php", "-f", str(sub / "contact.php")],
+            timeout=4.0,
+            cwd=sub,
+        )
+
+        captured = capsys.readouterr()
+        assert "DOCKER DAEMON ERROR" not in captured.out
+        assert "DOCKER PYTHON EXCEPTION" not in captured.out
+        assert result.exit_code == 255
+        assert "PHP Parse error" in result.stderr
+
+    @patch("ams.sandbox.docker_runner.subprocess.run")
     def test_run_handles_timeout(self, mock_run, docker_config, tmp_path):
         runner = self._make_runner(docker_config)
 

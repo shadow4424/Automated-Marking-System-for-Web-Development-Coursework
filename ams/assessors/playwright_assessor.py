@@ -184,7 +184,7 @@ class PlaywrightAssessor(Assessor):
         import logging as _logging
         _logger = _logging.getLogger(__name__)
 
-        html_files = sorted(context.discovered_files.get("html", []))
+        html_files = sorted(context.files_for("html", relevant_only=True))
         if not html_files:
             return []
 
@@ -270,7 +270,11 @@ class PlaywrightAssessor(Assessor):
             )
             return findings
 
-        if profile_spec and profile_spec.name == "fullstack" and context.discovered_files.get("php"):
+        if (
+            profile_spec
+            and profile_spec.is_component_required("php")
+            and context.files_for("php", relevant_only=True)
+        ):
             # warn or skip if PHP present and we cannot serve dynamically
             findings.append(
                 self._finding(
@@ -399,7 +403,7 @@ class PlaywrightAssessor(Assessor):
         return findings
 
     def _select_entrypoint(self, context: SubmissionContext) -> Path | None:
-        html_files = sorted(context.discovered_files.get("html", []))
+        html_files = sorted(context.files_for("html", relevant_only=True))
         if not html_files:
             return None
         for path in html_files:

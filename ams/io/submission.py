@@ -13,7 +13,13 @@ class SubmissionProcessor:
     BINARY_EXTENSIONS = {".exe", ".dll", ".bin"}
     MAX_FILE_BYTES = 5 * 1024 * 1024
 
-    def prepare(self, submission_path: Path, workspace_path: Path, profile: str | None = None) -> SubmissionContext:
+    def prepare(
+        self,
+        submission_path: Path,
+        workspace_path: Path,
+        profile: str | None = None,
+        resolved_config: object | None = None,
+    ) -> SubmissionContext:
         submission_path = submission_path.resolve()
         workspace_path = workspace_path.resolve()
         workspace_path.mkdir(parents=True, exist_ok=True)
@@ -39,7 +45,7 @@ class SubmissionProcessor:
         filtered_items = sorted(set(filtered_items))
 
         discovered_files = self._discover_files(resolved_root)
-        validation = self._validation_flags(resolved_root, profile)
+        validation = self._validation_flags(resolved_root, profile, resolved_config=resolved_config)
         identity = self._extract_student_identity(submission_path)
         metadata = {
             "submission_name": submission_path.name,
@@ -156,12 +162,23 @@ class SubmissionProcessor:
                     path.unlink(missing_ok=True)
         return filtered
 
-    def _validation_flags(self, resolved_root: Path, profile: str | None) -> dict:
-        if not profile:
+    def _validation_flags(
+        self,
+        resolved_root: Path,
+        profile: str | None,
+        *,
+        resolved_config: object | None = None,
+    ) -> dict:
+        if resolved_config is not None:
+            required_files = list(getattr(getattr(resolved_config, "profile", None), "required_files", []) or [])
+        elif profile:
+            required_files = list(get_profile_spec(profile).required_files)
+        else:
+            required_files = []
+        if not required_files:
             return {"missing_required_files": []}
-        spec = get_profile_spec(profile)
         missing = []
-        for ext in spec.required_files:
+        for ext in required_files:
             if not list(resolved_root.rglob(f"*{ext}")):
                 missing.append(ext)
         return {"missing_required_files": missing}

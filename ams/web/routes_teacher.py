@@ -33,7 +33,7 @@ from ams.core.db import (
     update_assignment_students,
     withhold_marks,
 )
-from ams.io.web_storage import get_runs_root, list_runs
+from ams.io.web_storage import get_runs_root, list_runs, purge_assignment_storage
 from ams.core.factory import get_llm_provider
 from ams.llm.utils import clean_json_response
 from ams.web.auth import get_current_user, teacher_or_admin_required
@@ -475,7 +475,7 @@ def create_assignment_route():
     assignment_id = request.form.get("assignment_id", "").strip()
     title = request.form.get("title", "").strip()
     description = request.form.get("description", "").strip()
-    profile = request.form.get("profile", "frontend").strip()
+    profile = request.form.get("profile", "frontend_interactive").strip()
     due_date = request.form.get("due_date", "").strip()
     selected_students = request.form.getlist("students")
 
@@ -739,7 +739,11 @@ def export_analytics_csv(assignment_id: str, export_kind: str):
 @teacher_or_admin_required
 def delete_assignment_route(assignment_id: str):
     if delete_assignment(assignment_id):
-        flash(f"Assignment '{assignment_id}' deleted.", "success")
+        removed_count = purge_assignment_storage(get_runs_root(current_app), assignment_id)
+        flash(
+            f"Assignment '{assignment_id}' deleted and {removed_count} stored run artefact(s) removed.",
+            "success",
+        )
     else:
         flash(f"Could not delete assignment '{assignment_id}'.", "error")
     return redirect(url_for("teacher.dashboard"))

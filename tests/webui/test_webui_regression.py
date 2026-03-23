@@ -5,6 +5,7 @@ import json
 import zipfile
 from pathlib import Path
 
+from ams.core.config import ScoringMode
 from ams.tools.batch import run_batch
 from ams.webui import create_app, _write_run_index_mark
 from ams.core.pipeline import AssessmentPipeline
@@ -30,7 +31,13 @@ def test_web_mark_and_batch_same_score(tmp_path: Path) -> None:
     submissions_dir.mkdir()
     (submissions_dir / "s1_assignment1.zip").write_bytes(zip_bytes)
     batch_out = tmp_path / "batch_out"
-    summary = run_batch(submissions_dir=submissions_dir, out_root=batch_out, profile="frontend", keep_individual_runs=True)
+    summary = run_batch(
+        submissions_dir=submissions_dir,
+        out_root=batch_out,
+        profile="frontend",
+        keep_individual_runs=True,
+        scoring_mode=ScoringMode.STATIC_ONLY,
+    )
     batch_summary = json.loads((batch_out / "batch_summary.json").read_text(encoding="utf-8"))
     batch_overall = batch_summary["records"][0]["overall"]
 

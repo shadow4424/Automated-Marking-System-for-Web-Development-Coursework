@@ -24,7 +24,7 @@
         <input type="hidden" name="scoring_mode" value="static_plus_llm">
         <select id="profile" name="profile" style="display:none;">
             {% for prof in profiles %}
-            <option value="{{ prof }}">{{ prof }}</option>
+            <option value="{{ prof }}" {% if prof == 'frontend_interactive' %}selected{% endif %}>{{ prof|replace('_', ' ')|title }}</option>
             {% endfor %}
         </select>
 
@@ -37,7 +37,7 @@
             <select id="assignment_id" name="assignment_id" class="form-select" required>
                 <option value="">Select an assignment…</option>
                 {% for a in student_assignments %}
-                <option value="{{ a.assignmentID }}" data-profile="{{ a.profile }}">
+                <option value="{{ a.assignmentID }}" data-profile="{{ 'frontend_interactive' if a.profile == 'frontend' else 'fullstack_php_sql' if a.profile == 'fullstack' else a.profile }}">
                     {{ a.title }}{% if a.due_date %} — Due {{ a.due_date[:16].replace('T', ' ') }}{% endif %}
                 </option>
                 {% endfor %}
@@ -161,7 +161,7 @@
                 <label class="form-label" for="profile">Assessment Profile</label>
                 <select id="profile" name="profile" class="form-select">
                     {% for prof in profiles %}
-                    <option value="{{ prof }}">{{ prof|capitalize }}</option>
+                    <option value="{{ prof }}" {% if prof == 'frontend_interactive' %}selected{% endif %}>{{ prof|replace('_', ' ')|title }}</option>
                     {% endfor %}
                 </select>
                 <p class="form-hint">Determines which components are evaluated</p>

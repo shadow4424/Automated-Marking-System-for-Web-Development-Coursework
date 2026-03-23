@@ -5,25 +5,41 @@ import platform
 import sys
 from typing import Dict, Iterable, List, Mapping, Tuple
 
-from ams.core.models import BrowserEvidence, BehaviouralEvidence, Finding, ScoreEvidenceBundle, Severity
+from ams.core.assignment_config import ResolvedAssignmentConfig, resolve_assignment_config
+from ams.core.models import (
+    BrowserEvidence,
+    BehaviouralEvidence,
+    ComponentScoreSummary,
+    ConfidenceSummary,
+    Finding,
+    RequirementEvaluationResult,
+    ReviewRecommendation,
+    ScoreEvidenceBundle,
+    Severity,
+    SubmissionContext,
+)
 from ams.core.profiles import get_relevant_components
 
 
 class ScoringEngine:
     """Deterministic scoring engine producing explainable scores."""
 
-    COMPONENTS = ["html", "css", "js", "php", "sql"]
+    COMPONENTS = ["html", "css", "js", "php", "sql", "api"]
 
     def score(
         self,
         findings: Iterable[Finding],
         profile: str = None,
+        context: SubmissionContext | None = None,
+        resolved_config: ResolvedAssignmentConfig | None = None,
         behavioural_evidence: Iterable[BehaviouralEvidence] | None = None,
         browser_evidence: Iterable[BrowserEvidence] | None = None,
     ) -> Mapping[str, object]:
         scores, _ = self.score_with_evidence(
             findings,
             profile=profile,
+            context=context,
+            resolved_config=resolved_config,
             behavioural_evidence=behavioural_evidence,
             browser_evidence=browser_evidence,
         )
@@ -33,12 +49,22 @@ class ScoringEngine:
         self,
         findings: Iterable[Finding],
         profile: str = None,
+        context: SubmissionContext | None = None,
+        resolved_config: ResolvedAssignmentConfig | None = None,
         behavioural_evidence: Iterable[BehaviouralEvidence] | None = None,
         browser_evidence: Iterable[BrowserEvidence] | None = None,
     ) -> Tuple[Mapping[str, object], ScoreEvidenceBundle]:
         findings_list = list(findings)
         behavioural_evidence_list = list(behavioural_evidence or [])
         browser_evidence_list = list(browser_evidence or [])
+        if context is not None and resolved_config is not None:
+            return self._score_from_requirements(
+                findings_list,
+                context=context,
+                resolved_config=resolved_config,
+                behavioural_evidence=behavioural_evidence_list,
+                browser_evidence=browser_evidence_list,
+            )
         by_category: Dict[str, List[Finding]] = {c: [] for c in self.COMPONENTS}
         for finding in findings_list:
             if finding.category in by_category:
@@ -114,6 +140,260 @@ class ScoringEngine:
             },
         )
         return scores, evidence
+
+    def _score_from_requirements(
+        self,
+        findings: List[Finding],
+        *,
+        context: SubmissionContext,
+        resolved_config: ResolvedAssignmentConfig,
+        behavioural_evidence: List[BehaviouralEvidence],
+        browser_evidence: List[BrowserEvidence],
+    ) -> Tuple[Mapping[str, object], ScoreEvidenceBundle]:
+        requirement_results = list(context.requirement_results or [])
+        relevant_components = list(resolved_config.required_components)
+        generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        findings_by_category: Dict[str, List[Finding]] = {c: [] for c in self.COMPONENTS}
+        for finding in findings:
+            if finding.category in findings_by_category:
+                findings_by_category[finding.category].append(finding)
+
+        component_results: Dict[str, dict] = {}
+        component_summaries: Dict[str, ComponentScoreSummary] = {}
+        for component in self.COMPONENTS:
+            component_requirements = [
+                result
+                for result in requirement_results
+                if result.component == component and result.required
+            ]
+            if component not in relevant_components:
+                component_results[component] = {
+                    "score": "SKIPPED",
+                    "rationale": [
+                        {
+                            "rule": "component_skipped_profile",
+                            "finding_ids": [],
+                            "note": f"Component not required for profile [{resolved_config.profile_name}]",
+                        }
+                    ],
+                    "requirement_summary": {
+                        "requirement_count": 0,
+                        "met": 0,
+                        "partial": 0,
+                        "failed": 0,
+                        "skipped": 0,
+                    },
+                }
+                continue
+
+            score_value, penalty, summary = self._score_component_from_requirements(
+                component_requirements,
+            )
+            rationale = [
+                {
+                    "rule": result.requirement_id,
+                    "score": result.score,
+                    "status": result.status,
+                    "stage": result.stage,
+                    "aggregation_mode": result.aggregation_mode,
+                }
+                for result in component_requirements
+            ]
+            if penalty > 0:
+                rationale.append(
+                    {
+                        "rule": f"{component}.quality.capped_penalty",
+                        "score": max(0.0, 1.0 - penalty),
+                        "status": "PARTIAL" if penalty < 0.5 else "FAIL",
+                        "stage": "quality",
+                        "aggregation_mode": "CAPPED_PENALTY",
+                        "note": f"Penalty applied: {penalty:.2f}",
+                    }
+                )
+            component_results[component] = {
+                "score": score_value,
+                "rationale": rationale,
+                "requirement_summary": summary.to_dict(),
+                "static_summary": self._static_summary(component, findings_by_category.get(component, [])),
+                "behavioural_summary": self._behavioural_view(behavioural_evidence),
+                "browser_summary": self._browser_view(browser_evidence),
+            }
+            component_summaries[component] = summary
+
+        overall_raw = self._weighted_overall(
+            component_results,
+            relevant_components,
+            resolved_config.component_weights,
+        )
+        confidence_summary = self._build_confidence_summary(requirement_results)
+        review = self._build_review_recommendation(overall_raw, confidence_summary, component_summaries)
+        context.confidence_summary = confidence_summary
+        context.review_recommendation = review
+        scores = {
+            "overall": round(overall_raw, 2),
+            "by_component": component_results,
+            "generated_at": generated_at,
+            "confidence": confidence_summary.to_dict(),
+            "review": review.to_dict(),
+        }
+
+        components_evidence: Dict[str, Mapping[str, object]] = {}
+        for component in self.COMPONENTS:
+            component_requirements = [
+                result.to_dict()
+                for result in requirement_results
+                if result.component == component
+            ]
+            components_evidence[component] = {
+                "score": component_results[component]["score"],
+                "required": component in relevant_components,
+                "weight": float(resolved_config.component_weights.get(component, 0.0)),
+                "requirements": component_requirements,
+                "rationale": component_results[component].get("rationale", []),
+                "static_summary": component_results[component].get("static_summary"),
+                "behavioural_summary": component_results[component].get("behavioural_summary"),
+                "browser_summary": component_results[component].get("browser_summary"),
+            }
+
+        evidence = ScoreEvidenceBundle(
+            profile=resolved_config.profile_name,
+            generated_at=generated_at,
+            environment={
+                "python_version": sys.version.split()[0],
+                "platform": platform.platform(),
+            },
+            components=components_evidence,
+            overall={
+                "raw_average": overall_raw,
+                "final": round(overall_raw, 2),
+                "required_components": list(relevant_components),
+                "component_weights": dict(resolved_config.component_weights),
+                "rationale": [
+                    f"Weighted overall score across required components: {overall_raw:.2f}.",
+                    f"Confidence level: {confidence_summary.level}.",
+                ],
+            },
+            requirements=[result.to_dict() for result in requirement_results],
+            assignment_profile=resolved_config.to_dict(),
+            role_mapping=context.role_mapping.to_dict() if context.role_mapping else {},
+            confidence=confidence_summary.to_dict(),
+            review=review.to_dict(),
+            manifest=context.manifest.to_dict() if context.manifest else {},
+            artefact_inventory=context.artefact_inventory.to_dict() if context.artefact_inventory else {},
+        )
+        return scores, evidence
+
+    def _score_component_from_requirements(
+        self,
+        requirement_results: List[RequirementEvaluationResult],
+    ) -> tuple[float, float, ComponentScoreSummary]:
+        numeric_requirements = [
+            result
+            for result in requirement_results
+            if isinstance(result.score, (int, float))
+            and result.aggregation_mode != "CAPPED_PENALTY"
+        ]
+        penalty_requirements = [
+            result
+            for result in requirement_results
+            if result.aggregation_mode == "CAPPED_PENALTY"
+        ]
+        total_weight = sum(float(result.weight or 1.0) for result in numeric_requirements)
+        weighted_score = (
+            sum(float(result.score) * float(result.weight or 1.0) for result in numeric_requirements) / total_weight
+            if total_weight > 0
+            else 0.0
+        )
+        penalty = max(
+            (
+                float(result.evidence.get("penalty", 0.0))
+                for result in penalty_requirements
+                if isinstance(result.evidence, Mapping)
+            ),
+            default=0.0,
+        )
+        final_score = max(0.0, round(weighted_score - penalty, 2))
+        summary = ComponentScoreSummary(
+            component=(
+                requirement_results[0].component
+                if requirement_results
+                else "unknown"
+            ),
+            score=final_score,
+            weight=total_weight,
+            requirement_count=len(requirement_results),
+            met=sum(1 for result in requirement_results if result.status == "PASS"),
+            partial=sum(1 for result in requirement_results if result.status == "PARTIAL"),
+            failed=sum(1 for result in requirement_results if result.status == "FAIL"),
+            skipped=sum(1 for result in requirement_results if result.status == "SKIPPED"),
+        )
+        return final_score, penalty, summary
+
+    def _weighted_overall(
+        self,
+        component_results: Mapping[str, Mapping[str, object]],
+        relevant_components: List[str],
+        component_weights: Mapping[str, float],
+    ) -> float:
+        total_weight = 0.0
+        total_score = 0.0
+        for component in relevant_components:
+            score = component_results.get(component, {}).get("score")
+            if not isinstance(score, (int, float)):
+                continue
+            weight = float(component_weights.get(component, 0.0) or 0.0)
+            total_weight += weight
+            total_score += float(score) * weight
+        if total_weight == 0:
+            return 0.0
+        return total_score / total_weight
+
+    def _build_confidence_summary(
+        self,
+        requirement_results: List[RequirementEvaluationResult],
+    ) -> ConfidenceSummary:
+        flags: List[str] = []
+        reasons: List[str] = []
+        skipped_checks: List[str] = []
+        for result in requirement_results:
+            for flag in result.confidence_flags:
+                if flag not in flags:
+                    flags.append(flag)
+            if result.status == "SKIPPED" and result.stage in {"runtime", "browser", "layout"}:
+                skipped_checks.append(result.requirement_id)
+        if any(flag in {"runtime_failure", "browser_failure", "browser_console_errors"} for flag in flags):
+            level = "low"
+            reasons.append("Runtime or browser failures reduced confidence in the automated result.")
+        elif skipped_checks:
+            level = "medium"
+            reasons.append("Some runtime, browser, or layout checks were skipped.")
+        else:
+            level = "high"
+            reasons.append("All enabled deterministic scoring layers produced usable evidence.")
+        return ConfidenceSummary(
+            level=level,
+            reasons=reasons,
+            flags=flags,
+            skipped_checks=skipped_checks,
+        )
+
+    def _build_review_recommendation(
+        self,
+        overall_score: float,
+        confidence: ConfidenceSummary,
+        component_summaries: Mapping[str, ComponentScoreSummary],
+    ) -> ReviewRecommendation:
+        reasons: List[str] = []
+        if confidence.level != "high":
+            reasons.append("Confidence was reduced by skipped or failing runtime/browser checks.")
+        if overall_score < 0.5:
+            reasons.append("Overall score is below 50%.")
+        if any(summary.failed > 0 for summary in component_summaries.values()):
+            reasons.append("One or more required components have failing requirements.")
+        return ReviewRecommendation(
+            recommended=bool(reasons),
+            reasons=reasons,
+        )
 
     def _determine_relevant_components(self, profile: str | None) -> List[str]:
         if profile is None:

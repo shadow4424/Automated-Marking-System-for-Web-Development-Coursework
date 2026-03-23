@@ -22,3 +22,8 @@ where = ["."]
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "playwright>=1.41.0", "matplotlib>=3.7.0"]
 demo = ["matplotlib>=3.7.0"]
+
+[tool.pytest.ini_options]
+markers = [
+    "uses_llm: opt a test into real LLM-backed behaviour when that is the behaviour under test",
+]

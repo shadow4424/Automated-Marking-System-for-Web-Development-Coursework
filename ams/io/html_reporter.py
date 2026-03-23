@@ -47,14 +47,29 @@ class HTMLReporter:
             Path to the generated HTML file.
         """
         # Extract data
-        metadata = report_data.get("metadata", {})
-        findings = report_data.get("findings", [])
-        score_evidence = report_data.get("score_evidence", {})
-        llm_analysis = score_evidence.get("llm_analysis", {})
+        metadata = report_data.get("metadata", {}) or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        findings = report_data.get("findings", []) or []
+        if not isinstance(findings, list):
+            findings = []
+        score_evidence = report_data.get("score_evidence", {}) or {}
+        if not isinstance(score_evidence, dict):
+            score_evidence = {}
+        llm_analysis = score_evidence.get("llm_analysis", {}) or {}
+        if not isinstance(llm_analysis, dict):
+            llm_analysis = {}
         
-        # Calculate score
-        final_score = score_evidence.get("final_score", 0)
-        max_score = score_evidence.get("max_score", 100)
+        # Calculate score from the requirement-centred schema, with legacy fallbacks.
+        overall_summary = score_evidence.get("overall", {}) if isinstance(score_evidence, dict) else {}
+        scores = report_data.get("scores", {}) or {}
+        if not isinstance(scores, dict):
+            scores = {}
+        final_score = score_evidence.get(
+            "final_score",
+            overall_summary.get("final", scores.get("overall", 0)),
+        )
+        max_score = score_evidence.get("max_score", 1.0)
         percentage = (final_score / max_score * 100) if max_score > 0 else 0
         
         # Determine grade colour
@@ -123,9 +138,13 @@ class HTMLReporter:
             message = finding.get("message", "No details")
             severity = finding.get("severity", "WARN")
             evidence = finding.get("evidence", {})
+            if not isinstance(evidence, dict):
+                evidence = {}
             
             # Read LLM feedback from inline evidence (new approach)
             llm_feedback = evidence.get("llm_feedback", {})
+            if not isinstance(llm_feedback, dict):
+                llm_feedback = {}
             
             # Format feedback from inline evidence
             feedback_html = ""

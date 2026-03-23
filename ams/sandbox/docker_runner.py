@@ -108,13 +108,12 @@ class DockerCommandRunner(CommandRunner):
                 text=True,
                 timeout=timeout + 2,   # +2 s grace for container start
             )
-
-            # --- DEBUG BLOCK: Catch silent Docker daemon errors ---
             if completed.returncode != 0:
-                print(f"\n\U0001f6a8 DOCKER DAEMON ERROR \U0001f6a8")
-                print(f"Command: {' '.join(docker_cmd)}")
-                print(f"Error details: {completed.stderr}\n")
-            # ----------------------------------------------------
+                logger.debug(
+                    "Docker command exited with code %s. stderr=%s",
+                    completed.returncode,
+                    _decode(completed.stderr)[:500],
+                )
 
             duration_ms = int((time.time() - start) * 1000)
             return RunResult(
@@ -135,9 +134,6 @@ class DockerCommandRunner(CommandRunner):
                 timed_out=True,
             )
         except Exception as exc:
-            # --- DEBUG BLOCK: Catch Python execution errors ---
-            print(f"\n\U0001f6a8 DOCKER PYTHON EXCEPTION \U0001f6a8\n{exc}\n")
-            # --------------------------------------------------
             duration_ms = int((time.time() - start) * 1000)
             logger.error("Docker execution failed: %s", exc)
             return RunResult(

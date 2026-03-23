@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import secrets
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Optional, Tuple, List
@@ -665,6 +666,142 @@ def validate_file_size(file_path: Path, max_size_mb: int = 25) -> Tuple[bool, Op
         return False, f"Cannot read file: {exc}"
 
 
+_LEGACY_BATCH_FILES = (
+    "component_means.csv",
+    "failure_reasons_frequency.csv",
+    "findings_frequency.csv",
+    "score_buckets.csv",
+)
+_LEGACY_BATCH_DIRS = (
+    "batch_inputs",
+    "legacy_batch_inputs",
+)
+_LEGACY_BATCH_PATTERNS = (
+    "batch_reports_*.zip",
+)
+_TRANSIENT_SUBMISSION_DIRS = (
+    "extracted",
+    "rerun_source",
+    "source_files",
+)
+
+
+def _remove_path_within(root_dir: Path, candidate: Path) -> bool:
+    root = root_dir.resolve()
+    path = candidate.resolve()
+    try:
+        path.relative_to(root)
+    except Exception:
+        return False
+
+    if path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+        return True
+    if path.exists():
+        try:
+            path.unlink()
+            return True
+        except FileNotFoundError:
+            return False
+    return False
+
+
+def _prune_empty_parents(path: Path, *, stop_at: Path) -> None:
+    stop = stop_at.resolve()
+    current = path.resolve()
+    while current != stop:
+        if not current.exists() or not current.is_dir():
+            current = current.parent
+            continue
+        try:
+            next(current.iterdir())
+            break
+        except StopIteration:
+            current.rmdir()
+            current = current.parent
+        except OSError:
+            break
+
+
+def cleanup_batch_run_storage(run_dir: Path, run_info: Mapping[str, object] | None = None) -> None:
+    """Remove transient and legacy batch artefacts from a completed batch run."""
+    root = run_dir.resolve()
+    info = dict(run_info or load_run_info(root) or {})
+
+    for dirname in _LEGACY_BATCH_DIRS:
+        _remove_path_within(root, root / dirname)
+
+    original_filename = str(info.get("original_filename") or "").strip()
+    if original_filename.lower().endswith(".zip"):
+        _remove_path_within(root, root / original_filename)
+    _remove_path_within(root, root / "batch_submissions.zip")
+
+    for filename in _LEGACY_BATCH_FILES:
+        _remove_path_within(root, root / filename)
+    for pattern in _LEGACY_BATCH_PATTERNS:
+        for candidate in root.glob(pattern):
+            _remove_path_within(root, candidate)
+
+    runs_dir = root / "runs"
+    if runs_dir.is_dir():
+        for submission_dir in runs_dir.iterdir():
+            if not submission_dir.is_dir():
+                continue
+            has_canonical_submission = (submission_dir / "submission").is_dir()
+            for dirname in _TRANSIENT_SUBMISSION_DIRS:
+                if dirname in {"extracted", "source_files"} and not has_canonical_submission:
+                    continue
+                _remove_path_within(root, submission_dir / dirname)
+
+
+def purge_assignment_storage(runs_root: Path, assignment_id: str) -> int:
+    """Remove filesystem artefacts associated with a deleted assignment."""
+    assignment_value = str(assignment_id or "").strip()
+    if not assignment_value:
+        return 0
+
+    root = runs_root.resolve()
+    assignment_safe = MetadataValidator.sanitize_identifier(assignment_value)
+    removed: set[Path] = set()
+
+    assignment_dir = root / assignment_safe
+    if assignment_safe and assignment_dir.exists():
+        shutil.rmtree(assignment_dir, ignore_errors=True)
+        removed.add(assignment_dir.resolve())
+
+    def _matches_assignment(value: object) -> bool:
+        text = str(value or "").strip()
+        if not text:
+            return False
+        return (
+            text == assignment_value
+            or MetadataValidator.sanitize_identifier(text) == assignment_safe
+        )
+
+    for run_info_path in list(root.rglob("run_info.json")):
+        run_dir = run_info_path.parent.resolve()
+        if any(run_dir == removed_dir or removed_dir in run_dir.parents for removed_dir in removed):
+            continue
+
+        info = load_run_info(run_dir)
+        if not info:
+            continue
+
+        if _matches_assignment(info.get("assignment_id")):
+            shutil.rmtree(run_dir, ignore_errors=True)
+            removed.add(run_dir)
+            _prune_empty_parents(run_dir.parent, stop_at=root)
+            continue
+
+        submissions = list(info.get("submissions", []) or [])
+        if any(_matches_assignment(submission.get("assignment_id")) for submission in submissions if isinstance(submission, Mapping)):
+            shutil.rmtree(run_dir, ignore_errors=True)
+            removed.add(run_dir)
+            _prune_empty_parents(run_dir.parent, stop_at=root)
+
+    return len(removed)
+
+
 __all__ = [
     "get_runs_root",
     "create_run_dir",
@@ -677,6 +814,8 @@ __all__ = [
     "find_run_by_id",
     "allowed_download",
     "find_submission_root",
+    "cleanup_batch_run_storage",
+    "purge_assignment_storage",
     "store_submission_with_metadata",
     "validate_file_type",
     "validate_file_size",

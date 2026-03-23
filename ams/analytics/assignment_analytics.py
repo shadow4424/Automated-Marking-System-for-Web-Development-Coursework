@@ -17,7 +17,7 @@ from ams.io.web_storage import get_runs_root, load_run_info
 
 logger = logging.getLogger(__name__)
 
-COMPONENT_ORDER = ["html", "css", "js", "php", "sql"]
+COMPONENT_ORDER = ["html", "css", "js", "php", "sql", "api"]
 SMALL_COHORT_THRESHOLD = 5
 SEVERITY_PRIORITY = {"FAIL": 3, "WARN": 2, "SKIPPED": 1, "PASS": 0}
 GRADE_ORDER = {"unknown": 0, "failing": 1, "poor": 2, "partial": 3, "good": 4, "full marks": 5}
@@ -27,6 +27,7 @@ REQUIREMENT_TITLES = {
     "js": "Required JavaScript behaviour",
     "php": "Required PHP/backend processing",
     "sql": "Required SQL/database behaviour",
+    "api": "Required API integration behaviour",
 }
 SIGNAL_DESCRIPTIONS = {
     "missing_backend": "Required backend files or backend rubric checks are missing.",
@@ -373,7 +374,7 @@ def _report_to_record(
         "checks": checks,
         "check_stats": check_stats,
         "diagnostics": diagnostics,
-        "required_rules": _extract_required_rules(findings),
+        "required_rules": _extract_required_rules(findings, report.get("score_evidence", {}) or {}),
         "score_evidence": dict(report.get("score_evidence", {}) or {}),
         "behavioural_evidence": list(report.get("behavioural_evidence", []) or []),
         "browser_evidence": list(report.get("browser_evidence", []) or []),
@@ -441,8 +442,45 @@ def _ensure_check_payload(report: Mapping[str, object], findings: List[dict]) ->
     return [check.to_dict() for check in checks], compute_check_stats(checks), diagnostics
 
 
-def _extract_required_rules(findings: List[dict]) -> Dict[str, Dict[str, dict]]:
+def _extract_required_rules(
+    findings: List[dict],
+    score_evidence: Mapping[str, object] | None = None,
+) -> Dict[str, Dict[str, dict]]:
     required_by_component: Dict[str, Dict[str, dict]] = defaultdict(dict)
+    requirements = list((score_evidence or {}).get("requirements", []) or [])
+
+    if requirements:
+        for requirement in requirements:
+            if not isinstance(requirement, Mapping):
+                continue
+            if requirement.get("required") is False:
+                continue
+            if str(requirement.get("aggregation_mode") or "") == "CAPPED_PENALTY":
+                continue
+
+            rule_id = str(requirement.get("requirement_id") or "").strip()
+            component = str(requirement.get("component") or "").strip().lower()
+            if not rule_id or not component:
+                continue
+
+            status = str(requirement.get("status") or "").upper()
+            if status == "PARTIAL":
+                normalized_status = "WARN"
+            elif status in {"PASS", "FAIL", "SKIPPED"}:
+                normalized_status = status
+            else:
+                normalized_status = "FAIL"
+
+            required_by_component[component][rule_id] = {
+                "rule_id": rule_id,
+                "status": normalized_status,
+                "weight": _coerce_float(requirement.get("weight")),
+                "message": str(requirement.get("description") or ""),
+                "stage": str(requirement.get("stage") or ""),
+                "aggregation_mode": str(requirement.get("aggregation_mode") or ""),
+            }
+
+        return {component: dict(rule_map) for component, rule_map in required_by_component.items()}
 
     for finding in findings:
         finding_id = str(finding.get("id") or "")
@@ -636,12 +674,18 @@ def _component_readiness(records: List[Mapping[str, object]], relevant_component
 def _enrich_record(record: dict, profile: str) -> dict:
     del profile
     record_copy = dict(record)
+    score_evidence = dict(record_copy.get("score_evidence", {}) or {})
+    explicit_confidence = dict(score_evidence.get("confidence", {}) or {})
+    explicit_review = dict(score_evidence.get("review", {}) or {})
     runtime_flags = _runtime_flags(record_copy)
     problem_outcomes = _problem_outcomes(record_copy)
     matched_rules = [outcome for outcome in problem_outcomes if outcome["status"] in {"FAIL", "WARN", "SKIPPED"}]
 
     evaluation_state = _evaluation_state(record_copy, runtime_flags)
     confidence_level, confidence_reasons = _confidence(record_copy, runtime_flags, evaluation_state)
+    if explicit_confidence.get("level"):
+        confidence_level = str(explicit_confidence.get("level"))
+        confidence_reasons = [str(reason) for reason in explicit_confidence.get("reasons", []) if str(reason).strip()]
     overall = record_copy.get("overall")
 
     if overall is None:
@@ -677,8 +721,10 @@ def _enrich_record(record: dict, profile: str) -> dict:
 
     reason = _primary_reason(record_copy, runtime_flags)
     severity = _attention_severity(record_copy, runtime_flags, confidence_level, overall)
-    manual_review = severity in {"high", "medium"} or confidence_level != "high"
+    manual_review = bool(explicit_review.get("recommended")) or severity in {"high", "medium"} or confidence_level != "high"
     review_note = _manual_review_note(record_copy, runtime_flags, confidence_level, overall)
+    if explicit_review.get("reasons"):
+        review_note = "; ".join(str(reason) for reason in explicit_review.get("reasons", []) if str(reason).strip()) or review_note
     limitation_details = list(confidence_reasons)
     if runtime_flags["runtime_issue"] and "Runtime failures or timeouts were detected." not in limitation_details:
         limitation_details.append("Runtime failures or timeouts were detected.")
@@ -750,6 +796,7 @@ def _runtime_flags(record: Mapping[str, object]) -> dict:
 def _problem_outcomes(record: Mapping[str, object]) -> List[dict]:
     outcomes: list[dict] = []
     seen: set[str] = set()
+    score_evidence = dict(record.get("score_evidence", {}) or {})
 
     if record.get("status") != "ok":
         outcomes.append(
@@ -764,12 +811,43 @@ def _problem_outcomes(record: Mapping[str, object]) -> List[dict]:
         )
         seen.add("submission.not_analysable")
 
+    for requirement in score_evidence.get("requirements", []) or []:
+        if not isinstance(requirement, Mapping):
+            continue
+        if requirement.get("required") is False:
+            continue
+        if str(requirement.get("aggregation_mode") or "") == "CAPPED_PENALTY":
+            continue
+        requirement_id = str(requirement.get("requirement_id") or "").strip()
+        if not requirement_id or requirement_id in seen:
+            continue
+        status = str(requirement.get("status") or "").upper()
+        if status not in {"FAIL", "PARTIAL", "SKIPPED"}:
+            continue
+        seen.add(requirement_id)
+        outcomes.append(
+            {
+                "id": requirement_id,
+                "label": str(requirement.get("description") or requirement_id),
+                "status": "WARN" if status == "PARTIAL" else status,
+                "component": str(requirement.get("component") or "other"),
+                "message": str(
+                    requirement.get("description")
+                    or requirement.get("skipped_reason")
+                    or requirement_id
+                ),
+                "weight": _coerce_float(requirement.get("weight")),
+            }
+        )
+
     for check in record.get("checks", []) or []:
         status = str(check.get("status") or "").upper()
         if status not in {"FAIL", "WARN"}:
             continue
         check_id = str(check.get("check_id") or "").strip()
         if not check_id or check_id in seen:
+            continue
+        if check_id.endswith(".REQ.PASS") or check_id.endswith(".REQ.FAIL") or check_id.endswith(".REQ.SKIPPED"):
             continue
         seen.add(check_id)
         outcomes.append(
@@ -1142,13 +1220,18 @@ def _requirement_coverage(records: List[Mapping[str, object]], relevant_componen
                 continue
 
             passed = sum(1 for outcome in outcomes.values() if outcome.get("status") == "PASS")
+            partial = sum(1 for outcome in outcomes.values() if outcome.get("status") == "WARN")
+            skipped = sum(1 for outcome in outcomes.values() if outcome.get("status") == "SKIPPED")
             total_rules = len(outcomes)
-            if passed == total_rules:
+            evaluable_rules = total_rules - skipped
+            if evaluable_rules <= 0:
+                not_evaluable_students.append(student_id)
+            elif passed == evaluable_rules:
                 met_students.append(student_id)
+            elif partial > 0 or passed > 0:
+                partial_students.append(student_id)
             elif passed == 0:
                 unmet_students.append(student_id)
-            else:
-                partial_students.append(student_id)
 
         coverage_rows.append(
             {

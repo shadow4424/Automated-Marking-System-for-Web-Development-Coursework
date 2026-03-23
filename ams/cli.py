@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ams.core.pipeline import AssessmentPipeline
+from ams.core.profiles import get_visible_profile_specs
 
 
 def _print_sandbox_banner() -> None:
@@ -39,6 +40,7 @@ def _print_sandbox_banner() -> None:
 
 
 def _create_parser() -> argparse.ArgumentParser:
+    profile_choices = list(get_visible_profile_specs().keys()) + ["custom_profile"]
     parser = argparse.ArgumentParser(prog="ams", description="Automated Marking System")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -48,9 +50,14 @@ def _create_parser() -> argparse.ArgumentParser:
     mark_parser.add_argument("--out", "-o", type=Path, help="Path to write final report.json to")
     mark_parser.add_argument(
         "--profile",
-        choices=["frontend", "fullstack"],
-        default="frontend",
+        choices=profile_choices,
+        default="frontend_interactive",
         help="Profile to score against",
+    )
+    mark_parser.add_argument(
+        "--profile-config",
+        type=Path,
+        help="Path to a custom profile JSON file when using --profile custom_profile",
     )
 
     batch_parser = subparsers.add_parser(
@@ -58,7 +65,12 @@ def _create_parser() -> argparse.ArgumentParser:
         help="Run marking over a folder of submissions and produce batch reports",
     )
     batch_parser.add_argument("submissions_dir", type=Path, help="Folder containing submission dirs or .zip files")
-    batch_parser.add_argument("--profile", choices=["frontend", "fullstack"], required=True)
+    batch_parser.add_argument("--profile", choices=profile_choices, required=True)
+    batch_parser.add_argument(
+        "--profile-config",
+        type=Path,
+        help="Path to a custom profile JSON file when using --profile custom_profile",
+    )
     batch_parser.add_argument(
         "--out",
         "-o",
@@ -74,6 +86,8 @@ def _create_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     parser = _create_parser()
     args = parser.parse_args(argv)
+    if getattr(args, "profile", None) == "custom_profile" and not getattr(args, "profile_config", None):
+        parser.error("--profile custom_profile requires --profile-config")
 
     # ── Sandbox enforcement — always check before any pipeline work ──
     _print_sandbox_banner()
@@ -91,7 +105,15 @@ def main(argv: list[str] | None = None) -> None:
             workspace_path.mkdir(parents=True, exist_ok=True)
 
         pipeline = AssessmentPipeline()
-        report_path = pipeline.run(submission_path=submission_path, workspace_path=workspace_path, profile=args.profile)
+        metadata = {}
+        if args.profile_config:
+            metadata["profile_config_path"] = str(args.profile_config)
+        report_path = pipeline.run(
+            submission_path=submission_path,
+            workspace_path=workspace_path,
+            profile=args.profile,
+            metadata=metadata or None,
+        )
 
         # If an explicit output path is requested, copy report there
         if args.out:
@@ -118,9 +140,14 @@ def main(argv: list[str] | None = None) -> None:
             submissions_dir=Path(args.submissions_dir),
             out_root=out_root,
             profile=args.profile,
+            profile_config_path=str(args.profile_config) if args.profile_config else None,
             keep_individual_runs=True,
         )
-        failed = result["summary"]["failed"]
+        failed = sum(
+            1
+            for record in result.get("records", [])
+            if str(record.get("status") or "").lower() in {"error", "failed"}
+        )
         raise SystemExit(0 if failed == 0 else 1)
     elif args.command == "demo":
         from .tools.demo_full_system import run_demo

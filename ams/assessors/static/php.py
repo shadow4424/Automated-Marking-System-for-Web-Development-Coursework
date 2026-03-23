@@ -16,7 +16,7 @@ class PHPStaticAssessor(Assessor):
 
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
-        php_files = sorted(context.discovered_files.get("php", []))
+        php_files = sorted(context.files_for("php", relevant_only=True))
         
         # Determine if PHP is required for this profile
         profile_name = context.metadata.get("profile")

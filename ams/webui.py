@@ -47,11 +47,12 @@ from ams.core.config import (
     GITHUB_CLIENT_SECRET,
     GITHUB_OAUTH_CALLBACK,
 )
-from ams.core.profiles import PROFILES
+from ams.core.profiles import get_visible_profile_specs
 from ams.core.aggregation import aggregate_findings_to_checks, compute_check_stats
 from ams.io.metadata import MetadataValidator, SubmissionMetadata
 from ams.io.web_storage import (
     allowed_download,
+    cleanup_batch_run_storage,
     create_run_dir,
     extract_review_flags_from_report,
     find_run_by_id,
@@ -74,6 +75,7 @@ from ams.core.job_manager import job_manager
 logger = logging.getLogger(__name__)
 
 MAX_UPLOAD_MB = 25
+PROFILE_CHOICES = tuple(get_visible_profile_specs().keys())
 ALLOWED_DOWNLOADS = {
     "report.json",
     "summary.txt",
@@ -296,11 +298,7 @@ def _rebuild_batch_outputs(run_dir: Path, run_info: dict, records: list[dict]) -
     updated_run_info["batch_summary"] = {"records": records}
     save_run_info(run_dir, updated_run_info)
     _write_run_index_batch(run_dir, updated_run_info)
-
-    try:
-        _write_batch_reports_zip(run_dir, profile, updated_run_info.get("id", run_dir.name))
-    except Exception:
-        logger.warning("Failed to refresh batch_reports.zip for %s", run_dir, exc_info=True)
+    cleanup_batch_run_storage(run_dir, updated_run_info)
 
 
 def _replace_existing_submissions(
@@ -514,7 +512,7 @@ def _register_routes(app: Flask) -> None:
 
             return render_template(
                 "mark.html",
-                profiles=PROFILES.keys(),
+                profiles=PROFILE_CHOICES,
                 github_connected=github_connected,
                 github_user=github_user,
                 user_role=user_role,
@@ -535,7 +533,7 @@ def _register_routes(app: Flask) -> None:
                 f"({_sb['message']})",
                 "error",
             )
-            return render_template("mark.html", profiles=PROFILES.keys()), 503
+            return render_template("mark.html", profiles=PROFILE_CHOICES), 503
 
         # GitHub state (needed for error paths and template rendering)
         github_connected = bool(session.get("github_token"))
@@ -545,7 +543,7 @@ def _register_routes(app: Flask) -> None:
         file = request.files.get("submission")
         github_repo = request.form.get("github_repo", "").strip()
         github_branch = request.form.get("github_branch", "").strip()
-        profile = request.form.get("profile", "frontend")
+        profile = request.form.get("profile", "frontend_interactive")
         student_id = request.form.get("student_id", "").strip()
         assignment_id = request.form.get("assignment_id", "").strip()
         scoring_mode_str = request.form.get("scoring_mode", "static_plus_llm").strip()
@@ -559,12 +557,12 @@ def _register_routes(app: Flask) -> None:
             github_token = session.get("github_token")
             if not github_token:
                 flash("Please link your GitHub account first.", "error")
-                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=False, github_user=github_user), 400
+                return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=False, github_user=github_user), 400
 
             # Validate repo format (owner/repo)
             if "/" not in github_repo or github_repo.count("/") != 1:
                 flash("Invalid GitHub repository format. Use owner/repo.", "error")
-                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
+                return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
 
             try:
                 # Branch-specific zipball (Gradescope-style)
@@ -585,7 +583,7 @@ def _register_routes(app: Flask) -> None:
             except _requests.RequestException as exc:
                 logger.warning("GitHub zipball download failed for %s: %s", github_repo, exc)
                 flash(f"Failed to download repository from GitHub: {exc}", "error")
-                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
+                return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
 
             # Save to a temporary ZIP file
             with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
@@ -600,11 +598,11 @@ def _register_routes(app: Flask) -> None:
             # ------ ZIP upload path ------
             if not file or not file.filename:
                 flash("Please upload a .zip file or select a GitHub repository.", "error")
-                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
+                return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
 
             if not validate_file_type(file.filename):
                 flash("Invalid file type. Please upload a .zip file.", "error")
-                return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
+                return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
 
             # Save to temp file
             with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
@@ -620,25 +618,25 @@ def _register_routes(app: Flask) -> None:
             except Exception:
                 pass
             flash("The uploaded file is not a valid ZIP archive.", "error")
-            return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
+            return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
         
         # Validate and convert scoring mode
         try:
             scoring_mode = ScoringMode(scoring_mode_str)
         except ValueError:
             flash(f"Invalid scoring mode: {scoring_mode_str}", "error")
-            return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
+            return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
         
         # Validate metadata
         valid_student, student_error = MetadataValidator.validate_student_id(student_id)
         if not valid_student:
             flash(f"Invalid Student ID: {student_error}", "error")
-            return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
+            return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
         
         valid_assignment, assignment_error = MetadataValidator.validate_assignment_id(assignment_id)
         if not valid_assignment:
             flash(f"Invalid Assignment ID: {assignment_error}", "error")
-            return render_template("mark.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
+            return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
         
         # Sanitize identifiers
         student_id = MetadataValidator.sanitize_identifier(student_id)
@@ -669,7 +667,7 @@ def _register_routes(app: Flask) -> None:
             valid_size, size_error = validate_file_size(tmp_zip_path, MAX_UPLOAD_MB)
             if not valid_size:
                 flash(size_error or "File size exceeds maximum limit.")
-                return render_template("mark.html", profiles=PROFILES.keys()), 400
+                return render_template("mark.html", profiles=PROFILE_CHOICES), 400
             
             # Store submission with metadata
             run_id, run_dir = store_submission_with_metadata(
@@ -708,7 +706,7 @@ def _register_routes(app: Flask) -> None:
                 flash("No web development files (HTML, CSS, JS, PHP, SQL) were found in this repository. Please select the correct repository.", "error")
                 return render_template(
                     "mark.html",
-                    profiles=PROFILES.keys(),
+                    profiles=PROFILE_CHOICES,
                     github_connected=github_connected,
                     github_user=github_user,
                 ), 400
@@ -808,11 +806,24 @@ def _register_routes(app: Flask) -> None:
     @app.route("/batch", methods=["GET", "POST"])
     @teacher_or_admin_required
     def batch():
+        def _available_batch_assignments() -> list[dict]:
+            if session.get("user_role") == "admin":
+                return list_assignments()
+            return list_assignments(teacher_id=session.get("user_id"))
+
+        assignment_options = _available_batch_assignments()
+        selected_assignment_id = request.form.get("assignment_id", "").strip() if request.method == "POST" else ""
+
         if request.method == "GET":
             github_connected = bool(session.get("github_token"))
             github_user = session.get("github_user", "")
-            return render_template("batch.html", profiles=PROFILES.keys(),
-                                   github_connected=github_connected, github_user=github_user)
+            return render_template(
+                "batch.html",
+                assignments=assignment_options,
+                selected_assignment_id=selected_assignment_id,
+                github_connected=github_connected,
+                github_user=github_user,
+            )
 
         # ── Sandbox enforcement ──────────────────────────────────────
         from ams.sandbox.config import get_sandbox_status, get_sandbox_config, SandboxMode
@@ -825,15 +836,24 @@ def _register_routes(app: Flask) -> None:
                 f"({_sb['message']})",
                 "error",
             )
-            return render_template("batch.html", profiles=PROFILES.keys()), 503
+            return render_template(
+                "batch.html",
+                assignments=assignment_options,
+                selected_assignment_id=selected_assignment_id,
+                github_connected=bool(session.get("github_token")),
+                github_user=session.get("github_user", ""),
+            ), 503
 
         # Get form data
         file = request.files.get("submission")
-        profile = request.form.get("profile", "frontend")
         assignment_id = request.form.get("assignment_id", "").strip()
         scoring_mode = ScoringMode("static_plus_llm")  # Always use static + LLM
         github_connected = bool(session.get("github_token"))
         github_user = session.get("github_user", "")
+        assignment_map = {
+            str(assignment.get("assignmentID") or "").strip(): assignment
+            for assignment in assignment_options
+        }
         
         # ── Determine submission source (ZIP upload vs GitHub) ──
         submission_method = request.form.get("submission_method", "upload")
@@ -848,12 +868,24 @@ def _register_routes(app: Flask) -> None:
             github_token = session.get("github_token")
             if not github_token:
                 flash("Please link your GitHub account first.", "error")
-                return render_template("batch.html", profiles=PROFILES.keys(), github_connected=False, github_user=github_user), 400
+                return render_template(
+                    "batch.html",
+                    assignments=assignment_options,
+                    selected_assignment_id=selected_assignment_id,
+                    github_connected=False,
+                    github_user=github_user,
+                ), 400
 
             # Validate repo format (owner/repo)
             if "/" not in github_repo or github_repo.count("/") != 1:
                 flash("Invalid GitHub repository format. Use owner/repo.", "error")
-                return render_template("batch.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
+                return render_template(
+                    "batch.html",
+                    assignments=assignment_options,
+                    selected_assignment_id=selected_assignment_id,
+                    github_connected=github_connected,
+                    github_user=github_user,
+                ), 400
 
             try:
                 # Branch-specific zipball
@@ -874,7 +906,13 @@ def _register_routes(app: Flask) -> None:
             except _requests.RequestException as exc:
                 logger.warning("GitHub zipball download failed for %s: %s", github_repo, exc)
                 flash(f"Failed to download repository from GitHub: {exc}", "error")
-                return render_template("batch.html", profiles=PROFILES.keys(), github_connected=github_connected, github_user=github_user), 400
+                return render_template(
+                    "batch.html",
+                    assignments=assignment_options,
+                    selected_assignment_id=selected_assignment_id,
+                    github_connected=github_connected,
+                    github_user=github_user,
+                ), 400
 
             # Save to a temporary ZIP file
             with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
@@ -889,13 +927,23 @@ def _register_routes(app: Flask) -> None:
             # ------ ZIP upload path ------
             if not file or not file.filename:
                 flash("Please upload a .zip file or select a GitHub repository.", "error")
-                return render_template("batch.html", profiles=PROFILES.keys(),
-                                       github_connected=github_connected, github_user=github_user), 400
+                return render_template(
+                    "batch.html",
+                    assignments=assignment_options,
+                    selected_assignment_id=selected_assignment_id,
+                    github_connected=github_connected,
+                    github_user=github_user,
+                ), 400
             
             if not validate_file_type(file.filename):
                 flash("Invalid file type. Please upload a .zip file.", "error")
-                return render_template("batch.html", profiles=PROFILES.keys(),
-                                       github_connected=github_connected, github_user=github_user), 400
+                return render_template(
+                    "batch.html",
+                    assignments=assignment_options,
+                    selected_assignment_id=selected_assignment_id,
+                    github_connected=github_connected,
+                    github_user=github_user,
+                ), 400
             
             # Save to temp file
             with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
@@ -904,7 +952,7 @@ def _register_routes(app: Flask) -> None:
 
             original_filename = MetadataValidator.sanitize_filename(file.filename)
         
-        # Validate assignment ID
+        # Validate and resolve assignment
         valid_assignment, assignment_error = MetadataValidator.validate_assignment_id(assignment_id)
         if not valid_assignment:
             if tmp_zip_path.exists():
@@ -913,11 +961,32 @@ def _register_routes(app: Flask) -> None:
                 except Exception:
                     pass
             flash(f"Invalid Assignment ID: {assignment_error}", "error")
-            return render_template("batch.html", profiles=PROFILES.keys(),
-                                   github_connected=github_connected, github_user=github_user), 400
+            return render_template(
+                "batch.html",
+                assignments=assignment_options,
+                selected_assignment_id=selected_assignment_id,
+                github_connected=github_connected,
+                github_user=github_user,
+            ), 400
         
         # Sanitize
         assignment_id = MetadataValidator.sanitize_identifier(assignment_id)
+        assignment = assignment_map.get(assignment_id)
+        if assignment is None:
+            if tmp_zip_path.exists():
+                try:
+                    tmp_zip_path.unlink()
+                except Exception:
+                    pass
+            flash("Select a valid assignment from the list.", "error")
+            return render_template(
+                "batch.html",
+                assignments=assignment_options,
+                selected_assignment_id=selected_assignment_id,
+                github_connected=github_connected,
+                github_user=github_user,
+            ), 400
+        profile = str(assignment.get("profile") or "frontend_interactive").strip()
         
         runs_root = get_runs_root(app)
         
@@ -928,16 +997,26 @@ def _register_routes(app: Flask) -> None:
             except Exception:
                 pass
             flash("The uploaded file is not a valid ZIP archive.", "error")
-            return render_template("batch.html", profiles=PROFILES.keys(), 
-                                   github_connected=github_connected, github_user=github_user), 400
+            return render_template(
+                "batch.html",
+                assignments=assignment_options,
+                selected_assignment_id=selected_assignment_id,
+                github_connected=github_connected,
+                github_user=github_user,
+            ), 400
 
         try:
             # Validate file size
             valid_size, size_error = validate_file_size(tmp_zip_path, MAX_UPLOAD_MB)
             if not valid_size:
                 flash(size_error or "File size exceeds maximum limit.", "error")
-                return render_template("batch.html", profiles=PROFILES.keys(), 
-                                       github_connected=github_connected, github_user=github_user), 400
+                return render_template(
+                    "batch.html",
+                    assignments=assignment_options,
+                    selected_assignment_id=selected_assignment_id,
+                    github_connected=github_connected,
+                    github_user=github_user,
+                ), 400
             
             uploader_extra: dict = {
                 "ip_address": request.remote_addr or "unknown",
@@ -1036,9 +1115,9 @@ def _register_routes(app: Flask) -> None:
                     if using_github:
                         run_info["github_repo"] = github_repo
 
-                    _write_batch_reports_zip(run_dir, profile, run_id)
-                    _write_run_index_batch(run_dir, run_info)
                     save_run_info(run_dir, run_info)
+                    _write_run_index_batch(run_dir, run_info)
+                    cleanup_batch_run_storage(run_dir, run_info)
                     return {"run_id": run_id}
                 except Exception as exc:
                     failed_info = dict(initial_run_info, status="failed", error=str(exc))
@@ -1181,7 +1260,7 @@ def _register_routes(app: Flask) -> None:
         updated_run_info["summary"] = "batch_summary.json"
         save_run_info(run_dir, updated_run_info)
         _write_run_index_batch(run_dir, updated_run_info)
-        _write_batch_reports_zip(run_dir, profile, str(updated_run_info.get("id") or run_dir.name))
+        cleanup_batch_run_storage(run_dir, updated_run_info)
         return updated_run_info
 
     def _safe_delete_within_run(run_dir: Path, candidate: Path | str | None) -> None:
@@ -1286,6 +1365,10 @@ def _register_routes(app: Flask) -> None:
 
     def _resolve_batch_rerun_source(run_dir: Path, submission_id: str, record: Mapping[str, object]) -> tuple[Path, Path]:
         submission_dir = run_dir / "runs" / submission_id
+        submission_root = submission_dir / "submission"
+        if submission_root.exists():
+            return submission_dir, _prepare_source_tree(submission_root, submission_dir / "rerun_source")
+
         extracted_dir = submission_dir / "extracted"
         if extracted_dir.exists():
             return submission_dir, find_submission_root(extracted_dir)
@@ -1301,10 +1384,6 @@ def _register_routes(app: Flask) -> None:
                 return submission_dir, _prepare_zip_source(source_path, submission_dir / "rerun_source")
             if source_path.is_dir():
                 return submission_dir, _prepare_source_tree(source_path, submission_dir / "rerun_source")
-
-        submission_root = submission_dir / "submission"
-        if submission_root.exists():
-            return submission_dir, _prepare_source_tree(submission_root, submission_dir / "rerun_source")
 
         raise FileNotFoundError("Stored submission content is unavailable.")
 
@@ -1322,7 +1401,7 @@ def _register_routes(app: Flask) -> None:
         record["overall"] = scores.get("overall")
         record["components"] = {
             component: ((by_component.get(component) or {}).get("score"))
-            for component in ("html", "css", "js", "php", "sql")
+            for component in ("html", "css", "js", "php", "sql", "api")
         }
         record["status"] = "llm_error" if review_flags.get("llm_error_flagged") else "ok"
         record["rerun_pending"] = False

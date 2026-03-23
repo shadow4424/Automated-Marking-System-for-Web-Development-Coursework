@@ -16,7 +16,7 @@ class SQLStaticAssessor(Assessor):
 
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
-        sql_files = sorted(context.discovered_files.get("sql", []))
+        sql_files = sorted(context.files_for("sql", relevant_only=True))
         
         # Determine if SQL is required for this profile
         profile_name = context.metadata.get("profile")

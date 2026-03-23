@@ -75,7 +75,16 @@ class ReportWriter:
         
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         self.output_path.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
-        self._write_summary(context, scores, profile, behavioural, browser, metadata, findings=list(findings))
+        self._write_summary(
+            context,
+            scores,
+            profile,
+            behavioural,
+            browser,
+            metadata,
+            findings=list(findings),
+            score_evidence=score_evidence,
+        )
         return self.output_path
 
     def _serialize_finding(self, finding: Finding) -> dict:
@@ -145,6 +154,7 @@ class ReportWriter:
         browser: list[dict],
         metadata: Optional[Mapping[str, object]] = None,
         findings: Optional[list] = None,
+        score_evidence: Optional[ScoreEvidenceBundle] = None,
     ) -> None:
         summary_path = self.output_path.with_name("summary.txt")
         lines = []
@@ -187,6 +197,23 @@ class ReportWriter:
             lines.append(f"Overall score: {overall_score:.2f}")
             lines.append("")
 
+        summary_evidence = score_evidence.to_dict() if score_evidence else {}
+        confidence = dict(summary_evidence.get("confidence", {}) or {})
+        review = dict(summary_evidence.get("review", {}) or {})
+        if confidence:
+            lines.append(f"Confidence: {confidence.get('level', 'unknown')}")
+            for reason in confidence.get("reasons", [])[:2]:
+                lines.append(f"  - {reason}")
+            lines.append("")
+        if review:
+            lines.append(
+                "Manual review: "
+                + ("recommended" if review.get("recommended") else "not currently recommended")
+            )
+            for reason in review.get("reasons", [])[:2]:
+                lines.append(f"  - {reason}")
+            lines.append("")
+
         by_component = scores.get("by_component", {}) if isinstance(scores, dict) else {}
         if by_component:
             lines.append("Component scores:")
@@ -207,6 +234,26 @@ class ReportWriter:
                     f"- {component}: {component_score}"
                     + (" (" + "; ".join(rationale_bits) + ")" if rationale_bits else "")
                 )
+            lines.append("")
+
+        role_mapping = dict(summary_evidence.get("role_mapping", {}) or {})
+        if role_mapping.get("roles"):
+            lines.append("Mapped roles:")
+            for role, paths in sorted((role_mapping.get("roles") or {}).items()):
+                if paths:
+                    lines.append(f"- {role}: {', '.join(paths[:3])}")
+            lines.append("")
+
+        requirements = list(summary_evidence.get("requirements", []) or [])
+        if requirements:
+            lines.append("Requirement results:")
+            for requirement in requirements[:10]:
+                lines.append(
+                    f"- {requirement.get('requirement_id')}: "
+                    f"{requirement.get('status')} ({requirement.get('component')}/{requirement.get('stage')})"
+                )
+            if len(requirements) > 10:
+                lines.append(f"- ... {len(requirements) - 10} more requirement results in report.json")
             lines.append("")
 
         # Add policy notes

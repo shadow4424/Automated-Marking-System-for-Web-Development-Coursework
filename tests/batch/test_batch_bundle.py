@@ -5,6 +5,7 @@ import zipfile
 import json
 from pathlib import Path
 
+from ams.core.config import ScoringMode
 from ams.tools.batch import run_batch
 
 
@@ -44,29 +45,35 @@ def _make_bundle(tmp_path: Path, include_bad: bool = False) -> Path:
 def test_batch_bundle_processes_all(tmp_path: Path) -> None:
     bundle = _make_bundle(tmp_path)
     out_root = tmp_path / "out"
-    result = run_batch(bundle, out_root, profile="frontend", keep_individual_runs=True)
+    result = run_batch(
+        bundle,
+        out_root,
+        profile="frontend",
+        keep_individual_runs=True,
+        scoring_mode=ScoringMode.STATIC_ONLY,
+    )
     summary_json = out_root / "batch_summary.json"
     assert summary_json.exists()
     data = json.loads(summary_json.read_text(encoding="utf-8"))
     records = data["records"]
     assert len(records) == 2
-    assert all(r.get("status") in {"ok", "llm_error"} for r in records)
+    assert all(r.get("status") == "ok" for r in records)
     assert all(r.get("overall") is not None for r in records)
-    for record in [r for r in records if r.get("status") == "llm_error"]:
-        assert record.get("llm_error_flagged") is True
-        assert record.get("llm_error_messages")
 
 
 def test_batch_bundle_continues_on_error(tmp_path: Path) -> None:
     bundle = _make_bundle(tmp_path, include_bad=True)
     out_root = tmp_path / "out_err"
-    result = run_batch(bundle, out_root, profile="frontend", keep_individual_runs=True)
+    result = run_batch(
+        bundle,
+        out_root,
+        profile="frontend",
+        keep_individual_runs=True,
+        scoring_mode=ScoringMode.STATIC_ONLY,
+    )
     data = json.loads((out_root / "batch_summary.json").read_text(encoding="utf-8"))
     records = data["records"]
     assert len(records) == 3
     statuses = [r.get("status") for r in records]
     assert statuses.count("error") == 1
-    assert statuses.count("ok") + statuses.count("llm_error") == 2
-    for record in [r for r in records if r.get("status") == "llm_error"]:
-        assert record.get("llm_error_flagged") is True
-        assert record.get("llm_error_messages")
+    assert statuses.count("ok") == 2

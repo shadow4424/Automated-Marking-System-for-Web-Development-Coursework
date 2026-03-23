@@ -33,9 +33,196 @@ class SubmissionContext:
     submission_path: Path
     workspace_path: Path
     discovered_files: MutableMapping[str, List[Path]] = field(default_factory=dict)
+    scoring_files: MutableMapping[str, List[Path]] = field(default_factory=dict)
     metadata: MutableMapping[str, object] = field(default_factory=dict)
     behavioural_evidence: List["BehaviouralEvidence"] = field(default_factory=list)
     browser_evidence: List["BrowserEvidence"] = field(default_factory=list)
+    manifest: Optional["SubmissionManifest"] = None
+    artefact_inventory: Optional["ArtefactInventory"] = None
+    role_mapping: Optional["RoleMappedSubmission"] = None
+    resolved_config: object | None = None
+    requirement_results: List["RequirementEvaluationResult"] = field(default_factory=list)
+    confidence_summary: Optional["ConfidenceSummary"] = None
+    review_recommendation: Optional["ReviewRecommendation"] = None
+
+    def files_for(self, component: str, *, relevant_only: bool = True) -> List[Path]:
+        if relevant_only and self.scoring_files.get(component):
+            return list(self.scoring_files.get(component, []))
+        return list(self.discovered_files.get(component, []))
+
+
+@dataclass
+class SubmissionManifestEntry:
+    path: str
+    absolute_path: str
+    component: str
+    size_bytes: int
+    reachable: bool = False
+    orphan: bool = False
+    duplicate: bool = False
+    backup: bool = False
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "path": self.path,
+            "absolute_path": self.absolute_path,
+            "component": self.component,
+            "size_bytes": self.size_bytes,
+            "reachable": self.reachable,
+            "orphan": self.orphan,
+            "duplicate": self.duplicate,
+            "backup": self.backup,
+        }
+
+
+@dataclass
+class SubmissionManifest:
+    entries: List[SubmissionManifestEntry] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "entries": [entry.to_dict() for entry in self.entries],
+            "warnings": list(self.warnings),
+            "errors": list(self.errors),
+        }
+
+
+@dataclass
+class ArtefactRelation:
+    source: str
+    target: str
+    relation: str
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "source": self.source,
+            "target": self.target,
+            "relation": self.relation,
+        }
+
+
+@dataclass
+class ArtefactInventory:
+    artefacts: Dict[str, List[str]] = field(default_factory=dict)
+    relations: List[ArtefactRelation] = field(default_factory=list)
+    orphan_files: List[str] = field(default_factory=list)
+    duplicate_files: List[str] = field(default_factory=list)
+    backup_files: List[str] = field(default_factory=list)
+    candidate_execution_map: Dict[str, List[str]] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "artefacts": {key: list(value) for key, value in self.artefacts.items()},
+            "relations": [relation.to_dict() for relation in self.relations],
+            "orphan_files": list(self.orphan_files),
+            "duplicate_files": list(self.duplicate_files),
+            "backup_files": list(self.backup_files),
+            "candidate_execution_map": {
+                key: list(value) for key, value in self.candidate_execution_map.items()
+            },
+        }
+
+
+@dataclass
+class RoleMappedSubmission:
+    roles: Dict[str, List[str]] = field(default_factory=dict)
+    relevant_files: Dict[str, List[str]] = field(default_factory=dict)
+    selection_trace: List[Dict[str, object]] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "roles": {key: list(value) for key, value in self.roles.items()},
+            "relevant_files": {key: list(value) for key, value in self.relevant_files.items()},
+            "selection_trace": [dict(item) for item in self.selection_trace],
+        }
+
+
+@dataclass
+class RequirementEvaluationResult:
+    requirement_id: str
+    component: str
+    description: str
+    stage: str
+    aggregation_mode: str
+    score: float | str
+    status: str
+    weight: float = 1.0
+    required: bool = True
+    evidence: Mapping[str, object] = field(default_factory=dict)
+    contributing_paths: List[str] = field(default_factory=list)
+    skipped_reason: str | None = None
+    confidence_flags: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "requirement_id": self.requirement_id,
+            "component": self.component,
+            "description": self.description,
+            "stage": self.stage,
+            "aggregation_mode": self.aggregation_mode,
+            "score": self.score,
+            "status": self.status,
+            "weight": self.weight,
+            "required": self.required,
+            "evidence": dict(self.evidence),
+            "contributing_paths": list(self.contributing_paths),
+            "skipped_reason": self.skipped_reason,
+            "confidence_flags": list(self.confidence_flags),
+        }
+
+
+@dataclass
+class ComponentScoreSummary:
+    component: str
+    score: float | str
+    weight: float
+    requirement_count: int
+    met: int
+    partial: int
+    failed: int
+    skipped: int
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "component": self.component,
+            "score": self.score,
+            "weight": self.weight,
+            "requirement_count": self.requirement_count,
+            "met": self.met,
+            "partial": self.partial,
+            "failed": self.failed,
+            "skipped": self.skipped,
+        }
+
+
+@dataclass
+class ConfidenceSummary:
+    level: str
+    reasons: List[str] = field(default_factory=list)
+    flags: List[str] = field(default_factory=list)
+    skipped_checks: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "level": self.level,
+            "reasons": list(self.reasons),
+            "flags": list(self.flags),
+            "skipped_checks": list(self.skipped_checks),
+        }
+
+
+@dataclass
+class ReviewRecommendation:
+    recommended: bool
+    reasons: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "recommended": self.recommended,
+            "reasons": list(self.reasons),
+        }
 
 
 @dataclass
@@ -66,14 +253,39 @@ class ScoreEvidenceBundle:
     environment: Mapping[str, str]
     components: Dict[str, Mapping[str, object]]
     overall: Mapping[str, object]
+    requirements: List[Mapping[str, object]] = field(default_factory=list)
+    assignment_profile: Mapping[str, object] = field(default_factory=dict)
+    role_mapping: Mapping[str, object] = field(default_factory=dict)
+    confidence: Mapping[str, object] = field(default_factory=dict)
+    review: Mapping[str, object] = field(default_factory=dict)
+    manifest: Mapping[str, object] = field(default_factory=dict)
+    artefact_inventory: Mapping[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, object]:
+        component_scores = {
+            name: {
+                "score": data.get("score"),
+                "weight": data.get("weight", 0.0),
+            }
+            for name, data in self.components.items()
+        }
+        final_score = self.overall.get("final", self.overall.get("raw_average", 0.0))
         return {
             "profile": self.profile,
             "generated_at": self.generated_at,
             "environment": dict(self.environment),
             "components": dict(self.components),
             "overall": dict(self.overall),
+            "final_score": final_score,
+            "max_score": 1.0,
+            "component_scores": component_scores,
+            "requirements": list(self.requirements),
+            "assignment_profile": dict(self.assignment_profile),
+            "role_mapping": dict(self.role_mapping),
+            "confidence": dict(self.confidence),
+            "review": dict(self.review),
+            "manifest": dict(self.manifest),
+            "artefact_inventory": dict(self.artefact_inventory),
         }
 
 
@@ -229,6 +441,15 @@ __all__ = [
     "Severity",
     "FindingCategory",
     "SubmissionContext",
+    "SubmissionManifestEntry",
+    "SubmissionManifest",
+    "ArtefactRelation",
+    "ArtefactInventory",
+    "RoleMappedSubmission",
+    "RequirementEvaluationResult",
+    "ComponentScoreSummary",
+    "ConfidenceSummary",
+    "ReviewRecommendation",
     "Finding",
     "ScoreEvidenceBundle",
     "BehaviouralEvidence",

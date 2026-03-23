@@ -16,7 +16,7 @@ class CSSStaticAssessor(Assessor):
 
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
-        css_files = sorted(context.discovered_files.get("css", []))
+        css_files = sorted(context.files_for("css", relevant_only=True))
         
         # Determine if CSS is required for this profile
         profile_name = context.metadata.get("profile")

@@ -12,25 +12,23 @@
 
 <div class="card">
     <form method="post" enctype="multipart/form-data" id="batchForm">
-        <div class="grid grid-2">
-            <div class="form-group">
-                <label class="form-label" for="assignment_id">
-                    Assignment ID <span class="required">*</span>
-                </label>
-                <input type="text" id="assignment_id" name="assignment_id" class="form-input" required
-                    pattern="[a-zA-Z0-9_\-]{2,30}" placeholder="e.g., webdev_001" title="2-30 alphanumeric characters">
-                <p class="form-hint">Shared identifier for all submissions in this batch</p>
-            </div>
-
-            <div class="form-group">
-                <label class="form-label" for="profile">Assessment Profile</label>
-                <select id="profile" name="profile" class="form-select">
-                    {% for prof in profiles %}
-                    <option value="{{ prof }}">{{ prof|capitalize }}</option>
-                    {% endfor %}
-                </select>
-                <p class="form-hint">Determines which components are evaluated</p>
-            </div>
+        <div class="form-group">
+            <label class="form-label" for="assignment_id">
+                Assignment <span class="required">*</span>
+            </label>
+            <select id="assignment_id" name="assignment_id" class="form-select" required {% if not assignments %}disabled{% endif %}>
+                {% if assignments %}
+                <option value="">Select an assignment…</option>
+                {% for assignment in assignments %}
+                <option value="{{ assignment.assignmentID }}" {% if assignment.assignmentID == selected_assignment_id %}selected{% endif %}>
+                    {{ assignment.assignmentID }}{% if assignment.title %} — {{ assignment.title }}{% endif %}
+                </option>
+                {% endfor %}
+                {% else %}
+                <option value="">No assignments available</option>
+                {% endif %}
+            </select>
+            <p class="form-hint">The assessment profile is taken from the selected assignment automatically.</p>
         </div>
 
         {# ── Submission method radio buttons ── #}
@@ -103,6 +101,7 @@
         </div>
 
         <button type="submit" class="btn btn-primary btn-lg btn-block" id="markSubmitBtn"
+            {% if not assignments %}disabled title="Create an assignment before running a batch"{% endif %}
             {% if sandbox_status is defined and not sandbox_status.enforced and sandbox_status.mode == 'docker' %}disabled title="Docker sandbox must be running to process submissions"{% endif %}>
             Upload &amp; Run Batch
         </button>

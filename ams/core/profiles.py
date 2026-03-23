@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, List, Optional
+import json
+from dataclasses import dataclass, field, replace
+from enum import Enum
+from pathlib import Path
+from typing import Dict, List, Mapping, Optional, Sequence
 
 
 @dataclass(frozen=True)
@@ -83,6 +86,41 @@ class BehavioralRule:
     related_rules: tuple[str, ...] = ()
 
 
+class AggregationMode(str, Enum):
+    ANY = "ANY"
+    ALL_RELEVANT = "ALL_RELEVANT"
+    EXPECTED_SET = "EXPECTED_SET"
+    CAPPED_PENALTY = "CAPPED_PENALTY"
+
+
+@dataclass(frozen=True)
+class RequirementDefinition:
+    id: str
+    component: str
+    description: str
+    stage: str
+    aggregation_mode: str
+    weight: float = 1.0
+    required: bool = True
+    rule: RequiredRule | BehavioralRule | None = None
+    evaluator: str = ""
+    expected_roles: tuple[str, ...] = ()
+    skip_reason: str | None = None
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "id": self.id,
+            "component": self.component,
+            "description": self.description,
+            "stage": self.stage,
+            "aggregation_mode": self.aggregation_mode,
+            "weight": self.weight,
+            "required": self.required,
+            "evaluator": self.evaluator,
+            "expected_roles": list(self.expected_roles),
+        }
+
+
 @dataclass(frozen=True)
 class ProfileSpec:
     name: str
@@ -94,6 +132,19 @@ class ProfileSpec:
     behavioral_rules: List[BehavioralRule]
     required_files: List[str]
     relevant_artefacts: List[str]
+    optional_components: List[str] = field(default_factory=list)
+    expected_layers: List[str] = field(default_factory=list)
+    enabled_static_checks: List[str] = field(default_factory=list)
+    enabled_behavioural_checks: List[str] = field(default_factory=list)
+    enabled_browser_checks: List[str] = field(default_factory=list)
+    enabled_layout_checks: List[str] = field(default_factory=list)
+    expected_entrypoint_types: List[str] = field(default_factory=list)
+    component_weights: Dict[str, float] = field(default_factory=dict)
+    missing_component_treatment: Dict[str, str] = field(default_factory=dict)
+    role_expectations: Dict[str, str] = field(default_factory=dict)
+    frontend_only: bool = False
+    custom_config_path: str | None = None
+    aliases: tuple[str, ...] = ()
 
     def is_component_required(self, component: str) -> bool:
         """Check if a component is required for this profile."""
@@ -110,6 +161,87 @@ class ProfileSpec:
         }
         rules = rule_map.get(component, [])
         return len(rules) > 0
+
+    def component_rule_map(self) -> Dict[str, List[RequiredRule]]:
+        return {
+            "html": list(self.required_html),
+            "css": list(self.required_css),
+            "js": list(self.required_js),
+            "php": list(self.required_php),
+            "sql": list(self.required_sql),
+        }
+
+    def enabled_components(self) -> List[str]:
+        ordered = list(self.relevant_artefacts)
+        for component in self.optional_components:
+            if component not in ordered:
+                ordered.append(component)
+        return ordered
+
+    def get_component_weight(self, component: str) -> float:
+        if self.component_weights:
+            return float(self.component_weights.get(component, 0.0))
+        required = list(self.relevant_artefacts)
+        return 1.0 / len(required) if required and component in required else 0.0
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "name": self.name,
+            "required_components": list(self.relevant_artefacts),
+            "optional_components": list(self.optional_components),
+            "expected_layers": list(self.expected_layers),
+            "enabled_static_checks": list(self.enabled_static_checks),
+            "enabled_behavioural_checks": list(self.enabled_behavioural_checks),
+            "enabled_browser_checks": list(self.enabled_browser_checks),
+            "enabled_layout_checks": list(self.enabled_layout_checks),
+            "expected_entrypoint_types": list(self.expected_entrypoint_types),
+            "component_weights": dict(self.component_weights),
+            "missing_component_treatment": dict(self.missing_component_treatment),
+            "role_expectations": dict(self.role_expectations),
+            "frontend_only": self.frontend_only,
+            "custom_config_path": self.custom_config_path,
+            "aliases": list(self.aliases),
+        }
+
+    def build_requirement_definitions(self) -> List[RequirementDefinition]:
+        definitions: List[RequirementDefinition] = []
+        for component, rules in self.component_rule_map().items():
+            required = self.is_component_required(component)
+            for rule in rules:
+                definitions.append(
+                    RequirementDefinition(
+                        id=rule.id,
+                        component=component,
+                        description=rule.description,
+                        stage="static",
+                        aggregation_mode=_static_aggregation_mode(component, rule),
+                        weight=float(getattr(rule, "weight", 1.0)),
+                        required=required,
+                        rule=rule,
+                        evaluator="required_rule",
+                        expected_roles=_expected_roles_for_component(component),
+                    )
+                )
+
+        for rule in self.behavioral_rules:
+            definitions.append(
+                RequirementDefinition(
+                    id=rule.id,
+                    component=rule.component,
+                    description=rule.description,
+                    stage="runtime",
+                    aggregation_mode=_behavioural_aggregation_mode(rule),
+                    weight=float(getattr(rule, "weight", 1.0)),
+                    required=self.is_component_required(rule.component),
+                    rule=rule,
+                    evaluator="behavioral_rule",
+                    expected_roles=_expected_roles_for_component(rule.component),
+                )
+            )
+
+        for definition in _default_profile_level_requirements(self):
+            definitions.append(definition)
+        return definitions
 
 
 def _build_profile_specs() -> Dict[str, ProfileSpec]:
@@ -1012,8 +1144,66 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
         ),
     ]
 
-    frontend = ProfileSpec(
-        name="frontend",
+    behavioral_rules_api = [
+        BehavioralRule(
+            id="behavior.page_loads",
+            description="HTML page renders without errors in browser",
+            test_type="page_load",
+            component="html",
+            weight=0.25,
+        ),
+        BehavioralRule(
+            id="behavior.js_interactive",
+            description="JavaScript responds to user events and modifies DOM",
+            test_type="js_interaction",
+            component="js",
+            weight=0.35,
+        ),
+        BehavioralRule(
+            id="behavior.api_exec",
+            description="API-backed flow returns a usable response",
+            test_type="api_exec",
+            component="api",
+            weight=0.40,
+        ),
+    ]
+
+    frontend_basic = ProfileSpec(
+        name="frontend_basic",
+        required_html=html_rules,
+        required_css=css_rules,
+        required_js=[],
+        required_php=[],
+        required_sql=[],
+        behavioral_rules=[
+            BehavioralRule(
+                id="behavior.page_loads",
+                description="Primary HTML page renders without errors in browser",
+                test_type="page_load",
+                component="html",
+                weight=1.0,
+            ),
+        ],
+        required_files=[".html"],
+        relevant_artefacts=["html", "css"],
+        optional_components=["js"],
+        expected_layers=["html", "css", "js"],
+        enabled_static_checks=["html", "css", "consistency"],
+        enabled_behavioural_checks=["page_load"],
+        enabled_browser_checks=["page_load"],
+        enabled_layout_checks=["visibility"],
+        expected_entrypoint_types=["html"],
+        component_weights={"html": 0.55, "css": 0.45},
+        missing_component_treatment={"html": "zero", "css": "zero", "js": "warning"},
+        role_expectations={
+            "primary_page": "single primary HTML page",
+            "stylesheet_set": "linked stylesheet set",
+        },
+        frontend_only=True,
+    )
+
+    frontend_interactive = ProfileSpec(
+        name="frontend_interactive",
         required_html=html_rules,
         required_css=css_rules,
         required_js=js_rules,
@@ -1022,29 +1212,156 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
         behavioral_rules=behavioral_rules_frontend,
         required_files=[".html"],
         relevant_artefacts=["html", "css", "js"],
+        expected_layers=["html", "css", "js"],
+        enabled_static_checks=["html", "css", "js", "consistency"],
+        enabled_behavioural_checks=["page_load", "js_interaction"],
+        enabled_browser_checks=["page_load", "interaction", "console"],
+        enabled_layout_checks=["responsive", "visibility"],
+        expected_entrypoint_types=["html"],
+        component_weights={"html": 0.34, "css": 0.33, "js": 0.33},
+        missing_component_treatment={"html": "zero", "css": "zero", "js": "zero"},
+        role_expectations={
+            "primary_page": "single primary HTML page",
+            "secondary_page": "reachable linked pages",
+            "stylesheet_set": "linked stylesheet set",
+            "script_set": "linked script set",
+        },
+        frontend_only=True,
+        aliases=("frontend",),
     )
 
-    fullstack = ProfileSpec(
-        name="fullstack",
+    fullstack_form_php = ProfileSpec(
+        name="fullstack_form_php",
+        required_html=html_rules,
+        required_css=css_rules,
+        required_js=js_rules,
+        required_php=php_rules_fullstack,
+        required_sql=[],
+        behavioral_rules=[
+            rule
+            for rule in behavioral_rules_fullstack
+            if rule.id != "behavior.db_persists"
+        ],
+        required_files=[".html", ".php"],
+        relevant_artefacts=["html", "css", "js", "php"],
+        optional_components=["sql"],
+        expected_layers=["html", "css", "js", "php"],
+        enabled_static_checks=["html", "css", "js", "php", "consistency"],
+        enabled_behavioural_checks=["page_load", "js_interaction", "form_submit"],
+        enabled_browser_checks=["page_load", "interaction", "console"],
+        enabled_layout_checks=["responsive", "visibility"],
+        expected_entrypoint_types=["html", "php"],
+        component_weights={"html": 0.25, "css": 0.2, "js": 0.2, "php": 0.35},
+        missing_component_treatment={
+            "html": "zero",
+            "css": "zero",
+            "js": "zero",
+            "php": "zero",
+            "sql": "warning",
+        },
+        role_expectations={
+            "primary_page": "single primary HTML page",
+            "backend_entrypoint": "form-processing PHP entrypoint",
+            "script_set": "interactive scripts",
+        },
+        frontend_only=False,
+    )
+
+    fullstack_php_sql = ProfileSpec(
+        name="fullstack_php_sql",
         required_html=html_rules,
         required_css=css_rules,
         required_js=js_rules,
         required_php=php_rules_fullstack,
         required_sql=sql_rules_fullstack,
         behavioral_rules=behavioral_rules_fullstack,
-        required_files=[".html"],
+        required_files=[".html", ".php", ".sql"],
         relevant_artefacts=["html", "css", "js", "php", "sql"],
+        expected_layers=["html", "css", "js", "php", "sql"],
+        enabled_static_checks=["html", "css", "js", "php", "sql", "consistency"],
+        enabled_behavioural_checks=["page_load", "js_interaction", "form_submit", "db_persist"],
+        enabled_browser_checks=["page_load", "interaction", "console"],
+        enabled_layout_checks=["responsive", "visibility"],
+        expected_entrypoint_types=["html", "php", "sql"],
+        component_weights={"html": 0.2, "css": 0.18, "js": 0.18, "php": 0.24, "sql": 0.2},
+        missing_component_treatment={
+            "html": "zero",
+            "css": "zero",
+            "js": "zero",
+            "php": "zero",
+            "sql": "zero",
+        },
+        role_expectations={
+            "primary_page": "single primary HTML page",
+            "backend_entrypoint": "reachable PHP entrypoint",
+            "database_schema_file": "database/schema SQL file",
+        },
+        frontend_only=False,
+        aliases=("fullstack",),
     )
 
-    return {p.name: p for p in (frontend, fullstack)}
+    api_backed_web = ProfileSpec(
+        name="api_backed_web",
+        required_html=html_rules,
+        required_css=css_rules,
+        required_js=js_rules,
+        required_php=[],
+        required_sql=[],
+        behavioral_rules=behavioral_rules_api,
+        required_files=[".html", ".js"],
+        relevant_artefacts=["html", "css", "js", "api"],
+        optional_components=["php", "sql"],
+        expected_layers=["html", "css", "js", "api"],
+        enabled_static_checks=["html", "css", "js", "api", "consistency"],
+        enabled_behavioural_checks=["page_load", "js_interaction", "api_exec"],
+        enabled_browser_checks=["page_load", "interaction", "console"],
+        enabled_layout_checks=["responsive", "visibility"],
+        expected_entrypoint_types=["html", "api"],
+        component_weights={"html": 0.2, "css": 0.2, "js": 0.25, "api": 0.35},
+        missing_component_treatment={
+            "html": "zero",
+            "css": "zero",
+            "js": "zero",
+            "api": "zero",
+            "php": "warning",
+            "sql": "warning",
+        },
+        role_expectations={
+            "primary_page": "single primary HTML page",
+            "script_set": "API client script set",
+            "api_client_code": "API request/response flow",
+        },
+        frontend_only=False,
+    )
+
+    specs = {
+        spec.name: spec
+        for spec in (
+            frontend_basic,
+            frontend_interactive,
+            fullstack_form_php,
+            fullstack_php_sql,
+            api_backed_web,
+        )
+    }
+    return specs
 
 
 PROFILE_SPECS = _build_profile_specs()
+PROFILE_ALIASES = {
+    alias: spec.name
+    for spec in PROFILE_SPECS.values()
+    for alias in spec.aliases
+}
+VISIBLE_PROFILE_SPECS = {
+    name: spec for name, spec in PROFILE_SPECS.items()
+}
 
 
 def get_profile_spec(name: str) -> ProfileSpec:
+    canonical_name = PROFILE_ALIASES.get(name, name)
     try:
-        return PROFILE_SPECS[name]
+        return PROFILE_SPECS[canonical_name]
     except KeyError as exc:
         raise ValueError(f"Unknown profile: {name}") from exc
 
@@ -1053,11 +1370,224 @@ def get_relevant_components(name: str) -> List[str]:
     return get_profile_spec(name).relevant_artefacts
 
 
+def get_visible_profile_specs() -> Dict[str, ProfileSpec]:
+    return dict(VISIBLE_PROFILE_SPECS)
+
+
+def list_profile_names(*, include_aliases: bool = False, visible_only: bool = False) -> List[str]:
+    if visible_only:
+        names = list(VISIBLE_PROFILE_SPECS.keys())
+    else:
+        names = list(PROFILE_SPECS.keys())
+    if include_aliases:
+        names.extend(PROFILE_ALIASES.keys())
+    return sorted(dict.fromkeys(names))
+
+
+def resolve_profile_spec(name: str, *, config_path: str | Path | None = None) -> ProfileSpec:
+    if name != "custom_profile":
+        return get_profile_spec(name)
+    if not config_path:
+        raise ValueError("custom_profile requires a config file path")
+    return _build_custom_profile(Path(config_path))
+
+
 # Compatibility mapping for legacy imports expecting PROFILES
-PROFILES = {name: {"relevant_artefacts": spec.relevant_artefacts} for name, spec in PROFILE_SPECS.items()}
+PROFILES = {
+    name: {"relevant_artefacts": spec.relevant_artefacts}
+    for name, spec in {**VISIBLE_PROFILE_SPECS, **{alias: get_profile_spec(alias) for alias in PROFILE_ALIASES}}.items()
+}
+
+
+def _build_custom_profile(config_path: Path) -> ProfileSpec:
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    base_name = str(payload.get("base_profile") or "frontend_interactive")
+    base = get_profile_spec(base_name)
+
+    required_components = _normalize_component_list(
+        payload.get("required_components"),
+        default=base.relevant_artefacts,
+    )
+    optional_components = _normalize_component_list(
+        payload.get("optional_components"),
+        default=base.optional_components,
+    )
+    expected_layers = _normalize_component_list(
+        payload.get("expected_layers"),
+        default=base.expected_layers or list(dict.fromkeys(required_components + optional_components)),
+    )
+
+    return replace(
+        base,
+        name="custom_profile",
+        relevant_artefacts=required_components,
+        optional_components=optional_components,
+        expected_layers=expected_layers,
+        enabled_static_checks=_normalize_string_list(payload.get("enabled_static_checks"), base.enabled_static_checks),
+        enabled_behavioural_checks=_normalize_string_list(payload.get("enabled_behavioural_checks"), base.enabled_behavioural_checks),
+        enabled_browser_checks=_normalize_string_list(payload.get("enabled_browser_checks"), base.enabled_browser_checks),
+        enabled_layout_checks=_normalize_string_list(payload.get("enabled_layout_checks"), base.enabled_layout_checks),
+        expected_entrypoint_types=_normalize_string_list(payload.get("expected_entrypoint_types"), base.expected_entrypoint_types),
+        component_weights=_normalize_weight_map(payload.get("component_weights"), base.component_weights, required_components),
+        missing_component_treatment=_normalize_mapping(payload.get("missing_component_treatment"), base.missing_component_treatment),
+        role_expectations=_normalize_mapping(payload.get("role_expectations"), base.role_expectations),
+        frontend_only=bool(payload.get("frontend_only", base.frontend_only)),
+        custom_config_path=str(config_path),
+        aliases=(),
+    )
+
+
+def _normalize_string_list(value: object, default: Sequence[str]) -> List[str]:
+    if value is None:
+        return list(default)
+    if not isinstance(value, list):
+        raise ValueError("Expected a list of strings in custom profile config")
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _normalize_component_list(value: object, default: Sequence[str]) -> List[str]:
+    return _normalize_string_list(value, default)
+
+
+def _normalize_mapping(value: object, default: Mapping[str, str]) -> Dict[str, str]:
+    if value is None:
+        return dict(default)
+    if not isinstance(value, dict):
+        raise ValueError("Expected an object in custom profile config")
+    return {str(key): str(item) for key, item in value.items()}
+
+
+def _normalize_weight_map(
+    value: object,
+    default: Mapping[str, float],
+    required_components: Sequence[str],
+) -> Dict[str, float]:
+    if value is None:
+        return dict(default)
+    if not isinstance(value, dict):
+        raise ValueError("Expected component_weights to be an object")
+    weights = {str(key): float(item) for key, item in value.items()}
+    total = sum(weight for component, weight in weights.items() if component in required_components)
+    if total <= 0:
+        raise ValueError("component_weights must contain a positive total for required components")
+    return weights
+
+
+def _static_aggregation_mode(component: str, rule: RequiredRule) -> str:
+    strict_ids = {
+        "html.has_doctype",
+        "html.has_html_tag",
+        "html.has_head",
+        "html.has_body",
+        "html.has_title",
+        "html.has_meta_charset",
+        "html.has_meta_viewport",
+        "html.has_lang_attribute",
+        "html.has_alt_attributes",
+        "html.has_labels",
+    }
+    if rule.id in strict_ids:
+        return AggregationMode.ALL_RELEVANT.value
+    if component in {"php", "sql"} and rule.id.endswith(("uses_database", "uses_request")):
+        return AggregationMode.EXPECTED_SET.value
+    return AggregationMode.ANY.value
+
+
+def _behavioural_aggregation_mode(rule: BehavioralRule) -> str:
+    if rule.test_type in {"form_submit", "db_persist", "api_exec"}:
+        return AggregationMode.EXPECTED_SET.value
+    return AggregationMode.ANY.value
+
+
+def _expected_roles_for_component(component: str) -> tuple[str, ...]:
+    mapping = {
+        "html": ("primary_page", "secondary_page"),
+        "css": ("stylesheet_set",),
+        "js": ("script_set",),
+        "php": ("backend_entrypoint",),
+        "sql": ("database_schema_file",),
+        "api": ("api_client_code",),
+    }
+    return mapping.get(component, ())
+
+
+def _default_profile_level_requirements(profile: ProfileSpec) -> List[RequirementDefinition]:
+    definitions: List[RequirementDefinition] = []
+    if profile.is_component_required("api"):
+        definitions.append(
+            RequirementDefinition(
+                id="api.usage_present",
+                component="api",
+                description="API-backed behaviour is evidenced in the mapped submission flow",
+                stage="static",
+                aggregation_mode=AggregationMode.ANY.value,
+                weight=1.0,
+                required=True,
+                evaluator="api_usage_presence",
+                expected_roles=("api_client_code",),
+            )
+        )
+    if "page_load" in profile.enabled_browser_checks or "page_load" in profile.enabled_behavioural_checks:
+        definitions.append(
+            RequirementDefinition(
+                id=f"{profile.name}.browser.page_load",
+                component="html",
+                description="Primary page loads successfully in the browser",
+                stage="browser",
+                aggregation_mode=AggregationMode.EXPECTED_SET.value,
+                weight=0.0,
+                required=profile.is_component_required("html"),
+                evaluator="browser_page_load",
+                expected_roles=("primary_page",),
+            )
+        )
+    if "interaction" in profile.enabled_browser_checks:
+        definitions.append(
+            RequirementDefinition(
+                id=f"{profile.name}.browser.interaction",
+                component="js",
+                description="Expected browser interaction completes without client-side failure",
+                stage="browser",
+                aggregation_mode=AggregationMode.EXPECTED_SET.value,
+                weight=0.0,
+                required=profile.is_component_required("js"),
+                evaluator="browser_interaction",
+                expected_roles=("primary_page", "script_set"),
+            )
+        )
+    if profile.enabled_layout_checks:
+        definitions.append(
+            RequirementDefinition(
+                id=f"{profile.name}.layout.responsive",
+                component="css",
+                description="Responsive/layout evidence is present for the expected UI flow",
+                stage="layout",
+                aggregation_mode=AggregationMode.EXPECTED_SET.value,
+                weight=0.0,
+                required=profile.is_component_required("css"),
+                evaluator="layout_responsive",
+                expected_roles=("primary_page", "stylesheet_set"),
+            )
+        )
+    for component in profile.relevant_artefacts:
+        definitions.append(
+            RequirementDefinition(
+                id=f"{component}.quality.capped_penalty",
+                component=component,
+                description=f"Capped quality and consistency penalty for {component.upper()}",
+                stage="quality",
+                aggregation_mode=AggregationMode.CAPPED_PENALTY.value,
+                weight=0.0,
+                required=profile.is_component_required(component),
+                evaluator="quality_penalty",
+                expected_roles=_expected_roles_for_component(component),
+            )
+        )
+    return definitions
 
 
 __all__ = [
+    "AggregationMode",
     "RequiredRule",
     "RequiredHTMLRule",
     "RequiredCSSRule",
@@ -1065,8 +1595,12 @@ __all__ = [
     "RequiredPHPRule",
     "RequiredSQLRule",
     "BehavioralRule",
+    "RequirementDefinition",
     "ProfileSpec",
     "get_profile_spec",
+    "get_visible_profile_specs",
+    "list_profile_names",
+    "resolve_profile_spec",
     "get_relevant_components",
     "PROFILES",
 ]

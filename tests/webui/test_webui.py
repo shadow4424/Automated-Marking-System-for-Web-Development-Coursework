@@ -489,6 +489,65 @@ def test_webui_batch_run_redirects_to_assignment_and_keeps_batch_downloads(tmp_p
     assert b"frontend" in cd
 
 
+def test_batch_form_shows_assignment_dropdown_and_hides_profile_selector(tmp_path: Path, monkeypatch) -> None:
+    client, _ = _client(tmp_path)
+    monkeypatch.setattr(
+        "ams.webui.list_assignments",
+        lambda teacher_id=None: [
+            {"assignmentID": "assignment1", "title": "Assignment 1", "profile": "frontend_interactive"},
+            {"assignmentID": "assignment2", "title": "Assignment 2", "profile": "fullstack_php_sql"},
+        ],
+    )
+
+    response = client.get("/batch")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'select id="assignment_id"' in body
+    assert "assignment1 — Assignment 1" in body
+    assert "assignment2 — Assignment 2" in body
+    assert "Assessment Profile" not in body
+    assert 'name="profile"' not in body
+
+
+def test_batch_route_resolves_profile_from_selected_assignment(tmp_path: Path, monkeypatch) -> None:
+    client, _ = _client(tmp_path)
+    queued = _capture_job_submission(monkeypatch)
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "ams.webui.list_assignments",
+        lambda teacher_id=None: [
+            {"assignmentID": "assignment1", "title": "Assignment 1", "profile": "fullstack_php_sql"},
+        ],
+    )
+
+    def _run_batch_stub(**kwargs):
+        captured.update(kwargs)
+        return {"records": []}
+
+    monkeypatch.setattr("ams.webui.run_batch", _run_batch_stub)
+
+    inner_submission = _make_zip({"index.html": "<!doctype html><html><body>ok</body></html>"})
+    batch_bundle = _make_zip({"student1_assignment1.zip": inner_submission})
+
+    response = client.post(
+        "/batch",
+        data={
+            "assignment_id": "assignment1",
+            "profile": "frontend_basic",
+            "submission_method": "upload",
+            "submission": (io.BytesIO(batch_bundle), "batch_submissions.zip"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 202
+    queued["func"]()
+    assert captured["profile"] == "fullstack_php_sql"
+    assert captured["assignment_id"] == "assignment1"
+
+
 def test_assignment_detail_uses_per_submission_scores_for_batch_rows(tmp_path: Path, monkeypatch) -> None:
     app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
     client = app.test_client()
@@ -759,6 +818,61 @@ def test_deleting_llm_error_submission_unblocks_grade_release(tmp_path: Path, mo
     assert "No flagged submissions remain. Grades can now be released." in body
     assert "aria-disabled=\"true\"" not in body
     assert not run_dir.exists()
+
+
+def test_delete_assignment_route_purges_assignment_storage(tmp_path: Path, monkeypatch) -> None:
+    client, runs_root = _client(tmp_path)
+    run_id = "20260323-060000_batch_frontend_demo"
+    run_dir = runs_root / "assignment1" / "batch" / run_id
+    submission_dir = run_dir / "runs" / "student1_assignment1"
+    (submission_dir / "submission").mkdir(parents=True, exist_ok=True)
+    (submission_dir / "submission" / "index.html").write_text("<!doctype html>", encoding="utf-8")
+    (run_dir / "batch_inputs" / "batch_submissions").mkdir(parents=True, exist_ok=True)
+    (run_dir / "batch_inputs" / "batch_submissions" / "student1_assignment1.zip").write_bytes(_make_zip({"index.html": "<!doctype html>"}))
+    (run_dir / "batch_submissions.zip").write_bytes(_make_zip({"student1_assignment1.zip": "placeholder"}))
+    (run_dir / "batch_reports_frontend_demo.zip").write_bytes(b"legacy")
+    for filename in (
+        "component_means.csv",
+        "failure_reasons_frequency.csv",
+        "findings_frequency.csv",
+        "score_buckets.csv",
+    ):
+        (run_dir / filename).write_text("legacy", encoding="utf-8")
+    save_run_info(
+        run_dir,
+        {
+            "id": run_id,
+            "mode": "batch",
+            "profile": "frontend",
+            "assignment_id": "assignment1",
+            "original_filename": "batch_submissions.zip",
+            "created_at": "2026-03-23T06:00:00Z",
+            "status": "completed",
+        },
+    )
+
+    legacy_run_dir = runs_root / "legacy_batch_run"
+    legacy_run_dir.mkdir(parents=True, exist_ok=True)
+    save_run_info(
+        legacy_run_dir,
+        {
+            "id": "legacy_batch_run",
+            "mode": "batch",
+            "profile": "frontend",
+            "assignment_id": "assignment1",
+            "created_at": "2026-03-23T06:01:00Z",
+            "status": "completed",
+        },
+    )
+
+    monkeypatch.setattr("ams.web.routes_teacher.delete_assignment", lambda assignment_id: True)
+
+    response = client.post("/teacher/assignment/assignment1/delete")
+
+    assert response.status_code == 302
+    assert not run_dir.exists()
+    assert not (runs_root / "assignment1").exists()
+    assert not legacy_run_dir.exists()
 
 
 def test_reprocessing_flagged_batch_submission_unblocks_grade_release(tmp_path: Path, monkeypatch) -> None:

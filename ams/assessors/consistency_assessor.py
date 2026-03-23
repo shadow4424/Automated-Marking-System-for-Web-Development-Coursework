@@ -92,7 +92,7 @@ class ConsistencyAssessor(Assessor):
             findings.extend(self._check_css_html_consistency(context, html_data, profile_name))
         
         # B3: Form field ↔ PHP variable consistency (fullstack only)
-        if profile_name == "fullstack":
+        if profile_spec and profile_spec.is_component_required("php"):
             findings.extend(self._check_php_form_consistency(context, html_data, profile_name))
         
         # B4: Link/action target existence
@@ -102,7 +102,7 @@ class ConsistencyAssessor(Assessor):
 
     def _extract_html_data(self, context: SubmissionContext) -> Dict[str, object]:
         """Extract IDs, classes, form fields, and links from HTML files."""
-        html_files = sorted(context.discovered_files.get("html", []))
+        html_files = sorted(context.files_for("html", relevant_only=True))
         all_ids: Set[str] = set()
         all_classes: Set[str] = set()
         all_form_fields: Dict[str, str] = {}
@@ -145,7 +145,7 @@ class ConsistencyAssessor(Assessor):
     ) -> List[Finding]:
         """Check JS DOM selectors against HTML IDs and classes."""
         findings: List[Finding] = []
-        js_files = sorted(context.discovered_files.get("js", []))
+        js_files = sorted(context.files_for("js", relevant_only=True))
         html_ids: Set[str] = html_data.get("ids", set())
         html_classes: Set[str] = html_data.get("classes", set())
         
@@ -229,7 +229,7 @@ class ConsistencyAssessor(Assessor):
     ) -> List[Finding]:
         """Check CSS selectors against HTML IDs and classes."""
         findings: List[Finding] = []
-        css_files = sorted(context.discovered_files.get("css", []))
+        css_files = sorted(context.files_for("css", relevant_only=True))
         html_ids: Set[str] = html_data.get("ids", set())
         html_classes: Set[str] = html_data.get("classes", set())
         
@@ -304,7 +304,7 @@ class ConsistencyAssessor(Assessor):
     ) -> List[Finding]:
         """Check PHP form variable access against HTML form fields."""
         findings: List[Finding] = []
-        php_files = sorted(context.discovered_files.get("php", []))
+        php_files = sorted(context.files_for("php", relevant_only=True))
         html_form_fields: Set[str] = set(html_data.get("form_fields", {}).keys())
         
         # Patterns for PHP form variable access
@@ -486,4 +486,3 @@ class ConsistencyAssessor(Assessor):
                 )
         
         return findings
-

@@ -46,7 +46,7 @@ class HTMLBehavioralAssessor(Assessor):
 
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
-        html_files = sorted(context.discovered_files.get("html", []))
+        html_files = sorted(context.files_for("html", relevant_only=True))
 
         if not html_files:
             findings.append(

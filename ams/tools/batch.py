@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Tuple
 
 from ams.core.pipeline import AssessmentPipeline
 from ams.core.config import ScoringMode
+from ams.core.assignment_config import resolve_assignment_config
 from ams.io.web_storage import extract_review_flags_from_report, safe_extract_zip, find_submission_root
 
 # Submission filename must match: studentID_assignmentID.zip
@@ -64,7 +65,22 @@ def discover_batch_items(submissions_dir: Path) -> List[BatchItem]:
 
 
 def _empty_components() -> Dict[str, Optional[float]]:
-    return {"html": None, "css": None, "js": None, "php": None, "sql": None}
+    return {"html": None, "css": None, "js": None, "php": None, "sql": None, "api": None}
+
+
+def _remove_legacy_batch_outputs(out_root: Path) -> None:
+    for filename in (
+        "component_means.csv",
+        "failure_reasons_frequency.csv",
+        "findings_frequency.csv",
+        "score_buckets.csv",
+    ):
+        candidate = out_root / filename
+        if candidate.is_file():
+            candidate.unlink()
+    for candidate in out_root.glob("batch_reports_*.zip"):
+        if candidate.is_file():
+            candidate.unlink()
 
 
 def run_batch(
@@ -73,6 +89,7 @@ def run_batch(
     profile: str,
     keep_individual_runs: bool = True,
     assignment_id: Optional[str] = None,
+    profile_config_path: Optional[str] = None,
     scoring_mode: ScoringMode = ScoringMode.STATIC_PLUS_LLM,
 ) -> dict:
     out_root.mkdir(parents=True, exist_ok=True)
@@ -103,10 +120,11 @@ def run_batch(
                 profile=profile,
                 keep_individual_runs=keep_individual_runs,
                 assignment_id=assignment_id,
+                profile_config_path=profile_config_path,
             )
             records.append(record)
 
-        write_outputs(out_root, records, profile=profile)
+        write_outputs(out_root, records, profile=profile, profile_config_path=profile_config_path)
         print("Batch complete.")
 
         return {"records": records}
@@ -119,12 +137,24 @@ def write_outputs(
     out_root: Path,
     records: List[dict],
     profile: str = "frontend",
+    profile_config_path: Optional[str] = None,
 ) -> None:
+    _remove_legacy_batch_outputs(out_root)
     batch_summary = {"records": records}
     (out_root / "batch_summary.json").write_text(json.dumps(batch_summary, indent=2), encoding="utf-8")
 
     csv_path = out_root / "batch_summary.csv"
-    fieldnames = ["id", "student_id", "assignment_id", "kind", "overall", "html", "css", "js", "php", "sql", "status", "error"]
+    try:
+        relevant_components = set(
+            resolve_assignment_config(
+                profile,
+                metadata={"profile_config_path": profile_config_path} if profile_config_path else None,
+            ).required_components
+        )
+    except Exception:
+        relevant_components = {"html", "css", "js", "php", "sql", "api"}
+
+    fieldnames = ["id", "student_id", "assignment_id", "kind", "overall", "html", "css", "js", "php", "sql", "api", "status", "error"]
     with csv_path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
@@ -140,12 +170,14 @@ def write_outputs(
                     "html": comps.get("html"),
                     "css": comps.get("css"),
                     "js": comps.get("js"),
-                    "php": comps.get("php") if profile == "fullstack" else "",
-                    "sql": comps.get("sql") if profile == "fullstack" else "",
+                    "php": comps.get("php") if "php" in relevant_components else "",
+                    "sql": comps.get("sql") if "sql" in relevant_components else "",
+                    "api": comps.get("api") if "api" in relevant_components else "",
                     "status": record.get("status", ""),
                     "error": record.get("error", "") or record.get("validation_error", ""),
                 }
             )
+
 
 def _process_one_submission(
     item: BatchItem,
@@ -154,6 +186,7 @@ def _process_one_submission(
     profile: str,
     keep_individual_runs: bool,
     assignment_id: Optional[str] = None,
+    profile_config_path: Optional[str] = None,
 ) -> dict:
     # ── Filename validation ────────────────────────────────────────────────────
     # Step 1: must contain at least one '_' separator
@@ -252,6 +285,8 @@ def _process_one_submission(
             # Copy directory contents to target
             shutil.copytree(source_path, target, dirs_exist_ok=True)
             submission_root = find_submission_root(target).resolve()
+        if keep_individual_runs:
+            record["path"] = str(submission_root)
 
         # Create metadata for this submission using the validated filename components
         from ams.io.metadata import MetadataValidator, SubmissionMetadata
@@ -264,14 +299,21 @@ def _process_one_submission(
             original_filename=MetadataValidator.sanitize_filename(item.path.name),
         )
         
+        pipeline_metadata = submission_metadata.to_dict()
+        if profile_config_path:
+            pipeline_metadata["profile_config_path"] = str(profile_config_path)
+
         report_path = pipeline.run(
             submission_path=submission_root,
             workspace_path=workspace_path,
             profile=profile,
-            metadata=submission_metadata.to_dict(),
+            metadata=pipeline_metadata,
         )
         record["report_path"] = str(report_path)
         report_data = json.loads(report_path.read_text(encoding="utf-8"))
+        canonical_submission = workspace_path / "submission"
+        if keep_individual_runs and canonical_submission.exists():
+            record["path"] = str(canonical_submission)
 
         # Extract metadata from report if available
         report_metadata = report_data.get("metadata", {}).get("submission_metadata")

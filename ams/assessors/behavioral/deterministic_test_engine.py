@@ -134,19 +134,22 @@ class DeterministicTestEngine(Assessor):
 
     def run(self, context: SubmissionContext) -> List[Finding]:
         profile = context.metadata.get("profile", "unknown")
-        try:
-            profile_spec = get_profile_spec(profile)
-        except ValueError:
-            profile_spec = None
+        profile_spec = getattr(getattr(context, "resolved_config", None), "profile", None)
+        if profile_spec is None:
+            try:
+                profile_spec = get_profile_spec(profile)
+            except ValueError:
+                profile_spec = None
 
         findings: List[Finding] = []
         start = time.time()
 
-        if not profile_spec or profile_spec.name != "fullstack":
+        enabled = set(getattr(profile_spec, "enabled_behavioural_checks", []) or [])
+        if not profile_spec or not enabled:
             findings.append(
                 self._finding(
                     code=BID.SKIPPED_PROFILE,
-                    message="Behavioural tests skipped for non-fullstack profile.",
+                    message="Behavioural tests skipped for this profile.",
                     severity=Severity.SKIPPED,
                     profile=profile,
                     evidence={"profile": profile},
@@ -156,10 +159,14 @@ class DeterministicTestEngine(Assessor):
             return findings
 
         try:
-            findings.extend(self._php_smoke(context, profile, start))
-            findings.extend(self._php_form_injection(context, profile, start))
-            findings.extend(self._sql_sqlite_exec(context, profile, start))
-            findings.extend(self._api_exec(context, profile, start))
+            if "form_submit" in enabled or "api_exec" in enabled:
+                findings.extend(self._php_smoke(context, profile, start))
+            if "form_submit" in enabled:
+                findings.extend(self._php_form_injection(context, profile, start))
+            if "db_persist" in enabled:
+                findings.extend(self._sql_sqlite_exec(context, profile, start))
+            if "api_exec" in enabled:
+                findings.extend(self._api_exec(context, profile, start))
         except Exception as exc:  # pragma: no cover - defensive guard
             findings.append(
                 self._finding(
@@ -434,7 +441,7 @@ class DeterministicTestEngine(Assessor):
 
     # ------------------------------------------------------------------ SQL SQLite execution
     def _sql_sqlite_exec(self, context: SubmissionContext, profile: str, started_at: float) -> List[Finding]:
-        sql_files = sorted(context.discovered_files.get("sql", []))
+        sql_files = sorted(context.files_for("sql", relevant_only=True))
         component_required = False
         if not sql_files:
             evidence = BehaviouralEvidence(
@@ -850,7 +857,7 @@ class DeterministicTestEngine(Assessor):
         return "<?php\n$_POST = array(" + php_array + ");\n$_GET = $_POST;\ninclude '" + target_posix + "';\n"
 
     def _discover_form_inputs(self, context: SubmissionContext) -> Mapping[str, str]:
-        html_files = sorted(context.discovered_files.get("html", []))
+        html_files = sorted(context.files_for("html", relevant_only=True))
         inputs: dict[str, str] = {}
         for path in html_files:
             try:
@@ -867,7 +874,7 @@ class DeterministicTestEngine(Assessor):
         return inputs
 
     def _select_php_entrypoint(self, context: SubmissionContext) -> Path | None:
-        php_files = sorted(context.discovered_files.get("php", []))
+        php_files = sorted(context.files_for("php", relevant_only=True))
         if not php_files:
             return None
 
@@ -891,7 +898,7 @@ class DeterministicTestEngine(Assessor):
 
     def _extract_form_actions(self, context: SubmissionContext) -> List[str]:
         actions: List[str] = []
-        html_files = sorted(context.discovered_files.get("html", []))
+        html_files = sorted(context.files_for("html", relevant_only=True))
         for path in html_files:
             try:
                 content = path.read_text(encoding="utf-8", errors="replace")
@@ -909,7 +916,7 @@ class DeterministicTestEngine(Assessor):
         """Find PHP files that appear to be API endpoints (return JSON)."""
         import re as _re
 
-        php_files = sorted(context.discovered_files.get("php", []))
+        php_files = sorted(context.files_for("php", relevant_only=True))
         if not php_files:
             return None
 

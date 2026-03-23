@@ -11,13 +11,6 @@ from ams.assessors import Assessor
 from ams.assessors.behavioral import DeterministicTestEngine, HTMLBehavioralAssessor
 from ams.assessors.playwright_assessor import PlaywrightAssessor
 from ams.assessors.consistency_assessor import ConsistencyAssessor
-from ams.assessors.required import (
-    CSSRequiredRulesAssessor,
-    HTMLRequiredElementsAssessor,
-    JSRequiredFeaturesAssessor,
-    PHPRequiredFeaturesAssessor,
-    SQLRequiredFeaturesAssessor,
-)
 from ams.assessors.static import (
     CSSStaticAssessor,
     HTMLStaticAssessor,
@@ -25,8 +18,11 @@ from ams.assessors.static import (
     PHPStaticAssessor,
     SQLStaticAssessor,
 )
+from ams.core.assignment_config import ResolvedAssignmentConfig, resolve_assignment_config
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
-from ams.core.profiles import ProfileSpec, get_profile_spec
+from ams.core.profiles import ProfileSpec
+from ams.core.requirements import RequirementEvaluationEngine
+from ams.core.submission_evidence import build_submission_evidence
 from ams.core.scoring import ScoringEngine
 from ams.core.config import SCORING_MODE, ScoringMode
 from ams.io.reporting import ReportWriter
@@ -65,6 +61,7 @@ class AssessmentPipeline:
         self.assessors: Optional[List[Assessor]] = list(assessors) if assessors is not None else None
         self.scoring_engine = scoring_engine or ScoringEngine()
         self.scoring_mode = scoring_mode
+        self.requirement_engine = RequirementEvaluationEngine()
         
         # Vision Integration: Lazy-load VisionAnalyst only if enabled
         self._vision_analyst = None
@@ -91,8 +88,18 @@ class AssessmentPipeline:
         metadata: Mapping[str, object] | None = None,
         skip_threat_scan: bool = False,
     ) -> Path:
-        context = self._prepare_context(submission_path, workspace_path, profile)
+        resolved_config = resolve_assignment_config(profile, metadata=metadata)
+        context = self._prepare_context(
+            submission_path,
+            workspace_path,
+            profile,
+            resolved_config,
+        )
+        context.resolved_config = resolved_config
         context.metadata["profile"] = profile
+        context.metadata["requested_profile"] = profile
+        context.metadata["resolved_profile"] = resolved_config.profile_name
+        context.metadata["resolved_assignment_config"] = resolved_config.to_dict()
         context.metadata["scoring_mode"] = self.scoring_mode.value
         context.metadata["llm_error_detected"] = False
         context.metadata["llm_error_messages"] = []
@@ -153,7 +160,7 @@ class AssessmentPipeline:
         # (assessors, LLM enrichment, UX review) to avoid executing
         # potentially malicious code.  Jump straight to scoring/reporting.
         if not context.metadata.get("threat_detected"):
-            profile_spec = get_profile_spec(profile)
+            profile_spec = resolved_config.profile
             assessors = self.assessors or _default_assessors(
                 profile_spec,
                 container_retain=context.metadata.get("container_retain", False),
@@ -162,6 +169,12 @@ class AssessmentPipeline:
 
             for assessor in assessors:
                 findings.extend(assessor.run(context))
+
+            _requirement_results, requirement_findings = self.requirement_engine.evaluate(
+                context,
+                findings,
+            )
+            findings.extend(requirement_findings)
 
             # Add CONFIG warnings for required components with no required rules
             findings.extend(self._check_config_warnings(profile_spec, context))
@@ -193,7 +206,7 @@ class AssessmentPipeline:
             # Resolve conflicts between Static and Visual findings before scoring
             findings = resolve_conflicts(findings)
         else:
-            profile_spec = get_profile_spec(profile)
+            profile_spec = resolved_config.profile
             llm_evidence = {}
 
         # When threats are detected the submission is unsafe — force score to 0.
@@ -203,7 +216,8 @@ class AssessmentPipeline:
         else:
             scores, score_evidence = self.scoring_engine.score_with_evidence(
                 findings,
-                profile=profile,
+                context=context,
+                resolved_config=resolved_config,
                 behavioural_evidence=context.behavioural_evidence,
                 browser_evidence=context.browser_evidence,
             )
@@ -1072,8 +1086,22 @@ class AssessmentPipeline:
         
         return {}
 
-    def _prepare_context(self, submission_path: Path, workspace_path: Path, profile: str) -> SubmissionContext:
-        return SubmissionProcessor().prepare(submission_path, workspace_path, profile=profile)
+    def _prepare_context(
+        self,
+        submission_path: Path,
+        workspace_path: Path,
+        profile: str,
+        resolved_config: ResolvedAssignmentConfig,
+    ) -> SubmissionContext:
+        context = SubmissionProcessor().prepare(
+            submission_path,
+            workspace_path,
+            profile=profile,
+            resolved_config=resolved_config,
+        )
+        context.resolved_config = resolved_config
+        build_submission_evidence(context)
+        return context
     
     def _find_screenshot(
         self,
@@ -1202,22 +1230,20 @@ def _default_assessors(
         container_retain=container_retain, run_id=run_id,
     )
 
-    return [
+    assessors: List[Assessor] = [
         HTMLStaticAssessor(),
         CSSStaticAssessor(),
         JSStaticAssessor(),
         PHPStaticAssessor(),
         SQLStaticAssessor(),
-        HTMLRequiredElementsAssessor(profile=profile_spec),
-        CSSRequiredRulesAssessor(profile=profile_spec),
-        JSRequiredFeaturesAssessor(profile=profile_spec),
-        PHPRequiredFeaturesAssessor(profile=profile_spec),
-        SQLRequiredFeaturesAssessor(profile=profile_spec),
         ConsistencyAssessor(),  # Cross-file consistency checks after static/required
-        HTMLBehavioralAssessor(),
-        DeterministicTestEngine(runner=cmd_runner),
-        PlaywrightAssessor(runner=browser_runner),
     ]
+    if profile_spec.enabled_behavioural_checks:
+        assessors.append(HTMLBehavioralAssessor())
+        assessors.append(DeterministicTestEngine(runner=cmd_runner))
+    if profile_spec.enabled_browser_checks:
+        assessors.append(PlaywrightAssessor(runner=browser_runner))
+    return assessors
 
 
 __all__ = ["AssessmentPipeline"]
