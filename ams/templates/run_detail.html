@@ -520,7 +520,6 @@
         <div class="section-heading-row">
             <div class="section-copy">
                 <h2 class="card-title">What needs attention</h2>
-                <p class="section-note">The first screen surfaces follow-up reasons before the detailed evidence.</p>
             </div>
             <a href="#detailed-evidence" class="btn btn-ghost btn-sm">Open detailed evidence</a>
         </div>
@@ -561,7 +560,6 @@
         <div class="section-heading-row">
             <div class="section-copy">
                 <h2 class="card-title">Component summary</h2>
-                <p class="section-note">A compact requirement overview by technical component before the full ledger.</p>
             </div>
         </div>
         <div class="results-component-grid">
@@ -581,7 +579,6 @@
         <div class="section-heading-row">
             <div class="section-copy">
                 <h2 class="card-title">Assessment context</h2>
-                <p class="section-note">Scoring uses mapped, reachable artefacts rather than every discovered file.</p>
             </div>
         </div>
         <div class="results-role-grid">
@@ -601,7 +598,6 @@
         <summary>
             <div class="section-copy">
                 <h2 class="card-title">Full requirement ledger</h2>
-                <p class="section-note">{{ requirement_results|length }} scored requirement{{ '' if requirement_results|length == 1 else 's' }}. Open only when you need the full per-rule breakdown.</p>
             </div>
             <span class="badge badge-secondary">{{ requirement_results|length }}</span>
         </summary>
@@ -647,7 +643,6 @@
         <summary>
             <div class="section-copy">
                 <h2 class="card-title">Detailed automated checks</h2>
-                <p class="section-note">Expand individual checks only when you need the underlying evidence, code snippets, or screenshots.</p>
             </div>
             <span class="badge badge-secondary">{{ ns.graded_findings|length }}</span>
         </summary>
@@ -688,7 +683,6 @@
         <summary>
             <div class="section-copy">
                 <h2 class="card-title">Security threats</h2>
-                <p class="section-note">Threat findings are separated from the main check list because they require immediate manual review.</p>
             </div>
             <span class="badge badge-danger">{{ ns.threat_findings|length }}</span>
         </summary>
@@ -741,7 +735,6 @@
         <summary>
             <div class="section-copy">
                 <h2 class="card-title">Skipped checks</h2>
-                <p class="section-note">These checks were skipped because they were not applicable or their prerequisites were not met.</p>
             </div>
             <span class="badge badge-secondary">{{ ns.skipped_findings|length }}</span>
         </summary>
@@ -760,7 +753,6 @@
         <summary>
             <div class="section-copy">
                 <h2 class="card-title">Informational evidence</h2>
-                <p class="section-note">These items are kept available for transparency but do not affect the final score.</p>
             </div>
             <span class="badge badge-secondary">{{ ns.info_findings|length }}</span>
         </summary>
@@ -780,7 +772,6 @@
         <summary>
             <div class="section-copy">
                 <h2 class="card-title">UX and usability review</h2>
-                <p class="section-note">Qualitative page-level feedback is kept separate from the scored checks.</p>
             </div>
             <span class="badge badge-secondary">{{ ns.ux_findings|length }}</span>
         </summary>
@@ -815,7 +806,6 @@
         <summary>
             <div class="section-copy">
                 <h2 class="card-title">Vision analysis</h2>
-                <p class="section-note">Rule-based visual checks are available as supporting diagnostics.</p>
             </div>
             <span class="badge badge-secondary">{{ ns.vision_findings|length }}</span>
         </summary>
@@ -851,7 +841,6 @@
         <summary>
             <div class="section-copy">
                 <h2 class="card-title">Overall AI feedback</h2>
-                <p class="section-note">The narrative summary stays available without taking over the first screen.</p>
             </div>
         </summary>
         <div class="disclosure-body">

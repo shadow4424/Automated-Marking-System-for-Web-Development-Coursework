@@ -27,18 +27,25 @@ def _client(tmp_path: Path):
 
 
 def _stub_assignment(monkeypatch, assignment_id: str, assigned_students: list[str]) -> None:
+    assignment = {
+        "assignmentID": assignment_id,
+        "title": "Assignment 1",
+        "description": "",
+        "profile": "fullstack",
+        "marks_released": False,
+        "assigned_students": assigned_students,
+        "assigned_teachers": [],
+        "teacher_ids": ["admin123"],
+        "due_date": "2026-03-27T14:00",
+        "teacherID": "admin123",
+    }
     monkeypatch.setattr(
         "ams.web.routes_teacher.get_assignment",
-        lambda current_assignment_id: {
-            "assignmentID": current_assignment_id,
-            "title": "Assignment 1",
-            "description": "",
-            "profile": "fullstack",
-            "marks_released": False,
-            "assigned_students": assigned_students,
-            "due_date": "2026-03-27T14:00",
-            "teacherID": "admin123",
-        },
+        lambda current_assignment_id: dict(assignment, assignmentID=current_assignment_id),
+    )
+    monkeypatch.setattr(
+        "ams.webui.get_assignment",
+        lambda current_assignment_id: dict(assignment, assignmentID=current_assignment_id),
     )
     monkeypatch.setattr(
         "ams.web.routes_teacher.get_user",
@@ -384,6 +391,21 @@ def test_webui_home_ok(tmp_path: Path):
     assert res.status_code == 302
 
 
+def test_admin_dashboard_hides_preview_badge_on_admin_routes(tmp_path: Path) -> None:
+    app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
+    client = app.test_client()
+    authenticate_client(client)
+    with client.session_transaction() as sess:
+        sess["view_as_role"] = "teacher"
+
+    response = client.get("/admin/")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Admin view active" in body
+    assert "Previewing teacher" not in body
+
+
 def test_webui_mark_rejects_non_zip(tmp_path: Path):
     client, _ = _client(tmp_path)
     data = {
@@ -510,6 +532,27 @@ def test_batch_form_shows_assignment_dropdown_and_hides_profile_selector(tmp_pat
     assert 'name="profile"' not in body
 
 
+def test_mark_form_shows_assignment_dropdown_and_hides_profile_selector_for_teacher_view(tmp_path: Path, monkeypatch) -> None:
+    client, _ = _client(tmp_path)
+    monkeypatch.setattr(
+        "ams.webui.list_assignments",
+        lambda teacher_id=None: [
+            {"assignmentID": "assignment1", "title": "Assignment 1", "profile": "frontend_interactive"},
+            {"assignmentID": "assignment2", "title": "Assignment 2", "profile": "fullstack_php_sql"},
+        ],
+    )
+
+    response = client.get("/mark")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'select id="assignment_id"' in body
+    assert "assignment1 - Assignment 1" in body
+    assert "assignment2 - Assignment 2" in body
+    assert "Assessment profile" not in body
+    assert 'name="profile"' not in body
+
+
 def test_batch_route_resolves_profile_from_selected_assignment(tmp_path: Path, monkeypatch) -> None:
     client, _ = _client(tmp_path)
     queued = _capture_job_submission(monkeypatch)
@@ -546,6 +589,71 @@ def test_batch_route_resolves_profile_from_selected_assignment(tmp_path: Path, m
     queued["func"]()
     assert captured["profile"] == "fullstack_php_sql"
     assert captured["assignment_id"] == "assignment1"
+
+
+def test_mark_route_resolves_profile_from_selected_assignment(tmp_path: Path, monkeypatch) -> None:
+    client, _ = _client(tmp_path)
+    _capture_job_submission(monkeypatch)
+    monkeypatch.setattr(
+        "ams.webui.list_assignments",
+        lambda teacher_id=None: [
+            {"assignmentID": "assignment1", "title": "Assignment 1", "profile": "fullstack_php_sql"},
+        ],
+    )
+
+    bundle = _make_zip({"index.html": "<!doctype html><html><body>ok</body></html>"})
+
+    response = client.post(
+        "/mark",
+        data={
+            "student_id": "student1",
+            "assignment_id": "assignment1",
+            "submission_method": "upload",
+            "submission": (io.BytesIO(bundle), "student1_assignment1.zip"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 202
+    run_info_path = next(tmp_path.rglob("run_info.json"))
+    run_info = json.loads(run_info_path.read_text(encoding="utf-8"))
+    assert run_info["profile"] == "fullstack_php_sql"
+    assert run_info["assignment_id"] == "assignment1"
+
+
+def test_create_assignment_route_passes_selected_teachers(tmp_path: Path, monkeypatch) -> None:
+    client, _ = _client(tmp_path)
+    captured: dict[str, object] = {}
+
+    def _create_assignment_stub(**kwargs):
+        captured.update(kwargs)
+        return True
+
+    def _list_users_stub(role=None):
+        if role == "teacher":
+            return [
+                {"userID": "teacher2", "firstName": "Ada", "lastName": "Jones"},
+                {"userID": "teacher3", "firstName": "Ben", "lastName": "Smith"},
+            ]
+        return []
+
+    monkeypatch.setattr("ams.web.routes_teacher.create_assignment", _create_assignment_stub)
+    monkeypatch.setattr("ams.web.routes_teacher.list_users", _list_users_stub)
+
+    response = client.post(
+        "/teacher/create-assignment",
+        data={
+            "assignment_id": "assignment1",
+            "title": "Assignment 1",
+            "profile": "frontend_interactive",
+            "due_date": "2026-03-30T12:00",
+            "teachers": ["teacher2", "teacher3"],
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert captured["assigned_teachers"] == ["teacher2", "teacher3"]
 
 
 def test_assignment_detail_uses_per_submission_scores_for_batch_rows(tmp_path: Path, monkeypatch) -> None:
@@ -822,6 +930,7 @@ def test_deleting_llm_error_submission_unblocks_grade_release(tmp_path: Path, mo
 
 def test_delete_assignment_route_purges_assignment_storage(tmp_path: Path, monkeypatch) -> None:
     client, runs_root = _client(tmp_path)
+    _stub_assignment(monkeypatch, "assignment1", ["student1"])
     run_id = "20260323-060000_batch_frontend_demo"
     run_dir = runs_root / "assignment1" / "batch" / run_id
     submission_dir = run_dir / "runs" / "student1_assignment1"

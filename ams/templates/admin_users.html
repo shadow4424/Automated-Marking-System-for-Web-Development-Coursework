@@ -1,101 +1,140 @@
 {% extends "base.html" %}
 
-{% block title %}All Users — AMS{% endblock %}
+{% block title %}All Users - AMS{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>All Users</h1>
-    <p class="text-secondary">Manage system accounts.</p>
-    <div class="page-header-actions">
-        <a href="{{ url_for('admin.dashboard') }}" class="btn btn-ghost btn-sm">&larr; Back to Dashboard</a>
-        <a href="{{ url_for('admin.create_account_page') }}" class="btn btn-primary btn-sm">Create Account</a>
-    </div>
-</div>
+{% set admin_count = users|selectattr('role', 'equalto', 'admin')|list|length %}
+{% set teacher_count = users|selectattr('role', 'equalto', 'teacher')|list|length %}
+{% set student_count = users|selectattr('role', 'equalto', 'student')|list|length %}
+<div class="page-shell">
+    <section class="page-hero page-hero--split">
+        <div class="page-hero-main">
+            <a href="{{ url_for('admin.dashboard') }}" class="page-back-link">Back to admin dashboard</a>
+            <div class="page-kicker">Admin workspace</div>
+            <h1>User management</h1>
+            <p class="page-context-line">Search the account list quickly, review role coverage, and remove outdated users from one place.</p>
+            <div class="page-action-row">
+                <a href="{{ url_for('admin.create_account_page') }}" class="btn btn-primary">Create account</a>
+            </div>
+        </div>
+        <aside class="page-side-panel">
+            <h2 class="card-title">Role mix</h2>
+            <div class="info-grid info-grid--2">
+                <div class="info-item">
+                    <span class="info-item-label">Total users</span>
+                    <span class="info-item-value">{{ users|length }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">Admins</span>
+                    <span class="info-item-value">{{ admin_count }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">Teachers</span>
+                    <span class="info-item-value">{{ teacher_count }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">Students</span>
+                    <span class="info-item-value">{{ student_count }}</span>
+                </div>
+            </div>
+        </aside>
+    </section>
 
-<div class="card">
-    <div class="card-header">
-        <h2 class="card-title">Users</h2>
-        <span class="badge badge-muted" id="user-count">{{ users|length }}</span>
-    </div>
-    {% if users %}
-    <div style="padding: 0 1.25rem 1rem;">
-        <div style="position:relative; max-width:28rem;">
-            <svg style="position:absolute; left:0.875rem; top:50%; transform:translateY(-50%); width:1rem; height:1rem; color:var(--color-text-muted); pointer-events:none; flex-shrink:0;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
-            </svg>
-            <input
-                type="search"
-                id="user-search"
-                class="form-input"
-                placeholder="Search by User ID, first name, last name, or email…"
-                autocomplete="off"
-                style="padding-left:2.5rem; border-radius:9999px; box-shadow:var(--shadow-sm);"
-            >
+    <section class="page-utility-bar">
+        <div class="page-utility-copy">
+            <span class="page-utility-title">Search users</span>
         </div>
-    </div>
-    <div class="table-container">
-        <table class="table" id="users-table">
-            <thead>
-                <tr>
-                    <th>User ID</th>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for u in users %}
-                <tr
-                    data-userid="{{ u.userID | lower }}"
-                    data-firstname="{{ u.firstName | lower }}"
-                    data-lastname="{{ u.lastName | lower }}"
-                    data-email="{{ u.email | lower }}"
+        <div class="page-utility-main">
+            <div class="search-field">
+                <svg class="search-field-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path stroke-linecap="round" d="M21 21l-4.35-4.35"></path>
+                </svg>
+                <input
+                    type="search"
+                    id="user-search"
+                    class="form-input"
+                    placeholder="Search by user ID, first name, last name, or email"
+                    autocomplete="off"
                 >
-                    <td><code>{{ u.userID }}</code></td>
-                    <td>{{ u.firstName }} {{ u.lastName }}</td>
-                    <td>{{ u.email }}</td>
-                    <td>
-                        {% if u.role == 'admin' %}
-                        <span class="badge badge-primary">Admin</span>
-                        {% elif u.role == 'teacher' %}
-                        <span class="badge badge-success">Teacher</span>
-                        {% else %}
-                        <span class="badge badge-info">Student</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if u.userID != 'admin123' %}
-                        <form method="POST" action="{{ url_for('admin.remove_user', user_id=u.userID) }}"
-                            style="display:inline;"
-                            onsubmit="return confirm('Delete user {{ u.userID }}?');">
-                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-                        </form>
-                        {% else %}
-                        <span class="text-muted">Protected</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        <div id="no-results" style="display:none; padding: 2rem 1.25rem; text-align:center; color: var(--text-muted, #6b7280);">
-            No users match your search.
+            </div>
         </div>
-    </div>
-    {% else %}
-    <div class="empty-state">
-        <p class="empty-state-title">No users found</p>
-    </div>
-    {% endif %}
+        <div class="page-utility-side">
+            <span class="badge badge-secondary"><span id="user-count">{{ users|length }}</span> visible</span>
+        </div>
+    </section>
+
+    <section class="card">
+        <div class="section-heading-row">
+            <div class="section-copy">
+                <h2 class="card-title">Accounts</h2>
+            </div>
+        </div>
+        {% if users %}
+        <div class="table-container">
+            <table class="table table-compact" id="users-table">
+                <thead>
+                    <tr>
+                        <th>User ID</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr
+                        data-userid="{{ u.userID | lower }}"
+                        data-firstname="{{ u.firstName | lower }}"
+                        data-lastname="{{ u.lastName | lower }}"
+                        data-email="{{ u.email | lower }}"
+                    >
+                        <td><code>{{ u.userID }}</code></td>
+                        <td>{{ u.firstName }} {{ u.lastName }}</td>
+                        <td>{{ u.email }}</td>
+                        <td>
+                            {% if u.role == 'admin' %}
+                            <span class="badge badge-primary">Admin</span>
+                            {% elif u.role == 'teacher' %}
+                            <span class="badge badge-success">Teacher</span>
+                            {% else %}
+                            <span class="badge badge-info">Student</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if u.userID != 'admin123' %}
+                            <form method="POST" action="{{ url_for('admin.remove_user', user_id=u.userID) }}" onsubmit="return confirm('Delete user {{ u.userID }}?');">
+                                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                            </form>
+                            {% else %}
+                            <span class="table-meta">Protected account</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div id="no-results" class="empty-state" style="display:none; border-top:1px solid var(--color-border-light);">
+                <p class="empty-state-title">No users match your search</p>
+                <p class="empty-state-text">Try a different identifier, name, or email term.</p>
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p class="empty-state-title">No users found</p>
+            <p class="empty-state-text">Create a teacher or student account to start using AMS.</p>
+        </div>
+        {% endif %}
+    </section>
 </div>
 
 {% if users %}
 <script>
 (function () {
-    const input     = document.getElementById('user-search');
-    const tbody     = document.querySelector('#users-table tbody');
-    const rows      = Array.from(tbody.querySelectorAll('tr'));
+    const input = document.getElementById('user-search');
+    const tbody = document.querySelector('#users-table tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
     const countBadge = document.getElementById('user-count');
     const noResults = document.getElementById('no-results');
 
@@ -111,13 +150,13 @@
                 || row.dataset.email.includes(q);
 
             row.style.display = match ? '' : 'none';
-            if (match) visible++;
+            if (match) visible += 1;
         });
 
         countBadge.textContent = visible;
         noResults.style.display = visible === 0 ? '' : 'none';
     });
-})();
+}());
 </script>
 {% endif %}
 {% endblock %}

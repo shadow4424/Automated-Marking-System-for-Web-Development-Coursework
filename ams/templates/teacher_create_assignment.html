@@ -1,65 +1,153 @@
 {% extends "base.html" %}
 
-{% block title %}Create Assignment — AMS{% endblock %}
+{% block title %}Create Assignment - AMS{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>Create Assignment</h1>
-    <p class="text-secondary">Set up a new assignment and allocate students.</p>
-    <div class="page-header-actions">
-        <a href="{{ url_for('teacher.dashboard') }}" class="btn btn-ghost btn-sm">&larr; Back to Dashboard</a>
-    </div>
-</div>
+{% set create_assignment_back_url = url_for('admin.dashboard') if user_role == 'admin' else url_for('teacher.dashboard') %}
+{% set create_assignment_back_label = 'Back to admin dashboard' if user_role == 'admin' else 'Back to assignments' %}
+{% set creator_teacher_id = current_user.userID if user_role == 'teacher' else '__none__' %}
+<div class="page-shell">
+    <section class="page-hero page-hero--split">
+        <div class="page-hero-main">
+            <a href="{{ create_assignment_back_url }}" class="page-back-link">{{ create_assignment_back_label }}</a>
+            <div class="page-kicker">Teacher workspace</div>
+            <h1>Create assignment</h1>
+            <p class="page-context-line">Set up the assignment shell first, then add the teaching team or student allocation only if you need it now. You can return later from the assignment workspace to adjust both.</p>
+        </div>
+        <aside class="page-side-panel">
+            <h2 class="card-title">What you need</h2>
+            <ul class="panel-list">
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Stable assignment ID</span>
+                    <span class="panel-list-note">Use a durable identifier because students, runs, and analytics all reference it later.</span>
+                </li>
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Correct assessment profile</span>
+                    <span class="panel-list-note">The profile determines which components and rules are evaluated automatically.</span>
+                </li>
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Optional student allocation</span>
+                    <span class="panel-list-note">You can save the assignment first and assign or adjust students afterwards.</span>
+                </li>
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Optional teaching team</span>
+                    <span class="panel-list-note">Added teachers receive the same assignment access and moderation permissions as the creator.</span>
+                </li>
+            </ul>
+        </aside>
+    </section>
 
-<div class="card">
-    <form method="POST" action="{{ url_for('teacher.create_assignment_route') }}">
-        <div class="form-group">
-            <label class="form-label" for="assignment_id">Assignment ID <span class="required">*</span></label>
-            <input type="text" id="assignment_id" name="assignment_id" class="form-input"
-                placeholder="e.g. web-dev-cw1" required>
-            <p class="form-hint">Alphanumeric, hyphens, underscores only.</p>
-        </div>
-        <div class="form-group">
-            <label class="form-label" for="title">Title <span class="required">*</span></label>
-            <input type="text" id="title" name="title" class="form-input"
-                placeholder="e.g. Web Development Coursework 1" required>
-        </div>
-        <div class="form-group">
-            <label class="form-label" for="description">Description</label>
-            <textarea id="description" name="description" class="form-textarea"
-                placeholder="Brief description of the assignment..."></textarea>
-        </div>
-        <div class="form-group">
-            <label class="form-label" for="profile">Profile</label>
-            <select id="profile" name="profile" class="form-select">
-                <option value="frontend_basic">Frontend Basic (HTML, CSS)</option>
-                <option value="frontend_interactive" selected>Frontend Interactive (HTML, CSS, JS)</option>
-                <option value="fullstack_form_php">Fullstack Form + PHP (HTML, CSS, JS, PHP)</option>
-                <option value="fullstack_php_sql">Fullstack PHP + SQL (HTML, CSS, JS, PHP, SQL)</option>
-                <option value="api_backed_web">API-backed Web App (HTML, CSS, JS, API)</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label class="form-label" for="due_date">Due Date <span class="required">*</span></label>
-            <input type="datetime-local" id="due_date" name="due_date" class="form-input" required>
-        </div>
-        <div class="form-group">
-            <label class="form-label">Assign Students</label>
-            {% if students %}
-            <div class="student-select-list">
-                {% for s in students %}
-                <label class="student-select-item">
-                    <input type="checkbox" name="students" value="{{ s.userID }}">
-                    <span class="student-select-name">{{ s.firstName }} {{ s.lastName }}</span>
-                    <span class="student-select-id">{{ s.userID }}</span>
-                </label>
-                {% endfor %}
+    <section class="form-layout">
+        <div class="card">
+            <div class="section-heading-row">
+                <div class="section-copy">
+                    <h2 class="card-title">Assignment details</h2>
+                </div>
             </div>
-            {% else %}
-            <p class="form-hint">No students registered yet.</p>
-            {% endif %}
+            <form method="POST" action="{{ url_for('teacher.create_assignment_route') }}">
+                <div class="form-group">
+                    <label class="form-label" for="assignment_id">Assignment ID <span class="required">*</span></label>
+                    <input type="text" id="assignment_id" name="assignment_id" class="form-input" placeholder="e.g. web-dev-cw1" required>
+                    <p class="form-hint">Alphanumeric, hyphens, and underscores only.</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="title">Title <span class="required">*</span></label>
+                    <input type="text" id="title" name="title" class="form-input" placeholder="e.g. Web Development Coursework 1" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="description">Description</label>
+                    <textarea id="description" name="description" class="form-textarea" placeholder="Brief description of the assignment"></textarea>
+                </div>
+                <div class="grid grid-2">
+                    <div class="form-group">
+                        <label class="form-label" for="profile">Profile</label>
+                        <select id="profile" name="profile" class="form-select">
+                            <option value="frontend_basic">Frontend Basic (HTML, CSS)</option>
+                            <option value="frontend_interactive" selected>Frontend Interactive (HTML, CSS, JS)</option>
+                            <option value="fullstack_form_php">Fullstack Form + PHP (HTML, CSS, JS, PHP)</option>
+                            <option value="fullstack_php_sql">Fullstack PHP + SQL (HTML, CSS, JS, PHP, SQL)</option>
+                            <option value="api_backed_web">API-backed Web App (HTML, CSS, JS, API)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="due_date">Due date <span class="required">*</span></label>
+                        <input type="datetime-local" id="due_date" name="due_date" class="form-input" required>
+                    </div>
+                </div>
+
+                <details class="disclosure-card" style="margin-top: var(--space-lg);">
+                    <summary>
+                        <div class="section-copy">
+                            <h2 class="card-title">Add teachers</h2>
+                        </div>
+                        <span class="badge badge-secondary">{{ teachers|length }}</span>
+                    </summary>
+                    <div class="disclosure-body">
+                        {% set extra_teacher_options = teachers|rejectattr('userID', 'equalto', creator_teacher_id)|list %}
+                        {% if extra_teacher_options %}
+                        <div class="student-select-list">
+                            {% for teacher in extra_teacher_options %}
+                            <label class="student-select-item">
+                                <input type="checkbox" name="teachers" value="{{ teacher.userID }}">
+                                <span class="student-select-name">{{ teacher.firstName }} {{ teacher.lastName }}</span>
+                                <span class="student-select-id">{{ teacher.userID }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="form-hint">No additional teachers are registered yet.</p>
+                        {% endif %}
+                    </div>
+                </details>
+
+                <details class="disclosure-card" style="margin-top: var(--space-lg);">
+                    <summary>
+                        <div class="section-copy">
+                            <h2 class="card-title">Assign students</h2>
+                        </div>
+                        <span class="badge badge-secondary">{{ students|length }}</span>
+                    </summary>
+                    <div class="disclosure-body">
+                        {% if students %}
+                        <div class="student-select-list">
+                            {% for s in students %}
+                            <label class="student-select-item">
+                                <input type="checkbox" name="students" value="{{ s.userID }}">
+                                <span class="student-select-name">{{ s.firstName }} {{ s.lastName }}</span>
+                                <span class="student-select-id">{{ s.userID }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="form-hint">No students are registered yet.</p>
+                        {% endif %}
+                    </div>
+                </details>
+
+                <div class="page-action-row" style="margin-top: var(--space-lg);">
+                    <button type="submit" class="btn btn-primary">Create assignment</button>
+                    <a href="{{ create_assignment_back_url }}" class="btn btn-ghost">Cancel</a>
+                </div>
+            </form>
         </div>
-        <button type="submit" class="btn btn-primary">Create Assignment</button>
-    </form>
+
+        <div class="page-side-panel">
+            <h2 class="card-title">Creation notes</h2>
+            <ul class="panel-list">
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Students can be added later</span>
+                    <span class="panel-list-note">The assignment workspace includes a dedicated allocation editor, so creation does not need to be slowed down by a long student list.</span>
+                </li>
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Analytics appear after submissions</span>
+                    <span class="panel-list-note">The dashboard and moderation views will populate automatically once active submissions exist.</span>
+                </li>
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Marks stay withheld by default</span>
+                    <span class="panel-list-note">Release remains a deliberate later step from the assignment workspace.</span>
+                </li>
+            </ul>
+        </div>
+    </section>
 </div>
 {% endblock %}

@@ -71,12 +71,25 @@ def get_current_user() -> dict | None:
 def inject_user_context() -> dict:
     """Context processor — makes ``current_user`` available in every template."""
     user = get_current_user()
+    raw_preview_role = session.get("view_as_role")
+    effective_role = None
+    preview_role = None
+
+    if user:
+        if request.blueprint == "admin" and user["role"] == "admin":
+            effective_role = "admin"
+        else:
+            effective_role = raw_preview_role or user["role"]
+            if user["role"] == "admin" and raw_preview_role in {"teacher", "student"}:
+                preview_role = raw_preview_role
+
     return {
         "current_user": user,
         "is_authenticated": user is not None,
         "user_role": user["role"] if user else None,
-        # Admin view-as support
-        "view_as_role": session.get("view_as_role"),
+        "effective_role": effective_role,
+        "preview_role": preview_role,
+        "view_as_role": raw_preview_role,
     }
 
 

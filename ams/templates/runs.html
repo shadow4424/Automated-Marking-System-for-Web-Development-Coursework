@@ -2,126 +2,194 @@
 {% block title %}Run History - AMS{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>Run History</h1>
-    {% if user_role == 'admin' %}
-    <p class="text-secondary">System-wide view — all runs across every user and assignment.</p>
+{% set stats = namespace(total=runs|length, batch=0, mark=0, threats=0, pending=0) %}
+{% for r in runs %}
+    {% if r.mode == 'batch' %}
+        {% set stats.batch = stats.batch + 1 %}
     {% else %}
-    <p class="text-secondary">Track single submissions and batch cohorts in one place.</p>
+        {% set stats.mark = stats.mark + 1 %}
     {% endif %}
-    <div class="page-header-actions">
-        {% if user_role == 'admin' %}
-        <a href="{{ url_for('admin.dashboard') }}" class="btn btn-ghost btn-sm">&larr; Back to Dashboard</a>
-        {% endif %}
-        <a href="{{ url_for('mark') }}" class="btn btn-primary">New Mark</a>
-        <a href="{{ url_for('batch') }}" class="btn btn-secondary">New Batch</a>
-    </div>
-</div>
-
-<div class="toolbar">
-    <div class="toolbar-search">
-        <input type="search" class="form-input" data-search placeholder="Search by ID, student, filename...">
-    </div>
-    <div class="toolbar-filters">
-        <button type="button" class="filter-toggle" data-filter="mode:mark">Single</button>
-        <button type="button" class="filter-toggle" data-filter="mode:batch">Batch</button>
-        <button type="button" class="filter-toggle" data-filter="threat:true" style="--toggle-active-bg:#dc2626;">Threats</button>
-    </div>
-    <span class="toolbar-count" data-count></span>
-</div>
-
-{% if runs %}
-<div class="flex flex-col gap-md">
-    {% for r in runs %}
-    <a href="{{ url_for('run_detail', run_id=r.id) }}"
-        class="run-card{% if r.threat_flagged %} run-card--threat{% endif %}" data-filterable
-        data-mode="{{ r.mode or 'mark' }}"
-        data-threat="{{ 'true' if r.threat_flagged else 'false' }}"
-        data-search="{{ r.id }} {{ r.student_id|default('') }} {{ r.assignment_id|default('') }} {{ r.original_filename|default('') }}">
-
-        <div class="run-card-score">
-            {% set status = r.get('status', 'completed') %}
-            {% if status == 'pending' %}
-            <span class="score-badge badge-muted" style="font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">...</span>
-            {% elif status == 'failed' %}
-            <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">FAIL</span>
-            {% elif r.threat_flagged %}
-            <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">THREAT</span>
-            {% elif r.llm_error_flagged %}
-            <span class="score-badge" style="background:#fef3c7;color:#92400e;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">LLM</span>
+    {% if r.threat_flagged %}
+        {% set stats.threats = stats.threats + 1 %}
+    {% endif %}
+    {% if r.get('status', 'completed') == 'pending' %}
+        {% set stats.pending = stats.pending + 1 %}
+    {% endif %}
+{% endfor %}
+{% set runs_back_url = url_for('admin.dashboard') if user_role == 'admin' else url_for('teacher.dashboard') %}
+{% set runs_back_label = 'Back to admin dashboard' if user_role == 'admin' else 'Back to assignments' %}
+<div class="page-shell">
+    <section class="page-hero page-hero--split">
+        <div class="page-hero-main">
+            <a href="{{ runs_back_url }}" class="page-back-link">{{ runs_back_label }}</a>
+            <div class="page-kicker">Run history</div>
+            <h1>Run History</h1>
+            {% if user_role == 'admin' %}
+            <p class="page-context-line">Inspect system-wide submission processing, identify failed or flagged runs, and move quickly into audit detail.</p>
             {% else %}
-            {% set score = r.get('score') %}
-            {% if score is not none %}
-            {% if score >= 70 %}
-            <span class="score-badge score-high">{{ score|round|int }}%</span>
-            {% elif score >= 40 %}
-            <span class="score-badge score-medium">{{ score|round|int }}%</span>
-            {% else %}
-            <span class="score-badge score-low">{{ score|round|int }}%</span>
+            <p class="page-context-line">Track single submissions and batch cohorts in one place, with search and filters kept directly above the list.</p>
             {% endif %}
-            {% else %}
-            <span class="score-badge badge-muted">–</span>
-            {% endif %}
-            {% endif %}
-        </div>
-
-        <div class="run-card-content">
-            <div class="run-card-title">
-                <span class="badge {% if r.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">
-                    {{ r.mode or 'mark' }}
-                </span>
-                <span>{{ r.profile or 'unknown' }}</span>
-                {% if status == 'pending' %}
-                <span class="badge badge-warning">Pending</span>
-                {% elif status == 'failed' %}
-                <span class="badge" style="background:#dc2626;color:#fff;">Failed</span>
-                {% endif %}
-                {% if r.threat_flagged %}
-                <span class="badge" style="background:#dc2626;color:#fff;">Security Threat</span>
-                {% endif %}
-                {% if r.llm_error_flagged %}
-                <span class="badge" style="background:#fef3c7;color:#92400e;">LLM Error</span>
-                {% endif %}
-            </div>
-            <div class="run-card-meta">
-                <span>ID {{ r.id[:24] }}...</span>
-                {% if r.assignment_id %}
-                <span>Assignment: {{ r.assignment_id }}</span>
-                {% endif %}
-                {% if r.student_id %}
-                <span>{{ r.student_id }}</span>
-                {% endif %}
-                {% if r.submissions %}
-                {% for sub in r.submissions %}
-                {% if sub.student_name %}<span>{{ sub.student_name }}</span>{% endif %}
-                {% endfor %}
-                {% endif %}
-                {% if r.created_at %}
-                <span>{{ r.created_at[:10] }}</span>
-                {% endif %}
+            <div class="page-action-row">
+                <a href="{{ url_for('mark') }}" class="btn btn-primary">New mark</a>
+                <a href="{{ url_for('batch') }}" class="btn btn-secondary">New batch</a>
             </div>
         </div>
+        <aside class="page-side-panel">
+            <h2 class="card-title">Current queue</h2>
+            <div class="info-grid info-grid--2">
+                <div class="info-item">
+                    <span class="info-item-label">Runs</span>
+                    <span class="info-item-value">{{ stats.total }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">Pending</span>
+                    <span class="info-item-value">{{ stats.pending }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">Single</span>
+                    <span class="info-item-value">{{ stats.mark }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">Batch</span>
+                    <span class="info-item-value">{{ stats.batch }}</span>
+                </div>
+            </div>
+        </aside>
+    </section>
 
-        <div class="run-card-actions">
-            <span class="btn btn-ghost btn-sm">View →</span>
-            {% if user_role in ('admin', 'teacher') %}
-            <form method="POST" action="{{ url_for('delete_run', run_id=r.id) }}" class="run-delete-form">
-                <button type="button" class="btn btn-danger btn-sm"
-                        onclick="event.preventDefault(); event.stopPropagation(); if(confirm('Delete this run permanently?')) { this.form.submit(); }">
-                    Delete
-                </button>
-            </form>
-            {% endif %}
+    <section class="summary-strip">
+        <article class="summary-card">
+            <span class="summary-card-label">Total runs</span>
+            <strong class="summary-card-value">{{ stats.total }}</strong>
+            <span class="summary-card-detail">All tracked single and batch processing runs.</span>
+        </article>
+        <article class="summary-card">
+            <span class="summary-card-label">Single runs</span>
+            <strong class="summary-card-value">{{ stats.mark }}</strong>
+            <span class="summary-card-detail">Direct upload or GitHub single-submission checks.</span>
+        </article>
+        <article class="summary-card">
+            <span class="summary-card-label">Batch runs</span>
+            <strong class="summary-card-value">{{ stats.batch }}</strong>
+            <span class="summary-card-detail">Cohort or assignment-wide processing runs.</span>
+        </article>
+        <article class="summary-card">
+            <span class="summary-card-label">Threat flagged</span>
+            <strong class="summary-card-value">{{ stats.threats }}</strong>
+            <span class="summary-card-detail">Runs that need security review or cleanup.</span>
+        </article>
+    </section>
+
+    <div class="toolbar">
+        <div class="toolbar-search">
+            <input type="search" class="form-input" data-search placeholder="Search by ID, student, assignment, or filename">
         </div>
-    </a>
-    {% endfor %}
+        <div class="toolbar-filters">
+            <button type="button" class="filter-toggle" data-filter="mode:mark">Single</button>
+            <button type="button" class="filter-toggle" data-filter="mode:batch">Batch</button>
+            <button type="button" class="filter-toggle" data-filter="threat:true" style="--toggle-active-bg:#dc2626;">Threats</button>
+        </div>
+        <span class="toolbar-count" data-count></span>
+    </div>
+
+    {% if runs %}
+    <section class="section-stack">
+        <div class="flex flex-col gap-md">
+            {% for r in runs %}
+            <a href="{{ url_for('run_detail', run_id=r.id) }}"
+                class="run-card{% if r.threat_flagged %} run-card--threat{% endif %}" data-filterable
+                data-mode="{{ r.mode or 'mark' }}"
+                data-threat="{{ 'true' if r.threat_flagged else 'false' }}"
+                data-search="{{ r.id }} {{ r.student_id|default('') }} {{ r.assignment_id|default('') }} {{ r.original_filename|default('') }}">
+
+                <div class="run-card-score">
+                    {% set status = r.get('status', 'completed') %}
+                    {% if status == 'pending' %}
+                    <span class="score-badge badge-muted" style="font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">...</span>
+                    {% elif status == 'failed' %}
+                    <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">FAIL</span>
+                    {% elif r.threat_flagged %}
+                    <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">THREAT</span>
+                    {% elif r.llm_error_flagged %}
+                    <span class="score-badge" style="background:#fef3c7;color:#92400e;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">LLM</span>
+                    {% else %}
+                    {% set score = r.get('score') %}
+                    {% if score is not none %}
+                    {% if score >= 70 %}
+                    <span class="score-badge score-high">{{ score|round|int }}%</span>
+                    {% elif score >= 40 %}
+                    <span class="score-badge score-medium">{{ score|round|int }}%</span>
+                    {% else %}
+                    <span class="score-badge score-low">{{ score|round|int }}%</span>
+                    {% endif %}
+                    {% else %}
+                    <span class="score-badge badge-muted">-</span>
+                    {% endif %}
+                    {% endif %}
+                </div>
+
+                <div class="run-card-content">
+                    <div class="run-card-title">
+                        <span class="badge {% if r.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">
+                            {{ r.mode or 'mark' }}
+                        </span>
+                        <span>{{ r.profile or 'unknown' }}</span>
+                        {% if status == 'pending' %}
+                        <span class="badge badge-warning">Pending</span>
+                        {% elif status == 'failed' %}
+                        <span class="badge" style="background:#dc2626;color:#fff;">Failed</span>
+                        {% endif %}
+                        {% if r.threat_flagged %}
+                        <span class="badge" style="background:#dc2626;color:#fff;">Security threat</span>
+                        {% endif %}
+                        {% if r.llm_error_flagged %}
+                        <span class="badge" style="background:#fef3c7;color:#92400e;">LLM error</span>
+                        {% endif %}
+                    </div>
+                    <div class="run-card-meta">
+                        <span>ID {{ r.id[:24] }}...</span>
+                        {% if r.assignment_id %}
+                        <span>Assignment {{ r.assignment_id }}</span>
+                        {% endif %}
+                        {% if r.student_id %}
+                        <span>{{ r.student_id }}</span>
+                        {% endif %}
+                        {% if r.submissions %}
+                        {% for sub in r.submissions %}
+                        {% if sub.student_name %}<span>{{ sub.student_name }}</span>{% endif %}
+                        {% endfor %}
+                        {% endif %}
+                        {% if r.created_at %}
+                        <span>{{ r.created_at[:10] }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="run-card-actions">
+                    <span class="btn btn-ghost btn-sm">Open details</span>
+                    {% if user_role in ('admin', 'teacher') %}
+                    <form method="POST" action="{{ url_for('delete_run', run_id=r.id) }}" class="run-delete-form">
+                        <button type="button" class="btn btn-danger btn-sm"
+                                onclick="event.preventDefault(); event.stopPropagation(); if(confirm('Delete this run permanently?')) { this.form.submit(); }">
+                            Delete
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% else %}
+    <div class="empty-state card">
+        <div class="empty-state-icon"></div>
+        <h3 class="empty-state-title">No runs yet</h3>
+        <p class="empty-state-text">Start by uploading a submission to mark or by running a batch.</p>
+        <div class="page-inline-tools">
+            <a href="{{ url_for('mark') }}" class="btn btn-primary">Mark submission</a>
+            <a href="{{ url_for('batch') }}" class="btn btn-secondary">Run batch</a>
+        </div>
+    </div>
+    {% endif %}
 </div>
-{% else %}
-<div class="empty-state card">
-    <div class="empty-state-icon"></div>
-    <h3 class="empty-state-title">No runs yet</h3>
-    <p class="empty-state-text">Start by uploading a submission to mark.</p>
-    <a href="{{ url_for('mark') }}" class="btn btn-primary">Upload Submission</a>
-</div>
-{% endif %}
 {% endblock %}

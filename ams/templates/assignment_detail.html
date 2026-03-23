@@ -3,10 +3,12 @@
 {% block title %}{{ assignment.title }} - AMS{% endblock %}
 
 {% block content %}
+{% set assignment_back_url = url_for('admin.assignments_page') if user_role == 'admin' else url_for('teacher.dashboard') %}
+{% set assignment_back_label = 'Back to assignment oversight' if user_role == 'admin' else 'Back to assignments' %}
 <div class="page-shell">
     <section class="page-hero page-hero--split">
         <div class="page-hero-main">
-            <a href="{{ url_for('teacher.dashboard') }}" class="page-back-link">Back to assignments</a>
+            <a href="{{ assignment_back_url }}" class="page-back-link">{{ assignment_back_label }}</a>
             <div class="page-kicker">Assignment workspace</div>
             <h1>{{ assignment.title }}</h1>
             <p class="page-context-line">Manage release state, student allocation, and per-submission review from one place.</p>
@@ -51,8 +53,8 @@
                     <span class="info-item-value">{{ assignment.due_date[:10] if assignment.due_date else '-' }}</span>
                 </div>
                 <div class="info-item">
-                    <span class="info-item-label">Teacher</span>
-                    <span class="info-item-value">{{ assignment.teacherID }}</span>
+                    <span class="info-item-label">Teachers</span>
+                    <span class="info-item-value">{{ teacher_details|length }}</span>
                 </div>
             </div>
         </aside>
@@ -135,7 +137,6 @@
         <div class="section-heading-row">
             <div class="section-copy">
                 <h2 class="card-title">Description</h2>
-                <p class="section-note">Assignment brief</p>
             </div>
         </div>
         <p class="mb-0">{{ assignment.description }}</p>
@@ -145,8 +146,62 @@
     <section class="card">
         <div class="section-heading-row">
             <div class="section-copy">
+                <h2 class="card-title">Teaching team</h2>
+            </div>
+            <span class="badge badge-secondary">{{ teacher_details|length }}</span>
+        </div>
+        <div class="table-container">
+            <table class="table table-compact">
+                <thead>
+                    <tr>
+                        <th>User ID</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for teacher in teacher_details %}
+                    <tr>
+                        <td><code>{{ teacher.userID }}</code></td>
+                        <td>{{ teacher.firstName }} {{ teacher.lastName }}</td>
+                        <td>{{ teacher.email }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <details class="disclosure-card" style="margin-top: var(--space-lg);">
+            <summary>
+                <div class="section-copy">
+                    <h2 class="card-title">Edit teaching team</h2>
+                </div>
+            </summary>
+            <div class="disclosure-body">
+                <form method="POST" action="{{ url_for('teacher.update_teachers', assignment_id=assignment.assignmentID) }}">
+                    {% if all_teachers %}
+                    <div class="student-select-list">
+                        {% for teacher in all_teachers %}
+                        <label class="student-select-item">
+                            <input type="checkbox" name="teachers" value="{{ teacher.userID }}" {% if teacher.userID in assignment.assigned_teachers|default([]) %}checked{% endif %}>
+                            <span class="student-select-name">{{ teacher.firstName }} {{ teacher.lastName }}</span>
+                            <span class="student-select-id">{{ teacher.userID }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="form-hint">No additional teachers are registered yet.</p>
+                    {% endif %}
+                    <button type="submit" class="btn btn-primary btn-sm" style="margin-top: var(--space-md);">Save teaching team</button>
+                </form>
+            </div>
+        </details>
+    </section>
+
+    <section class="card">
+        <div class="section-heading-row">
+            <div class="section-copy">
                 <h2 class="card-title">Assigned students</h2>
-                <p class="section-note">Allocation is editable here without leaving the assignment workspace.</p>
             </div>
             <span class="badge badge-secondary">{{ student_details|length }}</span>
         </div>
@@ -182,7 +237,6 @@
             <summary>
                 <div class="section-copy">
                     <h2 class="card-title">Edit student allocation</h2>
-                    <p class="section-note">Open only when you need to change the assigned student list.</p>
                 </div>
             </summary>
             <div class="disclosure-body">
@@ -210,7 +264,6 @@
         <div class="section-heading-row">
             <div class="section-copy">
                 <h2 class="card-title">Submissions</h2>
-                <p class="section-note">Open a submission to rerun it, inspect the layered report, or move into assignment analytics.</p>
             </div>
             <span class="badge badge-secondary">{{ runs|length }}</span>
         </div>
@@ -237,7 +290,13 @@
                     {% endif %}
                     {% set detail_url = url_for('batch_submission_view', run_id=r.id, submission_id=r._batch_submission_id) if r.mode == 'batch' and r.get('_batch_submission_id') else url_for('run_detail', run_id=r.id) %}
                     <tr>
-                        <td><code>{{ r.student_id if r.student_id and r.student_id != 'batch' else '-' }}</code></td>
+                        <td>
+                            {% if r.student_id and r.student_id != 'batch' %}
+                            <a href="{{ detail_url }}" class="table-title-link"><code>{{ r.student_id }}</code></a>
+                            {% else %}
+                            <code>-</code>
+                            {% endif %}
+                        </td>
                         <td><span class="badge {% if r.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">{{ r.mode or 'mark' }}</span></td>
                         <td>
                             {% if status == 'pending' %}

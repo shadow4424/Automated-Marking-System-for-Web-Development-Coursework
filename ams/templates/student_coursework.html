@@ -9,7 +9,7 @@
             <div class="page-kicker">Coursework</div>
             <h1>My Coursework</h1>
             <p class="page-context-line">Track pending work, completed assignments, and the submission reports that are ready to open.</p>
-            {% if view_as_role == 'student' %}
+            {% if preview_role == 'student' %}
             <div class="callout-card callout-card--info">
                 <div class="callout-title">Admin preview mode</div>
                 <p class="callout-text">This view uses the preview student account so the student-facing structure can be reviewed safely.</p>
@@ -43,12 +43,11 @@
         </aside>
     </section>
 
-    {% if student_id or view_as_role == 'student' %}
+    {% if student_id or preview_role == 'student' %}
     <section class="card">
         <div class="section-heading-row">
             <div class="section-copy">
                 <h2 class="card-title">To do</h2>
-                <p class="section-note">Pending assignments are kept separate so the next action is always obvious.</p>
             </div>
             <span class="badge badge-warning">{{ todo|length }}</span>
         </div>
@@ -68,7 +67,7 @@
                     {% for a in todo %}
                     <tr>
                         <td>
-                            <strong>{{ a.title }}</strong>
+                            <strong><a href="{{ url_for('mark', assignment_id=a.assignmentID) }}" class="table-title-link">{{ a.title }}</a></strong>
                             <span class="table-meta"><code>{{ a.assignmentID }}</code></span>
                         </td>
                         <td><span class="badge badge-secondary">{{ a.profile }}</span></td>
@@ -98,7 +97,6 @@
         <div class="section-heading-row">
             <div class="section-copy">
                 <h2 class="card-title">Completed assignments</h2>
-                <p class="section-note">Past assignments stay separate from the active queue.</p>
             </div>
             <span class="badge badge-success">{{ completed|length }}</span>
         </div>
@@ -146,7 +144,6 @@
         <div class="section-heading-row">
             <div class="section-copy">
                 <h2 class="card-title">My submissions</h2>
-                <p class="section-note">Released results are easy to open. Unreleased submissions stay visible without exposing marks early.</p>
             </div>
             <span class="badge badge-secondary">{{ my_runs|length }}</span>
         </div>

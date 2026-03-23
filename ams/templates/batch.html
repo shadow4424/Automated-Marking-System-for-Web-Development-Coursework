@@ -1,111 +1,146 @@
 {% extends "base.html" %}
-{% block title %}Batch Marking — AMS{% endblock %}
+{% block title %}Batch Marking - AMS{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>Batch Marking</h1>
-    <p class="text-secondary">
-        Upload a ZIP containing multiple student submissions or submit from a GitHub repository.
-        Each submission should follow the format <code>studentID_assignmentID.zip</code>.
-    </p>
-</div>
-
-<div class="card">
-    <form method="post" enctype="multipart/form-data" id="batchForm">
-        <div class="form-group">
-            <label class="form-label" for="assignment_id">
-                Assignment <span class="required">*</span>
-            </label>
-            <select id="assignment_id" name="assignment_id" class="form-select" required {% if not assignments %}disabled{% endif %}>
-                {% if assignments %}
-                <option value="">Select an assignment…</option>
-                {% for assignment in assignments %}
-                <option value="{{ assignment.assignmentID }}" {% if assignment.assignmentID == selected_assignment_id %}selected{% endif %}>
-                    {{ assignment.assignmentID }}{% if assignment.title %} — {{ assignment.title }}{% endif %}
-                </option>
-                {% endfor %}
-                {% else %}
-                <option value="">No assignments available</option>
-                {% endif %}
-            </select>
-            <p class="form-hint">The assessment profile is taken from the selected assignment automatically.</p>
-        </div>
-
-        {# ── Submission method radio buttons ── #}
-        <div class="form-group">
-            <label class="form-label">Submission Method</label>
-            <div class="submission-method-radios">
-                <label class="radio-label">
-                    <input type="radio" name="submission_method" value="upload" checked id="methodUpload">
-                    Upload ZIP
-                </label>
-                <label class="radio-label">
-                    <input type="radio" name="submission_method" value="github" id="methodGithub">
-                    GitHub Repository
-                </label>
+{% set batch_back_url = url_for('admin.dashboard') if user_role == 'admin' else url_for('teacher.dashboard') %}
+{% set batch_back_label = 'Back to admin dashboard' if user_role == 'admin' else 'Back to assignments' %}
+<div class="page-shell">
+    <section class="page-hero page-hero--split">
+        <div class="page-hero-main">
+            <a href="{{ batch_back_url }}" class="page-back-link">{{ batch_back_label }}</a>
+            <div class="page-kicker">Teacher workflow</div>
+            <h1>Batch marking</h1>
+            <p class="page-context-line">Process a cohort ZIP or connect a GitHub repository when you need to run multiple submissions against one assignment in a single workflow.</p>
+            <div class="page-action-row">
+                <a href="{{ url_for('mark') }}" class="btn btn-secondary">Single submission</a>
+                <a href="{{ url_for('runs') }}" class="btn btn-ghost">Run history</a>
             </div>
         </div>
+        <aside class="page-side-panel">
+            <h2 class="card-title">Batch checklist</h2>
+            <ul class="panel-list">
+                <li class="panel-list-item">
+                    <span class="panel-list-title">One assignment per batch</span>
+                    <span class="panel-list-note">Select the assignment first so the correct profile is inherited automatically.</span>
+                </li>
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Use consistent file naming</span>
+                    <span class="panel-list-note">ZIP contents should follow <code>studentID_assignmentID.zip</code> for the smoothest processing.</span>
+                </li>
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Review results later in runs</span>
+                    <span class="panel-list-note">Batch outputs remain available from Run History and assignment workspaces after processing completes.</span>
+                </li>
+            </ul>
+        </aside>
+    </section>
 
-        {# ── ZIP upload section ── #}
-        <div id="uploadSection">
-            <div class="form-group">
-                <label class="form-label" for="submission">Batch ZIP File</label>
-                <input type="file" id="submission" name="submission" class="form-file-input" accept=".zip">
-                <p class="form-hint">
-                    Maximum file size: 25 MB. Each submission inside the ZIP should be named
-                    <code>studentID_assignmentID.zip</code>.
-                </p>
-            </div>
-        </div>
-
-        {# ── GitHub submission section ── #}
-        <div id="githubSection" style="display:none;">
-            <div class="form-group">
-                <label class="form-label">Connect your Account</label>
-                {% if github_connected %}
-                <div class="github-connected-status" id="githubConnectedState">
-                    <span class="github-status-dot github-status-active"></span>
-                    <span>Connected as <strong>{{ github_user }}</strong></span>
-                    <button type="button" class="btn btn-sm btn-outline" id="githubDisconnectBtn">Disconnect</button>
+    <section class="form-layout">
+        <div class="card">
+            <div class="section-heading-row">
+                <div class="section-copy">
+                    <h2 class="card-title">Batch submission details</h2>
                 </div>
-                {% else %}
-                <div id="githubDisconnectedState">
-                    <a href="{{ url_for('github_login') }}" class="btn btn-secondary" id="githubConnectBtn">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right:4px">
-                            <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-                        </svg>
-                        Connect to GitHub
-                    </a>
-                </div>
-                {% endif %}
             </div>
-
-            <div class="grid grid-2" id="githubRepoSection" {% if not github_connected %}style="display:none;"{% endif %}>
+            <form method="post" enctype="multipart/form-data" id="batchForm">
                 <div class="form-group">
-                    <label class="form-label" for="github_repo_select">
-                        Repository <span class="required">*</span>
-                    </label>
-                    <select id="github_repo_select" name="github_repo" class="form-select" disabled>
-                        <option value="">Select a repository…</option>
+                    <label class="form-label" for="assignment_id">Assignment <span class="required">*</span></label>
+                    <select id="assignment_id" name="assignment_id" class="form-select" required {% if not assignments %}disabled{% endif %}>
+                        {% if assignments %}
+                        <option value="">Select an assignment</option>
+                        {% for assignment in assignments %}
+                        <option value="{{ assignment.assignmentID }}" {% if assignment.assignmentID == selected_assignment_id %}selected{% endif %}>
+                            {{ assignment.assignmentID }}{% if assignment.title %} — {{ assignment.title }}{% endif %}
+                        </option>
+                        {% endfor %}
+                        {% else %}
+                        <option value="">No assignments available</option>
+                        {% endif %}
                     </select>
+                    <p class="form-hint">The selected assignment automatically supplies the assessment profile.</p>
                 </div>
+
                 <div class="form-group">
-                    <label class="form-label" for="github_branch_select">
-                        Branch <span class="required">*</span>
-                    </label>
-                    <select id="github_branch_select" name="github_branch" class="form-select" disabled>
-                        <option value="">Select a branch…</option>
-                    </select>
+                    <label class="form-label">Submission method</label>
+                    <div class="submission-method-radios">
+                        <label class="radio-label">
+                            <input type="radio" name="submission_method" value="upload" checked id="methodUpload">
+                            Upload ZIP
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="submission_method" value="github" id="methodGithub">
+                            GitHub repository
+                        </label>
+                    </div>
                 </div>
-            </div>
+
+                <div id="uploadSection">
+                    <div class="form-group">
+                        <label class="form-label" for="submission">Batch ZIP file</label>
+                        <input type="file" id="submission" name="submission" class="form-file-input" accept=".zip">
+                        <p class="form-hint">Maximum file size: 25 MB. Each nested submission ZIP should be named <code>studentID_assignmentID.zip</code>.</p>
+                    </div>
+                </div>
+
+                <div id="githubSection" style="display:none;">
+                    <div class="form-group">
+                        <label class="form-label">Connect your account</label>
+                        {% if github_connected %}
+                        <div class="github-connected-status" id="githubConnectedState">
+                            <span class="github-status-dot github-status-active"></span>
+                            <span>Connected as <strong>{{ github_user }}</strong></span>
+                            <button type="button" class="btn btn-sm btn-outline" id="githubDisconnectBtn">Disconnect</button>
+                        </div>
+                        {% else %}
+                        <div id="githubDisconnectedState">
+                            <a href="{{ url_for('github_login') }}" class="btn btn-secondary" id="githubConnectBtn">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right:4px">
+                                    <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                                </svg>
+                                Connect to GitHub
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="grid grid-2" id="githubRepoSection" {% if not github_connected %}style="display:none;"{% endif %}>
+                        <div class="form-group">
+                            <label class="form-label" for="github_repo_select">Repository <span class="required">*</span></label>
+                            <select id="github_repo_select" name="github_repo" class="form-select" disabled>
+                                <option value="">Select a repository</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="github_branch_select">Branch <span class="required">*</span></label>
+                            <select id="github_branch_select" name="github_branch" class="form-select" disabled>
+                                <option value="">Select a branch</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg btn-block" id="markSubmitBtn"
+                    {% if not assignments %}disabled title="Create an assignment before running a batch"{% endif %}
+                    {% if sandbox_status is defined and not sandbox_status.enforced and sandbox_status.mode == 'docker' %}disabled title="Docker sandbox must be running to process submissions"{% endif %}>
+                    Upload and run batch
+                </button>
+            </form>
         </div>
 
-        <button type="submit" class="btn btn-primary btn-lg btn-block" id="markSubmitBtn"
-            {% if not assignments %}disabled title="Create an assignment before running a batch"{% endif %}
-            {% if sandbox_status is defined and not sandbox_status.enforced and sandbox_status.mode == 'docker' %}disabled title="Docker sandbox must be running to process submissions"{% endif %}>
-            Upload &amp; Run Batch
-        </button>
-    </form>
+        <div class="page-side-panel">
+            <h2 class="card-title">When to use this</h2>
+            <ul class="panel-list">
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Cohort processing</span>
+                    <span class="panel-list-note">This is the preferred path when you are handling multiple students in one assignment cycle.</span>
+                </li>
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Assignment-scoped analytics</span>
+                    <span class="panel-list-note">Processed batch results feed directly into assignment dashboards and cohort analytics after completion.</span>
+                </li>
+            </ul>
+        </div>
+    </section>
 </div>
 {% endblock %}
 

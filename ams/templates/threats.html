@@ -2,74 +2,107 @@
 {% block title %}Security Threats - AMS{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>Security Threats Dashboard</h1>
-    <p class="text-secondary">
-        Retained Docker containers from submissions flagged with high-severity threats.
-        Review before cleanup.
-    </p>
-</div>
-
-{% if inspected %}
-<div class="card" style="border-left: 4px solid #dc2626; margin-bottom: 1.5rem;">
-    <h3 style="color:#dc2626;">Container Inspection: {{ inspected.name }}</h3>
-
-    {% if inspected.diff %}
-    <h4 style="margin-top: 1rem;">Filesystem Changes</h4>
-    <pre style="background: #1e1e2e; color: #cdd6f4; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; max-height: 300px;">{% for line in inspected.diff %}{{ line }}
-{% endfor %}</pre>
-    {% else %}
-    <p class="text-secondary">No filesystem changes detected.</p>
-    {% endif %}
-
-    {% if inspected.logs %}
-    <h4 style="margin-top: 1rem;">Container Logs (last 200 lines)</h4>
-    <pre style="background: #1e1e2e; color: #cdd6f4; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; max-height: 400px;">{{ inspected.logs }}</pre>
-    {% else %}
-    <p class="text-secondary">No container logs available.</p>
-    {% endif %}
-
-    <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
-        <a href="{{ url_for('threats') }}" class="btn btn-secondary">&#8592; Back to Threats</a>
-        <form method="post" action="{{ url_for('threat_cleanup', container_name=inspected.name) }}"
-            onsubmit="return confirm('Are you sure you want to remove this container?');"
-            style="display: inline;">
-            <button type="submit" class="btn" style="background:#dc2626;color:#fff;">Remove Container</button>
-        </form>
-    </div>
-</div>
-{% endif %}
-
-{% if containers %}
-<div class="flex flex-col gap-md">
-    {% for c in containers %}
-    <div class="card" style="border-left: 4px solid #dc2626;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <h3 style="margin: 0; color: #dc2626;">{{ c.name }}</h3>
-                <p class="text-secondary" style="margin: 0.25rem 0;">
-                    ID: {{ c.container_id }} &middot; Image: {{ c.image }} &middot;
-                    Status: {{ c.status }} &middot; Created: {{ c.created }}
-                </p>
+<div class="page-shell">
+    <section class="page-hero page-hero--split">
+        <div class="page-hero-main">
+            <a href="{{ url_for('runs') }}" class="page-back-link">Back to run history</a>
+            <div class="page-kicker">Security review</div>
+            <h1>Security threats</h1>
+            <p class="page-context-line">Review retained threat containers, inspect filesystem or log evidence, and remove containers once the investigation is complete.</p>
+        </div>
+        <aside class="page-side-panel">
+            <h2 class="card-title">Current state</h2>
+            <div class="info-grid info-grid--2">
+                <div class="info-item">
+                    <span class="info-item-label">Retained containers</span>
+                    <span class="info-item-value">{{ containers|length }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">Inspection open</span>
+                    <span class="info-item-value">{{ 'Yes' if inspected else 'No' }}</span>
+                </div>
             </div>
-            <div style="display: flex; gap: 0.5rem;">
-                <a href="{{ url_for('threat_inspect', container_name=c.name) }}" class="btn btn-secondary btn-sm">Inspect</a>
-                <form method="post" action="{{ url_for('threat_cleanup', container_name=c.name) }}"
-                    onsubmit="return confirm('Remove container {{ c.name }}?');"
-                    style="display: inline;">
-                    <button type="submit" class="btn btn-sm" style="background:#dc2626;color:#fff;">Remove</button>
+        </aside>
+    </section>
+
+    {% if inspected %}
+    <section class="card">
+        <div class="section-heading-row">
+            <div class="section-copy">
+                <h2 class="card-title">Container inspection</h2>
+            </div>
+            <div class="page-inline-tools">
+                <a href="{{ url_for('threats') }}" class="btn btn-secondary btn-sm">Back to threat list</a>
+                <form method="post" action="{{ url_for('threat_cleanup', container_name=inspected.name) }}" onsubmit="return confirm('Are you sure you want to remove this container?');">
+                    <button type="submit" class="btn btn-danger btn-sm">Remove container</button>
                 </form>
             </div>
         </div>
+
+        <div class="form-layout">
+            <div class="card" style="margin: 0; box-shadow: none;">
+                <div class="section-heading-row">
+                    <div class="section-copy">
+                        <h3 class="card-title">Filesystem changes</h3>
+                    </div>
+                </div>
+                {% if inspected.diff %}
+                <div class="code-surface"><pre>{% for line in inspected.diff %}{{ line }}
+{% endfor %}</pre></div>
+                {% else %}
+                <div class="empty-state" style="padding: var(--space-lg) 0;">
+                    <p class="empty-state-title">No filesystem changes detected</p>
+                    <p class="empty-state-text">The container diff did not return any retained file modifications.</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="page-side-panel">
+                <h2 class="card-title">Container logs</h2>
+                {% if inspected.logs %}
+                <div class="code-surface"><pre>{{ inspected.logs }}</pre></div>
+                {% else %}
+                <p class="section-note">No container logs are available for this retained environment.</p>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    {% if containers %}
+    <section class="card">
+        <div class="section-heading-row">
+            <div class="section-copy">
+                <h2 class="card-title">Retained containers</h2>
+            </div>
+            <span class="badge" style="background:#dc2626;color:#fff;">{{ containers|length }}</span>
+        </div>
+        <div class="surface-list">
+            {% for c in containers %}
+            <div class="surface-item" style="border-left: 4px solid #dc2626;">
+                <div class="surface-item-head">
+                    <div>
+                        <div class="surface-item-title" style="color:#b91c1c;">{{ c.name }}</div>
+                        <div class="surface-item-meta">ID {{ c.container_id }} | Image {{ c.image }} | Status {{ c.status }} | Created {{ c.created }}</div>
+                    </div>
+                    <div class="surface-item-actions">
+                        <a href="{{ url_for('threat_inspect', container_name=c.name) }}" class="btn btn-secondary btn-sm">Inspect</a>
+                        <form method="post" action="{{ url_for('threat_cleanup', container_name=c.name) }}" onsubmit="return confirm('Remove container {{ c.name }}?');">
+                            <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% elif not inspected %}
+    <div class="empty-state card">
+        <div class="empty-state-icon"></div>
+        <h3 class="empty-state-title">No retained containers</h3>
+        <p class="empty-state-text">No submissions are currently holding threat containers for manual review or cleanup.</p>
+        <a href="{{ url_for('runs') }}" class="btn btn-primary">View runs</a>
     </div>
-    {% endfor %}
+    {% endif %}
 </div>
-{% elif not inspected %}
-<div class="empty-state card">
-    <div class="empty-state-icon"></div>
-    <h3 class="empty-state-title">No Retained Containers</h3>
-    <p class="empty-state-text">No submissions have been flagged with high-severity threats, or all threat containers have been cleaned up.</p>
-    <a href="{{ url_for('runs') }}" class="btn btn-primary">View Runs</a>
-</div>
-{% endif %}
 {% endblock %}

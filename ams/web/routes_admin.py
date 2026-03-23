@@ -52,7 +52,13 @@ def users_page():
 @admin_required
 def assignments_page():
     assignments = list_assignments()
-    return render_template("admin_assignments.html", assignments=assignments)
+    teaching_team_ids = set()
+    for assignment in assignments:
+        for teacher_id in assignment.get("teacher_ids") or [assignment.get("teacherID")]:
+            if teacher_id:
+                teaching_team_ids.add(teacher_id)
+    teacher_count = len(teaching_team_ids)
+    return render_template("admin_assignments.html", assignments=assignments, teacher_count=teacher_count)
 
 
 @admin_bp.route("/create-teacher", methods=["POST"])

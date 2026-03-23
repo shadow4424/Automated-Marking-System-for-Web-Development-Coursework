@@ -677,7 +677,6 @@
         <div class="analytics-zone-intro">
             <div>
                 <span id="analytics-overview-zone-label" class="analytics-zone-kicker">Overview</span>
-                <p class="analytics-zone-note">Assignment context, teaching summary, and score distribution before moderation work.</p>
             </div>
         </div>
 
@@ -695,10 +694,26 @@
             <div class="analytics-section-heading">
                 <div>
                     <h2 class="card-title">Teaching insight summary</h2>
-                    <p class="analytics-section-note">Short assignment results summary</p>
                 </div>
-                <span id="teaching-summary-status" class="badge badge-secondary">{% if teaching_summary_source|default('deterministic', true) == 'llm' %}LLM-enhanced wording{% elif llm_summary_enabled %}Deterministic wording{% else %}Deterministic wording{% endif %}</span>
+                <div class="analytics-summary-badges">
+                    <span id="teaching-summary-status" class="badge badge-secondary">{% if teaching_summary_source|default('deterministic', true) == 'llm' %}LLM-enhanced wording{% else %}Deterministic wording{% endif %}</span>
+                    {% if llm_summary_enabled and insights %}
+                    <button
+                        type="button"
+                        id="generate-teaching-summary"
+                        class="btn btn-secondary btn-sm"
+                        data-endpoint="{{ url_for('teacher.teaching_insights_json', assignment_id=assignment.assignmentID) }}"
+                    >
+                        Generate LLM summary
+                    </button>
+                    {% endif %}
+                </div>
             </div>
+            {% if llm_summary_enabled and insights %}
+            <div id="teaching-summary-feedback" class="analytics-helper" aria-live="polite" style="margin-bottom: var(--space-md);">
+                Deterministic wording is shown by default. Generate the LLM summary only when you need a refined rewrite.
+            </div>
+            {% endif %}
             {% if insights %}
             <ol id="teaching-summary-list" class="analytics-summary-list">
                 {% for insight in insights %}
@@ -748,11 +763,10 @@
             </article>
         </section>
 
-        <details id="score-distribution" class="card analytics-collapse-card analytics-nav-target" open>
+        <details id="score-distribution" class="card analytics-collapse-card analytics-nav-target">
             <summary>
                 <div>
                     <h2 class="card-title">Score Distribution</h2>
-                    <p class="analytics-section-note">Assignment-wide score across submissions</p>
                 </div>
             </summary>
             <div class="analytics-collapse-body">
@@ -784,7 +798,6 @@
         <div class="analytics-zone-intro">
             <div>
                 <span id="analytics-action-zone-label" class="analytics-zone-kicker">Action</span>
-                <p class="analytics-zone-note">Review workflow is empty until active submissions are available in scope.</p>
             </div>
         </div>
         <section class="card">
@@ -801,7 +814,6 @@
         <div class="analytics-zone-intro">
             <div>
                 <span id="analytics-action-zone-label" class="analytics-zone-kicker">Action</span>
-                <p class="analytics-zone-note">Start with the review queue and repeated rule failures when you need to moderate quickly.</p>
             </div>
         </div>
 
@@ -825,7 +837,6 @@
         <summary>
             <div>
                 <h2 class="card-title">Needs Attention</h2>
-                <p class="analytics-section-note">Each summary row shows what was flagged; expand a row for evidence, limitations, triggered rules, and report links.</p>
             </div>
             <span class="badge badge-secondary"><span id="attention-visible-count">{{ needs_attention|length }}</span> flagged submission{{ '' if needs_attention|length == 1 else 's' }}</span>
         </summary>
@@ -843,7 +854,6 @@
             <summary>
                 <div>
                     <strong>Search filters</strong>
-                    <p class="analytics-section-note">Search or filter only when you need to narrow the review list.</p>
                 </div>
             </summary>
             <div class="analytics-collapse-body">
@@ -1073,7 +1083,6 @@
         <summary>
             <div>
                 <h2 class="card-title">Top Failing Rules</h2>
-                <p class="analytics-section-note">Most common rule-level issues across the assignment.</p>
             </div>
             <span class="badge badge-secondary">{{ top_rules|length }} rule{{ '' if top_rules|length == 1 else 's' }}</span>
         </summary>
@@ -1088,7 +1097,6 @@
             <summary>
                 <div>
                     <strong>Search filters</strong>
-                    <p class="analytics-section-note">Keep the full table visible by default; open this only when you need to slice by severity or component.</p>
                 </div>
             </summary>
             <div class="analytics-collapse-body">
@@ -1189,11 +1197,10 @@
         </details>
     </section>
 
-    <section class="analytics-zone analytics-zone--diagnostics" aria-labelledby="analytics-diagnostics-zone-label">
+    <section id="analytics-diagnostics" class="analytics-zone analytics-zone--diagnostics analytics-nav-target" aria-labelledby="analytics-diagnostics-zone-label" tabindex="-1">
         <div class="analytics-zone-intro">
             <div>
                 <span id="analytics-diagnostics-zone-label" class="analytics-zone-kicker">Diagnostics</span>
-                <p class="analytics-zone-note">Requirement attainment, reliability, cohort issues, and deeper diagnostics stay available without taking over the first view.</p>
             </div>
         </div>
 
@@ -1201,7 +1208,6 @@
         <summary>
             <div>
                 <h2 class="card-title">Requirement Coverage</h2>
-                <p class="analytics-section-note">Strict threshold view aligned to the assignment brief. Open this when you need the per-area attainment breakdown.</p>
             </div>
         </summary>
         <div class="analytics-collapse-body">
@@ -1246,7 +1252,6 @@
         <summary>
             <div>
                 <h2 class="card-title">Confidence and Reliability</h2>
-                <p class="analytics-section-note">Keep this secondary to score interpretation so confidence issues do not compete with the review queue.</p>
             </div>
         </summary>
         <div class="analytics-collapse-body">
@@ -1311,11 +1316,10 @@
         </div>
         </details>
 
-        <details class="card analytics-collapse-card analytics-nav-target" id="cohort-issues" open>
+        <details class="card analytics-collapse-card analytics-nav-target" id="cohort-issues">
         <summary>
             <div>
                 <h2 class="card-title">Cohort Issues</h2>
-                <p class="analytics-section-note">Pattern surface for repeated cohort issues.</p>
             </div>
             <span class="badge badge-secondary">{{ signals|length }} issue categor{{ 'y' if signals|length == 1 else 'ies' }}</span>
         </summary>
@@ -1366,18 +1370,10 @@
         </div>
         </details>
 
-        <div id="analytics-diagnostics" class="analytics-diagnostics-intro analytics-nav-target" tabindex="-1">
-            <div>
-                <h2 class="card-title">Diagnostics</h2>
-                <p class="analytics-section-note">Lower-priority coverage context and scoring-source interpretation for deeper investigation.</p>
-            </div>
-        </div>
-
         <details class="card analytics-collapse-card" id="coverage-detail">
         <summary>
             <div>
                 <h2 class="card-title">Coverage Detail</h2>
-                <p class="analytics-section-note">Open for assignment-scope diagnostics and missing-student detail.</p>
             </div>
         </summary>
         <div class="analytics-collapse-body">
@@ -1480,6 +1476,10 @@
         var attentionState = { signalLabel: '', signalRules: [], signalStudents: [] };
         var showAllRules = false;
         var showAllSignals = false;
+        var teachingSummaryButton = document.getElementById('generate-teaching-summary');
+        var teachingSummaryList = document.getElementById('teaching-summary-list');
+        var teachingSummaryStatus = document.getElementById('teaching-summary-status');
+        var teachingSummaryFeedback = document.getElementById('teaching-summary-feedback');
         var attentionControls = {
             student: document.getElementById('attention-student-search'),
             scoreBand: document.getElementById('attention-score-band'),
@@ -1728,6 +1728,81 @@
             if (toggleSignals) toggleSignals.textContent = showAllSignals ? 'Show fewer issues' : 'Show all issues';
         }
 
+        function setTeachingSummaryFeedback(message, isError) {
+            if (!teachingSummaryFeedback) return;
+            teachingSummaryFeedback.textContent = message || '';
+            teachingSummaryFeedback.style.color = isError ? 'var(--color-danger)' : '';
+        }
+
+        function renderTeachingSummary(insights) {
+            if (!teachingSummaryList) return;
+            teachingSummaryList.innerHTML = '';
+            (insights || []).forEach(function (insight, index) {
+                var li = document.createElement('li');
+                li.dataset.insightType = insight.insight_type || ('insight_' + (index + 1));
+
+                var strong = document.createElement('strong');
+                strong.textContent = ((insight.priority || 'medium').charAt(0).toUpperCase() + (insight.priority || 'medium').slice(1)) + ' priority:';
+                li.appendChild(strong);
+                li.appendChild(document.createTextNode(' ' + (insight.text || '')));
+                teachingSummaryList.appendChild(li);
+            });
+        }
+
+        function updateTeachingSummaryFromLlm() {
+            if (!teachingSummaryButton) return;
+            var endpoint = teachingSummaryButton.dataset.endpoint;
+            if (!endpoint) return;
+
+            teachingSummaryButton.disabled = true;
+            teachingSummaryButton.textContent = 'Generating...';
+            if (teachingSummaryStatus) teachingSummaryStatus.textContent = 'Generating LLM wording';
+            if (teachingSummaryList) teachingSummaryList.setAttribute('aria-busy', 'true');
+            setTeachingSummaryFeedback('Generating the LLM summary in the background.', false);
+
+            fetch(endpoint, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                credentials: 'same-origin'
+            })
+                .then(function (response) {
+                    return response.json().then(function (payload) {
+                        if (!response.ok) {
+                            throw new Error((payload && payload.error) || 'LLM summary generation failed.');
+                        }
+                        return payload;
+                    });
+                })
+                .then(function (payload) {
+                    if (payload && Array.isArray(payload.insights) && payload.insights.length) {
+                        renderTeachingSummary(payload.insights);
+                    }
+                    if (teachingSummaryStatus) {
+                        teachingSummaryStatus.textContent = payload && payload.source === 'llm'
+                            ? 'LLM-enhanced wording'
+                            : 'Deterministic wording';
+                    }
+                    if (payload && payload.source === 'llm') {
+                        setTeachingSummaryFeedback('LLM summary ready.', false);
+                        teachingSummaryButton.textContent = 'Refresh LLM summary';
+                    } else {
+                        setTeachingSummaryFeedback('LLM summary was unavailable. Deterministic wording remains in place.', true);
+                        teachingSummaryButton.textContent = 'Generate LLM summary';
+                    }
+                })
+                .catch(function (error) {
+                    if (teachingSummaryStatus) teachingSummaryStatus.textContent = 'Deterministic wording';
+                    setTeachingSummaryFeedback(error.message || 'LLM summary generation failed.', true);
+                    teachingSummaryButton.textContent = 'Generate LLM summary';
+                })
+                .finally(function () {
+                    teachingSummaryButton.disabled = false;
+                    if (teachingSummaryList) teachingSummaryList.removeAttribute('aria-busy');
+                });
+        }
+
         function clearAttentionFilters() {
             Object.keys(attentionControls).forEach(function (key) {
                 if (attentionControls[key]) attentionControls[key].value = '';
@@ -1827,6 +1902,10 @@
                 showAllSignals = !showAllSignals;
                 renderSignalCards();
             });
+        }
+
+        if (teachingSummaryButton) {
+            teachingSummaryButton.addEventListener('click', updateTeachingSummaryFromLlm);
         }
 
         collapsibleSections.forEach(function (section) {

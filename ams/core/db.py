@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS assignments (
     profile              TEXT NOT NULL DEFAULT 'frontend',
     marks_released       INTEGER NOT NULL DEFAULT 0,
     assigned_students    TEXT NOT NULL DEFAULT '[]',
+    assigned_teachers    TEXT NOT NULL DEFAULT '[]',
     due_date             TEXT NOT NULL DEFAULT '',
     created_at           TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (teacherID) REFERENCES users(userID)
@@ -89,6 +90,8 @@ def init_db() -> None:
         cols = [r[1] for r in conn.execute("PRAGMA table_info(assignments)").fetchall()]
         if "due_date" not in cols:
             conn.execute("ALTER TABLE assignments ADD COLUMN due_date TEXT NOT NULL DEFAULT ''")
+        if "assigned_teachers" not in cols:
+            conn.execute("ALTER TABLE assignments ADD COLUMN assigned_teachers TEXT NOT NULL DEFAULT '[]'")
 
         # Provision root admin when missing
         row = conn.execute(
@@ -233,6 +236,63 @@ def delete_user(user_id: str) -> bool:
 #  Assignment CRUD
 # ---------------------------------------------------------------------------
 
+def _decode_identifier_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        raw_items = value
+    else:
+        try:
+            raw_items = json.loads(value or "[]")
+        except (TypeError, json.JSONDecodeError):
+            raw_items = []
+
+    normalized: list[str] = []
+    for item in raw_items:
+        text = str(item or "").strip()
+        if text and text not in normalized:
+            normalized.append(text)
+    return normalized
+
+
+def assignment_teacher_ids(assignment: dict[str, Any] | None) -> list[str]:
+    if not assignment:
+        return []
+
+    teacher_ids: list[str] = []
+    owner_id = str(assignment.get("teacherID") or "").strip()
+    if owner_id:
+        teacher_ids.append(owner_id)
+
+    for teacher_id in _decode_identifier_list(assignment.get("assigned_teachers", "[]")):
+        if teacher_id not in teacher_ids:
+            teacher_ids.append(teacher_id)
+
+    return teacher_ids
+
+
+def assignment_allows_teacher(
+    assignment: dict[str, Any] | None,
+    user_id: str,
+    role: str | None = None,
+) -> bool:
+    if not assignment or not user_id:
+        return False
+    if role == "admin":
+        return True
+    return user_id in assignment_teacher_ids(assignment)
+
+
+def _normalize_assignment_record(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+    assignment = dict(row)
+    assignment["assigned_students"] = _decode_identifier_list(assignment.get("assigned_students", "[]"))
+    assignment["assigned_teachers"] = [
+        teacher_id
+        for teacher_id in _decode_identifier_list(assignment.get("assigned_teachers", "[]"))
+        if teacher_id != str(assignment.get("teacherID") or "").strip()
+    ]
+    assignment["teacher_ids"] = assignment_teacher_ids(assignment)
+    assignment["marks_released"] = bool(assignment.get("marks_released", 0))
+    return assignment
+
 def create_assignment(
     assignment_id: str,
     teacher_id: str,
@@ -240,14 +300,20 @@ def create_assignment(
     description: str = "",
     profile: str = "frontend",
     assigned_students: list[str] | None = None,
+    assigned_teachers: list[str] | None = None,
     due_date: str = "",
 ) -> bool:
     """Create a new assignment. Returns ``True`` on success."""
+    extra_teacher_ids = [
+        extra_teacher_id
+        for extra_teacher_id in _decode_identifier_list(assigned_teachers or [])
+        if extra_teacher_id != str(teacher_id or "").strip()
+    ]
     conn = get_db()
     try:
         conn.execute(
-            "INSERT INTO assignments (assignmentID, teacherID, title, description, profile, assigned_students, due_date) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO assignments (assignmentID, teacherID, title, description, profile, assigned_students, assigned_teachers, due_date) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 assignment_id,
                 teacher_id,
@@ -255,6 +321,7 @@ def create_assignment(
                 description,
                 profile,
                 json.dumps(assigned_students or []),
+                json.dumps(extra_teacher_ids),
                 due_date,
             ),
         )
@@ -275,10 +342,7 @@ def get_assignment(assignment_id: str) -> dict | None:
         ).fetchone()
         if row is None:
             return None
-        d = dict(row)
-        d["assigned_students"] = json.loads(d.get("assigned_students", "[]"))
-        d["marks_released"] = bool(d.get("marks_released", 0))
-        return d
+        return _normalize_assignment_record(row)
     finally:
         conn.close()
 
@@ -293,20 +357,10 @@ def list_assignments(teacher_id: str | None = None) -> list[dict]:
 
     conn = get_db()
     try:
+        rows = conn.execute("SELECT * FROM assignments").fetchall()
+        result = [_normalize_assignment_record(row) for row in rows]
         if teacher_id:
-            rows = conn.execute(
-                "SELECT * FROM assignments WHERE teacherID = ?",
-                (teacher_id,),
-            ).fetchall()
-        else:
-            rows = conn.execute("SELECT * FROM assignments").fetchall()
-
-        result = []
-        for r in rows:
-            d = dict(r)
-            d["assigned_students"] = json.loads(d.get("assigned_students", "[]"))
-            d["marks_released"] = bool(d.get("marks_released", 0))
-            result.append(d)
+            result = [assignment for assignment in result if teacher_id in assignment.get("teacher_ids", [])]
 
         # Sort: active/upcoming first, past-due last, alphanumeric within each group
         now = datetime.now().strftime("%Y-%m-%dT%H:%M")
@@ -335,6 +389,31 @@ def update_assignment_students(assignment_id: str, student_ids: list[str]) -> bo
         cur = conn.execute(
             "UPDATE assignments SET assigned_students = ? WHERE assignmentID = ?",
             (json.dumps(student_ids), assignment_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def update_assignment_teachers(assignment_id: str, teacher_ids: list[str]) -> bool:
+    """Replace the additional teacher list for an assignment."""
+    assignment = get_assignment(assignment_id)
+    if assignment is None:
+        return False
+
+    owner_id = str(assignment.get("teacherID") or "").strip()
+    extra_teacher_ids = [
+        teacher_id
+        for teacher_id in _decode_identifier_list(teacher_ids)
+        if teacher_id != owner_id
+    ]
+
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            "UPDATE assignments SET assigned_teachers = ? WHERE assignmentID = ?",
+            (json.dumps(extra_teacher_ids), assignment_id),
         )
         conn.commit()
         return cur.rowcount > 0

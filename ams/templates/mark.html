@@ -1,245 +1,310 @@
 {% extends "base.html" %}
-{% block title %}{% if effective_role == 'student' %}Submit Coursework{% else %}Mark Submission{% endif %} — AMS{% endblock %}
+{% block title %}{% if effective_role == 'student' %}Submit Coursework{% else %}Mark Submission{% endif %} - AMS{% endblock %}
 
 {% block content %}
 {% if effective_role == 'student' %}
-{# ──────────────────── STUDENT VIEW ──────────────────── #}
-<div class="page-header">
-    <h1>Submit Coursework</h1>
-    <p class="text-secondary">
-        Select your assignment and upload your work as a ZIP file or connect via GitHub.
-    </p>
-    {% if view_as_role == 'student' %}
-    <div class="alert alert-info" style="margin-top:var(--space-sm);">
-        <strong>Admin Preview Mode</strong> — Viewing student submission interface.
-        <a href="{{ url_for('admin.view_as', role='admin') }}" class="btn btn-ghost btn-sm" style="margin-left:var(--space-sm);">Back to Admin</a>
-    </div>
-    {% endif %}
-</div>
-
-<div class="card">
-    <form method="post" enctype="multipart/form-data" id="markForm">
-        {# Hidden system fields #}
-        <input type="hidden" id="student_id" name="student_id" value="{{ user_id }}">
-        <input type="hidden" name="scoring_mode" value="static_plus_llm">
-        <select id="profile" name="profile" style="display:none;">
-            {% for prof in profiles %}
-            <option value="{{ prof }}" {% if prof == 'frontend_interactive' %}selected{% endif %}>{{ prof|replace('_', ' ')|title }}</option>
-            {% endfor %}
-        </select>
-
-        {# Assignment picker #}
-        <div class="form-group">
-            <label class="form-label" for="assignment_id">
-                Assignment <span class="required">*</span>
-            </label>
-            {% if student_assignments %}
-            <select id="assignment_id" name="assignment_id" class="form-select" required>
-                <option value="">Select an assignment…</option>
-                {% for a in student_assignments %}
-                <option value="{{ a.assignmentID }}" data-profile="{{ 'frontend_interactive' if a.profile == 'frontend' else 'fullstack_php_sql' if a.profile == 'fullstack' else a.profile }}">
-                    {{ a.title }}{% if a.due_date %} — Due {{ a.due_date[:16].replace('T', ' ') }}{% endif %}
-                </option>
-                {% endfor %}
-            </select>
-            {% else %}
-            <div class="empty-state" style="padding:var(--space-lg) 0;">
-                <p class="empty-state-title">No assignments available</p>
-                <p class="empty-state-text">You have no pending assignments to submit.</p>
+<div class="page-shell">
+    <section class="page-hero page-hero--split">
+        <div class="page-hero-main">
+            <a href="{{ url_for('student.coursework') }}" class="page-back-link">Back to coursework</a>
+            <div class="page-kicker">Student workspace</div>
+            <h1>Submit coursework</h1>
+            <p class="page-context-line">Choose your assignment, then submit a ZIP or GitHub repository from one clear workflow.</p>
+            {% if preview_role == 'student' %}
+            <div class="callout-card callout-card--info">
+                <div class="callout-title">Admin preview mode</div>
+                <p class="callout-text">You are viewing the student submission flow with preview data only.</p>
             </div>
             {% endif %}
         </div>
+        <aside class="page-side-panel">
+            <h2 class="card-title">Before you submit</h2>
+            <ul class="panel-list">
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Choose the right assignment</span>
+                    <span class="panel-list-note">The selected assignment controls the assessment profile automatically.</span>
+                </li>
+                <li class="panel-list-item">
+                    <span class="panel-list-title">ZIP or GitHub</span>
+                    <span class="panel-list-note">Use a ZIP for the quickest upload, or connect GitHub if your work is already in a repository.</span>
+                </li>
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Results may stay hidden</span>
+                    <span class="panel-list-note">Submissions appear in your coursework history immediately, but marks only appear after release.</span>
+                </li>
+            </ul>
+        </aside>
+    </section>
 
-        {# Submission method #}
-        <div class="form-group">
-            <label class="form-label">How would you like to submit?</label>
-            <div class="submission-method-radios">
-                <label class="radio-label">
-                    <input type="radio" name="submission_method" value="upload" checked id="methodUpload">
-                    Upload ZIP
-                </label>
-                <label class="radio-label">
-                    <input type="radio" name="submission_method" value="github" id="methodGithub">
-                    GitHub Repository
-                </label>
-            </div>
-        </div>
-
-        {# ── ZIP upload ── #}
-        <div id="uploadSection">
-            <div class="form-group">
-                <label class="form-label" for="submission">Upload your submission</label>
-                <input type="file" id="submission" name="submission" class="form-file-input" accept=".zip">
-                <p class="form-hint">ZIP file only. Maximum size: 25 MB.</p>
-            </div>
-        </div>
-
-        {# ── GitHub ── #}
-        <div id="githubSection" style="display:none;">
-            <div class="form-group">
-                <label class="form-label">Connect your Account</label>
-                {% if github_connected %}
-                <div class="github-connected-status" id="githubConnectedState">
-                    <span class="github-status-dot github-status-active"></span>
-                    <span>Connected as <strong>{{ github_user }}</strong></span>
-                    <button type="button" class="btn btn-sm btn-outline" id="githubDisconnectBtn">Disconnect</button>
-                </div>
-                {% else %}
-                <div id="githubDisconnectedState">
-                    <a href="{{ url_for('github_login') }}" class="btn btn-secondary" id="githubConnectBtn">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right:4px">
-                            <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-                        </svg>
-                        Connect to GitHub
-                    </a>
-                </div>
-                {% endif %}
-            </div>
-
-            <div class="grid grid-2" id="githubRepoSection" {% if not github_connected %}style="display:none;"{% endif %}>
-                <div class="form-group">
-                    <label class="form-label" for="github_repo_select">
-                        Repository <span class="required">*</span>
-                    </label>
-                    <select id="github_repo_select" name="github_repo" class="form-select" disabled>
-                        <option value="">Select a repository…</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="github_branch_select">
-                        Branch <span class="required">*</span>
-                    </label>
-                    <select id="github_branch_select" name="github_branch" class="form-select" disabled>
-                        <option value="">Select a branch…</option>
-                    </select>
+    <section class="form-layout">
+        <div class="card">
+            <div class="section-heading-row">
+                <div class="section-copy">
+                    <h2 class="card-title">Submission details</h2>
                 </div>
             </div>
-        </div>
-
-        {% if student_assignments %}
-        <button type="submit" class="btn btn-primary btn-lg btn-block" id="markSubmitBtn"
-            {% if sandbox_status is defined and not sandbox_status.enforced and sandbox_status.mode == 'docker' %}disabled title="Docker sandbox must be running to process submissions"{% endif %}>
-            Submit Coursework
-        </button>
-        {% endif %}
-    </form>
-</div>
-
-{% else %}
-{# ──────────────────── TEACHER / ADMIN VIEW ──────────────────── #}
-<div class="page-header">
-    <h1>Mark Single Submission</h1>
-    <p class="text-secondary">
-        Upload a student submission ZIP or submit directly from a GitHub repository.
-    </p>
-</div>
-
-<div class="card">
-    <form method="post" enctype="multipart/form-data" id="markForm">
-        <div class="grid grid-2">
-            <div class="form-group">
-                <label class="form-label" for="student_id">
-                    Student ID <span class="required">*</span>
-                </label>
-                <input type="text" id="student_id" name="student_id" class="form-input" required
-                    pattern="[a-zA-Z0-9_\-]{3,20}" placeholder="e.g., s1234567" title="3-20 alphanumeric characters">
-                <p class="form-hint">3-20 alphanumeric characters (may include - or _)</p>
-            </div>
-
-            <div class="form-group">
-                <label class="form-label" for="assignment_id">
-                    Assignment ID <span class="required">*</span>
-                </label>
-                <input type="text" id="assignment_id" name="assignment_id" class="form-input" required
-                    pattern="[a-zA-Z0-9_\-]{2,30}" placeholder="e.g., webdev_001" title="2-30 alphanumeric characters">
-                <p class="form-hint">2-30 alphanumeric characters</p>
-            </div>
-        </div>
-
-        <div class="grid grid-2">
-            <div class="form-group">
-                <label class="form-label" for="profile">Assessment Profile</label>
-                <select id="profile" name="profile" class="form-select">
+            <form method="post" enctype="multipart/form-data" id="markForm">
+                <input type="hidden" id="student_id" name="student_id" value="{{ user_id }}">
+                <input type="hidden" name="scoring_mode" value="static_plus_llm">
+                <select id="profile" name="profile" style="display:none;">
                     {% for prof in profiles %}
                     <option value="{{ prof }}" {% if prof == 'frontend_interactive' %}selected{% endif %}>{{ prof|replace('_', ' ')|title }}</option>
                     {% endfor %}
                 </select>
-                <p class="form-hint">Determines which components are evaluated</p>
-            </div>
-        </div>
-        <input type="hidden" name="scoring_mode" value="static_plus_llm">
 
-        {# ── Submission method radio buttons ── #}
-        <div class="form-group">
-            <label class="form-label">Submission Method</label>
-            <div class="submission-method-radios">
-                <label class="radio-label">
-                    <input type="radio" name="submission_method" value="upload" checked id="methodUpload">
-                    Upload
-                </label>
-                <label class="radio-label">
-                    <input type="radio" name="submission_method" value="github" id="methodGithub">
-                    GitHub
-                </label>
-            </div>
-        </div>
-
-        {# ── ZIP upload section ── #}
-        <div id="uploadSection">
-            <div class="form-group">
-                <label class="form-label" for="submission">Submission ZIP</label>
-                <input type="file" id="submission" name="submission" class="form-file-input" accept=".zip">
-                <p class="form-hint">Maximum file size: 25 MB. Only valid ZIP archives are accepted.</p>
-            </div>
-        </div>
-
-        {# ── GitHub submission section ── #}
-        <div id="githubSection" style="display:none;">
-            <div class="form-group">
-                <label class="form-label">Connect your Account</label>
-                {% if github_connected %}
-                <div class="github-connected-status" id="githubConnectedState">
-                    <span class="github-status-dot github-status-active"></span>
-                    <span>Connected as <strong>{{ github_user }}</strong></span>
-                    <button type="button" class="btn btn-sm btn-outline" id="githubDisconnectBtn">Disconnect</button>
+                <div class="form-group">
+                    <label class="form-label" for="assignment_id">Assignment <span class="required">*</span></label>
+                    {% if student_assignments %}
+                    <select id="assignment_id" name="assignment_id" class="form-select" required>
+                        <option value="">Select an assignment</option>
+                        {% for a in student_assignments %}
+                        <option value="{{ a.assignmentID }}" data-profile="{{ 'frontend_interactive' if a.profile == 'frontend' else 'fullstack_php_sql' if a.profile == 'fullstack' else a.profile }}" {% if a.assignmentID == selected_assignment_id %}selected{% endif %}>
+                            {{ a.title }}{% if a.due_date %} - Due {{ a.due_date[:16].replace('T', ' ') }}{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    {% else %}
+                    <div class="empty-state" style="padding:var(--space-lg) 0;">
+                        <p class="empty-state-title">No assignments available</p>
+                        <p class="empty-state-text">You currently have no pending assignments to submit.</p>
+                    </div>
+                    {% endif %}
                 </div>
-                {% else %}
-                <div id="githubDisconnectedState">
-                    <a href="{{ url_for('github_login') }}" class="btn btn-secondary" id="githubConnectBtn">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right:4px">
-                            <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-                        </svg>
-                        Connect to GitHub
-                    </a>
+
+                <div class="form-group">
+                    <label class="form-label">Submission method</label>
+                    <div class="submission-method-radios">
+                        <label class="radio-label">
+                            <input type="radio" name="submission_method" value="upload" checked id="methodUpload">
+                            Upload ZIP
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="submission_method" value="github" id="methodGithub">
+                            GitHub repository
+                        </label>
+                    </div>
                 </div>
+
+                <div id="uploadSection">
+                    <div class="form-group">
+                        <label class="form-label" for="submission">Upload your submission</label>
+                        <input type="file" id="submission" name="submission" class="form-file-input" accept=".zip">
+                        <p class="form-hint">ZIP only. Maximum size: 25 MB.</p>
+                    </div>
+                </div>
+
+                <div id="githubSection" style="display:none;">
+                    <div class="form-group">
+                        <label class="form-label">Connect your account</label>
+                        {% if github_connected %}
+                        <div class="github-connected-status" id="githubConnectedState">
+                            <span class="github-status-dot github-status-active"></span>
+                            <span>Connected as <strong>{{ github_user }}</strong></span>
+                            <button type="button" class="btn btn-sm btn-outline" id="githubDisconnectBtn">Disconnect</button>
+                        </div>
+                        {% else %}
+                        <div id="githubDisconnectedState">
+                            <a href="{{ url_for('github_login') }}" class="btn btn-secondary" id="githubConnectBtn">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right:4px">
+                                    <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                                </svg>
+                                Connect to GitHub
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="grid grid-2" id="githubRepoSection" {% if not github_connected %}style="display:none;"{% endif %}>
+                        <div class="form-group">
+                            <label class="form-label" for="github_repo_select">Repository <span class="required">*</span></label>
+                            <select id="github_repo_select" name="github_repo" class="form-select" disabled>
+                                <option value="">Select a repository</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="github_branch_select">Branch <span class="required">*</span></label>
+                            <select id="github_branch_select" name="github_branch" class="form-select" disabled>
+                                <option value="">Select a branch</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                {% if student_assignments %}
+                <button type="submit" class="btn btn-primary btn-lg btn-block" id="markSubmitBtn"
+                    {% if sandbox_status is defined and not sandbox_status.enforced and sandbox_status.mode == 'docker' %}disabled title="Docker sandbox must be running to process submissions"{% endif %}>
+                    Submit coursework
+                </button>
                 {% endif %}
-            </div>
-
-            <div class="grid grid-2" id="githubRepoSection" {% if not github_connected %}style="display:none;"{% endif %}>
-                <div class="form-group">
-                    <label class="form-label" for="github_repo_select">
-                        Repository <span class="required">*</span>
-                    </label>
-                    <select id="github_repo_select" name="github_repo" class="form-select" disabled>
-                        <option value="">Select a repository…</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="github_branch_select">
-                        Branch <span class="required">*</span>
-                    </label>
-                    <select id="github_branch_select" name="github_branch" class="form-select" disabled>
-                        <option value="">Select a branch…</option>
-                    </select>
-                </div>
-            </div>
+            </form>
         </div>
 
-        <button type="submit" class="btn btn-primary btn-lg btn-block" id="markSubmitBtn"
-            {% if sandbox_status is defined and not sandbox_status.enforced and sandbox_status.mode == 'docker' %}disabled title="Docker sandbox must be running to process submissions"{% endif %}>
-            Upload &amp; Mark
-        </button>
-    </form>
+        <div class="page-side-panel">
+            <h2 class="card-title">Submission notes</h2>
+            <ul class="panel-list">
+                <li class="panel-list-item">
+                    <span class="panel-list-title">One assignment at a time</span>
+                    <span class="panel-list-note">This screen is intentionally focused on a single submission so it is harder to upload to the wrong place.</span>
+                </li>
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Coursework history stays visible</span>
+                    <span class="panel-list-note">Open Coursework later to check whether your submission has been received and whether results were released.</span>
+                </li>
+            </ul>
+        </div>
+    </section>
+</div>
+
+{% else %}
+{% set mark_back_url = url_for('admin.dashboard') if user_role == 'admin' else url_for('teacher.dashboard') %}
+{% set mark_back_label = 'Back to admin dashboard' if user_role == 'admin' else 'Back to assignments' %}
+<div class="page-shell">
+    <section class="page-hero page-hero--split">
+        <div class="page-hero-main">
+            <a href="{{ mark_back_url }}" class="page-back-link">{{ mark_back_label }}</a>
+            <div class="page-kicker">Teacher workflow</div>
+            <h1>Mark single submission</h1>
+            <p class="page-context-line">Upload one student ZIP or connect to GitHub when you need a quick manual marking run without opening the batch workflow.</p>
+            <div class="page-action-row">
+                <a href="{{ url_for('batch') }}" class="btn btn-secondary">Open batch marking</a>
+                <a href="{{ url_for('runs') }}" class="btn btn-ghost">Run history</a>
+            </div>
+        </div>
+        <aside class="page-side-panel">
+            <h2 class="card-title">Run setup</h2>
+            <ul class="panel-list">
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Student ID stays manual</span>
+                    <span class="panel-list-note">Enter the real student identifier so the run stays traceable from the assignment workspace.</span>
+                </li>
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Assignment controls the checks</span>
+                    <span class="panel-list-note">Choose the assignment first so the correct assessment profile is inherited automatically.</span>
+                </li>
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Single-run focus</span>
+                    <span class="panel-list-note">Use batch marking instead when you are processing a cohort or multiple ZIPs at once.</span>
+                </li>
+            </ul>
+        </aside>
+    </section>
+
+    <section class="form-layout">
+        <div class="card">
+            <div class="section-heading-row">
+                <div class="section-copy">
+                    <h2 class="card-title">Submission details</h2>
+                </div>
+            </div>
+            <form method="post" enctype="multipart/form-data" id="markForm">
+                <div class="grid grid-2">
+                    <div class="form-group">
+                        <label class="form-label" for="student_id">Student ID <span class="required">*</span></label>
+                        <input type="text" id="student_id" name="student_id" class="form-input" required pattern="[a-zA-Z0-9_\-]{3,20}" placeholder="e.g. s1234567" title="3-20 alphanumeric characters">
+                        <p class="form-hint">3-20 alphanumeric characters, hyphens, or underscores.</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="assignment_id">Assignment <span class="required">*</span></label>
+                        <select id="assignment_id" name="assignment_id" class="form-select" required {% if not assignments %}disabled{% endif %}>
+                            {% if assignments %}
+                            <option value="">Select an assignment</option>
+                            {% for assignment in assignments %}
+                            <option value="{{ assignment.assignmentID }}" {% if assignment.assignmentID == selected_assignment_id %}selected{% endif %}>
+                                {{ assignment.assignmentID }}{% if assignment.title %} - {{ assignment.title }}{% endif %}
+                            </option>
+                            {% endfor %}
+                            {% else %}
+                            <option value="">No assignments available</option>
+                            {% endif %}
+                        </select>
+                        <p class="form-hint">The selected assignment supplies the assessment profile automatically.</p>
+                    </div>
+                </div>
+
+                <input type="hidden" name="scoring_mode" value="static_plus_llm">
+
+                <div class="form-group">
+                    <label class="form-label">Submission method</label>
+                    <div class="submission-method-radios">
+                        <label class="radio-label">
+                            <input type="radio" name="submission_method" value="upload" checked id="methodUpload">
+                            Upload ZIP
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="submission_method" value="github" id="methodGithub">
+                            GitHub repository
+                        </label>
+                    </div>
+                </div>
+
+                <div id="uploadSection">
+                    <div class="form-group">
+                        <label class="form-label" for="submission">Submission ZIP</label>
+                        <input type="file" id="submission" name="submission" class="form-file-input" accept=".zip">
+                        <p class="form-hint">Maximum file size: 25 MB. Only valid ZIP archives are accepted.</p>
+                    </div>
+                </div>
+
+                <div id="githubSection" style="display:none;">
+                    <div class="form-group">
+                        <label class="form-label">Connect your account</label>
+                        {% if github_connected %}
+                        <div class="github-connected-status" id="githubConnectedState">
+                            <span class="github-status-dot github-status-active"></span>
+                            <span>Connected as <strong>{{ github_user }}</strong></span>
+                            <button type="button" class="btn btn-sm btn-outline" id="githubDisconnectBtn">Disconnect</button>
+                        </div>
+                        {% else %}
+                        <div id="githubDisconnectedState">
+                            <a href="{{ url_for('github_login') }}" class="btn btn-secondary" id="githubConnectBtn">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="margin-right:4px">
+                                    <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                                </svg>
+                                Connect to GitHub
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="grid grid-2" id="githubRepoSection" {% if not github_connected %}style="display:none;"{% endif %}>
+                        <div class="form-group">
+                            <label class="form-label" for="github_repo_select">Repository <span class="required">*</span></label>
+                            <select id="github_repo_select" name="github_repo" class="form-select" disabled>
+                                <option value="">Select a repository</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="github_branch_select">Branch <span class="required">*</span></label>
+                            <select id="github_branch_select" name="github_branch" class="form-select" disabled>
+                                <option value="">Select a branch</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg btn-block" id="markSubmitBtn"
+                    {% if not assignments %}disabled title="Create or gain access to an assignment before running a mark"{% endif %}
+                    {% if sandbox_status is defined and not sandbox_status.enforced and sandbox_status.mode == 'docker' %}disabled title="Docker sandbox must be running to process submissions"{% endif %}>
+                    Upload and mark
+                </button>
+            </form>
+        </div>
+
+        <div class="page-side-panel">
+            <h2 class="card-title">Why use this page</h2>
+            <ul class="panel-list">
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Fast single-run marking</span>
+                    <span class="panel-list-note">This is the shortest path when you need to inspect one submission quickly.</span>
+                </li>
+                <li class="panel-list-item">
+                    <span class="panel-list-title">Runs stay traceable</span>
+                    <span class="panel-list-note">The student and assignment IDs entered here are what later connect the run to dashboards and assignment history.</span>
+                </li>
+            </ul>
+        </div>
+    </section>
 </div>
 {% endif %}
 {% endblock %}

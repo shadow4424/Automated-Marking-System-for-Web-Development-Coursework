@@ -663,7 +663,7 @@ def test_teaching_insights_json_uses_llm_wording_by_default_when_provider_succee
     assert payload["insights"][0]["text"] == "Every assigned student currently has an active submission in scope."
 
 
-def test_assignment_analytics_page_renders_llm_summary_when_provider_succeeds(
+def test_assignment_analytics_page_renders_deterministic_summary_and_manual_llm_trigger(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -753,10 +753,13 @@ def test_assignment_analytics_page_renders_llm_summary_when_provider_succeeds(
         },
     )
 
+    provider_calls: list[bool] = []
+
     class FakeProvider:
         model_name = "fake"
 
         def complete(self, *args, **kwargs):
+            provider_calls.append(True)
             return SimpleNamespace(
                 content=json.dumps(
                     {
@@ -776,8 +779,10 @@ def test_assignment_analytics_page_renders_llm_summary_when_provider_succeeds(
     response = client.get("/teacher/assignment/assignment1/analytics")
 
     assert response.status_code == 200
-    assert b"Every assigned student currently has an active submission in scope." in response.data
-    assert b"LLM-enhanced wording" in response.data
+    assert b"All assigned students currently have an active submission in scope." in response.data
+    assert b"Deterministic wording" in response.data
+    assert b"Generate LLM summary" in response.data
+    assert provider_calls == []
 
 
 def test_assignment_analytics_rule_export_respects_rule_filters(tmp_path: Path, monkeypatch) -> None:

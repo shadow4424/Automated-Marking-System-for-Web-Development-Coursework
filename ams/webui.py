@@ -34,6 +34,7 @@ from flask import (
 )
 
 from ams.core.db import (
+    assignment_allows_teacher,
     init_db,
     get_assignment,
     list_assignments,
@@ -480,49 +481,68 @@ def _register_routes(app: Flask) -> None:
     @app.route("/mark", methods=["GET", "POST"])
     @login_required
     def mark():
-        if request.method == "GET":
-            github_connected = bool(session.get("github_token"))
-            github_user = session.get("github_user", "")
+        def _mark_assignment_context() -> tuple[str, str, str, list[dict], bool]:
             user_role = session.get("user_role", "")
             view_as_role = session.get("view_as_role")
             effective_role = view_as_role or user_role
             user_id = session.get("user_id", "")
-            student_assignments = []
             is_preview = False
 
-            # For students OR admins viewing as student, load available assignments
             if effective_role == "student":
                 now = datetime.now().strftime("%Y-%m-%dT%H:%M")
                 if user_role == "student":
-                    # Real student - show their assigned assignments
-                    student_assignments = [
-                        a for a in list_assignments_for_student(user_id)
-                        if not a.get("due_date") or a["due_date"] >= now
+                    assignments = [
+                        assignment
+                        for assignment in list_assignments_for_student(user_id)
+                        if not assignment.get("due_date") or assignment["due_date"] >= now
                     ]
                 else:
-                    # Admin viewing as student - use preview student, show all assignments
                     is_preview = True
-                    student_assignments = [
-                        a for a in list_assignments()
-                        if not a.get("due_date") or a["due_date"] >= now
+                    assignments = [
+                        assignment
+                        for assignment in list_assignments()
+                        if not assignment.get("due_date") or assignment["due_date"] >= now
                     ]
+            else:
+                assignments = list_assignments() if user_role == "admin" else list_assignments(teacher_id=user_id)
 
-            # For preview mode, use the dedicated preview student ID
+            return user_role, effective_role, user_id, assignments, is_preview
+
+        def _render_mark_page(status_code: int = 200, selected_assignment_id: str = ""):
+            github_connected = bool(session.get("github_token"))
+            github_user = session.get("github_user", "")
+            user_role, effective_role, user_id, assignment_options, is_preview = _mark_assignment_context()
             effective_student_id = PREVIEW_STUDENT_ID if is_preview else user_id
-
-            return render_template(
-                "mark.html",
-                profiles=PROFILE_CHOICES,
-                github_connected=github_connected,
-                github_user=github_user,
-                user_role=user_role,
-                effective_role=effective_role,
-                user_id=effective_student_id,
-                student_assignments=student_assignments,
-                is_preview=is_preview,
+            student_assignments = assignment_options if effective_role == "student" else []
+            teacher_assignments = assignment_options if effective_role != "student" else []
+            return (
+                render_template(
+                    "mark.html",
+                    profiles=PROFILE_CHOICES,
+                    github_connected=github_connected,
+                    github_user=github_user,
+                    user_role=user_role,
+                    effective_role=effective_role,
+                    user_id=effective_student_id,
+                    student_assignments=student_assignments,
+                    assignments=teacher_assignments,
+                    is_preview=is_preview,
+                    selected_assignment_id=selected_assignment_id,
+                ),
+                status_code,
             )
 
+        if request.method == "GET":
+            return _render_mark_page(selected_assignment_id=request.args.get("assignment_id", "").strip())
+
         # ── Sandbox enforcement ──────────────────────────────────────
+        selected_assignment_id = request.form.get("assignment_id", "").strip()
+        user_role, effective_role, user_id, assignment_options, is_preview = _mark_assignment_context()
+        assignment_map = {
+            str(assignment.get("assignmentID") or "").strip(): assignment
+            for assignment in assignment_options
+        }
+
         from ams.sandbox.config import get_sandbox_status, get_sandbox_config, SandboxMode
         _sb = get_sandbox_status()
         _cfg = get_sandbox_config()
@@ -533,7 +553,7 @@ def _register_routes(app: Flask) -> None:
                 f"({_sb['message']})",
                 "error",
             )
-            return render_template("mark.html", profiles=PROFILE_CHOICES), 503
+            return _render_mark_page(status_code=503, selected_assignment_id=selected_assignment_id)
 
         # GitHub state (needed for error paths and template rendering)
         github_connected = bool(session.get("github_token"))
@@ -543,7 +563,6 @@ def _register_routes(app: Flask) -> None:
         file = request.files.get("submission")
         github_repo = request.form.get("github_repo", "").strip()
         github_branch = request.form.get("github_branch", "").strip()
-        profile = request.form.get("profile", "frontend_interactive")
         student_id = request.form.get("student_id", "").strip()
         assignment_id = request.form.get("assignment_id", "").strip()
         scoring_mode_str = request.form.get("scoring_mode", "static_plus_llm").strip()
@@ -557,12 +576,12 @@ def _register_routes(app: Flask) -> None:
             github_token = session.get("github_token")
             if not github_token:
                 flash("Please link your GitHub account first.", "error")
-                return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=False, github_user=github_user), 400
+                return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
 
             # Validate repo format (owner/repo)
             if "/" not in github_repo or github_repo.count("/") != 1:
                 flash("Invalid GitHub repository format. Use owner/repo.", "error")
-                return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
+                return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
 
             try:
                 # Branch-specific zipball (Gradescope-style)
@@ -583,7 +602,7 @@ def _register_routes(app: Flask) -> None:
             except _requests.RequestException as exc:
                 logger.warning("GitHub zipball download failed for %s: %s", github_repo, exc)
                 flash(f"Failed to download repository from GitHub: {exc}", "error")
-                return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
+                return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
 
             # Save to a temporary ZIP file
             with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
@@ -598,11 +617,11 @@ def _register_routes(app: Flask) -> None:
             # ------ ZIP upload path ------
             if not file or not file.filename:
                 flash("Please upload a .zip file or select a GitHub repository.", "error")
-                return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
+                return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
 
             if not validate_file_type(file.filename):
                 flash("Invalid file type. Please upload a .zip file.", "error")
-                return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
+                return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
 
             # Save to temp file
             with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
@@ -618,29 +637,40 @@ def _register_routes(app: Flask) -> None:
             except Exception:
                 pass
             flash("The uploaded file is not a valid ZIP archive.", "error")
-            return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
+            return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
         
         # Validate and convert scoring mode
         try:
             scoring_mode = ScoringMode(scoring_mode_str)
         except ValueError:
             flash(f"Invalid scoring mode: {scoring_mode_str}", "error")
-            return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
-        
-        # Validate metadata
-        valid_student, student_error = MetadataValidator.validate_student_id(student_id)
-        if not valid_student:
-            flash(f"Invalid Student ID: {student_error}", "error")
-            return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
-        
+            return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
+
         valid_assignment, assignment_error = MetadataValidator.validate_assignment_id(assignment_id)
         if not valid_assignment:
             flash(f"Invalid Assignment ID: {assignment_error}", "error")
-            return render_template("mark.html", profiles=PROFILE_CHOICES, github_connected=github_connected, github_user=github_user), 400
+            return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
         
         # Sanitize identifiers
-        student_id = MetadataValidator.sanitize_identifier(student_id)
         assignment_id = MetadataValidator.sanitize_identifier(assignment_id)
+        selected_assignment_id = assignment_id
+        assignment = assignment_map.get(assignment_id)
+        if assignment is None:
+            flash("Select a valid assignment from the list.", "error")
+            return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
+
+        if effective_role == "student":
+            student_id = PREVIEW_STUDENT_ID if is_preview else user_id
+        else:
+            student_id = request.form.get("student_id", "").strip()
+
+        valid_student, student_error = MetadataValidator.validate_student_id(student_id)
+        if not valid_student:
+            flash(f"Invalid Student ID: {student_error}", "error")
+            return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
+
+        student_id = MetadataValidator.sanitize_identifier(student_id)
+        profile = str(assignment.get("profile") or "frontend_interactive").strip()
         original_filename = MetadataValidator.sanitize_filename(original_filename)
         
         # Create metadata
@@ -667,7 +697,7 @@ def _register_routes(app: Flask) -> None:
             valid_size, size_error = validate_file_size(tmp_zip_path, MAX_UPLOAD_MB)
             if not valid_size:
                 flash(size_error or "File size exceeds maximum limit.")
-                return render_template("mark.html", profiles=PROFILE_CHOICES), 400
+                return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
             
             # Store submission with metadata
             run_id, run_dir = store_submission_with_metadata(
@@ -704,12 +734,7 @@ def _register_routes(app: Flask) -> None:
                 except Exception:
                     pass
                 flash("No web development files (HTML, CSS, JS, PHP, SQL) were found in this repository. Please select the correct repository.", "error")
-                return render_template(
-                    "mark.html",
-                    profiles=PROFILE_CHOICES,
-                    github_connected=github_connected,
-                    github_user=github_user,
-                ), 400
+                return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
 
             pipeline = AssessmentPipeline(scoring_mode=scoring_mode)
             
@@ -1225,6 +1250,13 @@ def _register_routes(app: Flask) -> None:
                 return True
         return False
 
+    def _user_can_access_assignment(assignment_id: str) -> bool:
+        user = get_current_user()
+        assignment = get_assignment(assignment_id)
+        if user is None or assignment is None:
+            return False
+        return assignment_allows_teacher(assignment, user["userID"], user["role"])
+
     def _flash_assignment_review_state(assignment_id: str, resolved_message: str) -> None:
         flash(resolved_message, "success")
         if _assignment_has_unresolved_release_blockers(assignment_id):
@@ -1656,6 +1688,10 @@ def _register_routes(app: Flask) -> None:
     @app.route("/teacher/assignment/<assignment_id>/threats/delete", methods=["POST"])
     @teacher_or_admin_required
     def assignment_threat_delete(assignment_id: str):
+        if not _user_can_access_assignment(assignment_id):
+            flash("You do not have access to this assignment.", "error")
+            return redirect(url_for("teacher.dashboard"))
+
         run_id = str(request.form.get("run_id") or "").strip()
         submission_id = str(request.form.get("submission_id") or "").strip()
         if not run_id:
@@ -1706,6 +1742,12 @@ def _register_routes(app: Flask) -> None:
     @app.route("/teacher/assignment/<assignment_id>/threats/reprocess", methods=["POST"])
     @teacher_or_admin_required
     def assignment_submission_rerun(assignment_id: str):
+        if not _user_can_access_assignment(assignment_id):
+            if _is_async_job_request():
+                return jsonify({"error": "You do not have access to this assignment."}), 403
+            flash("You do not have access to this assignment.", "error")
+            return redirect(url_for("teacher.dashboard"))
+
         run_id = str(request.form.get("run_id") or "").strip()
         submission_id = str(request.form.get("submission_id") or "").strip()
         if not run_id:

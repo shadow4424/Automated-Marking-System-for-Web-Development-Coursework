@@ -23,6 +23,8 @@ from flask import (
 
 from ams.analytics import generate_assignment_analytics
 from ams.core.db import (
+    assignment_allows_teacher,
+    assignment_teacher_ids,
     create_assignment,
     delete_assignment,
     get_assignment,
@@ -31,6 +33,7 @@ from ams.core.db import (
     list_users,
     release_marks,
     update_assignment_students,
+    update_assignment_teachers,
     withhold_marks,
 )
 from ams.io.web_storage import get_runs_root, list_runs, purge_assignment_storage
@@ -41,6 +44,20 @@ from ams.web.auth import get_current_user, teacher_or_admin_required
 logger = logging.getLogger(__name__)
 
 teacher_bp = Blueprint("teacher", __name__, url_prefix="/teacher")
+
+
+def _user_can_access_assignment(assignment: Mapping[str, Any] | None) -> bool:
+    user = get_current_user()
+    if user is None:
+        return False
+    return assignment_allows_teacher(dict(assignment) if assignment is not None else None, user["userID"], user["role"])
+
+
+def _teacher_user_lookup(user_id: str) -> dict[str, Any]:
+    user = get_user(user_id)
+    if user:
+        return user
+    return {"userID": user_id, "firstName": user_id, "lastName": "", "email": ""}
 
 
 def _parse_iso_datetime(value: str | None) -> datetime | None:
@@ -469,7 +486,8 @@ def dashboard():
 def create_assignment_route():
     if request.method == "GET":
         students = list_users(role="student")
-        return render_template("teacher_create_assignment.html", students=students)
+        teachers = list_users(role="teacher")
+        return render_template("teacher_create_assignment.html", students=students, teachers=teachers)
 
     user = get_current_user()
     assignment_id = request.form.get("assignment_id", "").strip()
@@ -478,6 +496,12 @@ def create_assignment_route():
     profile = request.form.get("profile", "frontend_interactive").strip()
     due_date = request.form.get("due_date", "").strip()
     selected_students = request.form.getlist("students")
+    valid_teacher_ids = {teacher["userID"] for teacher in list_users(role="teacher")}
+    selected_teachers = [
+        teacher_id
+        for teacher_id in request.form.getlist("teachers")
+        if teacher_id in valid_teacher_ids and teacher_id != user["userID"]
+    ]
 
     if not assignment_id or not title:
         flash("Assignment ID and Title are required.", "error")
@@ -490,6 +514,7 @@ def create_assignment_route():
         description=description,
         profile=profile,
         assigned_students=selected_students,
+        assigned_teachers=selected_teachers,
         due_date=due_date,
     )
     if ok:
@@ -502,9 +527,39 @@ def create_assignment_route():
 @teacher_bp.route("/assignment/<assignment_id>/students", methods=["POST"])
 @teacher_or_admin_required
 def update_students(assignment_id: str):
+    assignment = get_assignment(assignment_id)
+    if assignment is None:
+        flash("Assignment not found.", "error")
+        return redirect(url_for("teacher.dashboard"))
+    if not _user_can_access_assignment(assignment):
+        flash("You do not have access to this assignment.", "error")
+        return redirect(url_for("teacher.dashboard"))
+
     selected = request.form.getlist("students")
     update_assignment_students(assignment_id, selected)
     flash(f"Student list updated for '{assignment_id}'.", "success")
+    return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+
+
+@teacher_bp.route("/assignment/<assignment_id>/teachers", methods=["POST"])
+@teacher_or_admin_required
+def update_teachers(assignment_id: str):
+    assignment = get_assignment(assignment_id)
+    if assignment is None:
+        flash("Assignment not found.", "error")
+        return redirect(url_for("teacher.dashboard"))
+    if not _user_can_access_assignment(assignment):
+        flash("You do not have access to this assignment.", "error")
+        return redirect(url_for("teacher.dashboard"))
+
+    valid_teacher_ids = {teacher["userID"] for teacher in list_users(role="teacher")}
+    selected_teachers = [
+        teacher_id
+        for teacher_id in request.form.getlist("teachers")
+        if teacher_id in valid_teacher_ids and teacher_id != assignment.get("teacherID")
+    ]
+    update_assignment_teachers(assignment_id, selected_teachers)
+    flash(f"Teaching team updated for '{assignment_id}'.", "success")
     return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
 
 
@@ -515,6 +570,9 @@ def assignment_detail(assignment_id: str):
     if assignment is None:
         flash("Assignment not found.", "error")
         return redirect(url_for("teacher.dashboard"))
+    if not _user_can_access_assignment(assignment):
+        flash("You do not have access to this assignment.", "error")
+        return redirect(url_for("teacher.dashboard"))
 
     student_details = []
     for sid in assignment.get("assigned_students", []):
@@ -524,7 +582,13 @@ def assignment_detail(assignment_id: str):
         else:
             student_details.append({"userID": sid, "firstName": sid, "lastName": "", "email": ""})
 
+    teacher_details = [_teacher_user_lookup(teacher_id) for teacher_id in assignment_teacher_ids(assignment)]
     all_students = list_users(role="student")
+    all_teachers = [
+        teacher
+        for teacher in list_users(role="teacher")
+        if teacher["userID"] != assignment.get("teacherID")
+    ]
     assignment_runs = _build_assignment_run_rows(assignment_id)
     threat_rows = _build_threat_resolution_rows(assignment_runs)
     llm_error_rows = _build_llm_error_resolution_rows(assignment_runs)
@@ -533,6 +597,8 @@ def assignment_detail(assignment_id: str):
         "assignment_detail.html",
         assignment=assignment,
         student_details=student_details,
+        teacher_details=teacher_details,
+        all_teachers=all_teachers,
         all_students=all_students,
         runs=assignment_runs,
         threat_rows=threat_rows,
@@ -546,6 +612,14 @@ def assignment_detail(assignment_id: str):
 @teacher_bp.route("/assignment/<assignment_id>/release", methods=["POST"])
 @teacher_or_admin_required
 def release(assignment_id: str):
+    assignment = get_assignment(assignment_id)
+    if assignment is None:
+        flash("Assignment not found.", "error")
+        return redirect(url_for("teacher.dashboard"))
+    if not _user_can_access_assignment(assignment):
+        flash("You do not have access to this assignment.", "error")
+        return redirect(url_for("teacher.dashboard"))
+
     assignment_runs = _build_assignment_run_rows(assignment_id)
     threat_rows = _build_threat_resolution_rows(assignment_runs)
     llm_error_rows = _build_llm_error_resolution_rows(assignment_runs)
@@ -564,6 +638,14 @@ def release(assignment_id: str):
 @teacher_bp.route("/assignment/<assignment_id>/withhold", methods=["POST"])
 @teacher_or_admin_required
 def withhold(assignment_id: str):
+    assignment = get_assignment(assignment_id)
+    if assignment is None:
+        flash("Assignment not found.", "error")
+        return redirect(url_for("teacher.dashboard"))
+    if not _user_can_access_assignment(assignment):
+        flash("You do not have access to this assignment.", "error")
+        return redirect(url_for("teacher.dashboard"))
+
     withhold_marks(assignment_id)
     flash(f"Marks withheld for '{assignment_id}'.", "info")
     return redirect(url_for("teacher.dashboard"))
@@ -576,6 +658,9 @@ def view_analytics(assignment_id: str):
     assignment = get_assignment(assignment_id)
     if assignment is None:
         flash("Assignment not found.", "error")
+        return redirect(url_for("teacher.dashboard"))
+    if not _user_can_access_assignment(assignment):
+        flash("You do not have access to this assignment.", "error")
         return redirect(url_for("teacher.dashboard"))
 
     try:
@@ -591,7 +676,8 @@ def view_analytics(assignment_id: str):
     missing_count = int(coverage.get("missing_assigned") or max(assigned_count - submitted_count, 0))
     coverage_percent = int(coverage.get("coverage_percent") or (round((submitted_count / assigned_count) * 100) if assigned_count else 0))
     updated_label, updated_exact = _format_freshness_label(analytics.get("generated_at"))
-    teaching_insights, teaching_summary_source = _maybe_enhance_teaching_insights(analytics)
+    teaching_insights = _normalize_teaching_insights(analytics.get("teaching_insights"))
+    teaching_summary_source = "deterministic"
 
     return render_template(
         "assignment_analytics.html",
@@ -615,6 +701,8 @@ def teaching_insights_json(assignment_id: str):
     assignment = get_assignment(assignment_id)
     if assignment is None:
         return jsonify({"error": "Assignment not found."}), 404
+    if not _user_can_access_assignment(assignment):
+        return jsonify({"error": "You do not have access to this assignment."}), 403
 
     try:
         analytics = generate_assignment_analytics(assignment_id, app=current_app)
@@ -638,6 +726,9 @@ def export_analytics_csv(assignment_id: str, export_kind: str):
     assignment = get_assignment(assignment_id)
     if assignment is None:
         flash("Assignment not found.", "error")
+        return redirect(url_for("teacher.dashboard"))
+    if not _user_can_access_assignment(assignment):
+        flash("You do not have access to this assignment.", "error")
         return redirect(url_for("teacher.dashboard"))
 
     try:
@@ -738,6 +829,14 @@ def export_analytics_csv(assignment_id: str, export_kind: str):
 @teacher_bp.route("/assignment/<assignment_id>/delete", methods=["POST"])
 @teacher_or_admin_required
 def delete_assignment_route(assignment_id: str):
+    assignment = get_assignment(assignment_id)
+    if assignment is None:
+        flash("Assignment not found.", "error")
+        return redirect(url_for("teacher.dashboard"))
+    if not _user_can_access_assignment(assignment):
+        flash("You do not have access to this assignment.", "error")
+        return redirect(url_for("teacher.dashboard"))
+
     if delete_assignment(assignment_id):
         removed_count = purge_assignment_storage(get_runs_root(current_app), assignment_id)
         flash(
