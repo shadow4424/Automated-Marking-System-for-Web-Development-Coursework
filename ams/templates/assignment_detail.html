@@ -3,170 +3,156 @@
 {% block title %}{{ assignment.title }} - AMS{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>{{ assignment.title }}</h1>
-    <p class="text-secondary">
-        <code>{{ assignment.assignmentID }}</code>
-        <span class="badge badge-secondary">{{ assignment.profile }}</span>
-        {% if assignment.marks_released %}
-        <span class="badge badge-success">Marks Released</span>
-        {% else %}
-        <span class="badge badge-warning">Marks Withheld</span>
-        {% endif %}
-    </p>
-    <div class="page-header-actions">
-        <a href="{{ url_for('teacher.dashboard') }}" class="btn btn-ghost btn-sm">&larr; Back to Dashboard</a>
-        <a href="{{ url_for('teacher.view_analytics', assignment_id=assignment.assignmentID) }}" class="btn btn-primary btn-sm">Analytics</a>
-        {% if assignment.marks_released %}
-        <form method="POST" action="{{ url_for('teacher.withhold', assignment_id=assignment.assignmentID) }}" style="display:inline;">
-            <button type="submit" class="btn btn-ghost btn-sm">Withhold Marks</button>
-        </form>
-        {% else %}
-        <form method="POST" action="{{ url_for('teacher.release', assignment_id=assignment.assignmentID) }}" style="display:inline;">
-            <button
-                type="submit"
-                class="btn btn-success btn-sm"
-                {% if has_release_blockers %}
-                disabled
-                title="Resolve all flagged submissions before releasing grades."
-                aria-disabled="true"
-                {% endif %}>
-                Release Marks
-            </button>
-        </form>
-        {% endif %}
-        <form method="POST" action="{{ url_for('teacher.delete_assignment_route', assignment_id=assignment.assignmentID) }}" style="display:inline;" onsubmit="return confirm('Delete assignment {{ assignment.assignmentID }}? This cannot be undone.');">
-            <button type="submit" class="btn btn-danger btn-sm">Delete Assignment</button>
-        </form>
-    </div>
-</div>
-
-{% if has_unresolved_threats %}
-<div class="card" style="margin-bottom:var(--space-lg); border-left:4px solid #dc2626; background:#fff3f2;">
-    <div class="card-header" style="align-items:flex-start; gap:var(--space-md);">
-        <div>
-            <h2 class="card-title" style="color:#991b1b;">Grade release blocked</h2>
-            <p class="text-secondary" style="margin:var(--space-xs) 0 0 0; color:#7f1d1d;">
-                At least one submission is flagged as a threat. Review each flagged submission before grades can be released.
-            </p>
-        </div>
-        <span class="badge" style="background:#dc2626;color:#fff;">{{ threat_rows|length }} unresolved threat{{ 's' if threat_rows|length != 1 else '' }}</span>
-    </div>
-    <div style="display:grid; gap:var(--space-sm);">
-        {% for threat in threat_rows %}
-        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:var(--space-sm); padding:var(--space-sm) 0; border-top:1px solid rgba(220,38,38,0.12);">
-            <div style="display:flex; flex-direction:column; gap:0.3rem;">
-                <strong><code>{{ threat.student_id }}</code></strong>
-                <span class="text-secondary" style="color:#7f1d1d;">
-                    {{ threat.mode|capitalize }} submission{% if threat.threat_count %} with {{ threat.threat_count }} threat finding{{ 's' if threat.threat_count != 1 else '' }}{% endif %}.
-                </span>
-                <a href="{{ threat.detail_url }}" class="btn btn-ghost btn-sm" style="width:max-content;">Review submission</a>
+<div class="page-shell">
+    <section class="page-hero page-hero--split">
+        <div class="page-hero-main">
+            <a href="{{ url_for('teacher.dashboard') }}" class="page-back-link">Back to assignments</a>
+            <div class="page-kicker">Assignment workspace</div>
+            <h1>{{ assignment.title }}</h1>
+            <p class="page-context-line">Manage release state, student allocation, and per-submission review from one place.</p>
+            <div class="page-status-row">
+                <span class="badge badge-secondary">{{ assignment.profile }}</span>
+                {% if assignment.marks_released %}
+                <span class="badge badge-success">Marks released</span>
+                {% else %}
+                <span class="badge badge-warning">Marks withheld</span>
+                {% endif %}
+                <span class="badge badge-secondary"><code>{{ assignment.assignmentID }}</code></span>
             </div>
-            <div style="display:flex; flex-wrap:wrap; gap:var(--space-xs); align-items:center;">
-                <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" style="display:inline;" data-job-form="rerun">
-                    <input type="hidden" name="run_id" value="{{ threat.run_id }}">
-                    {% if threat.submission_id %}
-                    <input type="hidden" name="submission_id" value="{{ threat.submission_id }}">
-                    {% endif %}
-                    <button type="submit" class="btn btn-warning btn-sm">Re-run submission</button>
+            <div class="page-action-row">
+                <a href="{{ url_for('teacher.view_analytics', assignment_id=assignment.assignmentID) }}" class="btn btn-primary">Analytics</a>
+                {% if assignment.marks_released %}
+                <form method="POST" action="{{ url_for('teacher.withhold', assignment_id=assignment.assignmentID) }}">
+                    <button type="submit" class="btn btn-secondary">Withhold marks</button>
                 </form>
-                <form method="POST" action="{{ url_for('assignment_threat_delete', assignment_id=assignment.assignmentID) }}" style="display:inline;" onsubmit="return confirm('Delete the flagged submission for {{ threat.student_id }}?');">
-                    <input type="hidden" name="run_id" value="{{ threat.run_id }}">
-                    {% if threat.submission_id %}
-                    <input type="hidden" name="submission_id" value="{{ threat.submission_id }}">
-                    {% endif %}
-                    <button type="submit" class="btn btn-danger btn-sm">Delete flagged submission</button>
+                {% else %}
+                <form method="POST" action="{{ url_for('teacher.release', assignment_id=assignment.assignmentID) }}">
+                    <button type="submit" class="btn btn-success" {% if has_release_blockers %}disabled title="Resolve all flagged submissions before releasing grades." aria-disabled="true"{% endif %}>Release marks</button>
+                </form>
+                {% endif %}
+                <form method="POST" action="{{ url_for('teacher.delete_assignment_route', assignment_id=assignment.assignmentID) }}" onsubmit="return confirm('Delete assignment {{ assignment.assignmentID }}? This cannot be undone.');">
+                    <button type="submit" class="btn btn-ghost">Delete assignment</button>
                 </form>
             </div>
         </div>
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
-
-{% if has_unresolved_llm_errors %}
-<div class="card" style="margin-bottom:var(--space-lg); border-left:4px solid #d97706; background:#fffbeb;">
-    <div class="card-header" style="align-items:flex-start; gap:var(--space-md);">
-        <div>
-            <h2 class="card-title" style="color:#92400e;">Grade release blocked</h2>
-            <p class="text-secondary" style="margin:var(--space-xs) 0 0 0; color:#92400e;">
-                One or more submissions failed during LLM-assisted marking. Review, rerun, or delete each flagged submission before grades can be released.
-            </p>
-        </div>
-        <span class="badge" style="background:#d97706;color:#fff;">{{ llm_error_rows|length }} LLM error{{ 's' if llm_error_rows|length != 1 else '' }}</span>
-    </div>
-    <div style="display:grid; gap:var(--space-sm);">
-        {% for flagged in llm_error_rows %}
-        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:var(--space-sm); padding:var(--space-sm) 0; border-top:1px solid rgba(217,119,6,0.16);">
-            <div style="display:flex; flex-direction:column; gap:0.3rem; max-width:48rem;">
-                <strong><code>{{ flagged.student_id }}</code></strong>
-                <span class="text-secondary" style="color:#92400e;">
-                    {{ flagged.mode|capitalize }} submission flagged as <strong>LLM Error - Requires Review</strong>.
-                </span>
-                <span class="text-secondary" style="color:#78350f;">
-                    {{ flagged.llm_error_message }}
-                </span>
-                <a href="{{ flagged.detail_url }}" class="btn btn-ghost btn-sm" style="width:max-content;">Review submission</a>
+        <aside class="page-side-panel">
+            <h2 class="card-title">Assignment summary</h2>
+            <div class="info-grid info-grid--2">
+                <div class="info-item">
+                    <span class="info-item-label">Students</span>
+                    <span class="info-item-value">{{ student_details|length }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">Submissions</span>
+                    <span class="info-item-value">{{ runs|length }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">Due date</span>
+                    <span class="info-item-value">{{ assignment.due_date[:10] if assignment.due_date else '-' }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">Teacher</span>
+                    <span class="info-item-value">{{ assignment.teacherID }}</span>
+                </div>
             </div>
-            <div style="display:flex; flex-wrap:wrap; gap:var(--space-xs); align-items:center;">
-                <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" style="display:inline;" data-job-form="rerun">
-                    <input type="hidden" name="run_id" value="{{ flagged.run_id }}">
-                    {% if flagged.submission_id %}
-                    <input type="hidden" name="submission_id" value="{{ flagged.submission_id }}">
-                    {% endif %}
-                    <button type="submit" class="btn btn-warning btn-sm">Re-run submission</button>
-                </form>
-                <form method="POST" action="{{ url_for('assignment_threat_delete', assignment_id=assignment.assignmentID) }}" style="display:inline;" onsubmit="return confirm('Delete the flagged submission for {{ flagged.student_id }}?');">
-                    <input type="hidden" name="run_id" value="{{ flagged.run_id }}">
-                    {% if flagged.submission_id %}
-                    <input type="hidden" name="submission_id" value="{{ flagged.submission_id }}">
-                    {% endif %}
-                    <button type="submit" class="btn btn-danger btn-sm">Delete flagged submission</button>
-                </form>
+        </aside>
+    </section>
+
+    {% if has_unresolved_threats %}
+    <section class="card">
+        <div class="section-heading-row">
+            <div class="section-copy">
+                <h2 class="card-title" style="color:#991b1b;">Grade release blocked by security threats</h2>
+                <p class="section-note" style="color:#7f1d1d;">Review each flagged submission before grades can be released.</p>
+            </div>
+            <span class="badge" style="background:#dc2626;color:#fff;">{{ threat_rows|length }}</span>
+        </div>
+        <div class="surface-list">
+            {% for threat in threat_rows %}
+            <div class="surface-item">
+                <div class="page-status-row" style="justify-content: space-between;">
+                    <strong><code>{{ threat.student_id }}</code></strong>
+                    <span class="badge" style="background:#dc2626;color:#fff;">Threat</span>
+                </div>
+                <div class="surface-item-meta">{{ threat.mode|capitalize }} submission{% if threat.threat_count %} with {{ threat.threat_count }} threat finding{{ 's' if threat.threat_count != 1 else '' }}{% endif %}.</div>
+                <div class="page-inline-tools" style="margin-top: var(--space-sm);">
+                    <a href="{{ threat.detail_url }}" class="btn btn-secondary btn-sm">Review submission</a>
+                    <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
+                        <input type="hidden" name="run_id" value="{{ threat.run_id }}">
+                        {% if threat.submission_id %}<input type="hidden" name="submission_id" value="{{ threat.submission_id }}">{% endif %}
+                        <button type="submit" class="btn btn-ghost btn-sm">Re-run submission</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('assignment_threat_delete', assignment_id=assignment.assignmentID) }}" onsubmit="return confirm('Delete the flagged submission for {{ threat.student_id }}?');">
+                        <input type="hidden" name="run_id" value="{{ threat.run_id }}">
+                        {% if threat.submission_id %}<input type="hidden" name="submission_id" value="{{ threat.submission_id }}">{% endif %}
+                        <button type="submit" class="btn btn-ghost btn-sm">Delete flagged submission</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if has_unresolved_llm_errors %}
+    <section class="card">
+        <div class="section-heading-row">
+            <div class="section-copy">
+                <h2 class="card-title" style="color:#92400e;">Grade release blocked by LLM review errors</h2>
+                <p class="section-note" style="color:#92400e;">One or more submissions failed during LLM-assisted marking. Resolve or rerun each flagged submission before releasing grades.</p>
+            </div>
+            <span class="badge" style="background:#d97706;color:#fff;">{{ llm_error_rows|length }}</span>
+        </div>
+        <div class="surface-list">
+            {% for flagged in llm_error_rows %}
+            <div class="surface-item">
+                <div class="page-status-row" style="justify-content: space-between;">
+                    <strong><code>{{ flagged.student_id }}</code></strong>
+                    <span class="badge" style="background:#fef3c7;color:#92400e;">LLM Error - Requires Review</span>
+                </div>
+                <div class="surface-item-meta">{{ flagged.llm_error_message }}</div>
+                <div class="page-inline-tools" style="margin-top: var(--space-sm);">
+                    <a href="{{ flagged.detail_url }}" class="btn btn-secondary btn-sm">Review submission</a>
+                    <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
+                        <input type="hidden" name="run_id" value="{{ flagged.run_id }}">
+                        {% if flagged.submission_id %}<input type="hidden" name="submission_id" value="{{ flagged.submission_id }}">{% endif %}
+                        <button type="submit" class="btn btn-ghost btn-sm">Re-run submission</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('assignment_threat_delete', assignment_id=assignment.assignmentID) }}" onsubmit="return confirm('Delete the flagged submission for {{ flagged.student_id }}?');">
+                        <input type="hidden" name="run_id" value="{{ flagged.run_id }}">
+                        {% if flagged.submission_id %}<input type="hidden" name="submission_id" value="{{ flagged.submission_id }}">{% endif %}
+                        <button type="submit" class="btn btn-ghost btn-sm">Delete flagged submission</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if assignment.description %}
+    <section class="card">
+        <div class="section-heading-row">
+            <div class="section-copy">
+                <h2 class="card-title">Description</h2>
+                <p class="section-note">Assignment brief</p>
             </div>
         </div>
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
+        <p class="mb-0">{{ assignment.description }}</p>
+    </section>
+    {% endif %}
 
-{% if assignment.description %}
-<div class="card" style="margin-bottom:var(--space-lg);">
-    <div class="card-header">
-        <h2 class="card-title">Description</h2>
-    </div>
-    <p>{{ assignment.description }}</p>
-</div>
-{% endif %}
-
-<div class="stat-grid-4" style="margin-bottom:var(--space-xl);">
-    <div class="card stat-card stat-card--default">
-        <div class="stat-value">{{ student_details|length }}</div>
-        <div class="stat-label">Students Assigned</div>
-    </div>
-    <div class="card stat-card stat-card--success">
-        <div class="stat-value">{{ runs|length }}</div>
-        <div class="stat-label">Submissions</div>
-    </div>
-    <div class="card stat-card stat-card--ai">
-        <div class="stat-value">{{ assignment.profile }}</div>
-        <div class="stat-label">Profile</div>
-    </div>
-    <div class="card stat-card stat-card--warning">
-        <div class="stat-value">{{ assignment.due_date[:10] if assignment.due_date else '-' }}</div>
-        <div class="stat-label">Due Date</div>
-    </div>
-</div>
-
-<div class="grid-2" style="gap:var(--space-xl);">
-    <div class="card">
-        <div class="card-header">
-            <h2 class="card-title">Assigned Students</h2>
-            <span class="badge badge-muted">{{ student_details|length }}</span>
+    <section class="card">
+        <div class="section-heading-row">
+            <div class="section-copy">
+                <h2 class="card-title">Assigned students</h2>
+                <p class="section-note">Allocation is editable here without leaving the assignment workspace.</p>
+            </div>
+            <span class="badge badge-secondary">{{ student_details|length }}</span>
         </div>
         {% if student_details %}
         <div class="table-container">
-            <table class="table">
+            <table class="table table-compact">
                 <thead>
                     <tr>
                         <th>User ID</th>
@@ -188,146 +174,123 @@
         {% else %}
         <div class="empty-state">
             <p class="empty-state-title">No students assigned</p>
-            <p class="empty-state-text">Use the form below to assign students.</p>
+            <p class="empty-state-text">Use the allocation panel below to add students to this assignment.</p>
         </div>
         {% endif %}
 
-        <details style="margin-top:var(--space-md);">
-            <summary class="btn btn-ghost btn-sm">Edit Student Allocation</summary>
-            <form method="POST" action="{{ url_for('teacher.update_students', assignment_id=assignment.assignmentID) }}" style="margin-top:var(--space-sm);">
-                {% if all_students %}
-                <div class="student-select-list">
-                    {% for s in all_students %}
-                    <label class="student-select-item">
-                        <input type="checkbox" name="students" value="{{ s.userID }}"
-                            {% if s.userID in assignment.assigned_students %}checked{% endif %}>
-                        <span class="student-select-name">{{ s.firstName }} {{ s.lastName }}</span>
-                        <span class="student-select-id">{{ s.userID }}</span>
-                    </label>
-                    {% endfor %}
+        <details class="disclosure-card" style="margin-top: var(--space-lg);">
+            <summary>
+                <div class="section-copy">
+                    <h2 class="card-title">Edit student allocation</h2>
+                    <p class="section-note">Open only when you need to change the assigned student list.</p>
                 </div>
-                {% else %}
-                <p class="form-hint">No students registered yet.</p>
-                {% endif %}
-                <button type="submit" class="btn btn-primary btn-sm" style="margin-top:var(--space-sm);">Save Changes</button>
-            </form>
+            </summary>
+            <div class="disclosure-body">
+                <form method="POST" action="{{ url_for('teacher.update_students', assignment_id=assignment.assignmentID) }}">
+                    {% if all_students %}
+                    <div class="student-select-list">
+                        {% for s in all_students %}
+                        <label class="student-select-item">
+                            <input type="checkbox" name="students" value="{{ s.userID }}" {% if s.userID in assignment.assigned_students %}checked{% endif %}>
+                            <span class="student-select-name">{{ s.firstName }} {{ s.lastName }}</span>
+                            <span class="student-select-id">{{ s.userID }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="form-hint">No students are registered yet.</p>
+                    {% endif %}
+                    <button type="submit" class="btn btn-primary btn-sm" style="margin-top: var(--space-md);">Save allocation</button>
+                </form>
+            </div>
         </details>
-    </div>
+    </section>
 
-    <div class="card">
-        <div class="card-header">
-            <h2 class="card-title">Assignment Info</h2>
+    <section class="card">
+        <div class="section-heading-row">
+            <div class="section-copy">
+                <h2 class="card-title">Submissions</h2>
+                <p class="section-note">Open a submission to rerun it, inspect the layered report, or move into assignment analytics.</p>
+            </div>
+            <span class="badge badge-secondary">{{ runs|length }}</span>
         </div>
-        <dl style="display:grid; grid-template-columns:auto 1fr; gap:var(--space-xs) var(--space-md);">
-            <dt class="text-secondary">ID</dt>
-            <dd><code>{{ assignment.assignmentID }}</code></dd>
-            <dt class="text-secondary">Teacher</dt>
-            <dd><code>{{ assignment.teacherID }}</code></dd>
-            <dt class="text-secondary">Profile</dt>
-            <dd><span class="badge badge-secondary">{{ assignment.profile }}</span></dd>
-            <dt class="text-secondary">Due Date</dt>
-            <dd>{{ assignment.due_date[:16].replace('T', ' ') if assignment.due_date else '-' }}</dd>
-            <dt class="text-secondary">Marks</dt>
-            <dd>
-                {% if assignment.marks_released %}
-                <span class="badge badge-success">Released</span>
-                {% else %}
-                <span class="badge badge-warning">Withheld</span>
-                {% endif %}
-            </dd>
-        </dl>
-    </div>
-</div>
-
-<div class="card" style="margin-top:var(--space-xl);">
-    <div class="card-header">
-        <h2 class="card-title">Submissions</h2>
-        <span class="badge badge-muted">{{ runs|length }}</span>
-    </div>
-    {% if runs %}
-    <div class="table-container">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Student</th>
-                    <th>Mode</th>
-                    <th>Score</th>
-                    <th>Date</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for r in runs %}
-                {% set submission = r.get('_submission_record') %}
-                {% set status = r.get('status', 'completed') %}
-                {% set row_score = r.get('score') %}
-                {% if row_score is none and submission and submission.get('overall') is not none %}
-                    {% set row_score = submission.get('overall') * 100 %}
-                {% endif %}
-                {% set detail_url = url_for('batch_submission_view', run_id=r.id, submission_id=r._batch_submission_id) if r.mode == 'batch' and r.get('_batch_submission_id') else url_for('run_detail', run_id=r.id) %}
-                <tr>
-                    <td><code>{{ r.student_id if r.student_id and r.student_id != 'batch' else '-' }}</code></td>
-                    <td><span class="badge {% if r.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">{{ r.mode or 'mark' }}</span></td>
-                    <td>
-                        {% if status == 'pending' %}
-                        <span class="badge badge-secondary">Queued</span>
-                        {% elif r.threat_flagged %}
-                        <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span>
-                        {% elif row_score is not none %}
-                        <strong>{{ row_score|round|int }}%</strong>
-                        {% else %}
-                        -
-                        {% endif %}
-                    </td>
-                    <td>{{ r.created_at[:10] if r.created_at else '-' }}</td>
-                    <td>
-                        {% if status == 'pending' %}
-                        <span class="badge badge-warning">Pending</span>
-                        {% elif r.threat_flagged or status == 'threat' %}
-                        <span class="badge" style="background:#dc2626;color:#fff;">Threat</span>
-                        {% elif r.llm_error_flagged or status == 'llm_error' %}
-                        <span class="badge" style="background:#fef3c7;color:#92400e;">LLM Error - Requires Review</span>
-                        {% elif status == 'failed' %}
-                        <span class="badge badge-danger">Failed</span>
-                        {% else %}
-                            {% set score = row_score %}
-                            {% if score is not none %}
-                                {% if score >= 70 %}
-                                <span class="badge badge-success">Excellent</span>
-                                {% elif score >= 40 %}
-                                <span class="badge badge-warning">Pass</span>
-                                {% else %}
-                                <span class="badge badge-danger">Fail</span>
-                                {% endif %}
+        {% if runs %}
+        <div class="table-container">
+            <table class="table table-compact">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Mode</th>
+                        <th>Score</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in runs %}
+                    {% set submission = r.get('_submission_record') %}
+                    {% set status = r.get('status', 'completed') %}
+                    {% set row_score = r.get('score') %}
+                    {% if row_score is none and submission and submission.get('overall') is not none %}
+                        {% set row_score = submission.get('overall') * 100 %}
+                    {% endif %}
+                    {% set detail_url = url_for('batch_submission_view', run_id=r.id, submission_id=r._batch_submission_id) if r.mode == 'batch' and r.get('_batch_submission_id') else url_for('run_detail', run_id=r.id) %}
+                    <tr>
+                        <td><code>{{ r.student_id if r.student_id and r.student_id != 'batch' else '-' }}</code></td>
+                        <td><span class="badge {% if r.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">{{ r.mode or 'mark' }}</span></td>
+                        <td>
+                            {% if status == 'pending' %}
+                            <span class="badge badge-secondary">Queued</span>
+                            {% elif r.threat_flagged %}
+                            <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span>
+                            {% elif row_score is not none %}
+                            <strong>{{ row_score|round|int }}%</strong>
                             {% else %}
-                                <span class="badge badge-secondary">Unknown</span>
+                            -
                             {% endif %}
-                        {% endif %}
-                    </td>
-                    <td>
-                        <div style="display:flex; flex-wrap:wrap; gap:var(--space-xs);">
-                            <a href="{{ detail_url }}" class="btn btn-ghost btn-sm">View &rarr;</a>
-                            <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" style="display:inline;" data-job-form="rerun">
-                                <input type="hidden" name="run_id" value="{{ r.id }}">
-                                {% if r.mode == 'batch' and r.get('_batch_submission_id') %}
-                                <input type="hidden" name="submission_id" value="{{ r._batch_submission_id }}">
-                                {% endif %}
-                                <button type="submit" class="btn btn-secondary btn-sm">Rerun Submission</button>
-                            </form>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <div class="empty-state">
-        <div class="empty-state-icon"></div>
-        <p class="empty-state-title">No submissions yet</p>
-        <p class="empty-state-text">Submissions will appear here once students submit their work or when batch uploads are processed.</p>
-    </div>
-    {% endif %}
+                        </td>
+                        <td>{{ r.created_at[:10] if r.created_at else '-' }}</td>
+                        <td>
+                            {% if status == 'pending' %}
+                            <span class="badge badge-warning">Pending</span>
+                            {% elif r.threat_flagged or status == 'threat' %}
+                            <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span>
+                            {% elif r.llm_error_flagged or status == 'llm_error' %}
+                            <span class="badge" style="background:#fef3c7;color:#92400e;">LLM error</span>
+                            {% elif status == 'failed' %}
+                            <span class="badge badge-danger">Failed</span>
+                            {% elif row_score is not none and row_score >= 70 %}
+                            <span class="badge badge-success">Excellent</span>
+                            {% elif row_score is not none and row_score >= 40 %}
+                            <span class="badge badge-warning">Pass</span>
+                            {% else %}
+                            <span class="badge badge-danger">Fail</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="page-inline-tools">
+                                <a href="{{ detail_url }}" class="btn btn-secondary btn-sm">Open</a>
+                                <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
+                                    <input type="hidden" name="run_id" value="{{ r.id }}">
+                                    {% if r.mode == 'batch' and r.get('_batch_submission_id') %}
+                                    <input type="hidden" name="submission_id" value="{{ r._batch_submission_id }}">
+                                    {% endif %}
+                                    <button type="submit" class="btn btn-ghost btn-sm">Rerun Submission</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p class="empty-state-title">No submissions yet</p>
+            <p class="empty-state-text">Submissions will appear here once students upload work or batch processing runs complete.</p>
+        </div>
+        {% endif %}
+    </section>
 </div>
 {% endblock %}

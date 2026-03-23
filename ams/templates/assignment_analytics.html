@@ -9,8 +9,6 @@
 {% set buckets = overall.buckets|default({}, true) %}
 {% set raw_signals = analytics.signals|default([], true) %}
 {% set signals = raw_signals if raw_signals is sequence and raw_signals is not mapping else [] %}
-{% set raw_components = analytics.components|default([], true) %}
-{% set components = raw_components if raw_components is sequence and raw_components is not mapping else [] %}
 {% set needs_attention = analytics.needs_attention|default([], true) %}
 {% set top_rules = analytics.top_failing_rules|default([], true) %}
 {% set requirements = analytics.requirement_coverage|default([], true) %}
@@ -38,6 +36,132 @@
 
 <style>
     .analytics-shell { display: grid; gap: var(--space-xl); }
+    .analytics-local-nav {
+        position: sticky;
+        top: var(--analytics-local-nav-top, 5.5rem);
+        z-index: 90;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-md);
+        padding: 0.8rem 0.9rem;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+    }
+    .analytics-local-nav-scroll {
+        display: flex;
+        align-items: center;
+        gap: var(--space-md);
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    .analytics-local-nav-scroll::-webkit-scrollbar { display: none; }
+    .analytics-local-nav-group {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        flex-shrink: 0;
+    }
+    .analytics-local-nav-group + .analytics-local-nav-group {
+        padding-left: var(--space-md);
+        border-left: 1px solid rgba(148, 163, 184, 0.18);
+    }
+    .analytics-local-nav-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.48rem 0.8rem;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        color: var(--color-text-secondary);
+        font-size: var(--text-sm);
+        font-weight: 600;
+        line-height: 1;
+        white-space: nowrap;
+        transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+    }
+    .analytics-local-nav-link:hover {
+        color: var(--color-text);
+        background: rgba(248, 250, 252, 0.92);
+        border-color: rgba(148, 163, 184, 0.2);
+    }
+    .analytics-local-nav-link.is-active,
+    .analytics-local-nav-link[aria-current="location"] {
+        color: var(--color-primary);
+        background: rgba(37, 99, 235, 0.12);
+        border-color: rgba(37, 99, 235, 0.18);
+        box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.05);
+    }
+    .analytics-local-nav-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.35rem;
+        padding: 0.16rem 0.35rem;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.16);
+        color: var(--color-text-muted);
+        font-size: 0.68rem;
+        font-weight: 700;
+    }
+    .analytics-local-nav-link.is-active .analytics-local-nav-count,
+    .analytics-local-nav-link[aria-current="location"] .analytics-local-nav-count {
+        background: rgba(37, 99, 235, 0.16);
+        color: var(--color-primary);
+    }
+    .analytics-local-nav-back {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+    .analytics-zone {
+        display: grid;
+        gap: var(--space-xl);
+    }
+    .analytics-zone + .analytics-zone {
+        padding-top: var(--space-xl);
+        border-top: 1px solid rgba(148, 163, 184, 0.14);
+    }
+    .analytics-zone-intro {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: var(--space-md);
+        flex-wrap: wrap;
+    }
+    .analytics-zone-kicker {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.32rem 0.62rem;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.04);
+        color: var(--color-text-muted);
+        font-size: var(--text-xs);
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .analytics-zone-note {
+        margin: 0.55rem 0 0;
+        max-width: 62ch;
+        color: var(--color-text-muted);
+        font-size: var(--text-sm);
+    }
+    .analytics-nav-target {
+        scroll-margin-top: calc(var(--analytics-anchor-offset, 9rem) + 0.75rem);
+    }
+    .analytics-diagnostics-intro {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        gap: var(--space-md);
+        flex-wrap: wrap;
+        padding: 0 0.15rem;
+    }
     .analytics-hero {
         display: grid;
         grid-template-columns: minmax(0, 1.75fr) minmax(300px, 1fr);
@@ -346,6 +470,34 @@
         align-items: center;
         gap: 0.35rem;
     }
+    .analytics-priority-banner {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        gap: var(--space-md);
+        padding: 1rem 1.1rem;
+        border-radius: var(--radius-lg);
+        border: 1px solid rgba(245, 158, 11, 0.22);
+        background: rgba(245, 158, 11, 0.12);
+    }
+    .analytics-priority-banner strong {
+        color: var(--color-text);
+    }
+    .analytics-inline-panel {
+        margin-bottom: var(--space-lg);
+        padding: 0;
+    }
+    .analytics-inline-panel > summary {
+        padding: 0.9rem 1rem;
+        align-items: center;
+    }
+    .analytics-inline-panel .analytics-collapse-body {
+        padding: 0 var(--space-lg) var(--space-lg);
+    }
+    .analytics-secondary-stack {
+        display: grid;
+        gap: var(--space-lg);
+    }
     .analytics-hidden-row,
     .analytics-hidden-card { display: none; }
     .analytics-collapse-card {
@@ -357,17 +509,28 @@
         cursor: pointer;
         padding: var(--space-lg);
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-start;
         align-items: start;
         gap: var(--space-lg);
     }
     .analytics-collapse-card > summary::-webkit-details-marker { display: none; }
+    .analytics-collapse-card > summary::before {
+        flex-shrink: 0;
+        margin-top: 0.2rem;
+    }
     .analytics-collapse-card[open] > summary {
         border-bottom: 1px solid var(--color-border-light);
         background: rgba(248, 250, 252, 0.75);
     }
     .analytics-collapse-body { padding: var(--space-lg); }
     @media (max-width: 1280px) {
+        .analytics-local-nav {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .analytics-local-nav-back {
+            align-self: flex-start;
+        }
         .analytics-kpi-strip,
         .analytics-reliability-grid,
         .analytics-coverage-grid,
@@ -383,6 +546,9 @@
         .analytics-attention-detail {
             grid-template-columns: 1fr;
         }
+        .analytics-local-nav-scroll {
+            width: 100%;
+        }
         .analytics-kpi-strip,
         .analytics-reliability-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -390,6 +556,15 @@
         .analytics-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 720px) {
+        .analytics-local-nav {
+            padding: 0.75rem;
+        }
+        .analytics-local-nav-group + .analytics-local-nav-group {
+            padding-left: 0.75rem;
+        }
+        .analytics-local-nav-link {
+            padding: 0.45rem 0.72rem;
+        }
         .analytics-kpi-strip,
         .analytics-reliability-grid,
         .analytics-coverage-grid,
@@ -414,148 +589,247 @@
 </style>
 
 <div class="analytics-shell">
-    <div class="page-header">
-        <nav class="text-sm text-muted">
-            <a href="{{ url_for('teacher.dashboard') }}">Dashboard</a> /
-            <a href="{{ url_for('teacher.assignment_detail', assignment_id=assignment.assignmentID) }}">{{ assignment.title }}</a> /
-            Analytics
-        </nav>
-    </div>
-
-    <section class="card analytics-hero">
-        <div>
-            <div class="analytics-kicker">Marker dashboard</div>
-            <h1 class="mt-md mb-sm">{{ assignment.title }}</h1>
-            <p class="text-secondary mb-0">Cohort analytics for {{ assignment.assignmentID }}.</p>
-            <div class="analytics-meta" style="margin-top: var(--space-md);">
-                <span class="badge badge-secondary" title="Assessment profile used for this assignment.">{{ assignment.profile|capitalize }} profile</span>
-                {% if assignment.marks_released %}
-                <span class="badge badge-success" title="Released grades are already visible to students.">Marks released</span>
-                {% else %}
-                <span class="badge badge-warning" title="Grades are currently withheld from students.">Marks withheld</span>
+    <section id="analytics-overview" class="card analytics-hero analytics-nav-target">
+            <div>
+                <a href="{{ url_for('teacher.assignment_detail', assignment_id=assignment.assignmentID) }}" class="page-back-link">Back to assignment</a>
+                <div class="analytics-kicker">Marker dashboard</div>
+                <h1 class="mt-md mb-sm">{{ assignment.title }}</h1>
+                <p class="text-secondary mb-0">Cohort analytics for {{ assignment.assignmentID }}.</p>
+                <div class="analytics-meta" style="margin-top: var(--space-md);">
+                    <span class="badge badge-secondary" title="Assessment profile used for this assignment.">{{ assignment.profile|capitalize }} profile</span>
+                    {% if assignment.marks_released %}
+                    <span class="badge badge-success" title="Released grades are already visible to students.">Marks released</span>
+                    {% else %}
+                    <span class="badge badge-warning" title="Grades are currently withheld from students.">Marks withheld</span>
+                    {% endif %}
+                    <span class="badge badge-info" title="Analytics are recomputed each time this page opens.">{{ updated_label }}</span>
+                </div>
+                {% if updated_exact %}
+                <p class="analytics-helper" style="margin-top: 0.65rem; margin-bottom: 0;">Exact refresh time: {{ updated_exact }}</p>
                 {% endif %}
-                <span class="badge badge-info" title="Analytics are recomputed each time this page opens.">{{ updated_label }}</span>
+                <div class="analytics-actions" style="margin-top: var(--space-lg);">
+                    <a id="needs-attention-export" href="{{ url_for('teacher.export_analytics_csv', assignment_id=assignment.assignmentID, export_kind='needs-attention') }}" class="btn btn-secondary btn-sm">Export review queue</a>
+                    <a id="rules-export" href="{{ url_for('teacher.export_analytics_csv', assignment_id=assignment.assignmentID, export_kind='rules') }}" class="btn btn-ghost btn-sm">Export rule summary</a>
+                </div>
             </div>
-            {% if updated_exact %}
-            <p class="analytics-helper" style="margin-top: 0.65rem; margin-bottom: 0;">Exact refresh time: {{ updated_exact }}</p>
+            <aside class="analytics-hero-panel">
+                <div>
+                    <h2 class="card-title">Scope and freshness</h2>
+                </div>
+                <div class="analytics-hero-stats">
+                    <div class="analytics-hero-stat">
+                        <span class="analytics-helper" title="Latest active submissions currently included in this dashboard.">Active submissions in scope</span>
+                        <strong>{{ active_in_scope }}</strong>
+                    </div>
+                    <div class="analytics-hero-stat">
+                        <span class="analytics-helper" title="Students currently assigned to this assignment.">Assigned students</span>
+                        <strong>{{ assigned_count }}</strong>
+                    </div>
+                    <div class="analytics-hero-stat">
+                        <span class="analytics-helper" title="Assigned students covered by at least one active submission in scope.">Coverage snapshot</span>
+                        <strong>{{ coverage_percent }}%</strong>
+                    </div>
+                    <div class="analytics-hero-stat">
+                        <span class="analytics-helper" title="Submissions currently recommended for marker follow-up.">Review queue</span>
+                        <strong>{{ manual_review_count }}</strong>
+                    </div>
+                </div>
+            </aside>
+    </section>
+
+    <nav id="analytics-local-nav" class="card analytics-local-nav" aria-label="Analytics sections">
+        <div class="analytics-local-nav-scroll">
+            <div class="analytics-local-nav-group">
+                <a href="#analytics-overview" class="analytics-local-nav-link is-active" data-analytics-target="analytics-overview" aria-current="location">Overview</a>
+            </div>
+            {% if has_submissions %}
+            <div class="analytics-local-nav-group">
+                <a href="#needs-attention" class="analytics-local-nav-link" data-analytics-target="needs-attention">
+                    Needs Attention
+                    {% if needs_attention %}
+                    <span class="analytics-local-nav-count">{{ needs_attention|length }}</span>
+                    {% endif %}
+                </a>
+                <a href="#top-rules" class="analytics-local-nav-link" data-analytics-target="top-rules">
+                    Top Rules
+                    {% if top_rules %}
+                    <span class="analytics-local-nav-count">{{ top_rules|length }}</span>
+                    {% endif %}
+                </a>
+            </div>
+            <div class="analytics-local-nav-group">
+                <a href="#requirement-coverage" class="analytics-local-nav-link" data-analytics-target="requirement-coverage">Coverage</a>
+                <a href="#confidence-reliability" class="analytics-local-nav-link" data-analytics-target="confidence-reliability">Reliability</a>
+                <a href="#cohort-issues" class="analytics-local-nav-link" data-analytics-target="cohort-issues">
+                    Cohort Issues
+                    {% if signals %}
+                    <span class="analytics-local-nav-count">{{ signals|length }}</span>
+                    {% endif %}
+                </a>
+                <a href="#analytics-diagnostics" class="analytics-local-nav-link" data-analytics-target="analytics-diagnostics">Diagnostics</a>
+            </div>
             {% endif %}
-            <div class="analytics-actions" style="margin-top: var(--space-lg);">
-                <a href="{{ url_for('teacher.assignment_detail', assignment_id=assignment.assignmentID) }}" class="btn btn-ghost btn-sm">Back to assignment</a>
-                <a id="needs-attention-export" href="{{ url_for('teacher.export_analytics_csv', assignment_id=assignment.assignmentID, export_kind='needs-attention') }}" class="btn btn-secondary btn-sm">Export review queue</a>
-                <a id="rules-export" href="{{ url_for('teacher.export_analytics_csv', assignment_id=assignment.assignmentID, export_kind='rules') }}" class="btn btn-ghost btn-sm">Export rule summary</a>
-            </div>
         </div>
-        <aside class="analytics-hero-panel">
-            <div>
-                <h2 class="card-title">Scope and freshness</h2>
-            </div>
-            <div class="analytics-hero-stats">
-                <div class="analytics-hero-stat">
-                    <span class="analytics-helper" title="Latest active submissions currently included in this dashboard.">Active submissions in scope</span>
-                    <strong>{{ active_in_scope }}</strong>
-                </div>
-                <div class="analytics-hero-stat">
-                    <span class="analytics-helper" title="Students currently assigned to this assignment.">Assigned students</span>
-                    <strong>{{ assigned_count }}</strong>
-                </div>
-                <div class="analytics-hero-stat">
-                    <span class="analytics-helper" title="Assigned students covered by at least one active submission in scope.">Coverage snapshot</span>
-                    <strong>{{ coverage_percent }}%</strong>
-                </div>
-                <div class="analytics-hero-stat">
-                    <span class="analytics-helper" title="Submissions currently recommended for marker follow-up.">Review queue</span>
-                    <strong>{{ manual_review_count }}</strong>
-                </div>
-            </div>
-        </aside>
-    </section>
+        <button type="button" class="btn btn-ghost btn-sm analytics-local-nav-back" data-analytics-target="analytics-overview">Back to overview</button>
+    </nav>
 
-    {% if small_cohort_enabled %}
-    <section class="analytics-info-banner" role="status">
-        <div>
-            <strong>Small cohort mode</strong>
-            <div class="analytics-helper">{{ small_cohort.note|default('Counts should be interpreted before percentages for very small cohorts.', true) }}</div>
-        </div>
-        <span class="badge badge-secondary">{{ active_in_scope }} active submission{{ '' if active_in_scope == 1 else 's' }}</span>
-    </section>
-    {% endif %}
-
-    <section class="card">
-        <div class="analytics-section-heading">
+    <section class="analytics-zone analytics-zone--overview" aria-labelledby="analytics-overview-zone-label">
+        <div class="analytics-zone-intro">
             <div>
-                <h2 class="card-title">Teaching insight summary</h2>
-                <p class="analytics-section-note">Short assignment results summary</p>
+                <span id="analytics-overview-zone-label" class="analytics-zone-kicker">Overview</span>
+                <p class="analytics-zone-note">Assignment context, teaching summary, and score distribution before moderation work.</p>
             </div>
-            <span id="teaching-summary-status" class="badge badge-secondary">{% if teaching_summary_source|default('deterministic', true) == 'llm' %}LLM-enhanced wording{% elif llm_summary_enabled %}Deterministic wording{% else %}Deterministic wording{% endif %}</span>
         </div>
-        {% if insights %}
-        <ol id="teaching-summary-list" class="analytics-summary-list">
-            {% for insight in insights %}
-            {% set insight_text = insight.text if insight is mapping else insight %}
-            {% set insight_priority = insight.priority if insight is mapping else 'medium' %}
-            <li data-insight-type="{{ insight.insight_type if insight is mapping else 'insight_' ~ loop.index }}">
-                <strong>{{ insight_priority|title }} priority:</strong> {{ insight_text }}
-            </li>
-            {% endfor %}
-        </ol>
-        {% else %}
-        <div class="analytics-empty-inline">No assignment-wide insights are available yet.</div>
+
+        {% if small_cohort_enabled %}
+        <section class="analytics-info-banner" role="status">
+            <div>
+                <strong>Small cohort mode</strong>
+                <div class="analytics-helper">{{ small_cohort.note|default('Counts should be interpreted before percentages for very small cohorts.', true) }}</div>
+            </div>
+            <span class="badge badge-secondary">{{ active_in_scope }} active submission{{ '' if active_in_scope == 1 else 's' }}</span>
+        </section>
         {% endif %}
-    </section>
 
-    <section class="analytics-kpi-strip">
-        <article class="analytics-kpi">
-            <div class="analytics-kpi-label" title="Latest active submissions counted for this assignment.">Active submissions in scope</div>
-            <strong>{{ active_in_scope }}</strong>
-            <div class="analytics-kpi-detail">{{ coverage.active_students|default(active_in_scope, true) }} assigned student{{ '' if (coverage.active_students|default(active_in_scope, true)) == 1 else 's' }} represented.</div>
-        </article>
-        <article class="analytics-kpi">
-            <div class="analytics-kpi-label" title="Assigned students covered by at least one active submission in scope.">Coverage</div>
-            <strong>{{ coverage_percent }}%</strong>
-            <div class="analytics-kpi-detail">{{ coverage.missing_assigned|default(missing_count, true) }} assigned student{{ '' if (coverage.missing_assigned|default(missing_count, true)) == 1 else 's' }} missing.</div>
-        </article>
-        <article class="analytics-kpi">
-            <div class="analytics-kpi-label" title="Submissions currently recommended for manual follow-up.">Needs review</div>
-            <strong>{{ manual_review_count }}</strong>
-            <div class="analytics-kpi-detail">{{ partially_evaluated }} partially evaluated; {{ not_analysable }} not analysable.</div>
-        </article>
-        <article class="analytics-kpi">
-            <div class="analytics-kpi-label" title="Average score across active submissions in scope.">Score snapshot</div>
-            {% if mean_pct is not none %}
-            <strong>{{ mean_pct }}%</strong>
-            <div class="analytics-kpi-detail">
-                {% if small_cohort_enabled %}
-                {{ overall.total|default(active_in_scope, true) }} submission{{ '' if (overall.total|default(active_in_scope, true)) == 1 else 's' }} in scope.
+        <section class="card">
+            <div class="analytics-section-heading">
+                <div>
+                    <h2 class="card-title">Teaching insight summary</h2>
+                    <p class="analytics-section-note">Short assignment results summary</p>
+                </div>
+                <span id="teaching-summary-status" class="badge badge-secondary">{% if teaching_summary_source|default('deterministic', true) == 'llm' %}LLM-enhanced wording{% elif llm_summary_enabled %}Deterministic wording{% else %}Deterministic wording{% endif %}</span>
+            </div>
+            {% if insights %}
+            <ol id="teaching-summary-list" class="analytics-summary-list">
+                {% for insight in insights %}
+                {% set insight_text = insight.text if insight is mapping else insight %}
+                {% set insight_priority = insight.priority if insight is mapping else 'medium' %}
+                <li data-insight-type="{{ insight.insight_type if insight is mapping else 'insight_' ~ loop.index }}">
+                    <strong>{{ insight_priority|title }} priority:</strong> {{ insight_text }}
+                </li>
+                {% endfor %}
+            </ol>
+            {% else %}
+            <div class="analytics-empty-inline">No assignment-wide insights are available yet.</div>
+            {% endif %}
+        </section>
+
+        <section class="analytics-kpi-strip">
+            <article class="analytics-kpi">
+                <div class="analytics-kpi-label" title="Latest active submissions counted for this assignment.">Active submissions in scope</div>
+                <strong>{{ active_in_scope }}</strong>
+                <div class="analytics-kpi-detail">{{ coverage.active_students|default(active_in_scope, true) }} assigned student{{ '' if (coverage.active_students|default(active_in_scope, true)) == 1 else 's' }} represented.</div>
+            </article>
+            <article class="analytics-kpi">
+                <div class="analytics-kpi-label" title="Assigned students covered by at least one active submission in scope.">Coverage</div>
+                <strong>{{ coverage_percent }}%</strong>
+                <div class="analytics-kpi-detail">{{ coverage.missing_assigned|default(missing_count, true) }} assigned student{{ '' if (coverage.missing_assigned|default(missing_count, true)) == 1 else 's' }} missing.</div>
+            </article>
+            <article class="analytics-kpi">
+                <div class="analytics-kpi-label" title="Submissions currently recommended for manual follow-up.">Needs review</div>
+                <strong>{{ manual_review_count }}</strong>
+                <div class="analytics-kpi-detail">{{ partially_evaluated }} partially evaluated; {{ not_analysable }} not analysable.</div>
+            </article>
+            <article class="analytics-kpi">
+                <div class="analytics-kpi-label" title="Average score across active submissions in scope.">Score snapshot</div>
+                {% if mean_pct is not none %}
+                <strong>{{ mean_pct }}%</strong>
+                <div class="analytics-kpi-detail">
+                    {% if small_cohort_enabled %}
+                    {{ overall.total|default(active_in_scope, true) }} submission{{ '' if (overall.total|default(active_in_scope, true)) == 1 else 's' }} in scope.
+                    {% else %}
+                    Median {{ median_pct|default(mean_pct, true) }}%; range {{ min_pct|default(mean_pct, true) }}% to {{ max_pct|default(mean_pct, true) }}%.
+                    {% endif %}
+                </div>
                 {% else %}
-                Median {{ median_pct|default(mean_pct, true) }}%; range {{ min_pct|default(mean_pct, true) }}% to {{ max_pct|default(mean_pct, true) }}%.
+                <strong>--</strong>
+                <div class="analytics-kpi-detail">No analysable scores are available yet.</div>
+                {% endif %}
+            </article>
+        </section>
+
+        <details id="score-distribution" class="card analytics-collapse-card analytics-nav-target" open>
+            <summary>
+                <div>
+                    <h2 class="card-title">Score Distribution</h2>
+                    <p class="analytics-section-note">Assignment-wide score across submissions</p>
+                </div>
+            </summary>
+            <div class="analytics-collapse-body">
+                <div class="analytics-score-distribution">
+                    {% for label, count in buckets.items() %}
+                    <div class="analytics-score-row">
+                        <div style="min-width: 0;">
+                            <strong>{{ label }}</strong>
+                            <div class="analytics-helper">{{ count }} active submission{{ '' if count == 1 else 's' }}</div>
+                            <div class="analytics-bar"><span style="width: {{ ((count / submitted_count) * 100)|round|int if submitted_count else 0 }}%;"></span></div>
+                        </div>
+                        <div>
+                            <strong>{{ ((count / submitted_count) * 100)|round|int if submitted_count else 0 }}%</strong>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if mean_pct is not none %}
+                <p class="analytics-section-note" style="margin-top: var(--space-md);">
+                    Average mark {{ mean_pct }}% across {{ overall.total|default(active_in_scope, true) }} submission{{ '' if (overall.total|default(active_in_scope, true)) == 1 else 's' }}.
+                </p>
                 {% endif %}
             </div>
-            {% else %}
-            <strong>--</strong>
-            <div class="analytics-kpi-detail">No analysable scores are available yet.</div>
-            {% endif %}
-        </article>
+        </details>
     </section>
 
     {% if not has_submissions %}
-    <section class="card">
-        <div class="empty-state">
-            <div class="empty-state-icon"></div>
-            <p class="empty-state-title">No submissions are currently in scope for this assignment</p>
-            <p class="empty-state-text">The dashboard will populate automatically once active submissions exist for {{ assignment.assignmentID }}.</p>
-            <a href="{{ url_for('teacher.assignment_detail', assignment_id=assignment.assignmentID) }}" class="btn btn-primary">Back to assignment</a>
+    <section class="analytics-zone analytics-zone--action" aria-labelledby="analytics-action-zone-label">
+        <div class="analytics-zone-intro">
+            <div>
+                <span id="analytics-action-zone-label" class="analytics-zone-kicker">Action</span>
+                <p class="analytics-zone-note">Review workflow is empty until active submissions are available in scope.</p>
+            </div>
         </div>
+        <section class="card">
+            <div class="empty-state">
+                <div class="empty-state-icon"></div>
+                <p class="empty-state-title">No submissions are currently in scope for this assignment</p>
+                <p class="empty-state-text">The dashboard will populate automatically once active submissions exist for {{ assignment.assignmentID }}.</p>
+                <a href="{{ url_for('teacher.assignment_detail', assignment_id=assignment.assignmentID) }}" class="btn btn-primary">Back to assignment</a>
+            </div>
+        </section>
     </section>
     {% else %}
-    <section class="card" id="needs-attention">
-        <div class="analytics-section-heading">
+    <section class="analytics-zone analytics-zone--action" aria-labelledby="analytics-action-zone-label">
+        <div class="analytics-zone-intro">
+            <div>
+                <span id="analytics-action-zone-label" class="analytics-zone-kicker">Action</span>
+                <p class="analytics-zone-note">Start with the review queue and repeated rule failures when you need to moderate quickly.</p>
+            </div>
+        </div>
+
+        {% if manual_review_count or low_confidence or not_analysable %}
+        <section class="analytics-priority-banner" role="status">
+            <div>
+                <strong>Priority follow-up</strong>
+                <p class="analytics-section-note" style="margin-top: 0.35rem;">
+                    {{ manual_review_count }} submission{{ '' if manual_review_count == 1 else 's' }} currently need manual review.
+                    {{ low_confidence }} low-confidence result{{ '' if low_confidence == 1 else 's' }} and {{ not_analysable }} not-analysable submission{{ '' if not_analysable == 1 else 's' }} are already reflected in the queue below.
+                </p>
+            </div>
+            <div class="analytics-actions">
+                <button type="button" class="btn btn-secondary btn-sm js-confidence-filter" data-confidence="low">Show low confidence</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-analytics-target="needs-attention">Open review queue</button>
+            </div>
+        </section>
+        {% endif %}
+
+        <details class="card analytics-collapse-card analytics-nav-target" id="needs-attention" open>
+        <summary>
             <div>
                 <h2 class="card-title">Needs Attention</h2>
                 <p class="analytics-section-note">Each summary row shows what was flagged; expand a row for evidence, limitations, triggered rules, and report links.</p>
             </div>
             <span class="badge badge-secondary"><span id="attention-visible-count">{{ needs_attention|length }}</span> flagged submission{{ '' if needs_attention|length == 1 else 's' }}</span>
-        </div>
-
+        </summary>
+        <div class="analytics-collapse-body">
         {% if needs_attention %}
         <div id="attention-filter-banner" class="analytics-drilldown-banner" aria-live="polite">
             <div>
@@ -565,100 +839,110 @@
             <button type="button" id="clear-drilldown" class="btn btn-ghost btn-sm">Clear drill-down</button>
         </div>
 
-        <div class="analytics-filter-panel" style="margin-bottom: var(--space-lg);">
-            <div class="analytics-filter-grid" style="margin-bottom: var(--space-md);">
-                <div class="form-group">
-                    <label for="attention-student-search">Student</label>
-                    <input id="attention-student-search" class="form-input" type="search" placeholder="Search student id">
+        <details class="analytics-collapse-card analytics-inline-panel">
+            <summary>
+                <div>
+                    <strong>Search filters</strong>
+                    <p class="analytics-section-note">Search or filter only when you need to narrow the review list.</p>
                 </div>
-                <div class="form-group">
-                    <label for="attention-score-band">Score band</label>
-                    <select id="attention-score-band" class="form-select">
-                        <option value="">All score bands</option>
-                        <option value="below_50">Below 50%</option>
-                        <option value="between_50_69">50% to 69%</option>
-                        <option value="70_plus">70% and above</option>
-                        <option value="no_score">No score</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="attention-grade">Grade</label>
-                    <select id="attention-grade" class="form-select">
-                        <option value="">All grades</option>
-                        <option value="unknown">Unknown</option>
-                        <option value="failing">Failing</option>
-                        <option value="poor">Poor</option>
-                        <option value="partial">Partial</option>
-                        <option value="good">Good</option>
-                        <option value="full marks">Full marks</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="attention-severity">Severity</label>
-                    <select id="attention-severity" class="form-select">
-                        <option value="">All severities</option>
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                        <option value="low">Low</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="attention-confidence">Confidence</label>
-                    <select id="attention-confidence" class="form-select">
-                        <option value="">All confidence levels</option>
-                        <option value="high">High confidence</option>
-                        <option value="medium">Medium confidence</option>
-                        <option value="low">Low confidence</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="attention-reason">Primary reason</label>
-                    <select id="attention-reason" class="form-select">
-                        <option value="">All reasons</option>
-                        <option value="submission not analysable">Submission not analysable</option>
-                        <option value="reduced evaluation confidence">Reduced evaluation confidence</option>
-                        <option value="behavioural runtime issue">Behavioural runtime issue</option>
-                        <option value="browser runtime issue">Browser runtime issue</option>
-                        <option value="consistency issue">Consistency issue</option>
-                        <option value="missing required files">Missing required files</option>
-                        <option value="syntax issue">Syntax issue</option>
-                        <option value="low score">Low score</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="attention-flag">Flag</label>
-                    <select id="attention-flag" class="form-select">
-                        <option value="">All flags</option>
-                        <option value="submission not analysable">Submission not analysable</option>
-                        <option value="no score">No score</option>
-                        <option value="low score">Low score</option>
-                        <option value="runtime checks skipped">Runtime checks skipped</option>
-                        <option value="browser checks skipped">Browser checks skipped</option>
-                        <option value="runtime issue">Runtime issue</option>
-                        <option value="browser issue">Browser issue</option>
-                        <option value="consistency issue">Consistency issue</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="attention-rule-filter">Rule id</label>
-                    <input id="attention-rule-filter" class="form-input" type="text" placeholder="Exact rule id">
-                </div>
-                <div class="form-group">
-                    <label for="attention-sort">Sort</label>
-                    <select id="attention-sort" class="form-select">
-                        <option value="severity">Severity then score</option>
-                        <option value="score_asc">Score ascending</option>
-                        <option value="score_desc">Score descending</option>
-                        <option value="grade">Grade</option>
-                    </select>
-                </div>
-            </div>
+            </summary>
+            <div class="analytics-collapse-body">
+                <div class="analytics-filter-panel" style="margin-bottom: 0;">
+                    <div class="analytics-filter-grid" style="margin-bottom: var(--space-md);">
+                        <div class="form-group">
+                            <label for="attention-student-search">Student</label>
+                            <input id="attention-student-search" class="form-input" type="search" placeholder="Search student id">
+                        </div>
+                        <div class="form-group">
+                            <label for="attention-score-band">Score band</label>
+                            <select id="attention-score-band" class="form-select">
+                                <option value="">All score bands</option>
+                                <option value="below_50">Below 50%</option>
+                                <option value="between_50_69">50% to 69%</option>
+                                <option value="70_plus">70% and above</option>
+                                <option value="no_score">No score</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="attention-grade">Grade</label>
+                            <select id="attention-grade" class="form-select">
+                                <option value="">All grades</option>
+                                <option value="unknown">Unknown</option>
+                                <option value="failing">Failing</option>
+                                <option value="poor">Poor</option>
+                                <option value="partial">Partial</option>
+                                <option value="good">Good</option>
+                                <option value="full marks">Full marks</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="attention-severity">Severity</label>
+                            <select id="attention-severity" class="form-select">
+                                <option value="">All severities</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="attention-confidence">Confidence</label>
+                            <select id="attention-confidence" class="form-select">
+                                <option value="">All confidence levels</option>
+                                <option value="high">High confidence</option>
+                                <option value="medium">Medium confidence</option>
+                                <option value="low">Low confidence</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="attention-reason">Primary reason</label>
+                            <select id="attention-reason" class="form-select">
+                                <option value="">All reasons</option>
+                                <option value="submission not analysable">Submission not analysable</option>
+                                <option value="reduced evaluation confidence">Reduced evaluation confidence</option>
+                                <option value="behavioural runtime issue">Behavioural runtime issue</option>
+                                <option value="browser runtime issue">Browser runtime issue</option>
+                                <option value="consistency issue">Consistency issue</option>
+                                <option value="missing required files">Missing required files</option>
+                                <option value="syntax issue">Syntax issue</option>
+                                <option value="low score">Low score</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="attention-flag">Flag</label>
+                            <select id="attention-flag" class="form-select">
+                                <option value="">All flags</option>
+                                <option value="submission not analysable">Submission not analysable</option>
+                                <option value="no score">No score</option>
+                                <option value="low score">Low score</option>
+                                <option value="runtime checks skipped">Runtime checks skipped</option>
+                                <option value="browser checks skipped">Browser checks skipped</option>
+                                <option value="runtime issue">Runtime issue</option>
+                                <option value="browser issue">Browser issue</option>
+                                <option value="consistency issue">Consistency issue</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="attention-rule-filter">Rule id</label>
+                            <input id="attention-rule-filter" class="form-input" type="text" placeholder="Exact rule id">
+                        </div>
+                        <div class="form-group">
+                            <label for="attention-sort">Sort</label>
+                            <select id="attention-sort" class="form-select">
+                                <option value="severity">Severity then score</option>
+                                <option value="score_asc">Score ascending</option>
+                                <option value="score_desc">Score descending</option>
+                                <option value="grade">Grade</option>
+                            </select>
+                        </div>
+                    </div>
 
-            <div class="analytics-filter-actions">
-                <button type="button" id="clear-attention-filters" class="btn btn-ghost btn-sm">Clear all filters</button>
+                    <div class="analytics-filter-actions">
+                        <button type="button" id="clear-attention-filters" class="btn btn-ghost btn-sm">Clear all filters</button>
+                    </div>
+                </div>
             </div>
-        </div>
+        </details>
 
         <div id="attention-list" class="analytics-attention-list">
             {% for row in needs_attention %}
@@ -782,84 +1066,68 @@
             <p class="empty-state-text mb-0">The current assignment cohort does not include any automatically flagged submissions.</p>
         </div>
         {% endif %}
-    </section>
-
-    <section class="card">
-        <div class="analytics-section-heading">
-            <div>
-                <h2 class="card-title">Score Distribution</h2>
-                <p class="analytics-section-note">Assignment-wide score across submissions</p>
-            </div>
         </div>
-        <div class="analytics-score-distribution">
-            {% for label, count in buckets.items() %}
-            <div class="analytics-score-row">
-                <div style="min-width: 0;">
-                    <strong>{{ label }}</strong>
-                    <div class="analytics-helper">{{ count }} active submission{{ '' if count == 1 else 's' }}</div>
-                    <div class="analytics-bar"><span style="width: {{ ((count / submitted_count) * 100)|round|int if submitted_count else 0 }}%;"></span></div>
-                </div>
-                <div>
-                    <strong>{{ ((count / submitted_count) * 100)|round|int if submitted_count else 0 }}%</strong>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        {% if mean_pct is not none %}
-        <p class="analytics-section-note" style="margin-top: var(--space-md);">
-            Average mark {{ mean_pct }}% across {{ overall.total|default(active_in_scope, true) }} submission{{ '' if (overall.total|default(active_in_scope, true)) == 1 else 's' }}.
-        </p>
-        {% endif %}
-    </section>
+        </details>
 
-    <section class="card">
-        <div class="analytics-section-heading">
+        <details class="card analytics-collapse-card analytics-nav-target" id="top-rules" open>
+        <summary>
             <div>
                 <h2 class="card-title">Top Failing Rules</h2>
                 <p class="analytics-section-note">Most common rule-level issues across the assignment.</p>
             </div>
-            <div class="analytics-section-tools">
-                <span class="badge badge-secondary">{{ top_rules|length }} rule{{ '' if top_rules|length == 1 else 's' }}</span>
-                {% if top_rules|selectattr('default_visible', 'equalto', false)|list %}
-                <button type="button" id="toggle-rules" class="btn btn-ghost btn-sm">Show all rules</button>
-                {% endif %}
-            </div>
-        </div>
+            <span class="badge badge-secondary">{{ top_rules|length }} rule{{ '' if top_rules|length == 1 else 's' }}</span>
+        </summary>
+        <div class="analytics-collapse-body">
         {% if top_rules %}
-        <div class="analytics-filter-panel" style="margin-bottom: var(--space-lg);">
-            <div class="analytics-filter-grid" style="margin-bottom: var(--space-md);">
-                <div class="form-group">
-                    <label for="rule-severity-filter">Severity</label>
-                    <select id="rule-severity-filter" class="form-select">
-                        <option value="">All severities</option>
-                        <option value="FAIL">Fail-level</option>
-                        <option value="WARN">Warning-level</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="rule-component-filter">Component</label>
-                    <select id="rule-component-filter" class="form-select">
-                        <option value="">All components</option>
-                        {% for component in ['html', 'css', 'js', 'php', 'sql', 'runtime', 'other'] %}
-                        <option value="{{ component }}">{{ component|upper }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="rule-impact-filter">Impact type</label>
-                    <select id="rule-impact-filter" class="form-select">
-                        <option value="">All impact types</option>
-                        <option value="fail_level">Fail-level</option>
-                        <option value="warning_level">Warning-level</option>
-                        <option value="weighted">Weighted</option>
-                    </select>
-                </div>
-            </div>
-            <div class="analytics-filter-actions">
-                <span class="analytics-helper" title="Counts refer to active submissions affected, not raw uploads. Incident counts refer to repeated rule failures or warnings across the cohort.">Rule counts are assignment-wide and assignment-scoped.</span>
-                <button type="button" id="clear-rule-filters" class="btn btn-ghost btn-sm">Clear rule filters</button>
-            </div>
+        <div class="analytics-section-tools" style="justify-content: flex-end; margin-bottom: var(--space-lg);">
+            {% if top_rules|selectattr('default_visible', 'equalto', false)|list %}
+            <button type="button" id="toggle-rules" class="btn btn-ghost btn-sm">Show all rules</button>
+            {% endif %}
         </div>
+        <details class="analytics-collapse-card analytics-inline-panel">
+            <summary>
+                <div>
+                    <strong>Search filters</strong>
+                    <p class="analytics-section-note">Keep the full table visible by default; open this only when you need to slice by severity or component.</p>
+                </div>
+            </summary>
+            <div class="analytics-collapse-body">
+                <div class="analytics-filter-panel" style="margin-bottom: 0;">
+                    <div class="analytics-filter-grid" style="margin-bottom: var(--space-md);">
+                        <div class="form-group">
+                            <label for="rule-severity-filter">Severity</label>
+                            <select id="rule-severity-filter" class="form-select">
+                                <option value="">All severities</option>
+                                <option value="FAIL">Fail-level</option>
+                                <option value="WARN">Warning-level</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="rule-component-filter">Component</label>
+                            <select id="rule-component-filter" class="form-select">
+                                <option value="">All components</option>
+                                {% for component in ['html', 'css', 'js', 'php', 'sql', 'runtime', 'other'] %}
+                                <option value="{{ component }}">{{ component|upper }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="rule-impact-filter">Impact type</label>
+                            <select id="rule-impact-filter" class="form-select">
+                                <option value="">All impact types</option>
+                                <option value="fail_level">Fail-level</option>
+                                <option value="warning_level">Warning-level</option>
+                                <option value="weighted">Weighted</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="analytics-filter-actions">
+                        <span class="analytics-helper" title="Counts refer to active submissions affected, not raw uploads. Incident counts refer to repeated rule failures or warnings across the cohort.">Rule counts are assignment-wide and assignment-scoped.</span>
+                        <button type="button" id="clear-rule-filters" class="btn btn-ghost btn-sm">Clear rule filters</button>
+                    </div>
+                </div>
+            </div>
+        </details>
         <div class="table-container">
             <table class="table">
                 <thead>
@@ -917,13 +1185,29 @@
         {% else %}
         <div class="analytics-empty-inline">No repeated rule-level failures or warnings were detected in the current assignment scope.</div>
         {% endif %}
+        </div>
+        </details>
     </section>
 
-    <section class="card">
-        <div class="analytics-section-heading">
+    <section class="analytics-zone analytics-zone--diagnostics" aria-labelledby="analytics-diagnostics-zone-label">
+        <div class="analytics-zone-intro">
+            <div>
+                <span id="analytics-diagnostics-zone-label" class="analytics-zone-kicker">Diagnostics</span>
+                <p class="analytics-zone-note">Requirement attainment, reliability, cohort issues, and deeper diagnostics stay available without taking over the first view.</p>
+            </div>
+        </div>
+
+        <details class="card analytics-collapse-card analytics-nav-target" id="requirement-coverage">
+        <summary>
             <div>
                 <h2 class="card-title">Requirement Coverage</h2>
-                <p class="analytics-section-note">Strict threshold view aligned to the assignment brief. A requirement area only counts as met when the full required rule set was satisfied; partial progress does not count as fully met.</p>
+                <p class="analytics-section-note">Strict threshold view aligned to the assignment brief. Open this when you need the per-area attainment breakdown.</p>
+            </div>
+        </summary>
+        <div class="analytics-collapse-body">
+        <div class="analytics-section-heading">
+            <div>
+                <p class="analytics-section-note">A requirement area only counts as met when the full required rule set was satisfied; partial progress does not count as fully met.</p>
             </div>
         </div>
         {% if requirements %}
@@ -955,12 +1239,19 @@
         {% else %}
         <div class="analytics-empty-inline">Requirement-level coverage cannot be calculated yet for this assignment.</div>
         {% endif %}
-    </section>
+        </div>
+        </details>
 
-    <section class="card">
-        <div class="analytics-section-heading">
+        <details class="card analytics-collapse-card analytics-nav-target" id="confidence-reliability">
+        <summary>
             <div>
                 <h2 class="card-title">Confidence and Reliability</h2>
+                <p class="analytics-section-note">Keep this secondary to score interpretation so confidence issues do not compete with the review queue.</p>
+            </div>
+        </summary>
+        <div class="analytics-collapse-body">
+        <div class="analytics-section-heading">
+            <div>
                 <p class="analytics-section-note">Trustworthiness is separated from performance so a low mark is not confused with incomplete evaluation.</p>
             </div>
         </div>
@@ -1017,69 +1308,24 @@
             </div>
             {% endfor %}
         </div>
-    </section>
+        </div>
+        </details>
 
-    <section class="card">
-        <div class="analytics-section-heading">
+        <details class="card analytics-collapse-card analytics-nav-target" id="cohort-issues" open>
+        <summary>
             <div>
-                <h2 class="card-title">Component Health</h2>
-                <p class="analytics-section-note">Average readiness by technical component. This is a partial-attainment view, not a strict all-rules-met success measure.</p>
+                <h2 class="card-title">Cohort Issues</h2>
+                <p class="analytics-section-note">Pattern surface for repeated cohort issues.</p>
             </div>
-        </div>
-        {% if components %}
-        <div class="table-container">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Component</th>
-                        <th>Average readiness</th>
-                        <th>0% readiness</th>
-                        <th>50% readiness</th>
-                        <th>100% readiness</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for component in components %}
-                    {% set average_pct = ((component.average|default(0, true)) * 100)|round|int if component.average is not none else None %}
-                    <tr>
-                        <td>
-                            <strong>{{ component.title }}</strong>
-                            <span class="analytics-table-note">{{ component.component|upper }}</span>
-                        </td>
-                        <td>
-                            {% if average_pct is not none %}
-                            <span class="badge {% if average_pct >= 70 %}badge-success{% elif average_pct >= 50 %}badge-warning{% else %}badge-danger{% endif %}">{{ average_pct }}%</span>
-                            {% else %}
-                            <span class="badge badge-secondary">No data</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ component.pct_zero|default(0, true)|round|int }}%</td>
-                        <td>{{ component.pct_half|default(0, true)|round|int }}%</td>
-                        <td>{{ component.pct_full|default(0, true)|round|int }}%</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <div class="analytics-empty-inline">No component-level readiness data is available for this assignment profile yet.</div>
-        {% endif %}
-    </section>
-
-    <section class="card">
-        <div class="analytics-section-heading">
-            <div>
-                <h2 class="card-title">Cohort Signals</h2>
-                <p class="analytics-section-note">Pattern surface for repeated issues.</p>
-            </div>
-            <div class="analytics-section-tools">
-                <span class="badge badge-secondary">{{ signals|length }} signal categor{{ 'y' if signals|length == 1 else 'ies' }}</span>
-                {% if signals|selectattr('default_visible', 'equalto', false)|list %}
-                <button type="button" id="toggle-signals" class="btn btn-ghost btn-sm">Show all signals</button>
-                {% endif %}
-            </div>
-        </div>
+            <span class="badge badge-secondary">{{ signals|length }} issue categor{{ 'y' if signals|length == 1 else 'ies' }}</span>
+        </summary>
+        <div class="analytics-collapse-body">
         {% if signals %}
+        <div class="analytics-section-tools" style="justify-content: flex-end; margin-bottom: var(--space-lg);">
+            {% if signals|selectattr('default_visible', 'equalto', false)|list %}
+            <button type="button" id="toggle-signals" class="btn btn-ghost btn-sm">Show all issues</button>
+            {% endif %}
+        </div>
         <div id="signals-grid" class="analytics-signals-grid">
             {% for signal in signals %}
             <article class="analytics-signal-card js-signal-card {% if not signal.default_visible|default(loop.index <= default_signal_limit, true) %}analytics-hidden-card{% endif %}"
@@ -1115,14 +1361,28 @@
             {% endfor %}
         </div>
         {% else %}
-        <div class="analytics-empty-inline">No repeated cohort-level signals were detected in the current assignment scope.</div>
+        <div class="analytics-empty-inline">No repeated cohort-level issues were detected in the current assignment scope.</div>
         {% endif %}
-    </section>
+        </div>
+        </details>
 
-    <section class="card">
-        <div class="analytics-section-heading">
+        <div id="analytics-diagnostics" class="analytics-diagnostics-intro analytics-nav-target" tabindex="-1">
+            <div>
+                <h2 class="card-title">Diagnostics</h2>
+                <p class="analytics-section-note">Lower-priority coverage context and scoring-source interpretation for deeper investigation.</p>
+            </div>
+        </div>
+
+        <details class="card analytics-collapse-card" id="coverage-detail">
+        <summary>
             <div>
                 <h2 class="card-title">Coverage Detail</h2>
+                <p class="analytics-section-note">Open for assignment-scope diagnostics and missing-student detail.</p>
+            </div>
+        </summary>
+        <div class="analytics-collapse-body">
+        <div class="analytics-section-heading">
+            <div>
                 <p class="analytics-section-note">Why assignment-wide coverage is or is not complete across assigned students and active submissions in scope.</p>
             </div>
         </div>
@@ -1159,9 +1419,10 @@
         {% if coverage.missing_students %}
         <p class="analytics-section-note" style="margin-top: var(--space-md);">Missing assigned students: {{ coverage.missing_students|join(', ') }}</p>
         {% endif %}
-    </section>
+        </div>
+        </details>
 
-    <details class="card analytics-collapse-card">
+        <details class="card analytics-collapse-card" id="scoring-sources">
         <summary>
             <div>
                 <h2 class="card-title">Scoring Sources and Confidence Effects</h2>
@@ -1197,7 +1458,8 @@
             <div class="analytics-empty-inline">No scoring-source detail is available yet.</div>
             {% endif %}
         </div>
-    </details>
+        </details>
+    </section>
     {% endif %}
 </div>
 <script>
@@ -1234,6 +1496,24 @@
             component: document.getElementById('rule-component-filter'),
             impact: document.getElementById('rule-impact-filter')
         };
+        var navbar = document.querySelector('.navbar');
+        var localNav = document.getElementById('analytics-local-nav');
+        var localNavLinks = Array.prototype.slice.call(document.querySelectorAll('.analytics-local-nav-link'));
+        var jumpControls = Array.prototype.slice.call(document.querySelectorAll('[data-analytics-target]'));
+        var collapsibleSections = Array.prototype.slice.call(document.querySelectorAll('.analytics-collapse-card'));
+        var trackedSections = ['analytics-overview', 'needs-attention', 'top-rules', 'requirement-coverage', 'confidence-reliability', 'cohort-issues', 'analytics-diagnostics']
+            .map(function (id) {
+                return { id: id, element: document.getElementById(id) };
+            })
+            .filter(function (item) { return !!item.element; });
+        var navAliases = {
+            'coverage-detail': 'analytics-diagnostics',
+            'scoring-sources': 'analytics-diagnostics'
+        };
+        var expansionTargets = {
+            'analytics-diagnostics': ['coverage-detail']
+        };
+        var scrollSyncPending = false;
 
         function splitList(value) {
             return (value || '').split('|').map(function (item) { return item.trim(); }).filter(Boolean);
@@ -1245,6 +1525,94 @@
                 if (b.indexOf(a[i]) !== -1) return true;
             }
             return false;
+        }
+
+        function getNavbarOffset() {
+            return navbar ? navbar.offsetHeight : 0;
+        }
+
+        function getLocalNavHeight() {
+            return localNav ? localNav.offsetHeight : 0;
+        }
+
+        function setAnalyticsOffsets() {
+            var navTop = getNavbarOffset() + 10;
+            var anchorOffset = getNavbarOffset() + getLocalNavHeight() + 20;
+            document.documentElement.style.setProperty('--analytics-local-nav-top', navTop + 'px');
+            document.documentElement.style.setProperty('--analytics-anchor-offset', anchorOffset + 'px');
+        }
+
+        function setActiveNav(targetId) {
+            if (!targetId) return;
+            localNavLinks.forEach(function (link) {
+                var isActive = link.dataset.analyticsTarget === targetId;
+                link.classList.toggle('is-active', isActive);
+                if (isActive) {
+                    link.setAttribute('aria-current', 'location');
+                } else {
+                    link.removeAttribute('aria-current');
+                }
+            });
+        }
+
+        function getSectionTop(element) {
+            return element.getBoundingClientRect().top + window.scrollY;
+        }
+
+        function syncActiveNav() {
+            if (!trackedSections.length) return;
+            setAnalyticsOffsets();
+            var threshold = window.scrollY + getNavbarOffset() + getLocalNavHeight() + 32;
+            var activeId = trackedSections[0].id;
+            trackedSections.forEach(function (item) {
+                if (getSectionTop(item.element) <= threshold) activeId = item.id;
+            });
+            if ((window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 8)) {
+                activeId = trackedSections[trackedSections.length - 1].id;
+            }
+            setActiveNav(activeId);
+        }
+
+        function requestActiveNavSync() {
+            if (scrollSyncPending) return;
+            scrollSyncPending = true;
+            window.requestAnimationFrame(function () {
+                scrollSyncPending = false;
+                syncActiveNav();
+            });
+        }
+
+        function expandTarget(targetId) {
+            var target = document.getElementById(targetId);
+            if (target && target.tagName.toLowerCase() === 'details' && !target.open) {
+                target.open = true;
+            }
+            return target;
+        }
+
+        function navigateToSection(targetId, options) {
+            if (!targetId) return;
+            var target = document.getElementById(targetId);
+            if (!target) return;
+            var navTargetId = navAliases[targetId] || targetId;
+            expandTarget(targetId);
+            if (expansionTargets[targetId]) {
+                expansionTargets[targetId].forEach(expandTarget);
+            }
+            window.requestAnimationFrame(function () {
+                setAnalyticsOffsets();
+                var top = getSectionTop(target) - (getNavbarOffset() + getLocalNavHeight() + 20);
+                window.scrollTo({
+                    top: top > 0 ? top : 0,
+                    behavior: options && options.instant ? 'auto' : 'smooth'
+                });
+                setActiveNav(navTargetId);
+                if (!options || options.updateHash !== false) {
+                    if (window.history && window.history.replaceState) {
+                        window.history.replaceState(null, '', '#' + targetId);
+                    }
+                }
+            });
         }
 
         function updateAttentionExportLink() {
@@ -1357,7 +1725,7 @@
                 var isDefaultVisible = card.dataset.defaultVisible === 'true';
                 card.style.display = (showAllSignals || isDefaultVisible) ? '' : 'none';
             });
-            if (toggleSignals) toggleSignals.textContent = showAllSignals ? 'Show fewer signals' : 'Show all signals';
+            if (toggleSignals) toggleSignals.textContent = showAllSignals ? 'Show fewer issues' : 'Show all issues';
         }
 
         function clearAttentionFilters() {
@@ -1404,11 +1772,19 @@
             });
         }
 
+        jumpControls.forEach(function (control) {
+            control.addEventListener('click', function (event) {
+                var targetId = control.dataset.analyticsTarget;
+                if (!targetId) return;
+                event.preventDefault();
+                navigateToSection(targetId);
+            });
+        });
+
         Array.prototype.slice.call(document.querySelectorAll('.js-rule-filter')).forEach(function (button) {
             button.addEventListener('click', function () {
                 if (attentionControls.rule) attentionControls.rule.value = button.dataset.rule || '';
-                var attentionSection = document.getElementById('needs-attention');
-                if (attentionSection) attentionSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                navigateToSection('needs-attention');
                 renderAttention();
             });
         });
@@ -1416,19 +1792,17 @@
         Array.prototype.slice.call(document.querySelectorAll('.js-student-filter')).forEach(function (button) {
             button.addEventListener('click', function () {
                 if (attentionControls.student) attentionControls.student.value = button.dataset.student || '';
-                var attentionSection = document.getElementById('needs-attention');
-                if (attentionSection) attentionSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                navigateToSection('needs-attention');
                 renderAttention();
             });
         });
 
         Array.prototype.slice.call(document.querySelectorAll('.js-signal-filter')).forEach(function (button) {
             button.addEventListener('click', function () {
-                attentionState.signalLabel = button.dataset.label || 'Signal filter';
+                attentionState.signalLabel = button.dataset.label || 'Cohort issue filter';
                 attentionState.signalRules = splitList(button.dataset.rules);
                 attentionState.signalStudents = splitList(button.dataset.students).map(function (item) { return item.toLowerCase(); });
-                var attentionSection = document.getElementById('needs-attention');
-                if (attentionSection) attentionSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                navigateToSection('needs-attention');
                 renderAttention();
             });
         });
@@ -1436,8 +1810,7 @@
         Array.prototype.slice.call(document.querySelectorAll('.js-confidence-filter')).forEach(function (button) {
             button.addEventListener('click', function () {
                 if (attentionControls.confidence) attentionControls.confidence.value = button.dataset.confidence || '';
-                var attentionSection = document.getElementById('needs-attention');
-                if (attentionSection) attentionSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                navigateToSection('needs-attention');
                 renderAttention();
             });
         });
@@ -1456,10 +1829,34 @@
             });
         }
 
+        collapsibleSections.forEach(function (section) {
+            section.addEventListener('toggle', function () {
+                setAnalyticsOffsets();
+                requestActiveNavSync();
+            });
+        });
+
+        window.addEventListener('scroll', requestActiveNavSync, { passive: true });
+        window.addEventListener('resize', function () {
+            setAnalyticsOffsets();
+            requestActiveNavSync();
+        });
+
         renderAttention();
         renderRuleRows();
         renderSignalCards();
         updateRulesExportLink();
+        setAnalyticsOffsets();
+        if (window.location.hash) {
+            var initialTargetId = window.location.hash.slice(1);
+            if (document.getElementById(initialTargetId)) {
+                navigateToSection(initialTargetId, { instant: true, updateHash: false });
+            } else {
+                syncActiveNav();
+            }
+        } else {
+            syncActiveNav();
+        }
     }());
 </script>
 {% endblock %}

@@ -123,10 +123,10 @@ This deletes all run data and resets the dashboard to empty.
 Remove-Item -Recurse -Force ams_web_runs\*
 ```
 
-**3. Clear LLM Caches:**
-Forces the LLM to regenerate all responses instead of using cached ones.
+**3. Clear LLM Cache Database:**
+Forces the LLM layer to regenerate responses instead of using the local SQLite cache.
 ```powershell
-Remove-Item -Recurse -Force cache\*
+Remove-Item -Force ams\cache.db
 ```
 
 **4. Force Rebuild Docker Sandbox:**
@@ -135,9 +135,9 @@ Useful if package dependencies have changed.
 ./docker/build.sh --no-cache
 ```
 
-**5. Client Code For GitHub Integration:**
+**5. GitHub Integration Environment Variables:**
 ```bash
-export AMS_GITHUB_CLIENT_ID="Iv23lirU52ENG3gWfdVe"
-export AMS_GITHUB_CLIENT_SECRET="06c9d1271b4eb1cc1d92d04f4e7c6fd533e9cb05"
+export AMS_GITHUB_CLIENT_ID="your-github-client-id"
+export AMS_GITHUB_CLIENT_SECRET="your-github-client-secret"
 export AMS_GITHUB_OAUTH_CALLBACK="http://localhost:5000/api/github/callback"
 ```bash

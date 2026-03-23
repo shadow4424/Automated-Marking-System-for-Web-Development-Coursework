@@ -1,63 +1,59 @@
 {% extends "base.html" %}
 
-{% block title %}Student Dashboard — AMS{% endblock %}
+{% block title %}Student Dashboard - AMS{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>My Dashboard</h1>
-    <p class="text-secondary">Welcome back. Here is your overview.</p>
-    {% if view_as_role == 'student' %}
-    <div class="alert alert-info" style="margin-top:var(--space-sm);">
-        <strong>Admin Preview Mode</strong> —
-        Using demo student account. No real student data is displayed.
-        <a href="{{ url_for('admin.view_as', role='admin') }}" class="btn btn-ghost btn-sm" style="margin-left:var(--space-sm);">Back to Admin</a>
-    </div>
-    {% endif %}
-</div>
-
-{% if student_id or view_as_role == 'student' %}
-<!-- Stats -->
-<div class="stat-grid-4" style="margin-bottom:var(--space-xl);">
-    <div class="card stat-card stat-card--default">
-        <div class="stat-value">{{ assignments|length }}</div>
-        <div class="stat-label">Total Assignments</div>
-    </div>
-    <div class="card stat-card stat-card--warning">
-        <div class="stat-value">{{ todo|length }}</div>
-        <div class="stat-label">To-Do</div>
-    </div>
-    <div class="card stat-card stat-card--success">
-        <div class="stat-value">{{ completed|length }}</div>
-        <div class="stat-label">Completed</div>
-    </div>
-    <div class="card stat-card stat-card--ai">
-        <div class="stat-value">{{ my_runs|length }}</div>
-        <div class="stat-label">Submissions</div>
-    </div>
-</div>
-
-<!-- Quick Actions + Recent Submissions -->
-<div class="grid-2" style="gap:var(--space-xl);">
-    <div class="card">
-        <div class="card-header">
-            <h2 class="card-title">Quick Actions</h2>
+<div class="page-shell">
+    <section class="page-hero page-hero--split">
+        <div class="page-hero-main">
+            <div class="page-kicker">Student workspace</div>
+            <h1>My Dashboard</h1>
+            <p class="page-context-line">See what is due, what has been submitted, and where released results are ready to open.</p>
+            {% if view_as_role == 'student' %}
+            <div class="callout-card callout-card--info">
+                <div class="callout-title">Admin preview mode</div>
+                <p class="callout-text">This is the student-facing dashboard using the preview student account, so no real student data is exposed.</p>
+            </div>
+            {% endif %}
+            <div class="page-action-row">
+                <a href="{{ url_for('mark') }}" class="btn btn-primary">Upload submission</a>
+                <a href="{{ url_for('student.coursework') }}" class="btn btn-secondary">View coursework</a>
+            </div>
         </div>
-        <div style="display:flex; flex-direction:column; gap:var(--space-md);">
-            <a href="{{ url_for('mark') }}" class="btn btn-primary btn-lg" style="justify-content:flex-start;">
-                Upload Submission
-            </a>
-            <a href="{{ url_for('student.coursework') }}" class="btn btn-secondary btn-lg" style="justify-content:flex-start;">
-                View My Coursework
-            </a>
-        </div>
-    </div>
+        <aside class="page-side-panel">
+            <h2 class="card-title">At a glance</h2>
+            <div class="info-grid info-grid--2">
+                <div class="info-item">
+                    <span class="info-item-label">Assignments</span>
+                    <span class="info-item-value">{{ assignments|length }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">To do</span>
+                    <span class="info-item-value">{{ todo|length }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">Completed</span>
+                    <span class="info-item-value">{{ completed|length }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">Submissions</span>
+                    <span class="info-item-value">{{ my_runs|length }}</span>
+                </div>
+            </div>
+        </aside>
+    </section>
 
-    <div class="card">
-        <div class="card-header">
-            <h2 class="card-title">Recent Submissions</h2>
+    {% if student_id or view_as_role == 'student' %}
+    <section class="card">
+        <div class="section-heading-row">
+            <div class="section-copy">
+                <h2 class="card-title">Recent submissions</h2>
+                <p class="section-note">Released results appear here first. Open coursework for the full history and assignment list.</p>
+            </div>
+            <a href="{{ url_for('student.coursework') }}" class="btn btn-ghost btn-sm">Open coursework</a>
         </div>
         {% if recent_runs %}
-        <div style="display:flex; flex-direction:column; gap:var(--space-md);">
+        <div class="surface-list">
             {% for run in recent_runs %}
             <div class="run-card" style="cursor:default; transform:none;">
                 <div class="run-card-score">
@@ -67,68 +63,50 @@
                         {% else %}
                             {% set score = run.get('score', 0) %}
                         {% endif %}
-                        <div class="score-badge {% if score >= 70 %}score-high{% elif score >= 40 %}score-medium{% else %}score-low{% endif %}">
-                            {{ "%.0f"|format(score) }}%
-                        </div>
+                        <div class="score-badge {% if score >= 70 %}score-high{% elif score >= 40 %}score-medium{% else %}score-low{% endif %}">{{ "%.0f"|format(score) }}%</div>
                     {% else %}
-                        <div class="score-badge" style="background:var(--color-surface); color:var(--color-text-muted);">
-                            —
-                        </div>
+                        <div class="score-badge" style="background:var(--color-surface); color:var(--color-text-muted);">-</div>
                     {% endif %}
                 </div>
                 <div class="run-card-content">
                     <div class="run-card-title">
-                        {% if run.get('assignment_id') %}
-                            <code>{{ run.assignment_id }}</code>
-                        {% endif %}
-                        {% if run.get('_submission_record') %}
-                            <span class="badge badge-info">Batch</span>
-                        {% else %}
-                            <span class="badge badge-primary">Individual</span>
-                        {% endif %}
+                        {% if run.get('assignment_id') %}<code>{{ run.assignment_id }}</code>{% endif %}
+                        <span class="badge {% if run.get('_submission_record') %}badge-info{% else %}badge-primary{% endif %}">{% if run.get('_submission_record') %}Batch{% else %}Individual{% endif %}</span>
                     </div>
                     <div class="run-card-meta">
-                        {% if run.get('created_at') %}
-                        <span>{{ run.created_at[:10] }}</span>
-                        {% endif %}
+                        {% if run.get('created_at') %}<span>{{ run.created_at[:10] }}</span>{% endif %}
                         <span class="badge badge-secondary">{{ run.get('profile', 'frontend') }}</span>
                         {% if run._marks_released %}
                         <span class="badge badge-success">Released</span>
                         {% else %}
-                        <span class="badge badge-warning">Awaiting</span>
+                        <span class="badge badge-warning">Awaiting release</span>
                         {% endif %}
                     </div>
                 </div>
                 <div class="run-card-actions">
                     {% if run._marks_released %}
                         {% if run.get('_batch_submission_id') %}
-                    <a href="{{ url_for('batch_submission_view', run_id=run.id, submission_id=run._batch_submission_id) }}" class="btn btn-ghost btn-sm">View →</a>
+                    <a href="{{ url_for('batch_submission_view', run_id=run.id, submission_id=run._batch_submission_id) }}" class="btn btn-ghost btn-sm">View result</a>
                         {% else %}
-                    <a href="{{ url_for('run_detail', run_id=run.id) }}" class="btn btn-ghost btn-sm">View →</a>
+                    <a href="{{ url_for('run_detail', run_id=run.id) }}" class="btn btn-ghost btn-sm">View result</a>
                         {% endif %}
                     {% endif %}
                 </div>
             </div>
             {% endfor %}
         </div>
-        <div style="margin-top:var(--space-md); text-align:center;">
-            <a href="{{ url_for('student.coursework') }}" class="btn btn-ghost btn-sm">View all submissions →</a>
-        </div>
         {% else %}
         <div class="empty-state">
             <p class="empty-state-title">No submissions yet</p>
-            <p class="empty-state-text">Upload your first submission to get started.</p>
+            <p class="empty-state-text">Upload your first submission to start building your coursework history.</p>
         </div>
         {% endif %}
+    </section>
+    {% else %}
+    <div class="empty-state">
+        <p class="empty-state-title">Access restricted</p>
+        <p class="empty-state-text">Please sign in as a student to view this dashboard.</p>
     </div>
+    {% endif %}
 </div>
-
-{% else %}
-<!-- No student context at all -->
-<div class="empty-state">
-    <div class="empty-state-icon">&#128100;</div>
-    <p class="empty-state-title">Access Restricted</p>
-    <p class="empty-state-text">Please log in as a student to view this dashboard.</p>
-</div>
-{% endif %}
 {% endblock %}

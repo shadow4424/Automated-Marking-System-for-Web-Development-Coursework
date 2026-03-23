@@ -1,6 +1,7 @@
 # Python cache
 __pycache__/
 .pytest_cache/
+.ruff_cache/
 *.pyc
 *.pyo
 
@@ -22,6 +23,7 @@ ams_users.db-shm
 
 # LLM cache
 cache.db
+tests/output/report.html
 demo_out/
 tmp_phase5/
 scratch_sql_test/

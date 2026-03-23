@@ -31,6 +31,7 @@
                     {% else %}
                         {% set effective_role = view_as_role or user_role %}
                     {% endif %}
+                    {% set teacher_assignment_endpoints = ['teacher.dashboard', 'teacher.assignment_detail', 'teacher.view_analytics', 'teacher.create_assignment_route'] %}
 
                     {# Admin-only navigation (not viewing as another role, or currently on an admin page) #}
                     {% if effective_role == 'admin' %}
@@ -45,7 +46,7 @@
                     {# Teacher navigation (real teachers OR admin viewing as teacher) #}
                     {% if effective_role == 'teacher' %}
                     <a href="{{ url_for('teacher.dashboard') }}"
-                        class="nav-link {% if request.endpoint and request.endpoint.startswith('teacher.') %}active{% endif %}">Dashboard</a>
+                        class="nav-link {% if request.endpoint and request.endpoint in teacher_assignment_endpoints %}active{% endif %}">Assignments</a>
                     <a href="{{ url_for('mark') }}"
                         class="nav-link {% if request.endpoint == 'mark' %}active{% endif %}">Mark</a>
                     <a href="{{ url_for('batch') }}"
