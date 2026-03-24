@@ -39,6 +39,7 @@ from ams.core.db import (
 from ams.io.web_storage import get_runs_root, list_runs, purge_assignment_storage
 from ams.core.factory import get_llm_provider
 from ams.llm.utils import clean_json_response
+from ams.pdf_exports import build_records_pdf
 from ams.web.auth import get_current_user, teacher_or_admin_required
 
 logger = logging.getLogger(__name__)
@@ -394,6 +395,48 @@ def _csv_response(filename: str, fieldnames: list[str], rows: list[dict]) -> Res
     return Response(
         output.getvalue(),
         mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _json_response(filename: str, rows: list[dict]) -> Response:
+    import json
+    return Response(
+        json.dumps(rows, indent=2),
+        mimetype="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _txt_response(filename: str, title: str, fieldnames: list[str], rows: list[dict]) -> Response:
+    lines = []
+    lines.append("=" * 70)
+    lines.append(title.upper())
+    lines.append("=" * 70)
+    lines.append("")
+
+    for i, row in enumerate(rows, 1):
+        lines.append(f"--- Entry {i} ---")
+        for field in fieldnames:
+            val = row.get(field, "")
+            lines.append(f"  {field}: {val}")
+        lines.append("")
+
+    lines.append("=" * 70)
+    lines.append(f"Total entries: {len(rows)}")
+    return Response(
+        "\n".join(lines),
+        mimetype="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _pdf_response(filename: str, title: str, fieldnames: list[str], rows: list[dict]) -> Response:
+    """Generate a PDF report as a direct file download."""
+    pdf = build_records_pdf(title, fieldnames, rows, record_label="Row")
+    return Response(
+        pdf,
+        mimetype="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
@@ -1451,6 +1494,126 @@ def export_analytics_csv(assignment_id: str, export_kind: str):
         )
 
     flash("Unknown analytics export.", "error")
+    return redirect(url_for("teacher.view_analytics", assignment_id=assignment_id))
+
+
+@teacher_bp.route("/assignment/<assignment_id>/analytics/export/<export_kind>/<format>")
+@teacher_or_admin_required
+def export_analytics(assignment_id: str, export_kind: str, format: str):
+    """Export analytics in various formats (csv, json, txt, pdf)."""
+    if format not in ("csv", "json", "txt", "pdf"):
+        flash("Invalid export format.", "error")
+        return redirect(url_for("teacher.view_analytics", assignment_id=assignment_id))
+
+    assignment = get_assignment(assignment_id)
+    if assignment is None:
+        flash("Assignment not found.", "error")
+        return redirect(url_for("teacher.dashboard"))
+    if not _user_can_access_assignment(assignment):
+        flash("You do not have access to this assignment.", "error")
+        return redirect(url_for("teacher.dashboard"))
+
+    try:
+        analytics = generate_assignment_analytics(assignment_id, app=current_app)
+    except Exception as exc:
+        logger.warning("Analytics export failed for %s: %s", assignment_id, exc)
+        flash(f"Analytics export failed: {exc}", "error")
+        return redirect(url_for("teacher.view_analytics", assignment_id=assignment_id))
+
+    if export_kind == "needs-attention":
+        rows = _filtered_needs_attention_rows(analytics, request.args)
+        fieldnames = [
+            "student_id",
+            "submission_id",
+            "severity",
+            "score_percent",
+            "grade",
+            "confidence",
+            "evaluation_state",
+            "reason",
+            "reason_detail",
+            "flags",
+            "related_rule_ids",
+            "limitation_details",
+            "evidence_excerpt",
+            "manual_review_recommended",
+            "review_note",
+        ]
+        export_rows = [
+            {
+                "student_id": row.get("student_id", ""),
+                "submission_id": row.get("submission_id", ""),
+                "severity": row.get("severity", ""),
+                "score_percent": round(float(row.get("overall", 0) or 0) * 100, 2) if row.get("overall") is not None else "",
+                "grade": row.get("grade", ""),
+                "confidence": row.get("confidence", ""),
+                "evaluation_state": row.get("evaluation_state", ""),
+                "reason": row.get("reason", ""),
+                "reason_detail": row.get("reason_detail", ""),
+                "flags": "; ".join(row.get("flags", []) or []),
+                "related_rule_ids": "; ".join(row.get("matched_rule_ids", []) or []),
+                "limitation_details": "; ".join(row.get("limitation_details", []) or []),
+                "evidence_excerpt": row.get("evidence_excerpt", ""),
+                "manual_review_recommended": "yes" if row.get("manual_review_recommended") else "no",
+                "review_note": row.get("review_note", ""),
+            }
+            for row in rows
+        ]
+        title = f"Review Queue - {assignment_id}"
+        base_name = f"{assignment_id}_needs_attention"
+
+    elif export_kind == "rules":
+        rows = _filtered_top_rule_rows(analytics, request.args)
+        fieldnames = [
+            "rule_id",
+            "label",
+            "component",
+            "severity",
+            "students_affected",
+            "percent_of_active_submissions",
+            "incident_count",
+            "fail_incidents",
+            "warning_incidents",
+            "impact_type",
+            "score_impact",
+            "example_students",
+            "messages",
+        ]
+        export_rows = [
+            {
+                "rule_id": row.get("rule_id", ""),
+                "label": row.get("label", ""),
+                "component": row.get("component", ""),
+                "severity": row.get("severity", ""),
+                "students_affected": row.get("students_affected", 0),
+                "percent_of_active_submissions": round(float(row.get("percent", 0) or 0), 2),
+                "incident_count": row.get("incident_count", 0),
+                "fail_incidents": row.get("fail_incidents", 0),
+                "warning_incidents": row.get("warning_incidents", 0),
+                "impact_type": row.get("impact_type", ""),
+                "score_impact": row.get("score_impact", ""),
+                "example_students": "; ".join(row.get("examples", []) or []),
+                "messages": "; ".join(row.get("messages", []) or []),
+            }
+            for row in rows
+        ]
+        title = f"Rule Summary - {assignment_id}"
+        base_name = f"{assignment_id}_top_failing_rules"
+    else:
+        flash("Unknown analytics export type.", "error")
+        return redirect(url_for("teacher.view_analytics", assignment_id=assignment_id))
+
+    # Return the appropriate format
+    if format == "csv":
+        return _csv_response(f"{base_name}.csv", fieldnames, export_rows)
+    elif format == "json":
+        return _json_response(f"{base_name}.json", export_rows)
+    elif format == "txt":
+        return _txt_response(f"{base_name}.txt", title, fieldnames, export_rows)
+    elif format == "pdf":
+        return _pdf_response(f"{base_name}.pdf", title, fieldnames, export_rows)
+
+    flash("Invalid export format.", "error")
     return redirect(url_for("teacher.view_analytics", assignment_id=assignment_id))
 
 

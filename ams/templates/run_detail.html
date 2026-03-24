@@ -432,9 +432,55 @@
             {% endif %}
             {% if can_download_json %}
                 {% if batch_submission_id %}
-                <a href="{{ url_for('batch_submission_report', run_id=run_id, submission_id=batch_submission_id) }}" class="btn btn-secondary btn-sm">Download JSON</a>
+                <div class="export-dropdown" data-export-dropdown>
+                    <button type="button" class="btn btn-secondary btn-sm export-dropdown-trigger" aria-haspopup="true" aria-expanded="false">
+                        Export Results
+                        <span class="dropdown-caret"></span>
+                    </button>
+                    <div class="export-dropdown-menu" role="menu">
+                        <a href="{{ url_for('batch_submission_report', run_id=run_id, submission_id=batch_submission_id) }}" class="export-dropdown-item" role="menuitem">
+                            <span class="format-icon json">JSON</span>
+                            JSON Format
+                        </a>
+                        <a href="{{ url_for('batch_submission_export', run_id=run_id, submission_id=batch_submission_id, format='csv') }}" class="export-dropdown-item" role="menuitem">
+                            <span class="format-icon csv">CSV</span>
+                            CSV Format
+                        </a>
+                        <a href="{{ url_for('batch_submission_export', run_id=run_id, submission_id=batch_submission_id, format='txt') }}" class="export-dropdown-item" role="menuitem">
+                            <span class="format-icon txt">TXT</span>
+                            Plain Text
+                        </a>
+                        <a href="{{ url_for('batch_submission_export', run_id=run_id, submission_id=batch_submission_id, format='pdf') }}" class="export-dropdown-item" role="menuitem">
+                            <span class="format-icon pdf">PDF</span>
+                            PDF Document
+                        </a>
+                    </div>
+                </div>
                 {% elif run.mode != 'batch' %}
-                <a href="{{ url_for('download', run_id=run_id, filename='report.json') }}" class="btn btn-secondary btn-sm">Download JSON</a>
+                <div class="export-dropdown" data-export-dropdown>
+                    <button type="button" class="btn btn-secondary btn-sm export-dropdown-trigger" aria-haspopup="true" aria-expanded="false">
+                        Export Results
+                        <span class="dropdown-caret"></span>
+                    </button>
+                    <div class="export-dropdown-menu" role="menu">
+                        <a href="{{ url_for('download', run_id=run_id, filename='report.json') }}" class="export-dropdown-item" role="menuitem">
+                            <span class="format-icon json">JSON</span>
+                            JSON Format
+                        </a>
+                        <a href="{{ url_for('individual_submission_export', run_id=run_id, format='csv') }}" class="export-dropdown-item" role="menuitem">
+                            <span class="format-icon csv">CSV</span>
+                            CSV Format
+                        </a>
+                        <a href="{{ url_for('individual_submission_export', run_id=run_id, format='txt') }}" class="export-dropdown-item" role="menuitem">
+                            <span class="format-icon txt">TXT</span>
+                            Plain Text
+                        </a>
+                        <a href="{{ url_for('individual_submission_export', run_id=run_id, format='pdf') }}" class="export-dropdown-item" role="menuitem">
+                            <span class="format-icon pdf">PDF</span>
+                            PDF Document
+                        </a>
+                    </div>
+                </div>
                 {% endif %}
             {% endif %}
         </div>
@@ -888,4 +934,52 @@
     </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    // Export dropdown toggle functionality
+    document.addEventListener('click', function(e) {
+        var trigger = e.target.closest('.export-dropdown-trigger');
+        if (trigger) {
+            e.preventDefault();
+            var dropdown = trigger.closest('.export-dropdown');
+            var isOpen = dropdown.classList.contains('is-open');
+
+            // Close all other dropdowns
+            document.querySelectorAll('.export-dropdown.is-open').forEach(function(d) {
+                d.classList.remove('is-open');
+                d.querySelector('.export-dropdown-trigger').setAttribute('aria-expanded', 'false');
+            });
+
+            // Toggle current dropdown
+            if (!isOpen) {
+                dropdown.classList.add('is-open');
+                trigger.setAttribute('aria-expanded', 'true');
+            }
+            return;
+        }
+
+        // Close dropdowns when clicking outside
+        if (!e.target.closest('.export-dropdown')) {
+            document.querySelectorAll('.export-dropdown.is-open').forEach(function(d) {
+                d.classList.remove('is-open');
+                d.querySelector('.export-dropdown-trigger').setAttribute('aria-expanded', 'false');
+            });
+        }
+    });
+
+    // Handle keyboard navigation
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.export-dropdown.is-open').forEach(function(d) {
+                d.classList.remove('is-open');
+                d.querySelector('.export-dropdown-trigger').setAttribute('aria-expanded', 'false');
+                d.querySelector('.export-dropdown-trigger').focus();
+            });
+        }
+    });
+})();
+</script>
 {% endblock %}

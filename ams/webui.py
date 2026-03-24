@@ -10,6 +10,8 @@ Start locally with: ``python -m flask --app ams.webui run --debug``
 """
 from __future__ import annotations
 
+import csv
+import io
 import json
 import logging
 import shutil
@@ -23,6 +25,7 @@ from typing import Any, Mapping, Sequence
 import requests as _requests
 from flask import (
     Flask,
+    Response,
     flash,
     jsonify,
     redirect,
@@ -52,6 +55,7 @@ from ams.core.profiles import get_visible_profile_specs
 from ams.core.aggregation import aggregate_findings_to_checks, compute_check_stats
 from ams.analytics import FINDING_LABELS
 from ams.io.metadata import MetadataValidator, SubmissionMetadata
+from ams.pdf_exports import build_submission_report_pdf
 from ams.io.web_storage import (
     allowed_download,
     cleanup_batch_run_storage,
@@ -2865,6 +2869,197 @@ def _register_routes(app: Flask) -> None:
         profile = run_info.get("profile", "")
         dl_name = f"report_{submission_id}_{profile}_{run_id}.json"
         return send_file(report_path, as_attachment=True, download_name=dl_name)
+
+    def _report_to_csv(report: dict) -> str:
+        """Convert a report JSON to CSV format."""
+        output = io.StringIO()
+        summary = report.get("summary", {})
+        components = report.get("components", {})
+        meta = report.get("metadata", {}).get("submission_metadata", {})
+
+        # Headers for main summary
+        writer = csv.writer(output)
+        writer.writerow(["Section", "Field", "Value"])
+
+        # Summary section
+        writer.writerow(["Summary", "Overall Score", summary.get("overall", "")])
+        writer.writerow(["Summary", "Grade", summary.get("grade", "")])
+        writer.writerow(["Summary", "Confidence", summary.get("confidence", "")])
+
+        # Metadata
+        writer.writerow(["Metadata", "Student ID", meta.get("student_id", "")])
+        writer.writerow(["Metadata", "Assignment ID", meta.get("assignment_id", "")])
+
+        # Components
+        for comp_name, comp_data in components.items():
+            if isinstance(comp_data, dict):
+                writer.writerow(["Component", comp_name, comp_data.get("score", "")])
+                for key, val in comp_data.items():
+                    if key != "score":
+                        writer.writerow([f"Component.{comp_name}", key, str(val)[:500]])
+
+        return output.getvalue()
+
+    def _report_to_txt(report: dict) -> str:
+        """Convert a report JSON to plain text format."""
+        lines = []
+        summary = report.get("summary", {})
+        components = report.get("components", {})
+        meta = report.get("metadata", {}).get("submission_metadata", {})
+
+        lines.append("=" * 60)
+        lines.append("SUBMISSION REPORT")
+        lines.append("=" * 60)
+        lines.append("")
+
+        # Summary
+        lines.append("SUMMARY")
+        lines.append("-" * 40)
+        lines.append(f"Overall Score: {summary.get('overall', 'N/A')}")
+        lines.append(f"Grade: {summary.get('grade', 'N/A')}")
+        lines.append(f"Confidence: {summary.get('confidence', 'N/A')}")
+        lines.append("")
+
+        # Metadata
+        lines.append("METADATA")
+        lines.append("-" * 40)
+        lines.append(f"Student ID: {meta.get('student_id', 'N/A')}")
+        lines.append(f"Assignment ID: {meta.get('assignment_id', 'N/A')}")
+        lines.append("")
+
+        # Components
+        lines.append("COMPONENTS")
+        lines.append("-" * 40)
+        for comp_name, comp_data in components.items():
+            if isinstance(comp_data, dict):
+                lines.append(f"\n{comp_name.upper()}")
+                lines.append(f"  Score: {comp_data.get('score', 'N/A')}")
+                for key, val in comp_data.items():
+                    if key != "score":
+                        val_str = str(val)[:200]
+                        lines.append(f"  {key}: {val_str}")
+
+        lines.append("")
+        lines.append("=" * 60)
+        return "\n".join(lines)
+
+    def _report_to_pdf(report: dict, submission_id: str) -> bytes:
+        """Generate a PDF report as bytes."""
+        return build_submission_report_pdf(report, submission_id)
+
+    @app.route("/batch/<run_id>/submissions/<submission_id>/export/<format>")
+    @login_required
+    def batch_submission_export(run_id: str, submission_id: str, format: str):
+        """Export batch submission in various formats (csv, txt, pdf)."""
+        if format not in ("csv", "txt", "pdf"):
+            return "Invalid format", 400
+
+        runs_root = get_runs_root(app)
+        run_dir = find_run_by_id(runs_root, run_id)
+        if run_dir is None:
+            return "Run not found", 404
+        report_path = (run_dir / "runs" / submission_id / "report.json").resolve()
+        try:
+            report_path.relative_to(run_dir.resolve())
+        except Exception:
+            return "Not allowed", 403
+        if not report_path.exists():
+            return "Report not found", 404
+
+        run_info = load_run_info(run_dir) or {}
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except Exception:
+            return "Report not found", 404
+
+        report_meta = report.get("metadata", {}).get("submission_metadata", {})
+        real_student_id = str(report_meta.get("student_id") or "")
+        user = get_current_user()
+        if user and user["role"] == "student" and real_student_id and real_student_id != user["userID"]:
+            flash("You do not have access to this submission.", "error")
+            return redirect(url_for("student.dashboard"))
+
+        profile = run_info.get("profile", "")
+        base_name = f"report_{submission_id}_{profile}_{run_id}"
+
+        if format == "csv":
+            content = _report_to_csv(report)
+            return Response(
+                content,
+                mimetype="text/csv",
+                headers={"Content-Disposition": f'attachment; filename="{base_name}.csv"'},
+            )
+        elif format == "txt":
+            content = _report_to_txt(report)
+            return Response(
+                content,
+                mimetype="text/plain",
+                headers={"Content-Disposition": f'attachment; filename="{base_name}.txt"'},
+            )
+        elif format == "pdf":
+            pdf_bytes = _report_to_pdf(report, submission_id)
+            return Response(
+                pdf_bytes,
+                mimetype="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="{base_name}.pdf"'},
+            )
+
+        return "Invalid format", 400
+
+    @app.route("/run/<run_id>/export/<format>")
+    @login_required
+    def individual_submission_export(run_id: str, format: str):
+        """Export individual submission in various formats (csv, txt, pdf)."""
+        if format not in ("csv", "txt", "pdf"):
+            return "Invalid format", 400
+
+        runs_root = get_runs_root(app)
+        run_dir = find_run_by_id(runs_root, run_id)
+        if run_dir is None:
+            return "Run not found", 404
+        report_path = run_dir / "report.json"
+        if not report_path.exists():
+            return "Report not found", 404
+
+        run_info = load_run_info(run_dir) or {}
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except Exception:
+            return "Report not found", 404
+
+        report_meta = report.get("metadata", {}).get("submission_metadata", {})
+        real_student_id = str(report_meta.get("student_id") or "")
+        user = get_current_user()
+        if user and user["role"] == "student" and real_student_id and real_student_id != user["userID"]:
+            flash("You do not have access to this submission.", "error")
+            return redirect(url_for("student.dashboard"))
+
+        profile = run_info.get("profile", "")
+        base_name = f"report_{profile}_{run_id}"
+
+        if format == "csv":
+            content = _report_to_csv(report)
+            return Response(
+                content,
+                mimetype="text/csv",
+                headers={"Content-Disposition": f'attachment; filename="{base_name}.csv"'},
+            )
+        elif format == "txt":
+            content = _report_to_txt(report)
+            return Response(
+                content,
+                mimetype="text/plain",
+                headers={"Content-Disposition": f'attachment; filename="{base_name}.txt"'},
+            )
+        elif format == "pdf":
+            pdf_bytes = _report_to_pdf(report, run_id)
+            return Response(
+                pdf_bytes,
+                mimetype="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="{base_name}.pdf"'},
+            )
+
+        return "Invalid format", 400
 
     @app.route("/batch/<run_id>/submissions/<submission_id>/rerun", methods=["POST"])
     @teacher_or_admin_required

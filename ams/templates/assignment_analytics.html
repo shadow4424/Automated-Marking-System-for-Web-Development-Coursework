@@ -1228,8 +1228,54 @@
                 <p class="analytics-helper" style="margin-top: 0.65rem; margin-bottom: 0;">Exact refresh time: {{ updated_exact }}</p>
                 {% endif %}
                 <div class="analytics-actions" style="margin-top: var(--space-lg);">
-                    <a id="needs-attention-export" href="{{ url_for('teacher.export_analytics_csv', assignment_id=assignment.assignmentID, export_kind='needs-attention') }}" class="btn btn-secondary btn-sm">Export review queue</a>
-                    <a id="rules-export" href="{{ url_for('teacher.export_analytics_csv', assignment_id=assignment.assignmentID, export_kind='rules') }}" class="btn btn-ghost btn-sm">Export rule summary</a>
+                    <div class="export-dropdown" data-export-dropdown>
+                        <button type="button" class="btn btn-secondary btn-sm export-dropdown-trigger" aria-haspopup="true" aria-expanded="false">
+                            Export review queue
+                            <span class="dropdown-caret"></span>
+                        </button>
+                        <div class="export-dropdown-menu" role="menu">
+                            <a id="needs-attention-export-csv" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='needs-attention', format='csv') }}" class="export-dropdown-item" role="menuitem">
+                                <span class="format-icon csv">CSV</span>
+                                CSV Format
+                            </a>
+                            <a id="needs-attention-export-json" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='needs-attention', format='json') }}" class="export-dropdown-item" role="menuitem">
+                                <span class="format-icon json">JSON</span>
+                                JSON Format
+                            </a>
+                            <a id="needs-attention-export-txt" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='needs-attention', format='txt') }}" class="export-dropdown-item" role="menuitem">
+                                <span class="format-icon txt">TXT</span>
+                                Plain Text
+                            </a>
+                            <a id="needs-attention-export-pdf" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='needs-attention', format='pdf') }}" class="export-dropdown-item" role="menuitem">
+                                <span class="format-icon pdf">PDF</span>
+                                PDF Document
+                            </a>
+                        </div>
+                    </div>
+                    <div class="export-dropdown" data-export-dropdown>
+                        <button type="button" class="btn btn-ghost btn-sm export-dropdown-trigger" aria-haspopup="true" aria-expanded="false">
+                            Export rule summary
+                            <span class="dropdown-caret"></span>
+                        </button>
+                        <div class="export-dropdown-menu align-right" role="menu">
+                            <a id="rules-export-csv" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='rules', format='csv') }}" class="export-dropdown-item" role="menuitem">
+                                <span class="format-icon csv">CSV</span>
+                                CSV Format
+                            </a>
+                            <a id="rules-export-json" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='rules', format='json') }}" class="export-dropdown-item" role="menuitem">
+                                <span class="format-icon json">JSON</span>
+                                JSON Format
+                            </a>
+                            <a id="rules-export-txt" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='rules', format='txt') }}" class="export-dropdown-item" role="menuitem">
+                                <span class="format-icon txt">TXT</span>
+                                Plain Text
+                            </a>
+                            <a id="rules-export-pdf" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='rules', format='pdf') }}" class="export-dropdown-item" role="menuitem">
+                                <span class="format-icon pdf">PDF</span>
+                                PDF Document
+                            </a>
+                        </div>
+                    </div>
                 </div>
             </div>
             <aside class="analytics-hero-panel">
@@ -2133,6 +2179,18 @@
         var bannerText = document.getElementById('attention-filter-banner-text');
         var exportLink = document.getElementById('needs-attention-export');
         var rulesExport = document.getElementById('rules-export');
+        var needsAttentionExportLinks = {
+            csv: document.getElementById('needs-attention-export-csv'),
+            json: document.getElementById('needs-attention-export-json'),
+            txt: document.getElementById('needs-attention-export-txt'),
+            pdf: document.getElementById('needs-attention-export-pdf')
+        };
+        var rulesExportLinks = {
+            csv: document.getElementById('rules-export-csv'),
+            json: document.getElementById('rules-export-json'),
+            txt: document.getElementById('rules-export-txt'),
+            pdf: document.getElementById('rules-export-pdf')
+        };
         var toggleRules = document.getElementById('toggle-rules');
         var toggleSignals = document.getElementById('toggle-signals');
         var rulesNoResults = document.getElementById('rules-no-results');
@@ -2168,6 +2226,14 @@
         var batchReportPattern = graphConfig ? (graphConfig.getAttribute('data-batch-report-pattern') || '') : '';
         var exportLinkBase = exportLink ? (exportLink.getAttribute('href') || '') : '';
         var rulesExportBase = rulesExport ? (rulesExport.getAttribute('href') || '') : '';
+        var needsAttentionExportBase = {};
+        var rulesExportLinkBase = {};
+        Object.keys(needsAttentionExportLinks).forEach(function(key) {
+            needsAttentionExportBase[key] = needsAttentionExportLinks[key] ? (needsAttentionExportLinks[key].getAttribute('href') || '') : '';
+        });
+        Object.keys(rulesExportLinks).forEach(function(key) {
+            rulesExportLinkBase[key] = rulesExportLinks[key] ? (rulesExportLinks[key].getAttribute('href') || '') : '';
+        });
         var attentionControls = {
             student: document.getElementById('attention-student-search'),
             scoreBand: document.getElementById('attention-score-band'),
@@ -2686,7 +2752,6 @@
         }
 
         function updateAttentionExportLink() {
-            if (!exportLink) return;
             var params = new URLSearchParams();
             if (attentionControls.student.value.trim()) params.set('student', attentionControls.student.value.trim());
             if (attentionControls.scoreBand.value) params.set('score_band', attentionControls.scoreBand.value);
@@ -2699,16 +2764,27 @@
             if (attentionControls.sort.value) params.set('sort', attentionControls.sort.value);
             if (attentionState.signalRules.length) params.set('signal_rules', attentionState.signalRules.join(','));
             if (attentionState.signalStudents.length) params.set('signal_students', attentionState.signalStudents.join(','));
-            exportLink.href = exportLinkBase + (params.toString() ? ('?' + params.toString()) : '');
+            var queryStr = params.toString() ? ('?' + params.toString()) : '';
+            // Update all format links
+            Object.keys(needsAttentionExportLinks).forEach(function(key) {
+                if (needsAttentionExportLinks[key]) {
+                    needsAttentionExportLinks[key].href = needsAttentionExportBase[key] + queryStr;
+                }
+            });
         }
 
         function updateRulesExportLink() {
-            if (!rulesExport) return;
             var params = new URLSearchParams();
             if (ruleControls.severity && ruleControls.severity.value) params.set('severity', ruleControls.severity.value);
             if (ruleControls.component && ruleControls.component.value) params.set('component', ruleControls.component.value);
             if (ruleControls.impact && ruleControls.impact.value) params.set('impact_type', ruleControls.impact.value);
-            rulesExport.href = rulesExportBase + (params.toString() ? ('?' + params.toString()) : '');
+            var queryStr = params.toString() ? ('?' + params.toString()) : '';
+            // Update all format links
+            Object.keys(rulesExportLinks).forEach(function(key) {
+                if (rulesExportLinks[key]) {
+                    rulesExportLinks[key].href = rulesExportLinkBase[key] + queryStr;
+                }
+            });
         }
 
         function matchesAttentionRow(row) {
@@ -3465,6 +3541,42 @@
             if (event.key === 'Escape') {
                 closeDrawer();
                 hideTooltip();
+                // Close any open export dropdowns
+                document.querySelectorAll('.export-dropdown.is-open').forEach(function(d) {
+                    d.classList.remove('is-open');
+                    var trigger = d.querySelector('.export-dropdown-trigger');
+                    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+                });
+            }
+        });
+
+        // Export dropdown click handling
+        document.body.addEventListener('click', function (e) {
+            var trigger = e.target.closest('.export-dropdown-trigger');
+            if (trigger) {
+                e.preventDefault();
+                var dropdown = trigger.closest('.export-dropdown');
+                var isOpen = dropdown.classList.contains('is-open');
+                // Close all other dropdowns first
+                document.querySelectorAll('.export-dropdown.is-open').forEach(function(d) {
+                    d.classList.remove('is-open');
+                    var t = d.querySelector('.export-dropdown-trigger');
+                    if (t) t.setAttribute('aria-expanded', 'false');
+                });
+                // Toggle current dropdown
+                if (!isOpen) {
+                    dropdown.classList.add('is-open');
+                    trigger.setAttribute('aria-expanded', 'true');
+                }
+                return;
+            }
+            // Close dropdowns when clicking outside
+            if (!e.target.closest('.export-dropdown')) {
+                document.querySelectorAll('.export-dropdown.is-open').forEach(function(d) {
+                    d.classList.remove('is-open');
+                    var t = d.querySelector('.export-dropdown-trigger');
+                    if (t) t.setAttribute('aria-expanded', 'false');
+                });
             }
         });
 

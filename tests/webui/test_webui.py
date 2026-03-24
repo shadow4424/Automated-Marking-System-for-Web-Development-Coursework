@@ -441,11 +441,62 @@ def test_webui_mark_zip_happy_path_creates_run_and_shows_scores(tmp_path: Path):
     assert detail.status_code == 200
     assert b"Recommended outcome" in detail.data
     assert b"Summary" in detail.data
-    assert b"Download JSON" in detail.data
+    assert b"Export Results" in detail.data  # Dropdown trigger text (was "Download JSON")
     assert b"Admin actions" not in detail.data
     assert b"Informational evidence" not in detail.data
     assert b"Raw technical details" not in detail.data
     assert any(runs_root.iterdir())
+
+
+def test_individual_submission_pdf_export_downloads_attachment(tmp_path: Path):
+    client, runs_root = _client(tmp_path)
+    run_id, run_dir = create_run_dir(runs_root, mode="mark", profile="frontend")
+    report_path = run_dir / "report.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "scores": {
+                    "overall": 0.82,
+                    "by_component": {
+                        "html": {"score": 0.9},
+                        "css": {"score": 0.8},
+                        "js": {"score": 0.75},
+                    },
+                },
+                "score_evidence": {
+                    "confidence": {"level": "high"},
+                    "review": {"recommended": False},
+                },
+                "findings": [{"id": "HTML.REQ.FAIL"}],
+                "metadata": {
+                    "submission_metadata": {
+                        "student_id": "student1",
+                        "assignment_id": "assignment1",
+                        "original_filename": "student1_assignment1.zip",
+                        "timestamp": "2026-03-24T10:00:00Z",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    save_run_info(
+        run_dir,
+        {
+            "id": run_id,
+            "mode": "mark",
+            "profile": "frontend",
+            "created_at": "2026-03-24T10:00:00Z",
+            "report": "report.json",
+        },
+    )
+
+    response = client.get(f"/run/{run_id}/export/pdf")
+
+    assert response.status_code == 200
+    assert response.mimetype == "application/pdf"
+    assert response.headers["Content-Disposition"] == f'attachment; filename="report_frontend_{run_id}.pdf"'
+    assert response.data.startswith(b"%PDF-")
 
 
 def test_webui_batch_run_redirects_to_assignment_and_keeps_batch_downloads(tmp_path: Path):
@@ -1372,7 +1423,7 @@ def test_rerun_single_submission_updates_report_and_detail_view(tmp_path: Path, 
     queued_body = queued_page.get_data(as_text=True)
     assert "Rerun queued" in queued_body
     assert "Awaiting rerun" in queued_body
-    assert "Download JSON" not in queued_body
+    assert "Export Results" not in queued_body  # Export dropdown hidden while rerun pending
 
     queued["func"]()
 

@@ -1982,3 +1982,51 @@ def test_assignment_analytics_rule_export_respects_rule_filters(tmp_path: Path, 
     assert response.mimetype == "text/csv"
     assert b"HTML.REQ.FAIL" in response.data
     assert b"CSS.REQ.WARN" not in response.data
+
+
+def test_assignment_analytics_pdf_export_downloads_attachment(tmp_path: Path, monkeypatch) -> None:
+    app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
+    client = app.test_client()
+    authenticate_client(client)
+
+    monkeypatch.setattr(
+        "ams.web.routes_teacher.get_assignment",
+        lambda assignment_id: {
+            "assignmentID": assignment_id,
+            "title": "Coursework 1",
+            "profile": "frontend",
+            "marks_released": False,
+            "assigned_students": ["student1"],
+        },
+    )
+    monkeypatch.setattr(
+        "ams.web.routes_teacher.generate_assignment_analytics",
+        lambda *_args, **_kwargs: {
+            "needs_attention": [
+                {
+                    "student_id": "student1",
+                    "submission_id": "student1_assignment1",
+                    "severity": "high",
+                    "overall": 0.42,
+                    "grade": "poor",
+                    "confidence": "low",
+                    "evaluation_state": "partially_evaluated",
+                    "reason": "reduced evaluation confidence",
+                    "reason_detail": "Browser checks skipped",
+                    "flags": ["browser issue"],
+                    "matched_rule_ids": ["HTML.REQ.FAIL"],
+                    "limitation_details": ["Timeout detected"],
+                    "evidence_excerpt": "Runtime check timed out.",
+                    "manual_review_recommended": True,
+                    "review_note": "Review manually.",
+                }
+            ]
+        },
+    )
+
+    response = client.get("/teacher/assignment/assignment1/analytics/export/needs-attention/pdf")
+
+    assert response.status_code == 200
+    assert response.mimetype == "application/pdf"
+    assert response.headers["Content-Disposition"] == 'attachment; filename="assignment1_needs_attention.pdf"'
+    assert response.data.startswith(b"%PDF-")
