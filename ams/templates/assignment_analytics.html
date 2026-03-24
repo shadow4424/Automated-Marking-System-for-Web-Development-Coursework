@@ -1470,10 +1470,10 @@
         {% if needs_attention %}
         <div id="attention-filter-banner" class="analytics-drilldown-banner" aria-live="polite">
             <div>
-                <strong id="attention-filter-banner-text">Drill-down active</strong>
+                <strong id="attention-filter-banner-text">Filter active</strong>
                 <div class="analytics-helper">The review queue is currently narrowed by a cohort signal or rule.</div>
             </div>
-            <button type="button" id="clear-drilldown" class="btn btn-ghost btn-sm">Clear drill-down</button>
+            <button type="button" id="clear-drilldown" class="btn btn-ghost btn-sm">Clear filter</button>
         </div>
 
         <details class="analytics-collapse-card analytics-inline-panel">
@@ -1843,7 +1843,7 @@
         <div id="requirement-focus-banner" class="analytics-requirement-focus" aria-live="polite">
             <div>
                 <strong id="requirement-focus-text">Requirement focus active</strong>
-                <div class="analytics-helper">Requirement drill-down selection is active for this assignment view.</div>
+                <div class="analytics-helper">Requirement filter selection is active for this assignment view.</div>
             </div>
             <button type="button" id="clear-requirement-focus" class="btn btn-ghost btn-sm">Clear focus</button>
         </div>
@@ -2741,7 +2741,7 @@
             if (banner && bannerText) {
                 if (attentionState.signalLabel) {
                     banner.classList.add('is-visible');
-                    bannerText.textContent = 'Drill-down: ' + attentionState.signalLabel;
+                    bannerText.textContent = 'Filter: ' + attentionState.signalLabel;
                 } else {
                     banner.classList.remove('is-visible');
                     bannerText.textContent = '';
