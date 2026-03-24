@@ -439,7 +439,12 @@ def test_webui_mark_zip_happy_path_creates_run_and_shows_scores(tmp_path: Path):
 
     detail = client.get(f"/runs/{run_id}")
     assert detail.status_code == 200
-    assert b"Overall Score" in detail.data
+    assert b"Recommended outcome" in detail.data
+    assert b"Summary" in detail.data
+    assert b"Download JSON" in detail.data
+    assert b"Admin actions" not in detail.data
+    assert b"Informational evidence" not in detail.data
+    assert b"Raw technical details" not in detail.data
     assert any(runs_root.iterdir())
 
 
@@ -1237,7 +1242,7 @@ def test_rerun_single_submission_updates_report_and_detail_view(tmp_path: Path, 
     queued_page = client.get(f"/runs/{run_id}")
     queued_body = queued_page.get_data(as_text=True)
     assert "Rerun queued" in queued_body
-    assert "Overall Score" not in queued_body
+    assert "Awaiting rerun" in queued_body
     assert "Download JSON" not in queued_body
 
     queued["func"]()
@@ -1246,6 +1251,7 @@ def test_rerun_single_submission_updates_report_and_detail_view(tmp_path: Path, 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "64%" in body
+    assert "Recommended outcome" in body
     assert "Rerun queued" not in body
     assert seen_skip_flags == [True]
 

@@ -126,86 +126,210 @@
     }
 
     // =========================================================================
-    // Findings Filtering
+    // Submission Detail Tabs
     // =========================================================================
 
-    function initFindingsFilters() {
-        const toolbar = document.querySelector('.findings-toolbar');
-        if (!toolbar) return;
+    function initTabGroups() {
+        document.querySelectorAll('[data-tab-group]').forEach(group => {
+            const tabs = Array.from(group.querySelectorAll('[data-tab-target]'));
+            if (!tabs.length) return;
 
-        const searchInput = toolbar.querySelector('[data-findings-search]');
-        const severityBtns = toolbar.querySelectorAll('[data-severity]');
-        const componentSelect = toolbar.querySelector('[data-component]');
-        const resetBtn = toolbar.querySelector('[data-reset]');
-        const findings = document.querySelectorAll('.finding');
-        const countDisplay = toolbar.querySelector('[data-findings-count]');
+            const panels = tabs
+                .map(tab => document.getElementById(tab.dataset.tabTarget || ''))
+                .filter(Boolean);
 
-        if (!findings.length) return;
+            function scrollToPageTop() {
+                const navbar = document.querySelector('.navbar');
+                const hero = group.closest('.submission-detail-shell')?.querySelector('.page-hero');
+                const target = hero || group.closest('.submission-detail-shell') || group;
+                const offset = (navbar ? navbar.getBoundingClientRect().height : 0) + 16;
+                const top = Math.max(0, window.scrollY + target.getBoundingClientRect().top - offset);
 
-        function applyFilters() {
-            const term = searchInput?.value.toLowerCase().trim() || '';
-            const activeSeverities = new Set();
-
-            severityBtns.forEach(btn => {
-                if (btn.classList.contains('active')) {
-                    activeSeverities.add(btn.dataset.severity.toLowerCase());
-                }
-            });
-
-            const component = componentSelect?.value.toLowerCase() || '';
-            let visible = 0;
-
-            findings.forEach(finding => {
-                let show = true;
-
-                // Search
-                if (term) {
-                    const text = finding.textContent.toLowerCase();
-                    const ruleId = (finding.dataset.ruleId || '').toLowerCase();
-                    if (!text.includes(term) && !ruleId.includes(term)) show = false;
-                }
-
-                // Severity
-                if (activeSeverities.size > 0) {
-                    const sev = (finding.dataset.severity || '').toLowerCase();
-                    if (!activeSeverities.has(sev)) show = false;
-                }
-
-                // Component
-                if (component) {
-                    const comp = (finding.dataset.component || '').toLowerCase();
-                    if (comp !== component) show = false;
-                }
-
-                finding.classList.toggle('hidden', !show);
-                if (show) visible++;
-            });
-
-            if (countDisplay) {
-                countDisplay.textContent = `${visible} events`;
+                window.scrollTo({
+                    top,
+                    behavior: 'smooth',
+                });
             }
-        }
 
-        searchInput?.addEventListener('input', debounce(applyFilters, 200));
+            function activateTab(tabToActivate, { focus = false } = {}) {
+                tabs.forEach(tab => {
+                    const isActive = tab === tabToActivate;
+                    const panelId = tab.dataset.tabTarget || '';
+                    const panel = panelId ? document.getElementById(panelId) : null;
 
-        severityBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                btn.classList.toggle('active');
+                    tab.classList.toggle('is-active', isActive);
+                    tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                    tab.setAttribute('tabindex', isActive ? '0' : '-1');
+
+                    if (panel) {
+                        panel.hidden = !isActive;
+                    }
+                });
+
+                if (focus) {
+                    tabToActivate.focus();
+                }
+            }
+
+            let initialTab = tabs.find(tab => tab.getAttribute('aria-selected') === 'true') || tabs[0];
+
+            if (window.location.hash) {
+                const hashMatch = tabs.find(tab => {
+                    const panelId = tab.dataset.tabTarget || '';
+                    return `#${panelId}` === window.location.hash;
+                });
+                if (hashMatch) {
+                    initialTab = hashMatch;
+                }
+            }
+
+            tabs.forEach((tab, index) => {
+                tab.addEventListener('click', () => {
+                    activateTab(tab);
+                    const panelId = tab.dataset.tabTarget || '';
+                    if (panelId && history.replaceState) {
+                        history.replaceState(null, '', `#${panelId}`);
+                    }
+                    scrollToPageTop();
+                });
+
+                tab.addEventListener('keydown', event => {
+                    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                    event.preventDefault();
+
+                    let nextIndex = index;
+                    if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+                    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
+                    if (event.key === 'Home') nextIndex = 0;
+                    if (event.key === 'End') nextIndex = tabs.length - 1;
+
+                    activateTab(tabs[nextIndex], { focus: true });
+                    const panelId = tabs[nextIndex].dataset.tabTarget || '';
+                    if (panelId && history.replaceState) {
+                        history.replaceState(null, '', `#${panelId}`);
+                    }
+                    scrollToPageTop();
+                });
+            });
+
+            panels.forEach(panel => {
+                if (!tabs.some(tab => tab.dataset.tabTarget === panel.id && tab === initialTab)) {
+                    panel.hidden = true;
+                }
+            });
+
+            activateTab(initialTab);
+        });
+    }
+
+    // =========================================================================
+    // Submission Evidence Filters
+    // =========================================================================
+
+    function initEvidenceFilters() {
+        document.querySelectorAll('[data-evidence-filter-root]').forEach(root => {
+            const searchInput = root.querySelector('[data-evidence-search]');
+            const statusButtons = Array.from(root.querySelectorAll('[data-evidence-status]'));
+            const componentButtons = Array.from(root.querySelectorAll('[data-evidence-component]'));
+            const resetButton = root.querySelector('[data-evidence-reset]');
+            const items = Array.from(root.querySelectorAll('[data-evidence-item]'));
+            const countDisplay = root.querySelector('[data-evidence-count]');
+            const emptyState = root.querySelector('[data-evidence-empty]');
+
+            if (!items.length) return;
+
+            function setActive(buttons, activeValue, datasetKey) {
+                buttons.forEach(button => {
+                    const isActive = (button.dataset[datasetKey] || '') === activeValue;
+                    button.classList.toggle('is-active', isActive);
+                    button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                });
+            }
+
+            function activeValue(buttons, datasetKey) {
+                const selected = buttons.find(button => button.getAttribute('aria-pressed') === 'true');
+                return (selected?.dataset[datasetKey] || 'all').toLowerCase();
+            }
+
+            function applyFilters() {
+                const term = (searchInput?.value || '').toLowerCase().trim();
+                const status = activeValue(statusButtons, 'evidenceStatus');
+                const component = activeValue(componentButtons, 'evidenceComponent');
+                let visibleCount = 0;
+
+                items.forEach(item => {
+                    const searchText = (item.dataset.search || item.textContent || '').toLowerCase();
+                    const itemStatus = (item.dataset.status || '').toLowerCase();
+                    const itemComponent = (item.dataset.component || '').toLowerCase();
+                    const matchesTerm = !term || searchText.includes(term);
+                    const matchesStatus = status === 'all' || itemStatus === status;
+                    const matchesComponent = component === 'all' || itemComponent === component;
+                    const isVisible = matchesTerm && matchesStatus && matchesComponent;
+
+                    item.classList.toggle('hidden', !isVisible);
+                    if (!isVisible) {
+                        item.open = false;
+                    }
+                    if (isVisible) {
+                        visibleCount += 1;
+                    }
+                });
+
+                if (countDisplay) {
+                    countDisplay.textContent = `${visibleCount} result${visibleCount === 1 ? '' : 's'}`;
+                }
+                if (emptyState) {
+                    emptyState.classList.toggle('hidden', visibleCount !== 0);
+                }
+            }
+
+            searchInput?.addEventListener('input', debounce(applyFilters, 180));
+
+            statusButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    setActive(statusButtons, button.dataset.evidenceStatus || 'all', 'evidenceStatus');
+                    applyFilters();
+                });
+            });
+
+            componentButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    setActive(componentButtons, button.dataset.evidenceComponent || 'all', 'evidenceComponent');
+                    applyFilters();
+                });
+            });
+
+            resetButton?.addEventListener('click', () => {
+                if (searchInput) {
+                    searchInput.value = '';
+                }
+                setActive(statusButtons, 'all', 'evidenceStatus');
+                setActive(componentButtons, 'all', 'evidenceComponent');
                 applyFilters();
             });
-        });
 
-        componentSelect?.addEventListener('change', applyFilters);
-
-        resetBtn?.addEventListener('click', () => {
-            if (searchInput) searchInput.value = '';
-            // On reset, clear all filters (show everything)
-            severityBtns.forEach(b => b.classList.remove('active'));
-            if (componentSelect) componentSelect.value = '';
+            setActive(statusButtons, 'all', 'evidenceStatus');
+            setActive(componentButtons, 'all', 'evidenceComponent');
             applyFilters();
         });
+    }
 
-        applyFilters();
+    // =========================================================================
+    // Sticky Local Navigation
+    // =========================================================================
+
+    function initStickyLocalNavs() {
+        const stickyNavs = document.querySelectorAll('[data-sticky-local-nav]');
+        if (!stickyNavs.length) return;
+
+        function updateOffsets() {
+            const navbar = document.querySelector('.navbar');
+            const navTop = navbar ? Math.round(navbar.getBoundingClientRect().height + 16) : 88;
+            document.documentElement.style.setProperty('--detail-local-nav-top', `${navTop}px`);
+        }
+
+        updateOffsets();
+        window.addEventListener('resize', updateOffsets);
     }
 
     // =========================================================================
@@ -233,20 +357,21 @@
     }
 
     // =========================================================================
-    // Expand/Collapse All
+    // Disclosure Controls
     // =========================================================================
 
-    function initExpandCollapse() {
-        const expandBtn = document.querySelector('[data-expand-all]');
-        const collapseBtn = document.querySelector('[data-collapse-all]');
-        const details = document.querySelectorAll('details');
+    function initDisclosureControls() {
+        document.querySelectorAll('[data-disclosure-action][data-disclosure-target]').forEach(button => {
+            button.addEventListener('click', () => {
+                const targetId = button.dataset.disclosureTarget || '';
+                const action = button.dataset.disclosureAction || '';
+                const container = document.getElementById(targetId);
+                if (!container) return;
 
-        expandBtn?.addEventListener('click', () => {
-            details.forEach(d => d.open = true);
-        });
-
-        collapseBtn?.addEventListener('click', () => {
-            details.forEach(d => d.open = false);
+                container.querySelectorAll('details').forEach(detail => {
+                    detail.open = action === 'expand';
+                });
+            });
         });
     }
 
@@ -287,9 +412,11 @@
 
     function init() {
         initDashboardFilters();
-        initFindingsFilters();
+        initTabGroups();
+        initEvidenceFilters();
+        initStickyLocalNavs();
         initCopyButtons();
-        initExpandCollapse();
+        initDisclosureControls();
         initAlertDismiss();
         initFormValidation();
     }

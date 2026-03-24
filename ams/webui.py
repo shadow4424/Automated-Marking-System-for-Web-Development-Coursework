@@ -18,7 +18,7 @@ import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping, Sequence
 
 import requests as _requests
 from flask import (
@@ -50,6 +50,7 @@ from ams.core.config import (
 )
 from ams.core.profiles import get_visible_profile_specs
 from ams.core.aggregation import aggregate_findings_to_checks, compute_check_stats
+from ams.analytics import FINDING_LABELS
 from ams.io.metadata import MetadataValidator, SubmissionMetadata
 from ams.io.web_storage import (
     allowed_download,
@@ -147,12 +148,15 @@ def _ensure_check_stats(report: dict) -> dict:
     Backward-compatible: reports generated before the aggregation layer was
     added will be enriched on load so the template always has the data.
     """
-    if "checks" not in report or "check_stats" not in report:
+    if "checks" not in report or "check_stats" not in report or "diagnostics" not in report:
         findings = report.get("findings", [])
         checks, diagnostics = aggregate_findings_to_checks(findings)
-        report["checks"] = [c.to_dict() for c in checks]
-        report["check_stats"] = compute_check_stats(checks)
-        report["diagnostics"] = diagnostics
+        if "checks" not in report:
+            report["checks"] = [c.to_dict() for c in checks]
+        if "check_stats" not in report:
+            report["check_stats"] = compute_check_stats(checks)
+        if "diagnostics" not in report:
+            report["diagnostics"] = diagnostics
     return report
 
 
@@ -235,6 +239,740 @@ def _load_threat_file_contents(findings: list, run_dir: Path) -> dict:
         file_data[key]["threat_lines"].sort()
 
     return file_data
+
+
+_DETAIL_COMPONENT_ORDER = ["html", "css", "js", "php", "sql", "api", "browser", "behavioural", "consistency", "other"]
+_DETAIL_COMPONENT_LABELS = {
+    "html": "HTML",
+    "css": "CSS",
+    "js": "JavaScript",
+    "php": "PHP",
+    "sql": "SQL",
+    "api": "API",
+    "browser": "Browser",
+    "behavioral": "Behavioural",
+    "behavioural": "Behavioural",
+    "consistency": "Consistency",
+    "security": "Security",
+    "other": "Other",
+}
+_DETAIL_STAGE_LABELS = {
+    "static": "Static",
+    "runtime": "Runtime",
+    "browser": "Browser",
+    "layout": "Layout",
+    "quality": "Quality",
+    "manual": "Manual",
+}
+_DETAIL_STATUS_PRIORITY = {
+    "FAIL": 0,
+    "THREAT": 0,
+    "PARTIAL": 1,
+    "WARN": 1,
+    "SKIPPED": 2,
+    "PASS": 3,
+    "NOT_EVALUATED": 4,
+    "UNKNOWN": 5,
+}
+_DETAIL_TONE_BY_STATUS = {
+    "FAIL": "danger",
+    "THREAT": "danger",
+    "PARTIAL": "warning",
+    "WARN": "warning",
+    "SKIPPED": "muted",
+    "PASS": "success",
+    "NOT_EVALUATED": "muted",
+    "UNKNOWN": "muted",
+}
+_CONFIDENCE_FLAG_TEXT = {
+    "runtime_failure": "Runtime checks failed or timed out in this run.",
+    "browser_failure": "Browser checks failed or timed out in this run.",
+    "browser_console_errors": "Browser console errors reduced trust in the automated result.",
+    "runtime_skipped": "Runtime checks were skipped.",
+    "browser_skipped": "Browser checks were skipped.",
+    "layout_skipped": "Layout checks were skipped.",
+}
+
+
+def _coerce_float(value: object) -> float | None:
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_non_empty(values: Sequence[object]) -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _format_submission_datetime(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "Unknown"
+    try:
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return dt.strftime("%d %b %Y, %H:%M")
+    except ValueError:
+        return text[:16].replace("T", " ")
+
+
+def _normalize_status(value: object, *, fallback: str = "UNKNOWN") -> str:
+    text = str(value or "").strip().upper()
+    return text or fallback
+
+
+def _status_tone(status: object) -> str:
+    return _DETAIL_TONE_BY_STATUS.get(_normalize_status(status), "muted")
+
+
+def _stage_label(stage: object) -> str:
+    key = str(stage or "").strip().lower()
+    if not key:
+        return "General"
+    return _DETAIL_STAGE_LABELS.get(key, key.replace("_", " ").title())
+
+
+def _component_label(component: object) -> str:
+    key = str(component or "").strip().lower()
+    if not key:
+        return "General"
+    return _DETAIL_COMPONENT_LABELS.get(key, key.replace("_", " ").title())
+
+
+def _component_filter_value(component: object, *, stage: object = None) -> str:
+    comp = str(component or "").strip().lower()
+    stage_key = str(stage or "").strip().lower()
+    if comp in {"html", "css", "js", "php", "sql", "api", "browser", "behavioral", "behavioural"}:
+        return "behavioural" if comp == "behavioral" else comp
+    if stage_key == "browser":
+        return "browser"
+    if stage_key == "runtime":
+        return "behavioural"
+    return comp or "other"
+
+
+def _humanize_identifier(identifier: object) -> str:
+    text = str(identifier or "").strip()
+    if not text:
+        return "Unnamed item"
+    label, _description = FINDING_LABELS.get(text, ("", ""))
+    if label:
+        return label
+    pretty = text.replace(".", " ").replace("_", " ").replace("-", " ").strip()
+    return pretty.title() if pretty else text
+
+
+def _describe_identifier(identifier: object) -> str:
+    text = str(identifier or "").strip()
+    if not text:
+        return ""
+    _label, description = FINDING_LABELS.get(text, ("", ""))
+    return description
+
+
+def _gather_screenshots(evidence: object) -> list[str]:
+    if not isinstance(evidence, Mapping):
+        return []
+    screenshots: list[str] = []
+    direct = evidence.get("screenshot")
+    if isinstance(direct, str) and direct.strip():
+        screenshots.append(direct.strip())
+    ux_review = evidence.get("ux_review")
+    if isinstance(ux_review, Mapping):
+        shot = ux_review.get("screenshot")
+        if isinstance(shot, str) and shot.strip() and shot.strip() not in screenshots:
+            screenshots.append(shot.strip())
+    vision = evidence.get("vision_analysis")
+    if isinstance(vision, Mapping):
+        meta = vision.get("meta")
+        if isinstance(meta, Mapping):
+            shot = meta.get("screenshot")
+            if isinstance(shot, str) and shot.strip() and shot.strip() not in screenshots:
+                screenshots.append(shot.strip())
+    return screenshots
+
+
+def _finding_stage(finding: Mapping[str, object]) -> str:
+    evidence = dict(finding.get("evidence", {}) or {})
+    explicit = str(evidence.get("stage") or "").strip().lower()
+    if explicit:
+        return explicit
+    identifier = str(finding.get("id") or "")
+    category = str(finding.get("category") or "").strip().lower()
+    if identifier.startswith("BROWSER.") or category == "browser":
+        return "browser"
+    if identifier.startswith("BEHAVIOUR.") or identifier.startswith("BEHAVIOR.") or category in {"behavioral", "behavioural"}:
+        return "runtime"
+    return ""
+
+
+def _finding_group_key(finding: Mapping[str, object]) -> str:
+    evidence = dict(finding.get("evidence", {}) or {})
+    rule_id = str(evidence.get("rule_id") or "").strip()
+    if rule_id:
+        return rule_id
+    return str(finding.get("id") or "").strip()
+
+
+def _normalize_raw_finding(finding: Mapping[str, object]) -> dict[str, Any]:
+    identifier = str(finding.get("id") or "").strip() or "unknown"
+    evidence = dict(finding.get("evidence", {}) or {}) if isinstance(finding.get("evidence"), Mapping) else finding.get("evidence")
+    severity = _normalize_status(finding.get("severity"), fallback="INFO")
+    stage = _finding_stage(finding)
+    component = str(finding.get("category") or "").strip().lower()
+    title = _humanize_identifier(identifier)
+    message = _first_non_empty(
+        [
+            finding.get("message"),
+            _describe_identifier(identifier),
+            title,
+        ]
+    )
+    screenshots = _gather_screenshots(evidence)
+    search_terms = " ".join(
+        str(part)
+        for part in (
+            identifier,
+            title,
+            message,
+            component,
+            stage,
+            finding.get("source"),
+            finding.get("finding_category"),
+        )
+        if str(part or "").strip()
+    ).lower()
+    return {
+        "id": identifier,
+        "title": title,
+        "message": message,
+        "status": severity,
+        "badge_label": severity if severity != "THREAT" else "THREAT",
+        "tone": _status_tone(severity),
+        "component": component,
+        "component_label": _component_label(component),
+        "component_filter": _component_filter_value(component, stage=stage),
+        "stage": stage,
+        "stage_label": _stage_label(stage),
+        "source": str(finding.get("source") or "").strip(),
+        "finding_category": str(finding.get("finding_category") or "").strip(),
+        "evidence": evidence,
+        "screenshots": screenshots,
+        "search_text": search_terms,
+    }
+
+
+def _build_decision_summary(
+    run: Mapping[str, object],
+    report: Mapping[str, object] | None,
+    confidence: Mapping[str, object],
+    review: Mapping[str, object],
+    limitations: list[dict[str, Any]],
+    student_issues: list[dict[str, Any]],
+) -> dict[str, Any]:
+    run_status = str(run.get("status") or "").strip().lower()
+    overall = _coerce_float(((report or {}).get("scores", {}) or {}).get("overall"))
+    confidence_level = str(confidence.get("level") or "unknown").strip().lower() or "unknown"
+    manual_review_required = bool(review.get("recommended"))
+    manual_review_label = "Required" if manual_review_required else "Not required"
+
+    if run_status == "pending":
+        outcome = "Awaiting rerun"
+        mark_band = "Pending"
+        tone = "warning"
+        manual_review_label = "Pending"
+    elif run_status in {"failed", "error"}:
+        outcome = "Manual decision needed"
+        mark_band = "Hold"
+        tone = "danger"
+        manual_review_required = True
+        manual_review_label = "Required"
+    elif overall is None:
+        outcome = "Manual decision needed"
+        mark_band = "Hold"
+        tone = "danger"
+        manual_review_required = True
+        manual_review_label = "Required"
+    elif overall <= 0:
+        outcome = "No meaningful attempt"
+        mark_band = "0.0"
+        tone = "danger"
+    elif overall < 0.7:
+        outcome = "Partial attempt"
+        mark_band = "0.5"
+        tone = "warning"
+    else:
+        outcome = "Meets exercise objectives"
+        mark_band = "1.0"
+        tone = "success"
+
+    reasons = []
+    for item in student_issues[:2]:
+        title = str(item.get("title") or "").strip()
+        if title and title not in reasons:
+            reasons.append(title)
+    for item in limitations:
+        title = str(item.get("title") or "").strip()
+        if title and title not in reasons:
+            reasons.append(title)
+        if len(reasons) >= 3:
+            break
+
+    confidence_titles = [str(item.get("title") or "").strip().lower() for item in limitations if str(item.get("title") or "").strip()]
+    if run_status == "pending":
+        explanation = "Confidence will be recalculated after the queued rerun completes."
+    elif confidence_titles:
+        prefix = {
+            "low": "Low confidence because",
+            "medium": "Medium confidence because",
+            "high": "High confidence, but note that",
+        }.get(confidence_level, "Confidence is reduced because")
+        explanation = f"{prefix} {', '.join(confidence_titles[:2])}."
+    elif confidence_level == "high":
+        explanation = "High confidence because all enabled automated stages completed successfully."
+    elif confidence_level == "medium":
+        explanation = "Medium confidence because some automated stages were incomplete."
+    else:
+        explanation = "Low confidence because the automated result is missing reliable supporting evidence."
+
+    return {
+        "outcome": outcome,
+        "mark_band": mark_band,
+        "tone": tone,
+        "internal_score_percent": int(round(overall * 100)) if overall is not None else None,
+        "confidence_level": confidence_level,
+        "manual_review_required": manual_review_required,
+        "manual_review_label": manual_review_label,
+        "reasons": reasons[:3],
+        "confidence_explanation": explanation,
+    }
+
+
+def _build_submission_detail_view(
+    run: Mapping[str, object],
+    report: Mapping[str, object] | None,
+) -> dict[str, Any]:
+    report_data = dict(report or {})
+    score_evidence = dict(report_data.get("score_evidence", {}) or {})
+    confidence = dict(score_evidence.get("confidence", {}) or {})
+    review = dict(score_evidence.get("review", {}) or {})
+    role_mapping = dict(score_evidence.get("role_mapping", {}) or {})
+    environment = dict(report_data.get("environment", {}) or {})
+    component_scores = dict(((report_data.get("scores", {}) or {}).get("by_component", {}) or {}))
+    requirement_results = [
+        dict(item)
+        for item in list(score_evidence.get("requirements", []) or [])
+        if isinstance(item, Mapping)
+    ]
+    raw_findings = [
+        _normalize_raw_finding(finding)
+        for finding in list(report_data.get("findings", []) or [])
+        if isinstance(finding, Mapping)
+    ]
+    diagnostics = [
+        _normalize_raw_finding(finding)
+        for finding in list(report_data.get("diagnostics", []) or [])
+        if isinstance(finding, Mapping)
+    ]
+    checks = [
+        dict(item)
+        for item in list(report_data.get("checks", []) or [])
+        if isinstance(item, Mapping)
+    ]
+    behavioural_evidence = [dict(item) for item in list(report_data.get("behavioural_evidence", []) or []) if isinstance(item, Mapping)]
+    browser_evidence = [dict(item) for item in list(report_data.get("browser_evidence", []) or []) if isinstance(item, Mapping)]
+
+    findings_by_key: dict[str, list[dict[str, Any]]] = {}
+    for finding in raw_findings:
+        findings_by_key.setdefault(_finding_group_key(finding), []).append(finding)
+    checks_by_id = {
+        str(check.get("check_id") or "").strip(): check
+        for check in checks
+        if str(check.get("check_id") or "").strip()
+    }
+
+    browser_capture_failed = any(item["id"] == "BROWSER.CAPTURE_FAIL" for item in diagnostics)
+    browser_reliable = bool(environment.get("browser_available", True)) and bool(environment.get("browser_tests_run", True)) and not browser_capture_failed
+
+    valid_ux_findings: list[dict[str, Any]] = []
+    raw_ux_findings: list[dict[str, Any]] = []
+    for finding in raw_findings:
+        evidence = finding.get("evidence")
+        if not isinstance(evidence, Mapping):
+            continue
+        ux_review = evidence.get("ux_review")
+        if not isinstance(ux_review, Mapping):
+            continue
+        raw_ux_findings.append(finding)
+        if str(ux_review.get("status") or "").strip().upper() == "NOT_EVALUATED":
+            continue
+        if browser_reliable:
+            valid_ux_findings.append(finding)
+    hidden_ux_keys = {_finding_group_key(finding) for finding in raw_ux_findings} if not browser_reliable else set()
+
+    evidence_items: list[dict[str, Any]] = []
+    matched_keys: set[str] = set()
+
+    for requirement in requirement_results:
+        requirement_id = str(requirement.get("requirement_id") or "").strip()
+        if not requirement_id:
+            continue
+        matched_keys.add(requirement_id)
+        component = str(requirement.get("component") or "").strip().lower()
+        stage = str(requirement.get("stage") or "").strip().lower()
+        status = _normalize_status(requirement.get("status"), fallback="UNKNOWN")
+        check = checks_by_id.get(requirement_id)
+        related_findings = list(findings_by_key.get(requirement_id, []))
+        detail = _first_non_empty(
+            list((check or {}).get("messages", []) or [])
+            + [requirement.get("skipped_reason"), (requirement.get("evidence") or {}).get("reason") if isinstance(requirement.get("evidence"), Mapping) else ""]
+        )
+        evidence_items.append(
+            {
+                "kind": "requirement",
+                "type_label": "Requirement",
+                "title": _first_non_empty([requirement.get("description"), _humanize_identifier(requirement_id)]),
+                "secondary_id": requirement_id,
+                "status": status,
+                "badge_label": status,
+                "tone": _status_tone(status),
+                "component": component,
+                "component_label": _component_label(component),
+                "component_filter": _component_filter_value(component, stage=stage),
+                "stage": stage,
+                "stage_label": _stage_label(stage),
+                "detail": detail,
+                "required": bool(requirement.get("required", True)),
+                "score_display": requirement.get("score"),
+                "requirement": requirement,
+                "check": check,
+                "raw_findings": related_findings,
+                "search_text": " ".join(
+                    [
+                        requirement_id,
+                        str(requirement.get("description") or ""),
+                        component,
+                        stage,
+                        status,
+                        detail,
+                    ]
+                    + [str(item.get("title") or "") for item in related_findings]
+                ).lower(),
+            }
+        )
+
+    for check_id, check in checks_by_id.items():
+        if check_id in matched_keys:
+            continue
+        if check_id in hidden_ux_keys:
+            continue
+        related_findings = list(findings_by_key.get(check_id, []))
+        first_finding = related_findings[0] if related_findings else {}
+        stage = str(first_finding.get("stage") or "").strip().lower()
+        component = str(check.get("component") or first_finding.get("component") or "").strip().lower()
+        status = _normalize_status(check.get("status"), fallback="UNKNOWN")
+        detail = _first_non_empty(list(check.get("messages", []) or []) + [first_finding.get("message")])
+        evidence_items.append(
+            {
+                "kind": "check",
+                "type_label": "Check",
+                "title": _humanize_identifier(check_id),
+                "secondary_id": check_id,
+                "status": status,
+                "badge_label": status,
+                "tone": _status_tone(status),
+                "component": component,
+                "component_label": _component_label(component),
+                "component_filter": _component_filter_value(component, stage=stage),
+                "stage": stage,
+                "stage_label": _stage_label(stage),
+                "detail": detail or _describe_identifier(check_id),
+                "required": False,
+                "score_display": None,
+                "requirement": None,
+                "check": check,
+                "raw_findings": related_findings,
+                "search_text": " ".join(
+                    [
+                        check_id,
+                        _humanize_identifier(check_id),
+                        component,
+                        stage,
+                        status,
+                        detail or "",
+                    ]
+                ).lower(),
+            }
+        )
+
+    threat_findings = [finding for finding in raw_findings if finding["status"] == "THREAT"]
+    for index, finding in enumerate(threat_findings, start=1):
+        evidence_items.append(
+            {
+                "kind": "threat",
+                "type_label": "Security",
+                "title": finding["title"],
+                "secondary_id": finding["id"],
+                "status": "FAIL",
+                "badge_label": "Threat",
+                "tone": "danger",
+                "component": "security",
+                "component_label": "Security",
+                "component_filter": "other",
+                "stage": "",
+                "stage_label": "Security",
+                "detail": finding["message"],
+                "required": False,
+                "score_display": None,
+                "requirement": None,
+                "check": None,
+                "raw_findings": [finding],
+                "search_text": f"{finding['id']} {finding['title']} {finding['message']} security threat".lower(),
+                "_sort_index": index,
+            }
+        )
+
+    for finding in valid_ux_findings:
+        evidence = dict(finding.get("evidence", {}) or {})
+        ux_review = dict(evidence.get("ux_review", {}) or {})
+        page_name = str(evidence.get("page") or ux_review.get("page") or finding["title"]).strip()
+        feedback = _first_non_empty([ux_review.get("feedback"), ux_review.get("improvement_recommendation"), finding.get("message")])
+        evidence_items.append(
+            {
+                "kind": "ux",
+                "type_label": "UX review",
+                "title": page_name or "UX review",
+                "secondary_id": finding["id"],
+                "status": "PASS" if str(ux_review.get("status") or "").strip().upper() == "PASS" else "WARN",
+                "badge_label": str(ux_review.get("status") or "Review").replace("_", " ").title(),
+                "tone": "success" if str(ux_review.get("status") or "").strip().upper() == "PASS" else "warning",
+                "component": "browser",
+                "component_label": "Browser",
+                "component_filter": "browser",
+                "stage": "browser",
+                "stage_label": "Browser",
+                "detail": feedback,
+                "required": False,
+                "score_display": None,
+                "requirement": None,
+                "check": None,
+                "raw_findings": [finding],
+                "search_text": f"{finding['id']} {page_name} {feedback} ux browser".lower(),
+            }
+        )
+
+    evidence_items.sort(
+        key=lambda item: (
+            _DETAIL_STATUS_PRIORITY.get(item["status"], 99),
+            0 if item["kind"] == "requirement" else (1 if item["kind"] == "threat" else 2),
+            _DETAIL_COMPONENT_ORDER.index(item["component_filter"]) if item["component_filter"] in _DETAIL_COMPONENT_ORDER else len(_DETAIL_COMPONENT_ORDER),
+            str(item["title"]).lower(),
+            str(item.get("_sort_index") or 0),
+        )
+    )
+
+    component_cards = []
+    for component, data in component_scores.items():
+        summary = dict(data.get("requirement_summary", {}) or {})
+        score_value = data.get("score")
+        if score_value == "SKIPPED" and int(summary.get("requirement_count", 0) or 0) == 0:
+            continue
+        numeric_score = _coerce_float(score_value)
+        if numeric_score is not None:
+            tone = "success" if numeric_score >= 0.7 else ("warning" if numeric_score > 0 else "danger")
+            score_label = f"{int(round(numeric_score * 100))}%"
+        else:
+            tone = "muted"
+            score_label = str(score_value or "N/A")
+        component_cards.append(
+            {
+                "key": component,
+                "label": _component_label(component),
+                "score_label": score_label,
+                "tone": tone,
+                "summary": summary,
+                "detail": (
+                    f"{int(summary.get('met', 0) or 0)} met, "
+                    f"{int(summary.get('partial', 0) or 0)} partial, "
+                    f"{int(summary.get('failed', 0) or 0)} failed"
+                    + (
+                        f", {int(summary.get('skipped', 0) or 0)} skipped"
+                        if int(summary.get("skipped", 0) or 0)
+                        else ""
+                    )
+                    + "."
+                ),
+            }
+        )
+    component_cards.sort(
+        key=lambda item: _DETAIL_COMPONENT_ORDER.index(item["key"]) if item["key"] in _DETAIL_COMPONENT_ORDER else len(_DETAIL_COMPONENT_ORDER)
+    )
+
+    student_issues = [
+        item
+        for item in evidence_items
+        if (
+            (item["kind"] == "requirement" and item["required"] and item["status"] in {"FAIL", "PARTIAL"})
+            or (item["kind"] == "check" and item["status"] in {"FAIL", "WARN"})
+            or item["kind"] == "threat"
+        )
+    ]
+    priority_findings = [
+        item
+        for item in evidence_items
+        if item["kind"] == "requirement" and item["required"] and item["status"] in {"FAIL", "PARTIAL"}
+    ]
+
+    limitations: list[dict[str, Any]] = []
+
+    def _push_limitation(title: str, detail: str = "", *, tone: str = "warning", secondary_id: str = "") -> None:
+        key = (title.strip().lower(), secondary_id.strip().lower())
+        if not title or any((item.get("_key") == key) for item in limitations):
+            return
+        limitations.append(
+            {
+                "_key": key,
+                "title": title,
+                "detail": detail or title,
+                "tone": tone,
+                "secondary_id": secondary_id,
+            }
+        )
+
+    run_status = str(run.get("status") or "").strip().lower()
+    if run_status == "pending":
+        _push_limitation(
+            "Rerun is still in progress",
+            "This submission is being reprocessed in the background, so the current result is incomplete.",
+        )
+    elif run_status in {"failed", "error"}:
+        _push_limitation(
+            "The latest rerun failed",
+            "The most recent attempt to reprocess this submission did not complete successfully.",
+            tone="danger",
+        )
+
+    if bool(run.get("llm_error_flagged")):
+        _push_limitation(
+            "LLM-assisted review failed",
+            str(run.get("llm_error_message") or "An LLM-assisted review step failed, so manual review is required."),
+            tone="warning",
+            secondary_id="llm",
+        )
+
+    if environment and not environment.get("php_available", True):
+        _push_limitation(
+            "PHP runtime was unavailable",
+            "Server-side runtime checks could not be completed because PHP was unavailable in this run.",
+            secondary_id="php_unavailable",
+        )
+    if environment and not environment.get("behavioural_tests_run", True):
+        _push_limitation(
+            "Runtime checks were unavailable",
+            "Behavioural runtime stages did not complete, so dynamic server-side evidence is incomplete.",
+            secondary_id="runtime_unavailable",
+        )
+    if environment and not environment.get("browser_available", True):
+        _push_limitation(
+            "Browser environment was unavailable",
+            "Browser-based checks could not be completed in this run.",
+            secondary_id="browser_unavailable",
+        )
+    if environment and not environment.get("browser_tests_run", True):
+        _push_limitation(
+            "Browser checks were unavailable",
+            "UI and browser-driven evidence was incomplete because the browser stage did not complete.",
+            secondary_id="browser_tests_unavailable",
+        )
+
+    for flag in list(confidence.get("flags", []) or []):
+        text = _CONFIDENCE_FLAG_TEXT.get(str(flag))
+        if text:
+            _push_limitation(text.rstrip("."), text, secondary_id=str(flag))
+
+    for finding in diagnostics:
+        if finding["id"] == "BROWSER.CAPTURE_FAIL":
+            _push_limitation(
+                "Browser screenshot capture failed",
+                finding["message"],
+                secondary_id=finding["id"],
+            )
+
+    if raw_ux_findings and not browser_reliable:
+        _push_limitation(
+            "UX review is hidden for this run",
+            "Browser capture was not reliable in this assessment result, so UX screenshots and review summaries are withheld to avoid contradictory evidence.",
+            secondary_id="ux_hidden",
+        )
+
+    limitations = limitations[:6]
+
+    stage_status = []
+    stage_status.append({"label": "Static checks", "value": "Completed"})
+    stage_status.append(
+        {
+            "label": "Runtime checks",
+            "value": "Completed" if environment.get("behavioural_tests_run", True) else "Unavailable",
+        }
+    )
+    stage_status.append(
+        {
+            "label": "Browser checks",
+            "value": "Completed" if environment.get("browser_tests_run", True) else "Unavailable",
+        }
+    )
+
+    role_context = []
+    for role, paths in sorted((role_mapping.get("roles", {}) or {}).items()):
+        clean_paths = [str(path) for path in list(paths or []) if str(path).strip()]
+        if clean_paths:
+            role_context.append(
+                {
+                    "title": role.replace("_", " ").title(),
+                    "detail": ", ".join(_clean_path(path) for path in clean_paths[:4]),
+                }
+            )
+
+    decision = _build_decision_summary(run, report_data, confidence, review, limitations, student_issues)
+
+    skipped_requirements = [
+        item
+        for item in evidence_items
+        if item["kind"] == "requirement" and item["status"] == "SKIPPED" and item["required"]
+    ]
+
+    return {
+        "decision": decision,
+        "student_issues": student_issues[:4],
+        "limitations": limitations,
+        "component_cards": component_cards,
+        "assessment_context": {
+            "roles": role_context,
+            "stages": stage_status,
+            "profile": str(score_evidence.get("profile") or run.get("profile") or "Unknown"),
+            "evaluation_state": (
+                "Partially evaluated"
+                if limitations
+                else "Fully evaluated"
+            ) if report_data else "Awaiting result",
+        },
+        "priority_findings": priority_findings[:6],
+        "evidence_items": evidence_items,
+        "debug": {
+            "skipped_requirements": skipped_requirements,
+            "diagnostics": diagnostics,
+            "behavioural_evidence": behavioural_evidence,
+            "browser_evidence": browser_evidence,
+            "environment": environment,
+            "llm_feedback": report_data.get("llm_feedback"),
+        },
+    }
 
 
 def _submission_identity(student_id: str | None, assignment_id: str | None) -> tuple[str, str] | None:
@@ -417,6 +1155,7 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
     
     # Register Jinja filters
     app.jinja_env.filters["clean_path"] = _clean_path
+    app.jinja_env.filters["format_submission_datetime"] = _format_submission_datetime
     app.jinja_env.globals["render_evidence_value"] = _render_evidence_value
 
     # ── Sandbox status context processor ─────────────────────────────
@@ -1851,6 +2590,7 @@ def _register_routes(app: Flask) -> None:
                 context["threat_file_contents"] = _load_threat_file_contents(
                     context["report"].get("findings", []), run_dir
                 )
+            context["detail_view"] = _build_submission_detail_view(context["run"], context.get("report"))
             return render_template("run_detail.html", **context)
         else:
             # Batch runs: redirect to assignment detail page (batch summary removed)
@@ -2081,14 +2821,17 @@ def _register_routes(app: Flask) -> None:
 
         # submission_dir doubles as the "run_dir" for threat file loading
         # because batch sub-runs store their files under runs/<id>/submission/
+        detail_run_info = submission_run_info
+        detail_report = report
         return render_template(
             "run_detail.html",
-            run=submission_run_info,
+            run=detail_run_info,
             run_id=run_id,
-            report=report,
+            report=detail_report,
             marks_released=marks_released,
+            detail_view=_build_submission_detail_view(detail_run_info, detail_report),
             threat_file_contents=_load_threat_file_contents(
-                (report or {}).get("findings", []), submission_dir
+                (detail_report or {}).get("findings", []), submission_dir
             ),
             batch_submission_id=submission_id,  # Flag to show back button
             back_url=back_url,

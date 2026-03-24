@@ -3,237 +3,155 @@
 
 {% block head %}
 <style>
-    .results-shell,
-    .results-stack,
-    .results-findings,
-    .results-grid,
-    .results-role-grid,
-    .results-component-grid {
-        display: grid;
-        gap: var(--space-md);
+    .submission-detail-shell,
+    .submission-summary-grid,
+    .submission-card-grid,
+    .submission-issue-list,
+    .submission-evidence-list,
+    .submission-detail-kv,
+    .submission-detail-body-grid,
+    .submission-evidence-row { display:grid; gap:var(--space-md); }
+    .submission-detail-shell { gap:var(--space-xl); }
+    .submission-detail-banner {
+        display:grid; gap:var(--space-lg); padding:clamp(1.1rem, 2vw, 1.5rem);
+        border-radius:var(--radius-lg); border:1px solid rgba(148,163,184,0.22);
+        background:linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%);
+        box-shadow:var(--shadow-sm);
     }
-    .results-shell {
-        gap: var(--space-xl);
+    .submission-banner-kicker,
+    .submission-banner-metric-label {
+        display:block; margin-bottom:0.35rem; font-size:var(--text-xs); font-weight:700;
+        letter-spacing:0.08em; text-transform:uppercase; color:var(--color-text-muted);
     }
-    .results-grid {
-        grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.95fr);
-        align-items: start;
+    .submission-banner-title { margin:0; font-size:clamp(1.8rem, 3vw, 2.35rem); line-height:1.05; }
+    .submission-banner-title.is-success { color:var(--color-success); }
+    .submission-banner-title.is-warning { color:var(--color-warning); }
+    .submission-banner-title.is-danger { color:var(--color-danger); }
+    .submission-band {
+        display:inline-flex; align-items:center; gap:0.45rem; padding:0.55rem 0.9rem; border-radius:999px;
+        background:rgba(255,255,255,0.92); border:1px solid rgba(148,163,184,0.22); box-shadow:var(--shadow-sm);
+        font-size:var(--text-sm); font-weight:700; color:var(--color-text);
     }
-    .results-role-grid,
-    .results-component-grid {
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    .submission-band strong { font-size:var(--text-base); }
+    .submission-banner-meta { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:var(--space-md); }
+    .submission-banner-metric,
+    .submission-issue-card,
+    .submission-component-card,
+    .submission-context-card,
+    .submission-evidence-block {
+        padding:1rem 1.05rem; border-radius:var(--radius-lg); border:1px solid var(--color-border-light); background:var(--color-surface-elevated);
     }
-    .results-block {
-        padding: 1rem 1.1rem;
-        border-radius: var(--radius-lg);
-        border: 1px solid var(--color-border-light);
-        background: var(--color-surface-elevated);
+    .submission-issue-card.is-danger,
+    .submission-component-card.is-danger { border-color:rgba(239,68,68,0.24); background:rgba(239,68,68,0.06); }
+    .submission-issue-card.is-warning,
+    .submission-component-card.is-warning { border-color:rgba(245,158,11,0.26); background:rgba(245,158,11,0.08); }
+    .submission-issue-card.is-success,
+    .submission-component-card.is-success { border-color:rgba(22,163,74,0.22); background:rgba(22,163,74,0.06); }
+    .submission-banner-metric-value,
+    .submission-score { font-size:1.35rem; font-weight:700; color:var(--color-text); }
+    .submission-detail-note,
+    .submission-secondary-id { color:var(--color-text-muted); font-size:var(--text-sm); }
+    .submission-secondary-id { font-family:var(--font-mono); overflow-wrap:anywhere; }
+    .submission-concern-list { margin:0; padding-left:1.1rem; display:grid; gap:0.45rem; color:var(--color-text-secondary); }
+    .submission-summary-grid { grid-template-columns:minmax(0, 1.12fr) minmax(0, 0.88fr); align-items:start; }
+    .submission-card-grid { grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); }
+    .submission-section-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:var(--space-lg); flex-wrap:wrap; margin-bottom:var(--space-lg); }
+    .submission-section-title,
+    .submission-card-title { margin:0; font-size:var(--text-base); font-weight:600; color:var(--color-text); }
+    .submission-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:var(--space-md); flex-wrap:wrap; }
+    .submission-inline-list { margin:0; padding:0; list-style:none; display:grid; gap:0.65rem; }
+    .submission-detail-kv { grid-template-columns:max-content 1fr; gap:0.3rem var(--space-md); margin:0; }
+    .submission-detail-kv dt { font-family:var(--font-mono); font-size:var(--text-xs); color:var(--color-text-muted); }
+    .submission-detail-kv dd { margin:0; color:var(--color-text); overflow-wrap:anywhere; }
+    .submission-tab-panels > [role="tabpanel"][hidden] { display:none; }
+    .submission-filter-row { display:flex; justify-content:space-between; align-items:center; gap:var(--space-md); flex-wrap:wrap; margin-bottom:var(--space-md); }
+    .submission-filter-search { flex:1; min-width:min(100%, 320px); }
+    .submission-filter-search .form-input {
+        min-height:48px; border-radius:999px; padding-inline:1rem; background:rgba(255,255,255,0.96);
+        border-color:rgba(148,163,184,0.35); box-shadow:0 1px 2px rgba(15,23,42,0.04);
     }
-    .results-block-title {
-        font-weight: 600;
-        color: var(--color-text);
+    .submission-filter-groups { display:grid; gap:var(--space-sm); }
+    .submission-filter-group { display:flex; align-items:center; flex-wrap:wrap; gap:var(--space-sm); }
+    .submission-filter-label { min-width:4.75rem; font-size:var(--text-sm); font-weight:600; color:var(--color-text); }
+    .submission-filter-chip {
+        display:inline-flex; align-items:center; justify-content:center; min-height:36px; padding:0.45rem 0.85rem;
+        border-radius:999px; border:1px solid rgba(148,163,184,0.18); background:rgba(255,255,255,0.92);
+        color:var(--color-text-secondary); font-size:var(--text-sm); font-weight:600; cursor:pointer; transition:all var(--transition-fast);
     }
-    .results-block-note,
-    .results-note {
-        margin-top: 0.4rem;
-        font-size: var(--text-sm);
-        color: var(--color-text-muted);
+    .submission-filter-chip.is-active,
+    .submission-filter-chip[aria-pressed="true"] {
+        color:white; border-color:rgba(37,99,235,0.82); background:linear-gradient(180deg, #4f8cff 0%, #2563eb 100%);
+        box-shadow:0 8px 18px rgba(37,99,235,0.18);
     }
-    .results-score {
-        margin-top: 0.35rem;
-        font-size: 1.45rem;
-        line-height: 1.05;
-        font-weight: 700;
-        color: var(--color-text);
+    .submission-filter-count { margin-left:auto; font-size:var(--text-sm); color:var(--color-text-muted); white-space:nowrap; }
+    .submission-evidence-item {
+        padding:0; overflow:hidden; border-radius:var(--radius-lg); border:1px solid var(--color-border-light); background:var(--color-surface);
     }
-    .results-list {
-        margin: 0;
-        padding-left: 1.1rem;
-        display: grid;
-        gap: 0.45rem;
-        color: var(--color-text-secondary);
+    .submission-evidence-item[open] { box-shadow:var(--shadow-sm); }
+    .submission-evidence-item > summary { list-style:none; cursor:pointer; padding:var(--space-lg); }
+    .submission-evidence-item > summary::-webkit-details-marker { display:none; }
+    .submission-evidence-item[open] > summary { border-bottom:1px solid var(--color-border-light); background:rgba(248,250,252,0.72); }
+    .submission-evidence-row { grid-template-columns:minmax(0, 1fr) auto; align-items:start; }
+    .submission-evidence-main { min-width:0; display:grid; gap:0.45rem; }
+    .submission-evidence-title { margin:0; font-size:var(--text-base); color:var(--color-text); line-height:1.45; }
+    .submission-detail-body-grid { grid-template-columns:minmax(0, 1.2fr) minmax(240px, 0.8fr); align-items:start; }
+    .submission-system-sections,
+    .submission-system-list,
+    .submission-system-state-grid { display:grid; gap:var(--space-md); }
+    .submission-system-sections { gap:var(--space-lg); }
+    .submission-system-list { grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); }
+    .submission-system-state-grid { grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); }
+    .submission-system-state-card {
+        padding:0.95rem 1rem; border-radius:var(--radius-md); border:1px solid var(--color-border-light);
+        background:rgba(248,250,252,0.78); display:grid; gap:0.45rem;
     }
-    .results-finding-card {
-        padding: 0;
-        overflow: hidden;
-        border-radius: var(--radius-lg);
-        border: 1px solid var(--color-border-light);
-        border-left-width: 4px;
-        background: var(--color-surface);
+    .submission-system-state-label {
+        font-size:var(--text-xs); font-weight:700; letter-spacing:0.06em; text-transform:uppercase;
+        color:var(--color-text-muted);
     }
-    .results-finding-card[open] {
-        box-shadow: var(--shadow-sm);
+    .submission-system-state-value {
+        color:var(--color-text); font-size:var(--text-sm); font-weight:600; line-height:1.55;
+        overflow-wrap:anywhere; min-width:0;
     }
-    .results-finding-card > summary {
-        list-style: none;
-        cursor: pointer;
-        padding: var(--space-lg);
+    .submission-system-state-value div + div { margin-top:0.35rem; }
+    .submission-system-item {
+        padding:0.95rem 1rem; border-radius:var(--radius-md); border:1px solid var(--color-border-light);
+        background:rgba(248,250,252,0.78);
     }
-    .results-finding-card > summary::-webkit-details-marker {
-        display: none;
+    .submission-system-item.is-success { border-color:rgba(22,163,74,0.2); background:rgba(22,163,74,0.05); }
+    .submission-system-item.is-warning { border-color:rgba(245,158,11,0.22); background:rgba(245,158,11,0.06); }
+    .submission-system-item.is-danger { border-color:rgba(239,68,68,0.2); background:rgba(239,68,68,0.05); }
+    .submission-system-note {
+        margin:0.7rem 0 0; color:var(--color-text-secondary); font-size:var(--text-sm);
+        line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere;
     }
-    .results-finding-card[open] > summary {
-        border-bottom: 1px solid var(--color-border-light);
-        background: rgba(248, 250, 252, 0.75);
+    .submission-system-meta { display:flex; flex-wrap:wrap; gap:0.45rem; margin-top:0.7rem; }
+    .submission-code { padding:0.9rem 1rem; border-radius:var(--radius-md); background:#0f172a; color:#e2e8f0; overflow-x:auto; }
+    .submission-code pre { margin:0; background:transparent; border:0; color:inherit; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .submission-screenshot { max-width:100%; border-radius:var(--radius-md); border:1px solid var(--color-border); box-shadow:var(--shadow-sm); }
+    .submission-empty {
+        padding:1rem 1.1rem; border-radius:var(--radius-lg); border:1px dashed rgba(148,163,184,0.32);
+        background:rgba(248,250,252,0.72); color:var(--color-text-muted);
     }
-    .results-finding-card--info { border-left-color: var(--color-success); }
-    .results-finding-card--warn { border-left-color: var(--color-warning); }
-    .results-finding-card--fail { border-left-color: var(--color-danger); }
-    .results-finding-card--threat { border-left-color: #dc2626; background: #fff7f7; }
-    .results-finding-card--skipped { border-left-color: #94a3b8; }
-    .results-finding-summary {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: var(--space-md);
-        align-items: start;
+    .submission-file { padding:0; overflow:hidden; border-radius:var(--radius-lg); border:1px solid rgba(220,38,38,0.18); background:#fffafb; }
+    .submission-file > summary {
+        list-style:none; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:var(--space-md);
+        padding:0.9rem 1rem; background:rgba(220,38,38,0.08);
     }
-    .results-finding-main {
-        min-width: 0;
-        display: grid;
-        gap: 0.45rem;
-    }
-    .results-finding-title {
-        margin: 0;
-        color: var(--color-text);
-        font-size: var(--text-base);
-        line-height: 1.5;
-    }
-    .results-finding-meta {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: var(--space-xs);
-    }
-    .results-finding-body {
-        padding: var(--space-lg);
-        display: grid;
-        gap: var(--space-md);
-    }
-    .results-evidence-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.9fr);
-        gap: var(--space-lg);
-        align-items: start;
-    }
-    .results-code {
-        padding: 0.9rem 1rem;
-        border-radius: var(--radius-md);
-        background: #0f172a;
-        color: #e2e8f0;
-        overflow-x: auto;
-        border: 1px solid rgba(148, 163, 184, 0.18);
-    }
-    .results-code pre {
-        margin: 0;
-        padding: 0;
-        background: transparent;
-        border: 0;
-        color: inherit;
-    }
-    .results-code-label {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-xs);
-        margin-bottom: 0.5rem;
-        font-size: var(--text-xs);
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: #94a3b8;
-    }
-    .results-screenshot {
-        max-width: 100%;
-        border-radius: var(--radius-md);
-        border: 1px solid var(--color-border);
-        box-shadow: var(--shadow-sm);
-    }
-    .results-evidence-dl {
-        display: grid;
-        grid-template-columns: max-content 1fr;
-        gap: 0.35rem var(--space-md);
-        margin: 0;
-    }
-    .results-evidence-dl dt {
-        font-family: var(--font-mono);
-        font-size: var(--text-xs);
-        color: var(--color-text-muted);
-    }
-    .results-evidence-dl dd {
-        margin: 0;
-        font-size: var(--text-sm);
-        color: var(--color-text);
-        overflow-wrap: anywhere;
-    }
-    .results-file {
-        padding: 0;
-        overflow: hidden;
-        border-radius: var(--radius-lg);
-        border: 1px solid rgba(220, 38, 38, 0.18);
-        background: #fffafb;
-    }
-    .results-file > summary {
-        list-style: none;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-md);
-        padding: 0.9rem 1rem;
-        background: rgba(220, 38, 38, 0.08);
-    }
-    .results-file > summary::-webkit-details-marker { display: none; }
-    .results-file-scroll {
-        overflow: auto;
-        max-height: 55vh;
-        background: #0f172a;
-    }
-    .results-file-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-family: var(--font-mono);
-        font-size: 0.8rem;
-        line-height: 1.55;
-    }
-    .results-file-table td {
-        padding: 0.05rem 0.75rem;
-        vertical-align: top;
-        color: #cbd5e1;
-        white-space: pre;
-    }
-    .results-file-line {
-        width: 3.5rem;
-        text-align: right;
-        user-select: none;
-        color: #64748b;
-        border-right: 1px solid #1e293b;
-    }
-    .results-file-row--threat {
-        background: rgba(220, 38, 38, 0.18);
-    }
-    .results-file-row--threat .results-file-line {
-        color: #fca5a5;
-        border-right-color: #ef4444;
-        font-weight: 700;
-    }
-    .results-toolbar-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-sm);
-        margin-bottom: var(--space-lg);
-    }
-    @media (max-width: 960px) {
-        .results-grid,
-        .results-evidence-grid {
-            grid-template-columns: 1fr;
-        }
-    }
-    @media (max-width: 720px) {
-        .results-finding-summary {
-            grid-template-columns: 1fr;
-        }
-        .results-finding-meta {
-            justify-content: flex-start;
-        }
+    .submission-file > summary::-webkit-details-marker { display:none; }
+    .submission-file-scroll { overflow:auto; max-height:55vh; background:#0f172a; }
+    .submission-file-table { width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:0.8rem; line-height:1.55; }
+    .submission-file-table td { padding:0.05rem 0.75rem; vertical-align:top; color:#cbd5e1; white-space:pre; }
+    .submission-file-line { width:3.5rem; text-align:right; user-select:none; color:#64748b; border-right:1px solid #1e293b; }
+    .submission-file-row--threat { background:rgba(220,38,38,0.18); }
+    .submission-file-row--threat .submission-file-line { color:#fca5a5; border-right-color:#ef4444; font-weight:700; }
+    @media (max-width:1100px) { .submission-summary-grid, .submission-detail-body-grid { grid-template-columns:1fr; } }
+    @media (max-width:960px) { .submission-banner-meta { grid-template-columns:1fr; } }
+    @media (max-width:720px) {
+        .submission-evidence-row { grid-template-columns:1fr; }
+        .submission-filter-search, .submission-filter-count { width:100%; margin-left:0; }
+        .submission-system-list,
+        .submission-system-state-grid { grid-template-columns:1fr; }
     }
 </style>
 {% endblock %}
@@ -248,152 +166,153 @@
     {%- endif -%}
 {%- endmacro %}
 
-{% macro render_evidence_panel(finding) -%}
-    {% if finding.evidence %}
-    <div class="results-evidence-grid">
-        <div class="results-stack">
-            {% if finding.evidence is mapping and finding.evidence.llm_feedback is mapping %}
-            {% set fb = finding.evidence.llm_feedback %}
-            {% set fb_text = fb.summary or fb.evidence or (fb['items'][0].message if fb['items'] else '') %}
-            {% if fb_text and fb_text != finding.id %}
-            <div class="callout-card callout-card--info">
-                <div class="callout-title">AI feedback</div>
-                <p class="callout-text">{{ fb_text }}</p>
-            </div>
-            {% endif %}
-            {% endif %}
-            {% if finding.evidence is mapping and finding.evidence.hybrid_score is mapping %}
-            {% set hs = finding.evidence.hybrid_score %}
-            <div class="callout-card callout-card--warning">
-                <div class="callout-title">Partial credit evidence</div>
-                <p class="callout-text">{{ ((hs.final_score|default(0) * 100)|round|int) if hs.final_score is not none else 0 }}% of the rule weight was awarded.{% if hs.reasoning %} {{ hs.reasoning }}{% endif %}</p>
-            </div>
-            {% endif %}
-            {% if finding.evidence is mapping and finding.evidence.vision_analysis is mapping %}
-            {% set va = finding.evidence.vision_analysis %}
-            <div class="callout-card {% if va.status == 'PASS' %}callout-card--success{% else %}callout-card--warning{% endif %}">
-                <div class="callout-title">Vision analysis</div>
-                <p class="callout-text">{{ va.status|default('UNKNOWN') }}{% if va.reason %}: {{ va.reason }}{% endif %}{% if va.confidence is defined and va.confidence is not none %} (Confidence {{ (va.confidence * 100)|round|int }}%){% endif %}</p>
-            </div>
-            {% endif %}
-            {% if finding.evidence is mapping and finding.evidence.snippet %}
-            <div class="results-code">
-                <div class="results-code-label">
-                    <span>Code snippet</span>
-                    {% if finding.evidence.file and finding.evidence.line %}
-                    <span>{{ finding.evidence.file }}:{{ finding.evidence.line }}</span>
-                    {% endif %}
-                </div>
-                <pre>{{ finding.evidence.snippet }}</pre>
-            </div>
-            {% endif %}
-            {% if finding.evidence is mapping and finding.evidence.screenshot %}
-            <div class="results-block">
-                <strong>Screenshot</strong>
-                <div class="results-note">
-                    <img src="{{ artifact_url(finding.evidence.screenshot) }}" alt="Evidence screenshot" class="results-screenshot" onerror="this.parentElement.innerHTML='<p class=\'results-note\'>Screenshot unavailable.</p>'">
-                </div>
-            </div>
-            {% endif %}
-        </div>
-        <div class="results-stack">
-            {% if finding.evidence is mapping %}
-            {% set hidden_keys = ('snippet', 'content', 'llm_feedback', 'hybrid_score', 'vision_analysis', 'screenshot', 'ux_review') %}
-            <div class="results-block">
-                <strong>Structured evidence</strong>
-                <dl class="results-evidence-dl">
-                    {% for key, val in finding.evidence.items() %}
-                    {% if key not in hidden_keys %}
-                    <dt>{{ key }}</dt>
-                    <dd>
-                        {% if val is mapping %}
-                            {% for nested_key, nested_val in val.items() %}
-                            <div><strong>{{ nested_key }}:</strong> {{ render_evidence_value(nested_val) }}</div>
-                            {% endfor %}
-                        {% elif val is iterable and val is not string %}
-                            {% if val %}
-                            <ul class="results-list">
-                                {% for item in val %}
-                                <li>{{ render_evidence_value(item) }}</li>
-                                {% endfor %}
-                            </ul>
-                            {% else %}
-                            -
-                            {% endif %}
-                        {% else %}
-                        {{ render_evidence_value(val) }}
-                        {% endif %}
-                    </dd>
-                    {% endif %}
-                    {% endfor %}
-                </dl>
-            </div>
-            {% elif finding.evidence is iterable and finding.evidence is not string %}
-            <div class="results-block">
-                <strong>Evidence list</strong>
-                <ul class="results-list">
-                    {% for item in finding.evidence %}
+{% macro render_mapping(mapping, hidden_keys=()) -%}
+    {% if mapping %}
+    <dl class="submission-detail-kv">
+        {% for key, value in mapping.items() %}
+        {% if key not in hidden_keys %}
+        <dt>{{ key }}</dt>
+        <dd>
+            {% if value is mapping %}
+                {% for nested_key, nested_value in value.items() %}
+                <div><strong>{{ nested_key }}:</strong> {{ render_evidence_value(nested_value) }}</div>
+                {% endfor %}
+            {% elif value is iterable and value is not string %}
+                {% if value %}
+                <ul class="submission-inline-list">
+                    {% for item in value %}
                     <li>{{ render_evidence_value(item) }}</li>
                     {% endfor %}
                 </ul>
-            </div>
+                {% else %}
+                -
+                {% endif %}
             {% else %}
-            <div class="results-block">
-                <strong>Raw evidence</strong>
-                <pre>{{ finding.evidence }}</pre>
-            </div>
+            {{ render_evidence_value(value) }}
             {% endif %}
-        </div>
-    </div>
+        </dd>
+        {% endif %}
+        {% endfor %}
+    </dl>
     {% else %}
-    <p class="results-note">No supporting evidence was recorded for this item.</p>
+    <div class="submission-empty">No structured evidence was recorded.</div>
     {% endif %}
 {%- endmacro %}
 
-{% macro render_finding_card(finding, filterable=false, show_score=true) -%}
-    {% set sev = finding.severity|default('WARN')|upper %}
-    {% set variant = 'info' if sev == 'INFO' else ('fail' if sev == 'FAIL' else ('threat' if sev == 'THREAT' else ('skipped' if sev == 'SKIPPED' else 'warn'))) %}
-    {% set weight = finding.evidence.weight|float if (finding.evidence is mapping and finding.evidence.weight) else 1.0 %}
-    {% set earned = 0.0 %}
-    {% if show_score %}
-        {% if sev == 'INFO' %}
-            {% set earned = weight %}
-        {% elif sev == 'WARN' and finding.evidence is mapping and finding.evidence.hybrid_score is mapping and finding.evidence.hybrid_score.final_score|default(0) > 0 %}
-            {% set earned = (finding.evidence.hybrid_score.final_score|default(0) * weight)|round(2) %}
-        {% elif sev == 'FAIL' %}
-            {% if finding.evidence is mapping and finding.evidence.hybrid_score is mapping and finding.evidence.hybrid_score.final_score|default(0) > 0 %}
-                {% set earned = (finding.evidence.hybrid_score.final_score|default(0) * weight)|round(2) %}
-            {% elif finding.evidence is mapping and finding.evidence.vision_analysis is mapping and finding.evidence.vision_analysis.status == 'PASS' %}
-                {% set earned = weight %}
-            {% endif %}
-        {% endif %}
-    {% endif %}
-    <details class="results-finding-card results-finding-card--{{ variant }}{% if filterable %} finding{% endif %}"
-        {% if filterable %}
-        data-severity="{{ sev|lower }}"
-        data-rule-id="{{ finding.id|default('') }}"
-        data-component="{{ finding.category|default('') }}"
-        {% endif %}>
-        <summary>
-            <div class="results-finding-summary">
-                <div class="results-finding-main">
-                    <span class="finding-id">{{ finding.id|default('unknown') }}</span>
-                    <p class="results-finding-title">{{ finding.message|default('No message') }}</p>
-                    {% if finding.evidence is mapping and finding.evidence.llm_feedback is mapping and finding.evidence.llm_feedback.summary %}
-                    <span class="results-note">{{ finding.evidence.llm_feedback.summary }}</span>
-                    {% endif %}
-                </div>
-                <div class="results-finding-meta">
-                    {% if finding.category %}<span class="badge badge-info">{{ finding.category|upper }}</span>{% endif %}
-                    <span class="badge {% if sev == 'INFO' %}badge-success{% elif sev == 'FAIL' or sev == 'THREAT' %}badge-danger{% elif sev == 'SKIPPED' %}badge-secondary{% else %}badge-warning{% endif %}">{{ sev }}</span>
-                    {% if show_score %}<span class="badge badge-secondary">{{ "%.2f"|format(earned) }} / {{ "%.2f"|format(weight) }}</span>{% endif %}
-                </div>
+{% macro render_raw_finding_detail(finding) -%}
+    {% set evidence = finding.evidence if finding.evidence is mapping else {} %}
+    {% set hidden_keys = ('snippet', 'snippets', 'content', 'llm_feedback', 'hybrid_score', 'vision_analysis', 'ux_review', 'screenshot') %}
+    <article class="submission-evidence-block">
+        <div class="submission-card-head">
+            <div>
+                <h4 class="submission-card-title">{{ finding.title }}</h4>
+                <div class="submission-secondary-id">{{ finding.id }}</div>
             </div>
-        </summary>
-        <div class="results-finding-body">
-            {{ render_evidence_panel(finding) }}
+            <div class="page-status-row">
+                {% if finding.component_label %}<span class="badge badge-info">{{ finding.component_label }}</span>{% endif %}
+                {% if finding.stage %}<span class="badge badge-secondary">{{ finding.stage_label }}</span>{% endif %}
+                <span class="badge {% if finding.tone == 'success' %}badge-success{% elif finding.tone == 'warning' %}badge-warning{% elif finding.tone == 'danger' %}badge-danger{% else %}badge-secondary{% endif %}">{{ finding.badge_label|default(finding.status) }}</span>
+            </div>
         </div>
-    </details>
+        <p class="submission-detail-note">{{ finding.message }}</p>
+        {% if evidence.snippet %}<div class="submission-code"><pre>{{ evidence.snippet }}</pre></div>{% endif %}
+        {% if finding.screenshots %}
+        <div class="submission-card-grid">
+            {% for shot in finding.screenshots %}
+            <img src="{{ artifact_url(shot) }}" alt="Evidence screenshot" class="submission-screenshot" onerror="this.parentElement.innerHTML='<p class=\'submission-detail-note\'>Screenshot unavailable.</p>'">
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if evidence %}{{ render_mapping(evidence, hidden_keys) }}{% endif %}
+    </article>
+{%- endmacro %}
+
+{% macro environment_label(key) -%}
+    {% set labels = {
+        'php_available': 'PHP runtime',
+        'browser_available': 'Browser runtime',
+        'behavioural_tests_run': 'Runtime checks',
+        'browser_tests_run': 'Browser checks'
+    } %}
+    {{ labels.get(key, key|replace('_', ' ')|title) }}
+{%- endmacro %}
+
+{% macro status_badge_class(status) -%}
+    {%- set key = status|string|lower -%}
+    {{- 'badge-success' if key in ['pass', 'passed', 'ok'] else ('badge-danger' if key in ['fail', 'failed', 'error', 'threat'] else ('badge-warning' if key in ['warn', 'warning', 'partial'] else 'badge-secondary')) -}}
+{%- endmacro %}
+
+{% macro system_item_class(status) -%}
+    {%- set key = status|string|lower -%}
+    {{- 'is-success' if key in ['pass', 'passed', 'ok'] else ('is-danger' if key in ['fail', 'failed', 'error', 'threat'] else ('is-warning' if key in ['warn', 'warning', 'partial'] else '')) -}}
+{%- endmacro %}
+
+{% macro render_environment_state(mapping) -%}
+    {% if mapping %}
+    <div class="submission-system-state-grid">
+        {% for key, value in mapping.items() %}
+        <article class="submission-system-state-card">
+            <div class="submission-system-state-label">{{ environment_label(key) }}</div>
+            <div class="submission-system-state-value">
+                {% if value is sameas true %}
+                    <span class="badge badge-success">{{ 'Completed' if key in ['behavioural_tests_run', 'browser_tests_run'] else 'Available' }}</span>
+                {% elif value is sameas false %}
+                    <span class="badge badge-warning">{{ 'Unavailable' if key in ['php_available', 'browser_available'] else 'Not completed' }}</span>
+                {% elif value is mapping %}
+                    {% for nested_key, nested_value in value.items() %}
+                    <div><strong>{{ nested_key|replace('_', ' ')|title }}:</strong> {{ render_evidence_value(nested_value) }}</div>
+                    {% endfor %}
+                {% elif value is iterable and value is not string %}
+                    {% if value %}
+                    <ul class="submission-inline-list">
+                        {% for item in value %}
+                        <li>{{ render_evidence_value(item) }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    -
+                    {% endif %}
+                {% else %}
+                {{ render_evidence_value(value) }}
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="submission-empty">No environment summary was recorded.</div>
+    {% endif %}
+{%- endmacro %}
+
+{% macro render_system_check_item(item, source_label) -%}
+    {% set test_id = item.test_id|default('Unknown', true) %}
+    {% set status = item.status|default('Unknown', true) %}
+    {% set note = item.notes|default('', true) %}
+    {% if not note %}{% set note = item.stderr|default('', true) %}{% endif %}
+    {% if not note %}{% set note = item.stdout|default('', true) %}{% endif %}
+    {% if not note and item.console_errors %}{% set note = item.console_errors|join(', ') %}{% endif %}
+    <article class="submission-system-item {{ system_item_class(status) }}">
+        <div class="submission-card-head">
+            <div>
+                <h4 class="submission-card-title">{{ test_id|replace('.', ' ')|replace('_', ' ')|title }}</h4>
+                <div class="submission-secondary-id">{{ test_id }}</div>
+            </div>
+            <div class="page-status-row">
+                <span class="badge badge-secondary">{{ source_label }}</span>
+                <span class="badge {{ status_badge_class(status) }}">{{ status|replace('_', ' ')|title }}</span>
+            </div>
+        </div>
+        {% if note %}
+        <p class="submission-system-note">{{ note }}</p>
+        {% endif %}
+        {% if item.component or item.duration_ms or item.url %}
+        <div class="submission-system-meta">
+            {% if item.component %}<span class="badge badge-info">{{ item.component|replace('_', ' ')|title }}</span>{% endif %}
+            {% if item.duration_ms %}<span class="badge badge-secondary">{{ item.duration_ms }} ms</span>{% endif %}
+            {% if item.url %}<span class="submission-detail-note">{{ item.url }}</span>{% endif %}
+        </div>
+        {% endif %}
+    </article>
 {%- endmacro %}
 
 {% set viewer_role = view_as_role or user_role %}
@@ -402,453 +321,557 @@
 {% set run_status = run.status|default('completed')|lower %}
 {% set is_student = (user_role == 'student') %}
 {% set hide_grades = (is_student and not marks_released) %}
-{% set report = report if report is defined else None %}
-{% set findings = report.findings|default([], true) if report else [] %}
-{% set score_evidence = report.score_evidence|default({}, true) if report else {} %}
-{% set confidence = score_evidence.confidence|default({}, true) %}
-{% set review = score_evidence.review|default({}, true) %}
-{% set role_mapping = score_evidence.role_mapping|default({}, true) %}
-{% set requirement_results = score_evidence.requirements|default([], true) %}
-{% set check_stats = report.check_stats|default({}, true) if report else {} %}
-{% set component_scores = report.scores.by_component|default({}, true) if report else {} %}
-{% set overall_pct = ((report.scores.overall|default(0, true)) * 100)|round|int if report and report.scores and report.scores.overall is not none else None %}
-{% set ns = namespace(total=0, passed=0, failed=0, warnings=0, skipped=0, threats=0, graded_findings=[], threat_findings=[], skipped_findings=[], info_findings=[], ux_findings=[], vision_findings=[], priority_findings=[]) %}
+{% set detail = detail_view|default({}, true) %}
+{% set decision = detail.decision|default({}, true) %}
+{% set report = report if report is defined else none %}
+{% set submission_meta = report.metadata.submission_metadata|default({}, true) if report else {} %}
+{% set submitted_label = (submission_meta.timestamp|default(run.created_at, true))|format_submission_datetime %}
+{% set marks_badge = 'badge-success' if marks_released else 'badge-warning' %}
+{% set tone_class = 'is-success' if decision.tone == 'success' else ('is-warning' if decision.tone == 'warning' else 'is-danger') %}
+{% set can_manage_submission = user_role in ['teacher', 'admin'] %}
+{% set can_rerun_submission = can_manage_submission and run_status != 'pending' and (batch_submission_id or run.mode != 'batch') %}
+{% set can_download_json = report and (batch_submission_id or run.mode != 'batch') %}
 
-{% for finding in findings %}
-    {% set sev = finding.severity|default('WARN')|upper %}
-    {% set has_ux = finding.evidence is mapping and finding.evidence.ux_review is mapping %}
-    {% set ns.total = ns.total + 1 %}
-    {% if sev == 'INFO' %}{% set ns.passed = ns.passed + 1 %}{% endif %}
-    {% if sev == 'FAIL' %}{% set ns.failed = ns.failed + 1 %}{% endif %}
-    {% if sev == 'WARN' %}{% set ns.warnings = ns.warnings + 1 %}{% endif %}
-    {% if sev == 'SKIPPED' %}{% set ns.skipped = ns.skipped + 1 %}{% endif %}
-    {% if sev == 'THREAT' %}{% set ns.threats = ns.threats + 1 %}{% endif %}
-    {% if has_ux %}
-        {% if ns.ux_findings.append(finding) %}{% endif %}
-    {% elif finding.finding_category|default('other') == 'evidence' %}
-        {% if ns.info_findings.append(finding) %}{% endif %}
-    {% elif sev == 'THREAT' %}
-        {% if ns.threat_findings.append(finding) %}{% endif %}
-    {% elif sev == 'SKIPPED' %}
-        {% if ns.skipped_findings.append(finding) %}{% endif %}
-    {% else %}
-        {% if ns.graded_findings.append(finding) %}{% endif %}
-    {% endif %}
-    {% if not has_ux and sev in ['THREAT', 'FAIL', 'WARN'] and ns.priority_findings|length < 4 %}
-        {% if ns.priority_findings.append(finding) %}{% endif %}
-    {% endif %}
-    {% if not has_ux and finding.evidence is mapping and finding.evidence.vision_analysis is mapping %}
-        {% if ns.vision_findings.append(finding) %}{% endif %}
-    {% endif %}
-{% endfor %}
-
-<div class="results-shell">
+<div class="submission-detail-shell">
     <section class="page-hero page-hero--split">
         <div class="page-hero-main">
             <a href="{{ back_target }}" class="page-back-link">{{ back_label }}</a>
             <div class="page-kicker">{% if viewer_role == 'student' %}Submission report{% else %}Marker review{% endif %}</div>
             <h1>{% if run.student_id and run.assignment_id %}{{ run.student_id }} / {{ run.assignment_id }}{% elif run.assignment_id %}{{ run.assignment_id }}{% else %}Submission result{% endif %}</h1>
-            <p class="page-context-line">{{ score_evidence.profile|default(run.profile|default('unknown'))|replace('_', ' ')|title }} assessment{% if run.created_at %} from {{ run.created_at[:16].replace('T', ' ') }}{% endif %}.</p>
             <div class="page-status-row">
-                <span class="badge {% if run.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">{{ run.mode|default('mark') }}</span>
-                <span class="badge badge-secondary">{{ score_evidence.profile|default(run.profile|default('unknown')) }}</span>
-                {% if marks_released %}<span class="badge badge-success">Marks released</span>{% else %}<span class="badge badge-warning">Marks withheld</span>{% endif %}
-                {% if run_status == 'pending' %}<span class="badge badge-warning">Rerun queued</span>{% elif run_status in ['failed', 'error'] %}<span class="badge badge-danger">Latest rerun failed</span>{% elif run.llm_error_flagged %}<span class="badge badge-warning">LLM review required</span>{% endif %}
+                <span class="badge {{ marks_badge }}">{{ 'Marks released' if marks_released else 'Marks withheld' }}</span>
+                <span class="badge badge-secondary">{{ (detail.assessment_context.profile|default(run.profile|default('unknown'), true))|replace('_', ' ')|title }}</span>
+                {% if run_status == 'pending' %}<span class="badge badge-warning">Rerun queued</span>{% elif run_status in ['failed', 'error'] %}<span class="badge badge-danger">Latest rerun failed</span>{% elif run.llm_error_flagged %}<span class="badge badge-warning">Manual review required</span>{% endif %}
             </div>
-            <div class="page-action-row">
-                {% if user_role in ['teacher', 'admin'] %}
-                    {% if batch_submission_id %}
-                    <form method="POST" action="{{ url_for('batch_submission_rerun', run_id=run_id, submission_id=batch_submission_id) }}" data-job-form="rerun"><button type="submit" class="btn btn-warning btn-sm">Rerun Submission</button></form>
-                    {% elif run.mode != 'batch' %}
-                    <form method="POST" action="{{ url_for('run_submission_rerun', run_id=run_id) }}" data-job-form="rerun"><button type="submit" class="btn btn-warning btn-sm">Rerun Submission</button></form>
-                    {% endif %}
-                {% endif %}
-                {% if batch_submission_id and report %}
-                <a href="{{ url_for('batch_submission_report', run_id=run_id, submission_id=batch_submission_id) }}" class="btn btn-secondary btn-sm">Download JSON</a>
-                {% elif run.mode != 'batch' and report %}
-                <a href="{{ url_for('download', run_id=run_id, filename='report.json') }}" class="btn btn-secondary btn-sm">Download JSON</a>
-                <a href="{{ url_for('download', run_id=run_id, filename='summary.txt') }}" class="btn btn-ghost btn-sm">Download summary</a>
-                <a href="{{ url_for('download_bundle', run_id=run_id) }}" class="btn btn-ghost btn-sm">Download bundle</a>
-                {% endif %}
+
+            {% if not hide_grades %}
+            <div class="submission-detail-banner">
+                <div>
+                    <div class="submission-banner-kicker">Recommended outcome</div>
+                    <h2 class="submission-banner-title {{ tone_class }}">{{ decision.outcome|default('Manual decision needed', true) }}</h2>
+                    <div class="page-status-row" style="margin-top: var(--space-sm);">
+                        <span class="submission-band">Mark band <strong>{{ decision.mark_band|default('Hold', true) }}</strong></span>
+                        <span class="badge {% if decision.manual_review_required %}badge-warning{% else %}badge-success{% endif %}">Manual review {{ decision.manual_review_label|default('Required', true) }}</span>
+                        <span class="badge {% if decision.confidence_level == 'high' %}badge-success{% elif decision.confidence_level == 'medium' %}badge-warning{% else %}badge-danger{% endif %}">{{ decision.confidence_level|default('unknown', true)|title }} confidence</span>
+                    </div>
+                </div>
+                <div class="submission-banner-meta">
+                    <article class="submission-banner-metric">
+                        <span class="submission-banner-metric-label">Internal score</span>
+                        <div class="submission-banner-metric-value">{{ decision.internal_score_percent if decision.internal_score_percent is not none else '--' }}{% if decision.internal_score_percent is not none %}%{% endif %}</div>
+                    </article>
+                    <article class="submission-banner-metric">
+                        <span class="submission-banner-metric-label">Confidence</span>
+                        <div class="submission-banner-metric-value">{{ decision.confidence_level|default('unknown', true)|title }}</div>
+                        <div class="submission-detail-note">{{ decision.confidence_explanation|default('Confidence explanation unavailable.', true) }}</div>
+                    </article>
+                    <article class="submission-banner-metric">
+                        <span class="submission-banner-metric-label">Top concerns</span>
+                        {% if decision.reasons %}
+                        <ul class="submission-concern-list">{% for reason in decision.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+                        {% else %}
+                        <div class="submission-detail-note">No major concerns flagged.</div>
+                        {% endif %}
+                    </article>
+                </div>
             </div>
+            {% endif %}
         </div>
+
         <aside class="page-side-panel">
             <h2 class="card-title">Submission context</h2>
             <div class="info-grid info-grid--2">
                 <div class="info-item"><span class="info-item-label">Student</span><span class="info-item-value">{{ run.student_id|default('Unknown') }}</span></div>
                 <div class="info-item"><span class="info-item-label">Assignment</span><span class="info-item-value">{{ run.assignment_id|default('Standalone') }}</span></div>
-                <div class="info-item"><span class="info-item-label">Profile</span><span class="info-item-value">{{ score_evidence.profile|default(run.profile|default('Unknown')) }}</span></div>
-                <div class="info-item"><span class="info-item-label">Submitted</span><span class="info-item-value">{{ run.created_at[:10] if run.created_at else '-' }}</span></div>
+                <div class="info-item"><span class="info-item-label">Profile</span><span class="info-item-value">{{ detail.assessment_context.profile|default(run.profile|default('Unknown'), true)|replace('_', ' ')|title }}</span></div>
+                <div class="info-item"><span class="info-item-label">Submitted</span><span class="info-item-value">{{ submitted_label }}</span></div>
             </div>
         </aside>
     </section>
-
-    <div class="results-stack">
-        {% if run_status == 'pending' %}
-        <section class="callout-card callout-card--warning"><div class="callout-title">Rerun queued</div><p class="callout-text">This submission is being reprocessed in the background. Results will refresh when the rerun completes.</p></section>
-        {% elif run_status in ['failed', 'error'] %}
-        <section class="callout-card callout-card--danger"><div class="callout-title">Latest rerun failed</div><p class="callout-text">The latest rerun did not complete successfully. Re-run the submission again after checking the job status.</p></section>
-        {% endif %}
-        {% if ns.threats > 0 %}
-        <section class="callout-card callout-card--danger"><div class="callout-title">Security threats detected</div><p class="callout-text">{{ ns.threats }} threat finding{{ '' if ns.threats == 1 else 's' }} blocked the full assessment flow. Review the flagged items before trusting the result.</p></section>
-        {% endif %}
-        {% if run.llm_error_flagged %}
-        <section class="callout-card callout-card--warning"><div class="callout-title">LLM review required</div><p class="callout-text">{{ run.llm_error_message or "LLM-assisted marking failed for this submission. Re-run or review it manually." }}</p></section>
-        {% endif %}
-        {% if report %}
-            {% set env = report.get('environment') %}
-            {% if env and (not env.get('php_available', true) or not env.get('browser_available', true) or not env.get('behavioural_tests_run', true) or not env.get('browser_tests_run', true)) %}
-            <section class="callout-card callout-card--warning"><div class="callout-title">Runtime checks were partially unavailable</div><p class="callout-text">Some runtime checks were unavailable during this assessment.{% if env.get('php_available') == false %} PHP was not detected.{% endif %}{% if env.get('browser_available') == false %} Browser was not detected.{% endif %} Scores may not fully reflect dynamic behaviour.</p></section>
-            {% endif %}
-        {% endif %}
-    </div>
 
     {% if hide_grades %}
     <section class="callout-card callout-card--warning">
         <div class="callout-title">Grades are not yet released</div>
         <p class="callout-text">Your teacher has not released marks for this assignment. Once marks are released, your score, summary feedback, and evidence will appear here.</p>
     </section>
-    {% elif report %}
-    <section class="summary-strip">
-        <article class="summary-card"><span class="summary-card-label">Overall Score</span><span class="summary-card-value {% if overall_pct is not none and overall_pct >= 70 %}text-success{% elif overall_pct is not none and overall_pct >= 40 %}text-warning{% else %}text-danger{% endif %}">{{ overall_pct if overall_pct is not none else '--' }}{% if overall_pct is not none %}%{% endif %}</span><div class="summary-card-detail">{{ check_stats.passed|default(ns.passed, true) }} passed of {{ check_stats.total|default(ns.total, true) }} graded checks.</div></article>
-        <article class="summary-card"><span class="summary-card-label">Confidence</span><span class="summary-card-value">{{ confidence.level|default('unknown')|title }}</span><div class="summary-card-detail">{{ (confidence.reasons|default([], true)|first) or 'Confidence reflects trust in the automated interpretation.' }}</div></article>
-        <article class="summary-card"><span class="summary-card-label">Manual review</span><span class="summary-card-value">{{ 'Required' if review.recommended else 'Not needed' }}</span><div class="summary-card-detail">{{ (review.reasons|default([], true)|first) or 'No additional review signal was raised.' }}</div></article>
-        <article class="summary-card"><span class="summary-card-label">Failing checks</span><span class="summary-card-value">{{ check_stats.failed|default(ns.failed, true) }}</span><div class="summary-card-detail">{{ check_stats.warnings|default(ns.warnings, true) }} warnings across {{ check_stats.total|default(ns.total, true) }} graded checks.</div></article>
-    </section>
-
-    <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">What needs attention</h2>
+    {% else %}
+    <nav class="detail-tab-nav" data-tab-group data-sticky-local-nav aria-label="Submission detail views">
+        <div class="detail-tab-scroll">
+            <div class="detail-tab-group">
+                <button type="button" class="detail-tab-button is-active" id="submission-tab-summary" role="tab" aria-selected="true" aria-controls="submission-summary-panel" data-tab-target="submission-summary-panel">Summary</button>
+                <button type="button" class="detail-tab-button" id="submission-tab-evidence" role="tab" aria-selected="false" aria-controls="submission-evidence-panel" data-tab-target="submission-evidence-panel">Evidence <span class="detail-tab-count">{{ detail.evidence_items|length }}</span></button>
+                <button type="button" class="detail-tab-button" id="submission-tab-debug" role="tab" aria-selected="false" aria-controls="submission-debug-panel" data-tab-target="submission-debug-panel">Debug / System details</button>
             </div>
-            <a href="#detailed-evidence" class="btn btn-ghost btn-sm">Open detailed evidence</a>
         </div>
-        <div class="results-grid">
-            <div class="results-stack">
-                {% if review.reasons %}
-                <div class="surface-item"><div class="surface-item-title">Manual review reasons</div><ul class="results-list">{% for reason in review.reasons %}<li>{{ reason }}</li>{% endfor %}</ul></div>
+        {% if can_rerun_submission or can_download_json %}
+        <div class="detail-nav-actions">
+            {% if can_rerun_submission %}
+                {% if batch_submission_id %}
+                <form method="POST" action="{{ url_for('batch_submission_rerun', run_id=run_id, submission_id=batch_submission_id) }}" data-job-form="rerun">
+                    <button type="submit" class="btn btn-warning btn-sm">Rerun Submission</button>
+                </form>
+                {% elif run.mode != 'batch' %}
+                <form method="POST" action="{{ url_for('run_submission_rerun', run_id=run_id) }}" data-job-form="rerun">
+                    <button type="submit" class="btn btn-warning btn-sm">Rerun Submission</button>
+                </form>
                 {% endif %}
-                {% if confidence.reasons %}
-                <div class="surface-item">
-                    <div class="surface-item-title">Confidence notes</div>
-                    <ul class="results-list">{% for reason in confidence.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
-                    {% if confidence.flags %}<div class="table-meta">Flags: {{ confidence.flags|join(', ') }}</div>{% endif %}
-                </div>
+            {% endif %}
+            {% if can_download_json %}
+                {% if batch_submission_id %}
+                <a href="{{ url_for('batch_submission_report', run_id=run_id, submission_id=batch_submission_id) }}" class="btn btn-secondary btn-sm">Download JSON</a>
+                {% elif run.mode != 'batch' %}
+                <a href="{{ url_for('download', run_id=run_id, filename='report.json') }}" class="btn btn-secondary btn-sm">Download JSON</a>
                 {% endif %}
+            {% endif %}
+        </div>
+        {% endif %}
+    </nav>
+
+    <div class="submission-tab-panels">
+        <section id="submission-summary-panel" role="tabpanel" aria-labelledby="submission-tab-summary">
+            <div class="submission-summary-grid">
+                <section class="card">
+                    <div class="submission-section-heading">
+                        <div><h2 class="submission-section-title">Student issues</h2></div>
+                    </div>
+                    {% if detail.student_issues %}
+                    <div class="submission-issue-list">
+                        {% for item in detail.student_issues %}
+                        <article class="submission-issue-card {{ 'is-danger' if item.tone == 'danger' else ('is-warning' if item.tone == 'warning' else 'is-success') }}">
+                            <div class="submission-card-head">
+                                <div>
+                                    <h3 class="submission-card-title">{{ item.title }}</h3>
+                                    <div class="submission-secondary-id">{{ item.secondary_id }}</div>
+                                </div>
+                                <div class="page-status-row">
+                                    {% if item.component_label %}<span class="badge badge-info">{{ item.component_label }}</span>{% endif %}
+                                    {% if item.stage %}<span class="badge badge-secondary">{{ item.stage_label }}</span>{% endif %}
+                                    <span class="badge {% if item.tone == 'success' %}badge-success{% elif item.tone == 'warning' %}badge-warning{% else %}badge-danger{% endif %}">{{ item.badge_label }}</span>
+                                </div>
+                            </div>
+                            <p class="submission-detail-note">{{ item.detail|default('No additional detail was recorded.', true) }}</p>
+                        </article>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="callout-card callout-card--success">
+                        <div class="callout-title">No major student-side issue surfaced</div>
+                        <p class="callout-text">No high-priority academic concern needs to be foregrounded ahead of the full evidence review.</p>
+                    </div>
+                    {% endif %}
+                </section>
+
+                <section class="card">
+                    <div class="submission-section-heading">
+                        <div><h2 class="submission-section-title">AMS limitations</h2></div>
+                    </div>
+                    {% if detail.limitations %}
+                    <div class="submission-issue-list">
+                        {% for item in detail.limitations %}
+                        <article class="submission-issue-card is-warning">
+                            <div class="submission-card-head">
+                                <div>
+                                    <h3 class="submission-card-title">{{ item.title }}</h3>
+                                    {% if item.secondary_id %}<div class="submission-secondary-id">{{ item.secondary_id }}</div>{% endif %}
+                                </div>
+                            </div>
+                            <p class="submission-detail-note">{{ item.detail }}</p>
+                        </article>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="callout-card callout-card--success">
+                        <div class="callout-title">Automation completed cleanly</div>
+                        <p class="callout-text">No system, runtime, or browser limitation is currently reducing confidence in this result.</p>
+                    </div>
+                    {% endif %}
+                </section>
             </div>
-            <div class="results-stack">
-                {% if ns.priority_findings %}
-                    {% for finding in ns.priority_findings %}
-                    {% set sev = finding.severity|default('WARN')|upper %}
-                    <article class="results-block">
-                        <div class="page-status-row" style="justify-content: space-between;">
-                            <strong>{{ finding.id|default('unknown') }}</strong>
-                            <span class="badge {% if sev == 'THREAT' or sev == 'FAIL' %}badge-danger{% else %}badge-warning{% endif %}">{{ sev }}</span>
+
+            <section class="card">
+                <div class="submission-section-heading">
+                    <div><h2 class="submission-section-title">Confidence explanation</h2></div>
+                </div>
+                <div class="submission-card-grid">
+                    <article class="submission-context-card">
+                        <div class="submission-card-title">Confidence</div>
+                        <div class="submission-score">{{ decision.confidence_level|default('unknown', true)|title }}</div>
+                        <p class="submission-detail-note">{{ decision.confidence_explanation|default('Confidence explanation unavailable.', true) }}</p>
+                    </article>
+                    <article class="submission-context-card">
+                        <div class="submission-card-title">Manual review</div>
+                        <div class="submission-score">{{ decision.manual_review_label|default('Required', true) }}</div>
+                        <p class="submission-detail-note">{% if report and report.score_evidence and report.score_evidence.review and report.score_evidence.review.reasons %}{{ report.score_evidence.review.reasons|join(' ') }}{% else %}{{ 'Manual review has been flagged because reliability or academic concerns need confirmation.' if decision.manual_review_required else 'No extra manual review trigger is currently recorded.' }}{% endif %}</p>
+                    </article>
+                    <article class="submission-context-card">
+                        <div class="submission-card-title">Evaluation state</div>
+                        <div class="submission-score">{{ detail.assessment_context.evaluation_state|default('Awaiting result', true) }}</div>
+                    </article>
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="submission-section-heading">
+                    <div><h2 class="submission-section-title">Component summary</h2></div>
+                </div>
+                {% if detail.component_cards %}
+                <div class="submission-card-grid">
+                    {% for component in detail.component_cards %}
+                    <article class="submission-component-card {{ 'is-danger' if component.tone == 'danger' else ('is-warning' if component.tone == 'warning' else ('is-success' if component.tone == 'success' else '')) }}">
+                        <div class="submission-card-head">
+                            <h3 class="submission-card-title">{{ component.label }}</h3>
+                            <span class="badge {% if component.tone == 'success' %}badge-success{% elif component.tone == 'warning' %}badge-warning{% elif component.tone == 'danger' %}badge-danger{% else %}badge-secondary{% endif %}">{{ component.score_label }}</span>
                         </div>
-                        <div class="results-block-note">{{ finding.message|default('No message') }}</div>
-                        {% if finding.category %}<div class="table-meta">{{ finding.category|upper }}</div>{% endif %}
+                        <p class="submission-detail-note">{{ component.detail }}</p>
                     </article>
                     {% endfor %}
+                </div>
                 {% else %}
-                <div class="callout-card callout-card--success"><div class="callout-title">No major follow-up signal</div><p class="callout-text">No high-priority issue was surfaced ahead of the detailed evidence sections.</p></div>
+                <div class="submission-empty">No component-level assessment summary is available for this result.</div>
                 {% endif %}
-            </div>
-        </div>
-    </section>
+            </section>
 
-    <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">Component summary</h2>
-            </div>
-        </div>
-        <div class="results-component-grid">
-            {% for component, data in component_scores.items() %}
-            {% set req_summary = data.requirement_summary|default({}, true) %}
-            <article class="results-block">
-                <div class="results-block-title">{{ component|upper }}</div>
-                <div class="results-score">{% if data.score is number %}{{ (data.score * 100)|round|int }}%{% else %}{{ data.score }}{% endif %}</div>
-                <div class="results-block-note">{% if req_summary %}{{ req_summary.met|default(0, true) }} met, {{ req_summary.partial|default(0, true) }} partial, {{ req_summary.failed|default(0, true) }} failed{% if req_summary.skipped|default(0, true) %}, {{ req_summary.skipped }} skipped{% endif %}.{% else %}No requirement summary available for this component.{% endif %}</div>
-            </article>
-            {% endfor %}
-        </div>
-    </section>
+            <section class="card">
+                <div class="submission-section-heading">
+                    <div><h2 class="submission-section-title">Assessment context</h2></div>
+                </div>
+                <div class="submission-card-grid">
+                    <article class="submission-context-card">
+                        <div class="submission-card-title">Automated stages</div>
+                        <ul class="submission-inline-list">
+                            {% for stage in detail.assessment_context.stages %}
+                            <li><strong>{{ stage.label }}:</strong> {{ stage.value }}</li>
+                            {% endfor %}
+                        </ul>
+                    </article>
+                    <article class="submission-context-card">
+                        <div class="submission-card-title">Mapped coursework roles</div>
+                        {% if detail.assessment_context.roles %}
+                        <ul class="submission-inline-list">
+                            {% for role in detail.assessment_context.roles %}
+                            <li><strong>{{ role.title }}:</strong> {{ role.detail }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="submission-detail-note">No additional role mapping was recorded for this run.</p>
+                        {% endif %}
+                    </article>
+                </div>
+            </section>
 
-    {% if role_mapping.roles %}
-    <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">Assessment context</h2>
-            </div>
-        </div>
-        <div class="results-role-grid">
-            {% for role, paths in role_mapping.roles.items() %}
-            {% if paths %}
-            <article class="results-block">
-                <div class="results-block-title">{{ role|replace('_', ' ')|title }}</div>
-                <div class="results-block-note">{{ paths|map('clean_path')|join(', ') }}</div>
-            </article>
-            {% endif %}
-            {% endfor %}
-        </div>
-    </section>
-    {% endif %}
+            <section class="card">
+                <div class="submission-section-heading">
+                    <div><h2 class="submission-section-title">Priority findings</h2></div>
+                </div>
+                {% if detail.priority_findings %}
+                <div class="submission-issue-list">
+                    {% for item in detail.priority_findings %}
+                    <article class="submission-issue-card {{ 'is-danger' if item.tone == 'danger' else ('is-warning' if item.tone == 'warning' else 'is-success') }}">
+                        <div class="submission-card-head">
+                            <div>
+                                <h3 class="submission-card-title">{{ item.title }}</h3>
+                                <div class="submission-secondary-id">{{ item.secondary_id }}</div>
+                            </div>
+                            <div class="page-status-row">
+                                {% if item.component_label %}<span class="badge badge-info">{{ item.component_label }}</span>{% endif %}
+                                {% if item.stage %}<span class="badge badge-secondary">{{ item.stage_label }}</span>{% endif %}
+                                <span class="badge {% if item.tone == 'success' %}badge-success{% elif item.tone == 'warning' %}badge-warning{% else %}badge-danger{% endif %}">{{ item.badge_label }}</span>
+                            </div>
+                        </div>
+                        <p class="submission-detail-note">{{ item.detail }}</p>
+                    </article>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="submission-empty">No priority finding needs to be pulled forward beyond the decision summary.</div>
+                {% endif %}
+            </section>
+        </section>
 
-    <details class="card disclosure-card" id="requirement-ledger">
-        <summary>
-            <div class="section-copy">
-                <h2 class="card-title">Full requirement ledger</h2>
-            </div>
-            <span class="badge badge-secondary">{{ requirement_results|length }}</span>
-        </summary>
-        <div class="disclosure-body">
-            {% if requirement_results %}
-            <div class="table-container">
-                <table class="table table-compact">
-                    <thead>
-                        <tr>
-                            <th>Requirement</th>
-                            <th>Component</th>
-                            <th>Stage</th>
-                            <th>Status</th>
-                            <th>Score</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for requirement in requirement_results %}
-                        <tr>
-                            <td>
-                                <strong>{{ requirement.requirement_id }}</strong>
-                                <span class="table-meta">{{ requirement.description }}</span>
-                            </td>
-                            <td>{{ requirement.component|upper }}</td>
-                            <td>{{ requirement.stage|replace('_', ' ')|title }}</td>
-                            <td>{{ requirement.status }}</td>
-                            <td>{{ requirement.score }}</td>
-                        </tr>
+        <section id="submission-evidence-panel" role="tabpanel" aria-labelledby="submission-tab-evidence" hidden>
+            <section class="card" data-evidence-filter-root>
+                <div class="submission-section-heading">
+                    <div><h2 class="submission-section-title">Assessment evidence</h2></div>
+                </div>
+
+                <div class="submission-filter-row">
+                    <div class="submission-filter-search">
+                        <input
+                            type="search"
+                            class="form-input"
+                            data-evidence-search
+                            aria-label="Search evidence"
+                            placeholder="Search by rule id, title, component, stage, status, or message"
+                        >
+                    </div>
+                    <div class="submission-filter-count" data-evidence-count>{{ detail.evidence_items|length }} results</div>
+                </div>
+
+                <div class="submission-filter-groups">
+                    <div class="submission-filter-group" role="toolbar" aria-label="Status filters">
+                        <span class="submission-filter-label">Status</span>
+                        <button type="button" class="submission-filter-chip is-active" aria-pressed="true" data-evidence-status="all">All</button>
+                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-status="PASS">Pass</button>
+                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-status="PARTIAL">Partial</button>
+                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-status="FAIL">Fail</button>
+                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-status="WARN">Warn</button>
+                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-status="SKIPPED">Skipped</button>
+                    </div>
+                    <div class="submission-filter-group" role="toolbar" aria-label="Component filters">
+                        <span class="submission-filter-label">Component</span>
+                        <button type="button" class="submission-filter-chip is-active" aria-pressed="true" data-evidence-component="all">All</button>
+                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="html">HTML</button>
+                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="css">CSS</button>
+                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="js">JS</button>
+                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="php">PHP</button>
+                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="sql">SQL</button>
+                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="api">API</button>
+                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="browser">Browser</button>
+                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="behavioural">Behavioural</button>
+                        <button type="button" class="btn btn-ghost btn-sm" data-evidence-reset>Reset</button>
+                    </div>
+                </div>
+
+                <div class="page-action-row" style="justify-content:flex-end; margin: var(--space-lg) 0;">
+                    <button type="button" class="btn btn-secondary btn-sm" data-disclosure-action="expand" data-disclosure-target="submission-evidence-list">Expand all</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-disclosure-action="collapse" data-disclosure-target="submission-evidence-list">Collapse all</button>
+                </div>
+
+                {% if detail.evidence_items %}
+                <div id="submission-evidence-list" class="submission-evidence-list">
+                    {% for item in detail.evidence_items %}
+                    <details class="submission-evidence-item" data-evidence-item data-search="{{ item.search_text }}" data-status="{{ item.status }}" data-component="{{ item.component_filter }}">
+                        <summary>
+                            <div class="submission-evidence-row">
+                                <div class="submission-evidence-main">
+                                    <div class="submission-secondary-id">{{ item.secondary_id }}</div>
+                                    <h3 class="submission-evidence-title">{{ item.title }}</h3>
+                                    {% if item.detail %}<div class="submission-detail-note">{{ item.detail }}</div>{% endif %}
+                                </div>
+                                <div class="page-status-row">
+                                    <span class="badge badge-secondary">{{ item.type_label }}</span>
+                                    {% if item.component_label %}<span class="badge badge-info">{{ item.component_label }}</span>{% endif %}
+                                    {% if item.stage %}<span class="badge badge-secondary">{{ item.stage_label }}</span>{% endif %}
+                                    <span class="badge {% if item.tone == 'success' %}badge-success{% elif item.tone == 'warning' %}badge-warning{% elif item.tone == 'danger' %}badge-danger{% else %}badge-secondary{% endif %}">{{ item.badge_label }}</span>
+                                </div>
+                            </div>
+                        </summary>
+
+                        <div class="disclosure-body">
+                            <div class="submission-detail-body-grid">
+                                <div class="submission-issue-list">
+                                    {% if item.kind == 'requirement' and item.requirement %}
+                                    <article class="submission-evidence-block">
+                                        <div class="submission-card-title">Requirement ledger entry</div>
+                                        <dl class="submission-detail-kv">
+                                            <dt>Status</dt><dd>{{ item.requirement.status }}</dd>
+                                            <dt>Score</dt><dd>{{ item.score_display }}</dd>
+                                            <dt>Component</dt><dd>{{ item.component_label }}</dd>
+                                            <dt>Stage</dt><dd>{{ item.stage_label }}</dd>
+                                            <dt>Required</dt><dd>{{ 'Yes' if item.required else 'No' }}</dd>
+                                            {% if item.requirement.aggregation_mode %}<dt>Aggregation</dt><dd>{{ item.requirement.aggregation_mode }}</dd>{% endif %}
+                                            {% if item.requirement.skipped_reason %}<dt>Skipped reason</dt><dd>{{ item.requirement.skipped_reason }}</dd>{% endif %}
+                                        </dl>
+                                    </article>
+                                    {% endif %}
+
+                                    {% if item.kind == 'check' and item.check %}
+                                    <article class="submission-evidence-block">
+                                        <div class="submission-card-title">Automated check summary</div>
+                                        <dl class="submission-detail-kv">
+                                            <dt>Status</dt><dd>{{ item.check.status }}</dd>
+                                            <dt>Occurrences</dt><dd>{{ item.check.occurrences }}</dd>
+                                            {% if item.check.weight is not none %}<dt>Weight</dt><dd>{{ item.check.weight }}</dd>{% endif %}
+                                            {% if item.check.sources %}<dt>Sources</dt><dd>{{ item.check.sources|join(', ') }}</dd>{% endif %}
+                                        </dl>
+                                        {% if item.check.messages %}
+                                        <ul class="submission-inline-list">{% for message in item.check.messages %}<li>{{ message }}</li>{% endfor %}</ul>
+                                        {% endif %}
+                                    </article>
+                                    {% endif %}
+
+                                    {% if item.requirement and item.requirement.evidence %}
+                                    <article class="submission-evidence-block">
+                                        <div class="submission-card-title">Requirement evidence</div>
+                                        {{ render_mapping(item.requirement.evidence, ('snippet', 'snippets')) }}
+                                    </article>
+                                    {% endif %}
+
+                                    {% if item.requirement and item.requirement.contributing_paths %}
+                                    <article class="submission-evidence-block">
+                                        <div class="submission-card-title">Contributing paths</div>
+                                        <ul class="submission-inline-list">{% for path in item.requirement.contributing_paths %}<li>{{ path|clean_path }}</li>{% endfor %}</ul>
+                                    </article>
+                                    {% endif %}
+                                </div>
+
+                                <div class="submission-issue-list">
+                                    {% if item.raw_findings %}
+                                        {% for finding in item.raw_findings %}
+                                        {{ render_raw_finding_detail(finding) }}
+                                        {% endfor %}
+                                    {% else %}
+                                    <div class="submission-empty">No additional finding-level evidence was attached to this row.</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                    {% endfor %}
+                </div>
+                <div class="submission-empty hidden" data-evidence-empty>No evidence rows match the current search and filters.</div>
+                {% else %}
+                <div class="submission-empty">No evidence rows are available for this result.</div>
+                {% endif %}
+            </section>
+        </section>
+        <section id="submission-debug-panel" role="tabpanel" aria-labelledby="submission-tab-debug" hidden>
+            <details class="card disclosure-card" open>
+                <summary>
+                    <div class="section-copy">
+                        <h2 class="card-title">Skipped checks</h2>
+                    </div>
+                </summary>
+                <div class="disclosure-body">
+                    {% if detail.debug.skipped_requirements %}
+                    <div class="submission-issue-list">
+                        {% for item in detail.debug.skipped_requirements %}
+                        <article class="submission-issue-card is-warning">
+                            <div class="submission-card-head">
+                                <div>
+                                    <h3 class="submission-card-title">{{ item.title }}</h3>
+                                    <div class="submission-secondary-id">{{ item.secondary_id }}</div>
+                                </div>
+                                <div class="page-status-row">
+                                    <span class="badge badge-info">{{ item.component_label }}</span>
+                                    <span class="badge badge-secondary">{{ item.stage_label }}</span>
+                                    <span class="badge badge-secondary">Skipped</span>
+                                </div>
+                            </div>
+                            <p class="submission-detail-note">{{ item.detail|default('No skipped-check reason was recorded.', true) }}</p>
+                        </article>
                         {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="empty-state">
-                <p class="empty-state-title">No requirement ledger available</p>
-                <p class="empty-state-text">This report does not include requirement-level detail.</p>
-            </div>
-            {% endif %}
-        </div>
-    </details>
-
-    <details class="card disclosure-card" id="detailed-evidence">
-        <summary>
-            <div class="section-copy">
-                <h2 class="card-title">Detailed automated checks</h2>
-            </div>
-            <span class="badge badge-secondary">{{ ns.graded_findings|length }}</span>
-        </summary>
-        <div class="disclosure-body">
-            <div class="toolbar findings-toolbar">
-                <div class="toolbar-search">
-                    <input type="search" class="form-input" data-findings-search placeholder="Search checks or rule ids...">
+                    </div>
+                    {% else %}
+                    <div class="submission-empty">No skipped requirement rows were recorded for this result.</div>
+                    {% endif %}
                 </div>
-                <div class="toolbar-filters">
-                    <button type="button" class="filter-toggle" data-severity="info">Pass</button>
-                    <button type="button" class="filter-toggle" data-severity="warn">Warn</button>
-                    <button type="button" class="filter-toggle" data-severity="fail">Fail</button>
-                    <button type="button" class="btn btn-ghost btn-sm" data-reset>Reset</button>
-                </div>
-                <span class="toolbar-count" data-findings-count>{{ ns.graded_findings|length }} events</span>
-            </div>
-            <div class="results-toolbar-actions">
-                <button type="button" class="btn btn-secondary btn-sm" data-expand-all>Expand all</button>
-                <button type="button" class="btn btn-secondary btn-sm" data-collapse-all>Collapse all</button>
-            </div>
-            {% if ns.graded_findings %}
-            <div class="results-findings">
-                {% for finding in ns.graded_findings %}
-                {{ render_finding_card(finding, true, true) }}
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="empty-state">
-                <p class="empty-state-title">No graded findings</p>
-                <p class="empty-state-text">The submission has no graded findings to display.</p>
-            </div>
-            {% endif %}
-        </div>
-    </details>
+            </details>
 
-    {% if ns.threat_findings %}
-    <details class="card disclosure-card" {% if ns.threats > 0 %}open{% endif %}>
-        <summary>
-            <div class="section-copy">
-                <h2 class="card-title">Security threats</h2>
-            </div>
-            <span class="badge badge-danger">{{ ns.threat_findings|length }}</span>
-        </summary>
-        <div class="disclosure-body">
-            <div class="results-findings">
-                {% for finding in ns.threat_findings %}
-                {{ render_finding_card(finding, false, false) }}
-                {% endfor %}
-            </div>
+            <details class="card disclosure-card" open>
+                <summary>
+                    <div class="section-copy">
+                        <h2 class="card-title">System details</h2>
+                    </div>
+                </summary>
+                <div class="disclosure-body">
+                    <div class="submission-system-sections">
+                        <article class="submission-context-card">
+                            <div class="submission-card-title">Environment state</div>
+                            {{ render_environment_state(detail.debug.environment) }}
+                        </article>
+
+                        <article class="submission-context-card">
+                            <div class="submission-card-title">Runtime evidence</div>
+                            {% if detail.debug.behavioural_evidence %}
+                            <div class="submission-system-list">
+                                {% for item in detail.debug.behavioural_evidence %}
+                                {{ render_system_check_item(item, 'Runtime') }}
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="submission-empty">No runtime evidence was recorded.</div>
+                            {% endif %}
+                        </article>
+
+                        <article class="submission-context-card">
+                            <div class="submission-card-title">Browser evidence</div>
+                            {% if detail.debug.browser_evidence %}
+                            <div class="submission-system-list">
+                                {% for item in detail.debug.browser_evidence %}
+                                {{ render_system_check_item(item, 'Browser') }}
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="submission-empty">No browser evidence was recorded.</div>
+                            {% endif %}
+                        </article>
+
+                        {% if detail.debug.diagnostics %}
+                        <article class="submission-context-card">
+                            <div class="submission-card-title">System messages</div>
+                            <div class="submission-system-list">
+                                {% for finding in detail.debug.diagnostics %}
+                                <article class="submission-system-item {{ system_item_class(finding.status) }}">
+                                    <div class="submission-card-head">
+                                        <div>
+                                            <h4 class="submission-card-title">{{ finding.title }}</h4>
+                                            <div class="submission-secondary-id">{{ finding.id }}</div>
+                                        </div>
+                                        <div class="page-status-row">
+                                            {% if finding.stage %}<span class="badge badge-secondary">{{ finding.stage_label }}</span>{% endif %}
+                                            <span class="badge {{ status_badge_class(finding.status) }}">{{ finding.badge_label|default(finding.status) }}</span>
+                                        </div>
+                                    </div>
+                                    <p class="submission-system-note">{{ finding.message }}</p>
+                                </article>
+                                {% endfor %}
+                            </div>
+                        </article>
+                        {% endif %}
+                    </div>
+
+                    {% if detail.debug.llm_feedback %}
+                    <article class="submission-evidence-block" style="margin-top: var(--space-lg);">
+                        <div class="submission-card-title">Overall AI feedback</div>
+                        <p class="submission-detail-note">{{ detail.debug.llm_feedback }}</p>
+                    </article>
+                    {% endif %}
+                </div>
+            </details>
+
             {% if threat_file_contents %}
-            <div class="results-stack" style="margin-top: var(--space-lg);">
-                <h3 class="card-title">Flagged file contents</h3>
-                {% for filepath, filedata in threat_file_contents.items() %}
-                <details class="results-file">
-                    <summary>
-                        <strong>{{ filepath }}</strong>
-                        <span class="badge badge-danger">{{ filedata.threat_lines|length }} threat line{{ '' if filedata.threat_lines|length == 1 else 's' }}</span>
-                    </summary>
-                    <div class="results-file-scroll">
-                        <table class="results-file-table">
-                            <tbody>
-                                {% if filedata.lines %}
-                                    {% for line in filedata.lines %}
-                                    {% set lineno = loop.index %}
-                                    {% set is_threat = lineno in filedata.threat_lines %}
-                                    <tr class="{% if is_threat %}results-file-row--threat{% endif %}">
-                                        <td class="results-file-line">{{ lineno }}</td>
-                                        <td>{{ line|e }}</td>
-                                    </tr>
-                                    {% endfor %}
-                                {% else %}
-                                <tr>
-                                    <td class="results-file-line">-</td>
-                                    <td>(empty file)</td>
-                                </tr>
-                                {% endif %}
-                            </tbody>
-                        </table>
+            <details class="card disclosure-card">
+                <summary>
+                    <div class="section-copy">
+                        <h2 class="card-title">Threat file excerpts</h2>
                     </div>
-                </details>
-                {% endfor %}
-            </div>
-            {% endif %}
-        </div>
-    </details>
-    {% endif %}
-
-    {% if ns.skipped_findings %}
-    <details class="card disclosure-card">
-        <summary>
-            <div class="section-copy">
-                <h2 class="card-title">Skipped checks</h2>
-            </div>
-            <span class="badge badge-secondary">{{ ns.skipped_findings|length }}</span>
-        </summary>
-        <div class="disclosure-body">
-            <div class="results-findings">
-                {% for finding in ns.skipped_findings %}
-                {{ render_finding_card(finding, false, false) }}
-                {% endfor %}
-            </div>
-        </div>
-    </details>
-    {% endif %}
-
-    {% if ns.info_findings %}
-    <details class="card disclosure-card">
-        <summary>
-            <div class="section-copy">
-                <h2 class="card-title">Informational evidence</h2>
-            </div>
-            <span class="badge badge-secondary">{{ ns.info_findings|length }}</span>
-        </summary>
-        <div class="disclosure-body">
-            <div class="results-findings">
-                {% for finding in ns.info_findings %}
-                {{ render_finding_card(finding, false, false) }}
-                {% endfor %}
-            </div>
-        </div>
-    </details>
-
-    {% endif %}
-
-    {% if ns.ux_findings %}
-    <details class="card disclosure-card">
-        <summary>
-            <div class="section-copy">
-                <h2 class="card-title">UX and usability review</h2>
-            </div>
-            <span class="badge badge-secondary">{{ ns.ux_findings|length }}</span>
-        </summary>
-        <div class="disclosure-body">
-            <div class="results-component-grid">
-                {% for finding in ns.ux_findings %}
-                {% set ux = finding.evidence.ux_review %}
-                <article class="results-block">
-                    <div class="page-status-row" style="justify-content: space-between;">
-                        <strong>{{ finding.evidence.page|default('unknown page') }}</strong>
-                        <span class="badge {% if ux.status == 'PASS' %}badge-success{% elif ux.status == 'NEEDS_IMPROVEMENT' %}badge-warning{% else %}badge-secondary{% endif %}">{{ ux.status|default('UNKNOWN') }}</span>
-                    </div>
-                    {% if ux.feedback %}<div class="results-block-note">{{ ux.feedback }}</div>{% endif %}
-                    {% if ux.improvement_recommendation %}
-                    <div class="callout-card callout-card--info" style="margin-top: var(--space-md);">
-                        <div class="callout-title">Improvement recommendation</div>
-                        <p class="callout-text">{{ ux.improvement_recommendation }}</p>
-                    </div>
-                    {% endif %}
-                    {% if finding.evidence.screenshot %}
-                    <div class="results-note"><img src="{{ artifact_url(finding.evidence.screenshot) }}" alt="UX review screenshot" class="results-screenshot" onerror="this.parentElement.innerHTML='<p class=\'results-note\'>Screenshot unavailable.</p>'"></div>
-                    {% endif %}
-                </article>
-                {% endfor %}
-            </div>
-        </div>
-    </details>
-    {% endif %}
-
-    {% if ns.vision_findings %}
-    <details class="card disclosure-card">
-        <summary>
-            <div class="section-copy">
-                <h2 class="card-title">Vision analysis</h2>
-            </div>
-            <span class="badge badge-secondary">{{ ns.vision_findings|length }}</span>
-        </summary>
-        <div class="disclosure-body">
-            <div class="results-component-grid">
-                {% for finding in ns.vision_findings %}
-                {% set va = finding.evidence.vision_analysis %}
-                <article class="results-block">
-                    <div class="page-status-row" style="justify-content: space-between;">
-                        <strong>{{ finding.id|default('unknown') }}</strong>
-                        <span class="badge {% if va.status == 'PASS' %}badge-success{% else %}badge-warning{% endif %}">{{ va.status|default('UNKNOWN') }}</span>
-                    </div>
-                    {% if va.reason %}<div class="results-block-note">{{ va.reason }}</div>{% endif %}
-                    {% if va.issues %}
-                    <ul class="results-list" style="margin-top: var(--space-md);">
-                        {% for issue in va.issues %}
-                        <li>{{ issue.description }}</li>
+                </summary>
+                <div class="disclosure-body">
+                    <div class="submission-issue-list">
+                        {% for filepath, filedata in threat_file_contents.items() %}
+                        <details class="submission-file">
+                            <summary>
+                                <strong>{{ filepath }}</strong>
+                                <span class="badge badge-danger">{{ filedata.threat_lines|length }} threat line{{ '' if filedata.threat_lines|length == 1 else 's' }}</span>
+                            </summary>
+                            <div class="submission-file-scroll">
+                                <table class="submission-file-table">
+                                    <tbody>
+                                        {% if filedata.lines %}
+                                            {% for line in filedata.lines %}
+                                            {% set lineno = loop.index %}
+                                            {% set is_threat = lineno in filedata.threat_lines %}
+                                            <tr class="{% if is_threat %}submission-file-row--threat{% endif %}">
+                                                <td class="submission-file-line">{{ lineno }}</td>
+                                                <td>{{ line|e }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        {% else %}
+                                        <tr><td class="submission-file-line">-</td><td>(empty file)</td></tr>
+                                        {% endif %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </details>
                         {% endfor %}
-                    </ul>
-                    {% endif %}
-                    {% if va.meta and va.meta.screenshot %}
-                    <div class="results-note"><img src="{{ artifact_url(va.meta.screenshot) }}" alt="Vision analysis screenshot" class="results-screenshot" onerror="this.parentElement.innerHTML='<p class=\'results-note\'>Screenshot unavailable.</p>'"></div>
-                    {% endif %}
-                </article>
-                {% endfor %}
-            </div>
-        </div>
-    </details>
-    {% endif %}
+                    </div>
+                </div>
+            </details>
+            {% endif %}
 
-    {% if report.llm_feedback %}
-    <details class="card disclosure-card">
-        <summary>
-            <div class="section-copy">
-                <h2 class="card-title">Overall AI feedback</h2>
-            </div>
-        </summary>
-        <div class="disclosure-body">
-            <div class="card-body">{{ report.llm_feedback }}</div>
-        </div>
-    </details>
-    {% endif %}
-
+        </section>
+    </div>
     {% endif %}
 </div>
 {% endblock %}
