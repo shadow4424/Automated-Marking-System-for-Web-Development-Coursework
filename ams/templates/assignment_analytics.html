@@ -13,6 +13,13 @@
 {% set top_rules = analytics.top_failing_rules|default([], true) %}
 {% set requirements = analytics.requirement_coverage|default([], true) %}
 {% set score_composition = analytics.score_composition|default([], true) %}
+{% set interactive_graphs = analytics.interactive_graphs|default({}, true) %}
+{% set histogram_graph = interactive_graphs.mark_distribution_histogram|default({}, true) %}
+{% set component_graph = interactive_graphs.component_performance_distribution|default({}, true) %}
+{% set requirement_matrix_graph = interactive_graphs.requirement_coverage_matrix|default({}, true) %}
+{% set reliability_graph = interactive_graphs.confidence_reliability_breakdown|default({}, true) %}
+{% set comparison_scatter_graph = interactive_graphs.static_functional_scatter_plot|default({}, true) %}
+{% set coverage_graph = interactive_graphs.missing_incomplete_submission_coverage_chart|default({}, true) %}
 {% set insights = teaching_insights|default(analytics.teaching_insights|default([], true), true) %}
 {% set small_cohort = analytics.small_cohort|default({}, true) %}
 {% set small_cohort_enabled = small_cohort.enabled|default(false, true) %}
@@ -397,13 +404,11 @@
         background: var(--color-surface-elevated);
         color: var(--color-text-secondary);
     }
-    .analytics-score-distribution,
     .analytics-coverage-detail-list,
     .analytics-limitation-list {
         display: grid;
         gap: 0.8rem;
     }
-    .analytics-score-row,
     .analytics-coverage-detail-item,
     .analytics-limitation-item {
         display: flex;
@@ -414,35 +419,6 @@
         border-radius: var(--radius-md);
         border: 1px solid var(--color-border-light);
         background: var(--color-surface-elevated);
-    }
-    .analytics-score-row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        row-gap: 0.75rem;
-    }
-    .analytics-score-row > :first-child {
-        min-width: 0;
-    }
-    .analytics-score-row > :last-child {
-        align-self: start;
-        font-size: 1.35rem;
-        line-height: 1;
-        color: var(--color-text);
-    }
-    .analytics-bar {
-        height: 0.65rem;
-        border-radius: 999px;
-        background: rgba(148, 163, 184, 0.22);
-        overflow: hidden;
-        margin-top: 0.55rem;
-        width: 100%;
-    }
-    .analytics-bar > span {
-        display: block;
-        height: 100%;
-        border-radius: inherit;
-        background: linear-gradient(90deg, rgba(37, 99, 235, 0.92), rgba(6, 182, 212, 0.82));
     }
     .analytics-table-note {
         display: block;
@@ -500,6 +476,447 @@
     }
     .analytics-hidden-row,
     .analytics-hidden-card { display: none; }
+    .analytics-graph-grid,
+    .analytics-graph-pair,
+    .analytics-graph-triple,
+    .analytics-component-grid,
+    .analytics-coverage-stage-grid,
+    .analytics-drawer-list {
+        display: grid;
+        gap: var(--space-lg);
+    }
+    .analytics-graph-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .analytics-graph-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .analytics-graph-triple { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .analytics-graph-card {
+        padding: 1.1rem 1.2rem 1.25rem;
+        border-radius: var(--radius-lg);
+        border: 1px solid rgba(148, 163, 184, 0.16);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(248, 250, 252, 0.97) 100%);
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+    }
+    .analytics-graph-card--histogram {
+        display: flex;
+        flex-direction: column;
+        padding-bottom: 1.1rem;
+    }
+    .analytics-graph-card h3 {
+        margin: 0;
+        font-size: 1.02rem;
+    }
+    .analytics-graph-card--histogram h3 {
+        font-size: 1.1rem;
+    }
+    .analytics-graph-header,
+    .analytics-drawer-header,
+    .analytics-drawer-summary,
+    .analytics-graph-actions,
+    .analytics-legend,
+    .analytics-stage-meta,
+    .analytics-student-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-sm);
+        flex-wrap: wrap;
+    }
+    .analytics-graph-body {
+        margin-top: 0.85rem;
+        display: grid;
+        gap: 0.8rem;
+    }
+    .analytics-graph-card--histogram .analytics-graph-body {
+        flex: 1;
+        align-content: start;
+        gap: 0.65rem;
+    }
+    .analytics-chart-axis-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-md);
+        padding: 0.5rem 0.15rem 0;
+        color: var(--color-text-muted);
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .analytics-graph-caption,
+    .analytics-graph-empty,
+    .analytics-drawer-empty {
+        color: var(--color-text-muted);
+        font-size: var(--text-sm);
+    }
+    .analytics-graph-empty,
+    .analytics-drawer-empty {
+        padding: 1rem;
+        border-radius: var(--radius-md);
+        border: 1px dashed var(--color-border-light);
+        background: rgba(248, 250, 252, 0.7);
+    }
+    .analytics-context-note {
+        padding: 0.85rem 0.95rem;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: rgba(248, 250, 252, 0.72);
+        color: var(--color-text-muted);
+        font-size: var(--text-sm);
+        line-height: 1.5;
+    }
+    .analytics-context-note strong {
+        display: block;
+        margin-bottom: 0.25rem;
+        color: var(--color-text);
+    }
+    .analytics-chart-shell {
+        position: relative;
+        min-height: 0;
+        padding: 0.45rem;
+        border-radius: calc(var(--radius-lg) - 0.1rem);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(250, 252, 255, 0.98) 100%);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+    }
+    .analytics-chart-shell--histogram {
+        margin-top: 7.4rem;
+        padding: 0;
+        border-color: transparent;
+        background: transparent;
+        box-shadow: none;
+    }
+    .analytics-chart-svg {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+    .analytics-chart-axis,
+    .analytics-chart-grid,
+    .analytics-chart-label,
+    .analytics-chart-reference {
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+    .analytics-chart-axis { stroke: rgba(71, 85, 105, 0.6); stroke-width: 1.15; }
+    .analytics-chart-grid { stroke: rgba(148, 163, 184, 0.18); stroke-width: 1; }
+    .analytics-chart-reference { stroke-width: 1.8; stroke-dasharray: 4 5; }
+    .analytics-chart-reference.mean { stroke: rgba(37, 99, 235, 0.38); }
+    .analytics-chart-reference.median { stroke: rgba(6, 182, 212, 0.34); }
+    .analytics-chart-reference.pass { stroke: rgba(245, 158, 11, 0.88); }
+    .analytics-chart-text {
+        fill: #475569;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .analytics-chart-text.axis-title {
+        fill: #0f172a;
+        font-size: 14.5px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+    }
+    .analytics-chart-text.value-label {
+        fill: #1e293b;
+        font-size: 12.5px;
+        font-weight: 700;
+    }
+    .analytics-chart-text--histogram {
+        font-size: 15px;
+    }
+    .analytics-chart-text.axis-title.analytics-chart-text--histogram-axis {
+        font-size: 17px;
+    }
+    .analytics-histogram-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.1rem;
+        color: var(--color-text-muted);
+        font-size: 0.92rem;
+        line-height: 1.45;
+    }
+    .analytics-histogram-meta strong {
+        color: var(--color-text);
+    }
+    .analytics-chart-bar,
+    .analytics-chart-point,
+    .analytics-matrix-cell,
+    .analytics-segment-button,
+    .analytics-bar-button,
+    .analytics-stage-button {
+        cursor: pointer;
+        transition: transform var(--transition-fast), opacity var(--transition-fast), box-shadow var(--transition-fast), filter var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+    }
+    .analytics-chart-bar:hover,
+    .analytics-chart-point:hover,
+    .analytics-matrix-cell:hover,
+    .analytics-segment-button:hover,
+    .analytics-bar-button:hover,
+    .analytics-stage-button:hover,
+    .analytics-chart-bar:focus-visible,
+    .analytics-chart-point:focus-visible,
+    .analytics-matrix-cell:focus-visible,
+    .analytics-segment-button:focus-visible,
+    .analytics-bar-button:focus-visible,
+    .analytics-stage-button:focus-visible {
+        transform: translateY(-1px);
+        filter: saturate(1.05);
+        outline: none;
+    }
+    .analytics-chart-bar.is-selected,
+    .analytics-chart-point.is-selected {
+        filter: drop-shadow(0 0 0.35rem rgba(37, 99, 235, 0.35));
+    }
+    .analytics-matrix-cell.is-selected,
+    .analytics-segment-button.is-selected,
+    .analytics-bar-button.is-selected,
+    .analytics-stage-button.is-selected,
+    .analytics-requirement-card.is-selected {
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+        border-color: rgba(37, 99, 235, 0.45);
+    }
+    .js-rule-row.is-selected td {
+        background: rgba(37, 99, 235, 0.08);
+    }
+    .analytics-tooltip {
+        position: fixed;
+        z-index: 160;
+        min-width: 180px;
+        max-width: 280px;
+        pointer-events: none;
+        padding: 0.8rem 0.9rem;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(15, 23, 42, 0.12);
+        background: rgba(15, 23, 42, 0.94);
+        color: #f8fafc;
+        font-size: 0.84rem;
+        line-height: 1.45;
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.28);
+        opacity: 0;
+        transform: translateY(6px);
+        transition: opacity var(--transition-fast), transform var(--transition-fast);
+    }
+    .analytics-tooltip.is-visible {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    .analytics-tooltip strong {
+        display: block;
+        margin-bottom: 0.25rem;
+        color: #fff;
+    }
+    .analytics-segment-bar,
+    .analytics-bar-list,
+    .analytics-stage-list {
+        display: grid;
+        gap: 0.75rem;
+    }
+    .analytics-segment-track {
+        position: relative;
+        display: flex;
+        min-height: 42px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(226, 232, 240, 0.8);
+        border: 1px solid rgba(148, 163, 184, 0.24);
+    }
+    .analytics-segment-button {
+        position: relative;
+        min-width: 2.5rem;
+        border: 0;
+        padding: 0.45rem 0.65rem;
+        color: #0f172a;
+        font-weight: 700;
+        background: transparent;
+    }
+    .analytics-segment-button + .analytics-segment-button {
+        box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.6);
+    }
+    .analytics-segment-button span {
+        display: block;
+        font-size: 0.76rem;
+        font-weight: 600;
+    }
+    .analytics-segment-button.segment-success { background: rgba(34, 197, 94, 0.22); }
+    .analytics-segment-button.segment-warning { background: rgba(245, 158, 11, 0.24); }
+    .analytics-segment-button.segment-danger { background: rgba(239, 68, 68, 0.2); }
+    .analytics-segment-button.segment-info { background: rgba(37, 99, 235, 0.18); }
+    .analytics-segment-button.segment-muted { background: rgba(148, 163, 184, 0.22); }
+    .analytics-bar-button,
+    .analytics-stage-button {
+        width: 100%;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
+        padding: 0.85rem 0.95rem;
+        text-align: left;
+    }
+    .analytics-bar-visual,
+    .analytics-stage-visual {
+        height: 0.7rem;
+        margin-top: 0.6rem;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(226, 232, 240, 0.85);
+    }
+    .analytics-bar-visual span,
+    .analytics-stage-visual span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, rgba(37, 99, 235, 0.92), rgba(6, 182, 212, 0.82));
+    }
+    .analytics-component-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .analytics-component-card {
+        padding: 1rem;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        background: rgba(255, 255, 255, 0.92);
+    }
+    .analytics-component-metrics {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.65rem;
+        margin-top: var(--space-md);
+    }
+    .analytics-component-stack {
+        display: grid;
+        gap: 0.8rem;
+    }
+    .analytics-matrix {
+        display: grid;
+        gap: 0.8rem;
+    }
+    .analytics-matrix-row {
+        display: grid;
+        grid-template-columns: minmax(180px, 1.25fr) repeat(4, minmax(0, 1fr));
+        gap: 0.65rem;
+        align-items: stretch;
+    }
+    .analytics-matrix-row-header {
+        padding: 0.85rem 0.95rem;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        background: rgba(248, 250, 252, 0.88);
+    }
+    .analytics-matrix-cell {
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: var(--radius-md);
+        background: rgba(255, 255, 255, 0.94);
+        padding: 0.8rem;
+        text-align: left;
+    }
+    .analytics-matrix-cell.cell-met { background: rgba(34, 197, 94, 0.12); }
+    .analytics-matrix-cell.cell-partial { background: rgba(245, 158, 11, 0.14); }
+    .analytics-matrix-cell.cell-unmet { background: rgba(239, 68, 68, 0.12); }
+    .analytics-matrix-cell.cell-not-evaluable { background: rgba(148, 163, 184, 0.14); }
+    .analytics-requirement-focus {
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-md);
+        margin-bottom: var(--space-md);
+        padding: 0.9rem 1rem;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(37, 99, 235, 0.18);
+        background: rgba(37, 99, 235, 0.08);
+    }
+    .analytics-requirement-focus.is-visible { display: flex; }
+    .analytics-stage-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .analytics-stage-button.stage-gap span { background: linear-gradient(90deg, rgba(245, 158, 11, 0.92), rgba(249, 115, 22, 0.82)); }
+    .analytics-stage-button.stage-risk span { background: linear-gradient(90deg, rgba(239, 68, 68, 0.9), rgba(244, 114, 182, 0.78)); }
+    .analytics-stage-button.stage-success span { background: linear-gradient(90deg, rgba(34, 197, 94, 0.9), rgba(16, 185, 129, 0.78)); }
+    .analytics-legend {
+        justify-content: flex-start;
+        gap: 1rem;
+        color: var(--color-text-secondary);
+        font-size: var(--text-sm);
+    }
+    .analytics-legend--compact {
+        gap: 0.85rem;
+        font-size: 0.82rem;
+    }
+    .analytics-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+    .analytics-legend-swatch {
+        width: 0.8rem;
+        height: 0.8rem;
+        border-radius: 999px;
+        display: inline-block;
+    }
+    .analytics-legend-swatch--outlined {
+        background: #ffffff;
+        border: 2px solid #0f172a;
+    }
+    .analytics-drawer {
+        position: fixed;
+        top: 0;
+        right: 0;
+        z-index: 150;
+        width: min(400px, 100vw);
+        height: 100vh;
+        display: flex;
+        justify-content: flex-end;
+        pointer-events: none;
+    }
+    .analytics-drawer.is-open { pointer-events: auto; }
+    .analytics-drawer-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.32);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--transition-fast);
+    }
+    .analytics-drawer.is-open .analytics-drawer-backdrop {
+        opacity: 1;
+        pointer-events: auto;
+    }
+    .analytics-drawer-panel {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.98);
+        border-left: 1px solid rgba(148, 163, 184, 0.2);
+        box-shadow: -18px 0 44px rgba(15, 23, 42, 0.16);
+        overflow-y: auto;
+        transform: translateX(100%);
+        transition: transform var(--transition-fast);
+    }
+    .analytics-drawer.is-open .analytics-drawer-panel { transform: translateX(0); }
+    .analytics-drawer-list { margin-top: var(--space-md); }
+    .analytics-student-card {
+        padding: 0.9rem 0.95rem;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        background: rgba(248, 250, 252, 0.82);
+    }
+    .analytics-student-card-metrics,
+    .analytics-student-card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        align-items: center;
+    }
+    .analytics-student-card-metrics {
+        margin-top: 0.65rem;
+    }
+    .analytics-student-primary-issue {
+        margin-top: 0.7rem;
+        margin-bottom: 0;
+        color: var(--color-text);
+        font-size: var(--text-sm);
+        line-height: 1.45;
+    }
+    .analytics-student-card-actions {
+        margin-top: 0.8rem;
+        justify-content: space-between;
+    }
+    .analytics-report-link {
+        margin-top: 0;
+    }
     .analytics-collapse-card {
         padding: 0;
         overflow: hidden;
@@ -538,6 +955,13 @@
         .analytics-score-source-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }
+        .analytics-graph-grid,
+        .analytics-graph-pair,
+        .analytics-graph-triple,
+        .analytics-component-grid,
+        .analytics-stage-list {
+            grid-template-columns: 1fr;
+        }
         .analytics-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         .analytics-attention-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
@@ -552,6 +976,9 @@
         .analytics-kpi-strip,
         .analytics-reliability-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .analytics-matrix-row {
+            grid-template-columns: 1fr;
         }
         .analytics-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
@@ -572,18 +999,16 @@
         .analytics-score-source-grid,
         .analytics-hero-stats,
         .analytics-filter-grid,
-        .analytics-attention-summary-grid {
+        .analytics-attention-summary-grid,
+        .analytics-component-metrics {
             grid-template-columns: 1fr;
         }
         .analytics-info-banner,
-        .analytics-score-row,
         .analytics-coverage-detail-item,
         .analytics-limitation-item,
-        .analytics-collapse-card > summary {
+        .analytics-collapse-card > summary,
+        .analytics-chart-axis-meta {
             flex-direction: column;
-        }
-        .analytics-score-row {
-            grid-template-columns: 1fr;
         }
     }
 </style>
@@ -641,6 +1066,9 @@
         <div class="analytics-local-nav-scroll">
             <div class="analytics-local-nav-group">
                 <a href="#analytics-overview" class="analytics-local-nav-link is-active" data-analytics-target="analytics-overview" aria-current="location">Overview</a>
+                {% if has_submissions %}
+                <a href="#interactive-graphs" class="analytics-local-nav-link" data-analytics-target="interactive-graphs">Interactive Graphs</a>
+                {% endif %}
             </div>
             {% if has_submissions %}
             <div class="analytics-local-nav-group">
@@ -763,34 +1191,48 @@
             </article>
         </section>
 
-        <details id="score-distribution" class="card analytics-collapse-card analytics-nav-target">
-            <summary>
+        <section id="interactive-graphs" class="card analytics-graph-card analytics-nav-target">
+            <div class="analytics-section-heading">
                 <div>
-                    <h2 class="card-title">Score Distribution</h2>
+                    <h2 class="card-title">Interactive cohort graphs</h2>
                 </div>
-            </summary>
-            <div class="analytics-collapse-body">
-                <div class="analytics-score-distribution">
-                    {% for label, count in buckets.items() %}
-                    <div class="analytics-score-row">
-                        <div style="min-width: 0;">
-                            <strong>{{ label }}</strong>
-                            <div class="analytics-helper">{{ count }} active submission{{ '' if count == 1 else 's' }}</div>
-                            <div class="analytics-bar"><span style="width: {{ ((count / submitted_count) * 100)|round|int if submitted_count else 0 }}%;"></span></div>
-                        </div>
+            </div>
+            <div class="analytics-graph-grid">
+                <article class="analytics-graph-card analytics-graph-card--histogram">
+                    <div class="analytics-graph-header">
                         <div>
-                            <strong>{{ ((count / submitted_count) * 100)|round|int if submitted_count else 0 }}%</strong>
+                            <h3>Assignment Mark Distribution Histogram</h3>
                         </div>
                     </div>
-                    {% endfor %}
-                </div>
-                {% if mean_pct is not none %}
-                <p class="analytics-section-note" style="margin-top: var(--space-md);">
-                    Average mark {{ mean_pct }}% across {{ overall.total|default(active_in_scope, true) }} submission{{ '' if (overall.total|default(active_in_scope, true)) == 1 else 's' }}.
-                </p>
-                {% endif %}
+                    <div class="analytics-graph-body">
+                        <div id="graph-mark-distribution" class="analytics-chart-shell analytics-chart-shell--histogram" data-graph-card="mark_distribution_histogram"></div>
+                        <div id="graph-mark-distribution-meta" class="analytics-histogram-meta"></div>
+                        {% if histogram_graph.unscored_submissions|default(0, true) %}
+                        <div class="analytics-graph-caption">{{ histogram_graph.unscored_submissions }} submission{{ '' if histogram_graph.unscored_submissions == 1 else 's' }} currently have no score and are excluded from the plotted bands.</div>
+                        {% endif %}
+                    </div>
+                </article>
+
+                <article class="analytics-graph-card">
+                    <div class="analytics-graph-header">
+                        <div>
+                            <h3>Static / Code Quality vs Behavioural / Functional Score</h3>
+                        </div>
+                    </div>
+                    <div class="analytics-graph-body">
+                        <div class="analytics-legend analytics-legend--compact">
+                            <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#16a34a;"></span>High confidence</span>
+                            <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#f59e0b;"></span>Medium confidence</span>
+                            <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#ef4444;"></span>Low confidence</span>
+                            <span class="analytics-legend-item"><span class="analytics-legend-swatch analytics-legend-swatch--outlined"></span>Manual review</span>
+                        </div>
+                        <div id="graph-static-functional-scatter" class="analytics-chart-shell" data-graph-card="static_functional_scatter_plot"></div>
+                        <div id="graph-scatter-quadrant-note" class="analytics-context-note">Click a quadrant to display what that region represents.</div>
+                    </div>
+                </article>
             </div>
-        </details>
+        </section>
+
     </section>
 
     {% if not has_submissions %}
@@ -1151,6 +1593,7 @@
                 <tbody id="rules-table-body">
                     {% for rule in top_rules %}
                     <tr class="js-rule-row {% if not rule.default_visible|default(loop.index <= default_rule_limit, true) %}analytics-hidden-row{% endif %}"
+                        data-rule-id="{{ rule.rule_id }}"
                         data-severity="{{ rule.severity }}"
                         data-component="{{ rule.component|lower }}"
                         data-impact="{{ rule.impact_type|default('', true)|lower }}"
@@ -1217,9 +1660,28 @@
             </div>
         </div>
         {% if requirements %}
+        <div id="requirement-focus-banner" class="analytics-requirement-focus" aria-live="polite">
+            <div>
+                <strong id="requirement-focus-text">Requirement focus active</strong>
+                <div class="analytics-helper">Requirement drill-down selection is active for this assignment view.</div>
+            </div>
+            <button type="button" id="clear-requirement-focus" class="btn btn-ghost btn-sm">Clear focus</button>
+        </div>
+        <div class="analytics-graph-card" style="margin-bottom: var(--space-lg); padding: 1rem;">
+            <div class="analytics-graph-header">
+                <div>
+                    <h3>Requirement Coverage Matrix</h3>
+                </div>
+            </div>
+            <div class="analytics-chart-axis-meta">
+                <span>Y-axis: Requirement area</span>
+                <span>X-axis: Requirement state</span>
+            </div>
+            <div id="graph-requirement-matrix" class="analytics-matrix" data-graph-card="requirement_coverage_matrix"></div>
+        </div>
         <div class="analytics-coverage-grid">
             {% for requirement in requirements %}
-            <article class="analytics-coverage-card">
+            <article class="analytics-coverage-card analytics-requirement-card" data-requirement-component="{{ requirement.component }}">
                 <div class="analytics-summary-badges" style="justify-content: space-between;">
                     <strong>{{ requirement.title }}</strong>
                     <span class="badge {% if requirement.met_percent >= 70 %}badge-success{% elif requirement.met_percent >= 40 %}badge-warning{% else %}badge-danger{% endif %}">
@@ -1259,6 +1721,32 @@
             <div>
                 <p class="analytics-section-note">Trustworthiness is separated from performance so a low mark is not confused with incomplete evaluation.</p>
             </div>
+        </div>
+        <div class="analytics-graph-pair" style="margin-bottom: var(--space-lg);">
+            <article class="analytics-graph-card">
+                <div class="analytics-graph-header">
+                    <div>
+                        <h3>Confidence and Reliability Breakdown</h3>
+                    </div>
+                </div>
+                <div class="analytics-chart-axis-meta">
+                    <span>Y-axis: Reliability segment</span>
+                    <span>X-axis: Students in scope</span>
+                </div>
+                <div id="graph-reliability-breakdown" class="analytics-segment-bar" data-graph-card="confidence_reliability_breakdown"></div>
+            </article>
+            <article class="analytics-graph-card">
+                <div class="analytics-graph-header">
+                    <div>
+                        <h3>Missing / Incomplete Submission Coverage Chart</h3>
+                    </div>
+                </div>
+                <div class="analytics-chart-axis-meta">
+                    <span>Y-axis: Coverage stage</span>
+                    <span>X-axis: Students / submissions</span>
+                </div>
+                <div id="graph-submission-coverage" class="analytics-stage-list" data-graph-card="missing_incomplete_submission_coverage_chart"></div>
+            </article>
         </div>
         <div class="analytics-reliability-grid">
             <article class="analytics-reliability-stat">
@@ -1370,6 +1858,30 @@
         </div>
         </details>
 
+        <details class="card analytics-collapse-card" id="component-performance">
+        <summary>
+            <div>
+                <h2 class="card-title">Component Performance Distribution</h2>
+            </div>
+        </summary>
+        <div class="analytics-collapse-body">
+        <div class="analytics-section-heading">
+            <div>
+                <p class="analytics-section-note">See whether each technical layer is failing outright, clustering around partial credit, or reaching full attainment.</p>
+            </div>
+        </div>
+        {% if component_graph.components|default([], true) %}
+        <div class="analytics-chart-axis-meta" style="margin-bottom: var(--space-md);">
+            <span>Y-axis: Component</span>
+            <span>X-axis: Students in each score state</span>
+        </div>
+        <div id="graph-component-distribution" class="analytics-component-grid" data-graph-card="component_performance_distribution"></div>
+        {% else %}
+        <div class="analytics-empty-inline">Component-level score distributions are not available yet for this assignment.</div>
+        {% endif %}
+        </div>
+        </details>
+
         <details class="card analytics-collapse-card" id="coverage-detail">
         <summary>
             <div>
@@ -1458,6 +1970,37 @@
     </section>
     {% endif %}
 </div>
+
+<div id="analytics-tooltip" class="analytics-tooltip" role="status" aria-hidden="true"></div>
+
+<script id="analytics-graph-data" type="application/json">{{ interactive_graphs|tojson }}</script>
+<div
+    id="analytics-js-config"
+    hidden
+    data-run-detail-pattern="{{ url_for('run_detail', run_id='__RUN_ID__') }}"
+    data-batch-report-pattern="{{ url_for('batch_submission_view', run_id='__RUN_ID__', submission_id='__SUBMISSION_ID__') }}"
+></div>
+
+<aside id="analytics-student-drawer" class="analytics-drawer" aria-hidden="true">
+    <div class="analytics-drawer-backdrop" data-drawer-close="true"></div>
+    <div class="analytics-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="analytics-drawer-title">
+        <div class="analytics-drawer-header">
+            <div>
+                <h2 id="analytics-drawer-title" class="card-title">Student subset</h2>
+            </div>
+            <button type="button" id="close-analytics-drawer" class="btn btn-ghost btn-sm">Close</button>
+        </div>
+        <div class="analytics-drawer-summary" style="margin-top: var(--space-md);">
+            <div class="analytics-summary-badges" id="analytics-drawer-badges"></div>
+            <div class="analytics-actions">
+                <button type="button" id="analytics-drawer-filter-queue" class="btn btn-secondary btn-sm">Filter review queue</button>
+                <button type="button" id="analytics-drawer-clear-selection" class="btn btn-ghost btn-sm">Clear selection</button>
+            </div>
+        </div>
+        <div id="analytics-drawer-list" class="analytics-drawer-list"></div>
+    </div>
+</aside>
+
 <script>
     (function () {
         var attentionRows = Array.prototype.slice.call(document.querySelectorAll('.attention-row'));
@@ -1480,6 +2023,30 @@
         var teachingSummaryList = document.getElementById('teaching-summary-list');
         var teachingSummaryStatus = document.getElementById('teaching-summary-status');
         var teachingSummaryFeedback = document.getElementById('teaching-summary-feedback');
+        var graphDataScript = document.getElementById('analytics-graph-data');
+        var graphConfig = document.getElementById('analytics-js-config');
+        var graphData = graphDataScript ? JSON.parse(graphDataScript.textContent || '{}') : {};
+        var tooltip = document.getElementById('analytics-tooltip');
+        var studentDrawer = document.getElementById('analytics-student-drawer');
+        var studentDrawerTitle = document.getElementById('analytics-drawer-title');
+        var studentDrawerBadges = document.getElementById('analytics-drawer-badges');
+        var studentDrawerList = document.getElementById('analytics-drawer-list');
+        var studentDrawerFilterQueue = document.getElementById('analytics-drawer-filter-queue');
+        var scatterQuadrantNote = document.getElementById('graph-scatter-quadrant-note');
+        var closeStudentDrawer = document.getElementById('close-analytics-drawer');
+        var clearGraphSelectionButton = document.getElementById('analytics-drawer-clear-selection');
+        var requirementFocusBanner = document.getElementById('requirement-focus-banner');
+        var requirementFocusText = document.getElementById('requirement-focus-text');
+        var clearRequirementFocusButton = document.getElementById('clear-requirement-focus');
+        var requirementCards = Array.prototype.slice.call(document.querySelectorAll('.analytics-requirement-card'));
+        var selectedGraphElement = null;
+        var selectedRequirementComponent = '';
+        var currentDrawerStudentIds = [];
+        var currentDrawerLabel = '';
+        var runDetailPattern = graphConfig ? (graphConfig.getAttribute('data-run-detail-pattern') || '') : '';
+        var batchReportPattern = graphConfig ? (graphConfig.getAttribute('data-batch-report-pattern') || '') : '';
+        var exportLinkBase = exportLink ? (exportLink.getAttribute('href') || '') : '';
+        var rulesExportBase = rulesExport ? (rulesExport.getAttribute('href') || '') : '';
         var attentionControls = {
             student: document.getElementById('attention-student-search'),
             scoreBand: document.getElementById('attention-score-band'),
@@ -1501,7 +2068,7 @@
         var localNavLinks = Array.prototype.slice.call(document.querySelectorAll('.analytics-local-nav-link'));
         var jumpControls = Array.prototype.slice.call(document.querySelectorAll('[data-analytics-target]'));
         var collapsibleSections = Array.prototype.slice.call(document.querySelectorAll('.analytics-collapse-card'));
-        var trackedSections = ['analytics-overview', 'needs-attention', 'top-rules', 'requirement-coverage', 'confidence-reliability', 'cohort-issues', 'analytics-diagnostics']
+        var trackedSections = ['analytics-overview', 'interactive-graphs', 'needs-attention', 'top-rules', 'requirement-coverage', 'confidence-reliability', 'cohort-issues', 'analytics-diagnostics']
             .map(function (id) {
                 return { id: id, element: document.getElementById(id) };
             })
@@ -1511,7 +2078,9 @@
             'scoring-sources': 'analytics-diagnostics'
         };
         var expansionTargets = {
-            'analytics-diagnostics': ['coverage-detail']
+            'analytics-diagnostics': ['coverage-detail'],
+            'component-performance': ['analytics-diagnostics'],
+            'coverage-detail': ['analytics-diagnostics']
         };
         var scrollSyncPending = false;
 
@@ -1525,6 +2094,388 @@
                 if (b.indexOf(a[i]) !== -1) return true;
             }
             return false;
+        }
+
+        function escapeHtml(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatPercent(value) {
+            if (value === null || value === undefined || value === '') return 'No score';
+            var numeric = typeof value === 'number' ? value : parseFloat(value);
+            if (!isFinite(numeric)) return 'No score';
+            return (Math.round(numeric * 10) / 10) + '%';
+        }
+
+        function studentDisplayName(student) {
+            if (!student) return 'Unknown student';
+            return student.student_name || student.student_id || 'Unknown student';
+        }
+
+        function confidenceBadgeClass(value) {
+            var level = String(value || '').toLowerCase();
+            if (level === 'high') return 'badge-success';
+            if (level === 'medium') return 'badge-warning';
+            if (level === 'low') return 'badge-danger';
+            return 'badge-secondary';
+        }
+
+        function studentSubsetExamples(studentIds, limit) {
+            return (studentIds || []).slice(0, limit || 3).map(function (studentId) {
+                return studentDisplayName(studentSnapshot(studentId));
+            });
+        }
+
+        function chartEmptyState(message, detail) {
+            return '<div class="analytics-graph-empty"><strong style="display:block; margin-bottom:0.35rem; color:var(--color-text);">' +
+                escapeHtml(message || 'Chart unavailable') +
+                '</strong>' +
+                (detail ? '<div>' + escapeHtml(detail) + '</div>' : '') +
+                '</div>';
+        }
+
+        function graphColor(kind) {
+            var palette = {
+                success: '#22c55e',
+                warning: '#f59e0b',
+                danger: '#ef4444',
+                info: '#2563eb',
+                muted: '#94a3b8',
+                ink: '#0f172a'
+            };
+            return palette[kind] || palette.info;
+        }
+
+        function inferSegmentTone(label) {
+            var text = String(label || '').toLowerCase();
+            if (text.indexOf('met') !== -1 || text.indexOf('full') !== -1 || text.indexOf('high confidence') !== -1 || text.indexOf('fully evaluated') !== -1) return 'success';
+            if (text.indexOf('partial') !== -1 || text.indexOf('medium') !== -1 || text.indexOf('skipped') !== -1) return 'warning';
+            if (text.indexOf('unmet') !== -1 || text.indexOf('low') !== -1 || text.indexOf('issue') !== -1 || text.indexOf('not analysable') !== -1 || text.indexOf('missing') !== -1) return 'danger';
+            if (text.indexOf('not evaluable') !== -1 || text.indexOf('not scored') !== -1) return 'muted';
+            return 'info';
+        }
+
+        function reportUrlForStudent(student) {
+            if (!student || !student.run_id) return '';
+            if (student.source_mode === 'batch' && student.submission_id) {
+                return batchReportPattern
+                    .replace('__RUN_ID__', encodeURIComponent(student.run_id))
+                    .replace('__SUBMISSION_ID__', encodeURIComponent(student.submission_id));
+            }
+            return runDetailPattern.replace('__RUN_ID__', encodeURIComponent(student.run_id));
+        }
+
+        function studentSnapshot(studentId) {
+            var index = (graphData && graphData.student_index) || {};
+            if (index[studentId]) return index[studentId];
+            return {
+                student_id: studentId,
+                student_name: '',
+                submission_id: '',
+                score_percent: null,
+                static_score_percent: null,
+                behavioural_score_percent: null,
+                grade: 'missing',
+                confidence: 'n/a',
+                evaluation_state: 'missing_submission',
+                severity: 'low',
+                manual_review_recommended: false,
+                primary_issue: 'No active submission is currently in scope for this student.',
+                reason: 'missing submission',
+                reason_detail: 'No active submission is currently in scope for this student.',
+                flags: ['missing submission'],
+                matched_rule_ids: [],
+                matched_rule_labels: [],
+                run_id: '',
+                source_mode: ''
+            };
+        }
+
+        function setSelectedGraphNode(node) {
+            if (selectedGraphElement && selectedGraphElement !== node) {
+                selectedGraphElement.classList.remove('is-selected');
+            }
+            selectedGraphElement = node || null;
+            if (selectedGraphElement) selectedGraphElement.classList.add('is-selected');
+        }
+
+        function clearSelectedGraphNode() {
+            if (!selectedGraphElement) return;
+            selectedGraphElement.classList.remove('is-selected');
+            selectedGraphElement = null;
+        }
+
+        function clearRequirementFocus() {
+            selectedRequirementComponent = '';
+            if (requirementFocusBanner) requirementFocusBanner.classList.remove('is-visible');
+            if (requirementFocusText) requirementFocusText.textContent = '';
+            requirementCards.forEach(function (card) {
+                card.classList.remove('is-selected');
+            });
+        }
+
+        function focusRequirement(component, label) {
+            if (!component) return;
+            selectedRequirementComponent = component;
+            requirementCards.forEach(function (card) {
+                card.classList.toggle('is-selected', card.dataset.requirementComponent === component);
+            });
+            if (requirementFocusBanner && requirementFocusText) {
+                requirementFocusBanner.classList.add('is-visible');
+                requirementFocusText.textContent = label || ('Requirement focus: ' + component.toUpperCase());
+            }
+        }
+
+        function filterReviewQueueToStudents(studentIds, label) {
+            attentionState.signalLabel = label || '';
+            attentionState.signalRules = [];
+            attentionState.signalStudents = (studentIds || []).map(function (item) { return String(item || '').toLowerCase(); }).filter(Boolean);
+            if (!attentionState.signalStudents.length) attentionState.signalLabel = '';
+            navigateToSection('needs-attention');
+            renderAttention();
+        }
+
+        function highlightRuleRow(ruleId) {
+            if (!ruleId) return;
+            var matchedRow = null;
+            ruleRows.forEach(function (row) {
+                var isMatch = row.dataset.ruleId === ruleId;
+                row.classList.toggle('is-selected', isMatch);
+                if (isMatch) matchedRow = row;
+            });
+            if (!matchedRow) return;
+            navigateToSection('top-rules');
+            showAllRules = true;
+            if (ruleControls.component) ruleControls.component.value = matchedRow.dataset.component || '';
+            renderRuleRows();
+            window.requestAnimationFrame(function () {
+                matchedRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            });
+        }
+
+        function tooltipText(title, lines) {
+            return '<strong>' + escapeHtml(title) + '</strong>' + (lines || []).filter(Boolean).map(function (line) {
+                return '<div>' + escapeHtml(line) + '</div>';
+            }).join('');
+        }
+
+        function showTooltip(event, html) {
+            if (!tooltip || !html) return;
+            tooltip.innerHTML = html;
+            tooltip.classList.add('is-visible');
+            tooltip.setAttribute('aria-hidden', 'false');
+            positionTooltip(event);
+        }
+
+        function positionTooltip(event) {
+            if (!tooltip || !tooltip.classList.contains('is-visible')) return;
+            var x = (event.clientX || 0) + 16;
+            var y = (event.clientY || 0) + 16;
+            var width = tooltip.offsetWidth || 220;
+            var height = tooltip.offsetHeight || 90;
+            if (x + width > window.innerWidth - 12) x = window.innerWidth - width - 12;
+            if (y + height > window.innerHeight - 12) y = window.innerHeight - height - 12;
+            tooltip.style.left = x + 'px';
+            tooltip.style.top = y + 'px';
+        }
+
+        function hideTooltip() {
+            if (!tooltip) return;
+            tooltip.classList.remove('is-visible');
+            tooltip.setAttribute('aria-hidden', 'true');
+        }
+
+        function bindTooltip(element, html) {
+            if (!element) return;
+            element.addEventListener('mouseenter', function (event) { showTooltip(event, html); });
+            element.addEventListener('mousemove', positionTooltip);
+            element.addEventListener('mouseleave', hideTooltip);
+            element.addEventListener('focus', function (event) { showTooltip(event, html); });
+            element.addEventListener('blur', hideTooltip);
+        }
+
+        function renderDrawerRows(studentIds) {
+            if (!studentDrawerList) return;
+            var rows = (studentIds || []).map(studentSnapshot);
+            if (!rows.length) {
+                studentDrawerList.innerHTML = '<div class="analytics-drawer-empty">No student records match this graph selection.</div>';
+                return;
+            }
+            studentDrawerList.innerHTML = rows.map(function (student) {
+                var metrics = [
+                    '<span class="badge badge-secondary">Overall ' + escapeHtml(formatPercent(student.score_percent)) + '</span>',
+                    '<span class="badge ' + confidenceBadgeClass(student.confidence) + '">' + escapeHtml((student.confidence || 'n/a') + ' confidence') + '</span>'
+                ];
+                if (student.static_score_percent !== null && student.static_score_percent !== undefined) {
+                    metrics.push('<span class="analytics-chip">Static ' + escapeHtml(formatPercent(student.static_score_percent)) + '</span>');
+                }
+                if (student.behavioural_score_percent !== null && student.behavioural_score_percent !== undefined) {
+                    metrics.push('<span class="analytics-chip">Functional ' + escapeHtml(formatPercent(student.behavioural_score_percent)) + '</span>');
+                }
+                if (student.grade) {
+                    metrics.push('<span class="analytics-chip">' + escapeHtml(student.grade) + '</span>');
+                }
+                var reportUrl = reportUrlForStudent(student);
+                var reportAction = reportUrl
+                    ? '<a class="btn btn-secondary btn-sm analytics-report-link" href="' + escapeHtml(reportUrl) + '">Open report</a>'
+                    : '<div class="analytics-helper analytics-report-link">Report unavailable</div>';
+                var identityLine = student.student_name && student.student_id && student.student_name !== student.student_id
+                    ? escapeHtml(student.student_id + ' - ' + (student.submission_id || 'No submission id'))
+                    : escapeHtml(student.submission_id || student.student_id || 'No submission id');
+                return '' +
+                    '<article class="analytics-student-card">' +
+                        '<div class="analytics-student-meta">' +
+                            '<div>' +
+                                '<strong>' + escapeHtml(studentDisplayName(student)) + '</strong>' +
+                                '<div class="analytics-table-note">' + identityLine + '</div>' +
+                            '</div>' +
+                            '<span class="analytics-helper">' + escapeHtml((student.evaluation_state || '').replace(/_/g, ' ')) + '</span>' +
+                        '</div>' +
+                        '<div class="analytics-student-card-metrics">' + metrics.join('') + '</div>' +
+                        '<p class="analytics-student-primary-issue">' + escapeHtml(student.primary_issue || student.reason_detail || student.reason || 'No additional detail recorded.') + '</p>' +
+                        '<div class="analytics-student-card-actions">' +
+                            reportAction +
+                            (student.manual_review_recommended ? '<span class="analytics-helper">Manual review recommended</span>' : '') +
+                        '</div>' +
+                    '</article>';
+            }).join('');
+        }
+
+        function openStudentDrawer(options) {
+            if (!studentDrawer) return;
+            currentDrawerStudentIds = (options && options.studentIds) ? options.studentIds.slice() : [];
+            currentDrawerLabel = options && options.label ? options.label : 'Student subset';
+            if (studentDrawerTitle) studentDrawerTitle.textContent = currentDrawerLabel;
+            if (studentDrawerBadges) {
+                studentDrawerBadges.innerHTML =
+                    '<span class="badge badge-secondary">' + currentDrawerStudentIds.length + ' student' + (currentDrawerStudentIds.length === 1 ? '' : 's') + '</span>' +
+                    ((options && options.badgeText) ? '<span class="badge badge-info">' + escapeHtml(options.badgeText) + '</span>' : '');
+            }
+            renderDrawerRows(currentDrawerStudentIds);
+            studentDrawer.classList.add('is-open');
+            studentDrawer.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeDrawer() {
+            if (!studentDrawer) return;
+            studentDrawer.classList.remove('is-open');
+            studentDrawer.setAttribute('aria-hidden', 'true');
+        }
+
+        function clearGraphSelection() {
+            clearSelectedGraphNode();
+            clearRequirementFocus();
+            renderScatterQuadrantNote(null);
+            closeDrawer();
+        }
+
+        function chartButton(title, subtitle, count, width, tone, tooltipHtml) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'analytics-bar-button';
+            button.innerHTML = '' +
+                '<div class="analytics-stage-meta"><strong>' + escapeHtml(title) + '</strong><span>' + escapeHtml(String(count)) + '</span></div>' +
+                (subtitle ? '<div class="analytics-table-note">' + escapeHtml(subtitle) + '</div>' : '') +
+                '<div class="analytics-bar-visual"><span style="width:' + width + '%; background:' + graphColor(tone) + ';"></span></div>';
+            if (tooltipHtml) bindTooltip(button, tooltipHtml);
+            return button;
+        }
+
+        function createSvgText(x, y, value, className, anchor, rotate) {
+            var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', x);
+            text.setAttribute('y', y);
+            text.setAttribute('class', className || 'analytics-chart-text');
+            if (anchor) text.setAttribute('text-anchor', anchor);
+            if (rotate) text.setAttribute('transform', 'rotate(' + rotate + ' ' + x + ' ' + y + ')');
+            text.textContent = value;
+            return text;
+        }
+
+        function appendReferenceHoverLine(svg, x1, y1, x2, y2, html) {
+            var hoverLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            hoverLine.setAttribute('x1', x1);
+            hoverLine.setAttribute('x2', x2);
+            hoverLine.setAttribute('y1', y1);
+            hoverLine.setAttribute('y2', y2);
+            hoverLine.setAttribute('stroke', 'rgba(15, 23, 42, 0.001)');
+            hoverLine.setAttribute('stroke-width', '14');
+            hoverLine.setAttribute('pointer-events', 'stroke');
+            bindTooltip(hoverLine, html);
+            svg.appendChild(hoverLine);
+        }
+
+        function renderScatterQuadrantNote(region) {
+            if (!scatterQuadrantNote) return;
+            if (!region) {
+                scatterQuadrantNote.innerHTML = 'Click a quadrant to display what that region represents.';
+                return;
+            }
+            scatterQuadrantNote.innerHTML = '<strong>' + escapeHtml(region.title || 'Quadrant guidance') + '</strong>' +
+                (region.lines || []).map(function (line) {
+                    return '<div>' + escapeHtml(line) + '</div>';
+                }).join('');
+        }
+
+        function appendQuadrantHoverRegion(svg, region) {
+            var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('x', region.x);
+            rect.setAttribute('y', region.y);
+            rect.setAttribute('width', Math.max(region.width, 0));
+            rect.setAttribute('height', Math.max(region.height, 0));
+            rect.setAttribute('fill', 'rgba(37, 99, 235, 0.001)');
+            rect.setAttribute('stroke', 'none');
+            rect.setAttribute('pointer-events', 'all');
+            rect.setAttribute('tabindex', '0');
+            rect.setAttribute('role', 'button');
+            rect.addEventListener('mouseenter', function () {
+                rect.setAttribute('fill', 'rgba(37, 99, 235, 0.06)');
+            });
+            rect.addEventListener('mouseleave', function () {
+                rect.setAttribute('fill', 'rgba(37, 99, 235, 0.001)');
+            });
+            rect.addEventListener('focus', function () {
+                rect.setAttribute('fill', 'rgba(37, 99, 235, 0.06)');
+            });
+            rect.addEventListener('blur', function () {
+                rect.setAttribute('fill', 'rgba(37, 99, 235, 0.001)');
+            });
+            rect.addEventListener('click', function () {
+                renderScatterQuadrantNote(region);
+            });
+            rect.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    renderScatterQuadrantNote(region);
+                }
+            });
+            svg.appendChild(rect);
+        }
+
+        function niceIntegerTicks(maxValue, maxSteps) {
+            var upper = Math.max(1, Math.ceil(maxValue || 0));
+            var targetSteps = Math.max(2, maxSteps || 5);
+            if (upper <= targetSteps) {
+                return Array.from({ length: upper + 1 }, function (_, value) { return value; });
+            }
+            var roughStep = upper / targetSteps;
+            var magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+            var normalised = roughStep / magnitude;
+            var niceMultiplier = 10;
+            if (normalised <= 1.5) niceMultiplier = 1;
+            else if (normalised <= 3) niceMultiplier = 2;
+            else if (normalised <= 7) niceMultiplier = 5;
+            var step = Math.max(1, niceMultiplier * magnitude);
+            var ceiling = Math.ceil(upper / step) * step;
+            var ticks = [0];
+            for (var value = step; value < ceiling; value += step) ticks.push(value);
+            if (ticks[ticks.length - 1] !== ceiling) ticks.push(ceiling);
+            return ticks;
         }
 
         function getNavbarOffset() {
@@ -1629,7 +2580,7 @@
             if (attentionControls.sort.value) params.set('sort', attentionControls.sort.value);
             if (attentionState.signalRules.length) params.set('signal_rules', attentionState.signalRules.join(','));
             if (attentionState.signalStudents.length) params.set('signal_students', attentionState.signalStudents.join(','));
-            exportLink.href = {{ url_for('teacher.export_analytics_csv', assignment_id=assignment.assignmentID, export_kind='needs-attention')|tojson }} + (params.toString() ? ('?' + params.toString()) : '');
+            exportLink.href = exportLinkBase + (params.toString() ? ('?' + params.toString()) : '');
         }
 
         function updateRulesExportLink() {
@@ -1638,7 +2589,7 @@
             if (ruleControls.severity && ruleControls.severity.value) params.set('severity', ruleControls.severity.value);
             if (ruleControls.component && ruleControls.component.value) params.set('component', ruleControls.component.value);
             if (ruleControls.impact && ruleControls.impact.value) params.set('impact_type', ruleControls.impact.value);
-            rulesExport.href = {{ url_for('teacher.export_analytics_csv', assignment_id=assignment.assignmentID, export_kind='rules')|tojson }} + (params.toString() ? ('?' + params.toString()) : '');
+            rulesExport.href = rulesExportBase + (params.toString() ? ('?' + params.toString()) : '');
         }
 
         function matchesAttentionRow(row) {
@@ -1803,6 +2754,636 @@
                 });
         }
 
+        function drawMarkDistribution() {
+            var container = document.getElementById('graph-mark-distribution');
+            var meta = document.getElementById('graph-mark-distribution-meta');
+            var data = graphData && graphData.mark_distribution_histogram;
+            if (!container) return;
+            if (!data || !data.bins || !data.bins.length) {
+                container.innerHTML = chartEmptyState(
+                    'Histogram unavailable',
+                    'Histogram data will appear once active assignment scores are available.'
+                );
+                if (meta) meta.innerHTML = '';
+                return;
+            }
+            var bins = data.bins.slice().sort(function (left, right) {
+                return Number(left.range_min || 0) - Number(right.range_min || 0);
+            });
+            var width = 660;
+            var height = 540;
+            var margin = { top: 10, right: 12, bottom: 78, left: 72 };
+            var innerWidth = width - margin.left - margin.right;
+            var innerHeight = height - margin.top - margin.bottom;
+            var maxCount = Math.max.apply(null, bins.map(function (bin) { return bin.count; }).concat([1]));
+            var yTicks = niceIntegerTicks(maxCount, 5);
+            var yTickMax = Math.max(yTicks[yTicks.length - 1] || maxCount || 1, 1);
+            var yMax = maxCount <= 1 ? 1.15 : Math.max(yTickMax, maxCount * 1.1);
+            var xTicks = Array.isArray(data.x_ticks) && data.x_ticks.length ? data.x_ticks : [0, 20, 40, 60, 80, 100];
+            var primaryReference = data.primary_reference || {
+                key: 'mean_percent',
+                label: 'Mean',
+                value: data.reference_lines && data.reference_lines.mean_percent,
+                detail: 'Cohort mean mark across the active submissions in scope.'
+            };
+            var summaryStats = data.summary_stats || data.reference_lines || {};
+            var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+            svg.setAttribute('class', 'analytics-chart-svg analytics-chart-svg--histogram');
+
+            var axis = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            axis.setAttribute('d', 'M' + margin.left + ' ' + (margin.top + innerHeight) + 'H' + (margin.left + innerWidth) + 'M' + margin.left + ' ' + margin.top + 'V' + (margin.top + innerHeight));
+            axis.setAttribute('class', 'analytics-chart-axis');
+
+            yTicks.forEach(function (tick) {
+                var y = margin.top + innerHeight - ((tick / yMax) * innerHeight);
+                if (tick !== 0) {
+                    var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', margin.left);
+                    line.setAttribute('x2', margin.left + innerWidth);
+                    line.setAttribute('y1', y);
+                    line.setAttribute('y2', y);
+                    line.setAttribute('class', 'analytics-chart-grid');
+                    svg.appendChild(line);
+                }
+                svg.appendChild(createSvgText(margin.left - 10, y + 5, String(tick), 'analytics-chart-text analytics-chart-text--histogram', 'end'));
+            });
+
+            xTicks.forEach(function (tick) {
+                var x = margin.left + ((tick / 100) * innerWidth);
+                svg.appendChild(createSvgText(x, margin.top + innerHeight + 26, String(tick), 'analytics-chart-text analytics-chart-text--histogram', 'middle'));
+            });
+
+            svg.appendChild(axis);
+
+            var fallbackBinWidth = Number(data.bin_width || (100 / Math.max(bins.length, 1)));
+            bins.forEach(function (bin, index) {
+                var rangeMin = Number(bin.range_min != null ? bin.range_min : (index * fallbackBinWidth));
+                var rangeMax = Number(bin.range_max != null ? bin.range_max : Math.min(rangeMin + fallbackBinWidth, 100));
+                var barHeight = (bin.count / yMax) * innerHeight;
+                var exampleNames = studentSubsetExamples(bin.student_ids || [], 3);
+                if (bin.count > 0) {
+                    var barX = margin.left + ((rangeMin / 100) * innerWidth) + 0.5;
+                    var barWidth = Math.max((((Math.min(rangeMax, 100) - rangeMin) / 100) * innerWidth) - 1, 1);
+                    var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', barX);
+                    rect.setAttribute('y', margin.top + innerHeight - barHeight);
+                    rect.setAttribute('width', barWidth);
+                    rect.setAttribute('height', barHeight);
+                    rect.setAttribute('fill', 'rgba(20, 184, 166, 0.92)');
+                    rect.setAttribute('stroke', 'rgba(15, 23, 42, 0.55)');
+                    rect.setAttribute('stroke-width', '0.75');
+                    rect.setAttribute('class', 'analytics-chart-bar');
+                    rect.setAttribute('tabindex', '0');
+                    bindTooltip(rect, tooltipText(bin.label, [
+                        bin.count + ' student' + (bin.count === 1 ? '' : 's'),
+                        Math.round(bin.percent) + '% of active submissions',
+                        exampleNames.length ? ('Examples: ' + exampleNames.join(', ')) : ''
+                    ]));
+                    rect.addEventListener('click', function () {
+                        setSelectedGraphNode(rect);
+                        openStudentDrawer({
+                            label: 'Mark band: ' + bin.label,
+                            subtitle: 'Latest active submissions that fall inside this assignment mark band.',
+                            studentIds: bin.student_ids || [],
+                            badgeText: Math.round(bin.percent) + '% of cohort'
+                        });
+                        filterReviewQueueToStudents(bin.student_ids || [], 'Mark band ' + bin.label);
+                    });
+                    svg.appendChild(rect);
+                }
+            });
+
+            if (primaryReference && primaryReference.value !== null && primaryReference.value !== undefined) {
+                var referenceX = margin.left + ((primaryReference.value / 100) * innerWidth);
+                var halo = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                halo.setAttribute('x1', referenceX);
+                halo.setAttribute('x2', referenceX);
+                halo.setAttribute('y1', margin.top);
+                halo.setAttribute('y2', margin.top + innerHeight);
+                halo.setAttribute('stroke', 'rgba(255, 255, 255, 0.96)');
+                halo.setAttribute('stroke-width', '4.6');
+                halo.setAttribute('stroke-linecap', 'round');
+                svg.appendChild(halo);
+                var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', referenceX);
+                line.setAttribute('x2', referenceX);
+                line.setAttribute('y1', margin.top);
+                line.setAttribute('y2', margin.top + innerHeight);
+                line.setAttribute('stroke', 'rgba(15, 23, 42, 0.9)');
+                line.setAttribute('stroke-width', '2.25');
+                line.setAttribute('stroke-dasharray', '7 5');
+                line.setAttribute('stroke-linecap', 'round');
+                svg.appendChild(line);
+                var referenceLines = [
+                    (primaryReference.detail || 'Central tendency for the cohort marks in scope.'),
+                    'Value: ' + formatPercent(primaryReference.value)
+                ];
+                if (summaryStats.median_percent !== null && summaryStats.median_percent !== undefined && primaryReference.key !== 'median_percent') {
+                    referenceLines.push('Median: ' + formatPercent(summaryStats.median_percent));
+                }
+                if (summaryStats.pass_threshold_percent !== null && summaryStats.pass_threshold_percent !== undefined) {
+                    referenceLines.push('Pass threshold: ' + formatPercent(summaryStats.pass_threshold_percent));
+                }
+                appendReferenceHoverLine(svg, referenceX, margin.top, referenceX, margin.top + innerHeight, tooltipText(primaryReference.label || 'Reference line', referenceLines));
+            }
+
+            svg.appendChild(createSvgText(margin.left + (innerWidth / 2), height - 12, 'Mark', 'analytics-chart-text axis-title analytics-chart-text--histogram-axis', 'middle'));
+            svg.appendChild(createSvgText(24, margin.top + (innerHeight / 2), 'Number of Students', 'analytics-chart-text axis-title analytics-chart-text--histogram-axis', 'middle', -90));
+
+            container.innerHTML = '';
+            container.appendChild(svg);
+            if (meta) {
+                var metaParts = [];
+                if (summaryStats.mean_percent !== null && summaryStats.mean_percent !== undefined) {
+                    metaParts.push('<span><strong>Mean</strong> ' + escapeHtml(formatPercent(summaryStats.mean_percent)) + '</span>');
+                }
+                if (summaryStats.median_percent !== null && summaryStats.median_percent !== undefined) {
+                    metaParts.push('<span><strong>Median</strong> ' + escapeHtml(formatPercent(summaryStats.median_percent)) + '</span>');
+                }
+                if (summaryStats.pass_threshold_percent !== null && summaryStats.pass_threshold_percent !== undefined) {
+                    metaParts.push('<span><strong>Pass threshold</strong> ' + escapeHtml(formatPercent(summaryStats.pass_threshold_percent)) + '</span>');
+                }
+                if (data.bin_width) {
+                    metaParts.push('<span><strong>Bar width</strong> ' + escapeHtml(String(data.bin_width)) + ' marks</span>');
+                }
+                meta.innerHTML = metaParts.join('');
+            }
+        }
+
+        function drawStaticFunctionalScatter() {
+            var container = document.getElementById('graph-static-functional-scatter');
+            var data = graphData && graphData.static_functional_scatter_plot;
+            if (!container) return;
+            renderScatterQuadrantNote(null);
+            if (!data) {
+                container.innerHTML = chartEmptyState(
+                    'Scatter plot unavailable',
+                    'Scatter plot data will appear once assignment submissions are available.'
+                );
+                return;
+            }
+            if (!data.supported) {
+                container.innerHTML = chartEmptyState(
+                    'Static vs functional view unavailable',
+                    data.unsupported_reason || 'The current assignment does not have enough behavioural evidence for a meaningful comparison.'
+                );
+                return;
+            }
+            if (!data.points || !data.points.length) {
+                container.innerHTML = chartEmptyState(
+                    'Scatter plot unavailable',
+                    'No active submissions are available to plot.'
+                );
+                return;
+            }
+            var width = 640;
+            var height = 640;
+            var margin = { top: 34, right: 34, bottom: 82, left: 82 };
+            var innerWidth = width - margin.left - margin.right;
+            var innerHeight = height - margin.top - margin.bottom;
+            var ticks = [0, 25, 50, 75, 100];
+            var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+            svg.setAttribute('class', 'analytics-chart-svg');
+            var hoverTargets = [];
+
+            var plot = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            plot.setAttribute('x', margin.left);
+            plot.setAttribute('y', margin.top);
+            plot.setAttribute('width', innerWidth);
+            plot.setAttribute('height', innerHeight);
+            plot.setAttribute('rx', '18');
+            plot.setAttribute('fill', 'rgba(255, 255, 255, 0.96)');
+            plot.setAttribute('stroke', 'rgba(148, 163, 184, 0.2)');
+            svg.appendChild(plot);
+
+            ticks.forEach(function (tick) {
+                var gridX = margin.left + ((tick / 100) * innerWidth);
+                var vertical = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                vertical.setAttribute('x1', gridX);
+                vertical.setAttribute('x2', gridX);
+                vertical.setAttribute('y1', margin.top);
+                vertical.setAttribute('y2', margin.top + innerHeight);
+                vertical.setAttribute('class', 'analytics-chart-grid');
+                svg.appendChild(vertical);
+                svg.appendChild(createSvgText(gridX, margin.top + innerHeight + 22, String(tick), 'analytics-chart-text', 'middle'));
+            });
+
+            ticks.forEach(function (tick) {
+                var gridY = margin.top + innerHeight - ((tick / 100) * innerHeight);
+                var horizontal = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                horizontal.setAttribute('x1', margin.left);
+                horizontal.setAttribute('x2', margin.left + innerWidth);
+                horizontal.setAttribute('y1', gridY);
+                horizontal.setAttribute('y2', gridY);
+                horizontal.setAttribute('class', 'analytics-chart-grid');
+                svg.appendChild(horizontal);
+                svg.appendChild(createSvgText(margin.left - 10, gridY + 4, String(tick), 'analytics-chart-text', 'end'));
+            });
+
+            var axis = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            axis.setAttribute('d', 'M' + margin.left + ' ' + (margin.top + innerHeight) + 'H' + (margin.left + innerWidth) + 'M' + margin.left + ' ' + margin.top + 'V' + (margin.top + innerHeight));
+            axis.setAttribute('class', 'analytics-chart-axis');
+            svg.appendChild(axis);
+
+            if (data.reference_lines && data.reference_lines.show_balance_diagonal) {
+                var diagonal = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                diagonal.setAttribute('x1', margin.left);
+                diagonal.setAttribute('x2', margin.left + innerWidth);
+                diagonal.setAttribute('y1', margin.top + innerHeight);
+                diagonal.setAttribute('y2', margin.top);
+                diagonal.setAttribute('stroke', 'rgba(71, 85, 105, 0.45)');
+                diagonal.setAttribute('stroke-width', '1.6');
+                diagonal.setAttribute('stroke-dasharray', '5 5');
+                svg.appendChild(diagonal);
+                hoverTargets.push({
+                    x1: margin.left,
+                    y1: margin.top + innerHeight,
+                    x2: margin.left + innerWidth,
+                    y2: margin.top,
+                    html: tooltipText('Balance line', [
+                        'x = y.',
+                        'Points near this line have similar static and functional attainment.',
+                        'Points far from it are imbalanced across code quality and observed behaviour.'
+                    ])
+                });
+            }
+
+            if (data.reference_lines && data.reference_lines.show_mean_lines) {
+                var meanX = data.reference_lines.static_mean_percent;
+                var meanY = data.reference_lines.behavioural_mean_percent;
+                if (meanX !== null && meanX !== undefined) {
+                    var verticalMean = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    verticalMean.setAttribute('x1', margin.left + ((meanX / 100) * innerWidth));
+                    verticalMean.setAttribute('x2', margin.left + ((meanX / 100) * innerWidth));
+                    verticalMean.setAttribute('y1', margin.top);
+                    verticalMean.setAttribute('y2', margin.top + innerHeight);
+                    verticalMean.setAttribute('class', 'analytics-chart-reference mean');
+                    verticalMean.setAttribute('stroke-width', '1.15');
+                    verticalMean.setAttribute('stroke-dasharray', '3 6');
+                    svg.appendChild(verticalMean);
+                    hoverTargets.push({
+                        x1: margin.left + ((meanX / 100) * innerWidth),
+                        y1: margin.top,
+                        x2: margin.left + ((meanX / 100) * innerWidth),
+                        y2: margin.top + innerHeight,
+                        html: tooltipText('Cohort mean: static / code quality', [
+                            'Average static / code quality score: ' + formatPercent(meanX),
+                            'Submissions to the right of this line are above the cohort mean on static evidence.'
+                        ])
+                    });
+                }
+                if (meanY !== null && meanY !== undefined) {
+                    var horizontalMean = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    horizontalMean.setAttribute('x1', margin.left);
+                    horizontalMean.setAttribute('x2', margin.left + innerWidth);
+                    horizontalMean.setAttribute('y1', margin.top + innerHeight - ((meanY / 100) * innerHeight));
+                    horizontalMean.setAttribute('y2', margin.top + innerHeight - ((meanY / 100) * innerHeight));
+                    horizontalMean.setAttribute('class', 'analytics-chart-reference median');
+                    horizontalMean.setAttribute('stroke-width', '1.15');
+                    horizontalMean.setAttribute('stroke-dasharray', '3 6');
+                    svg.appendChild(horizontalMean);
+                    hoverTargets.push({
+                        x1: margin.left,
+                        y1: margin.top + innerHeight - ((meanY / 100) * innerHeight),
+                        x2: margin.left + innerWidth,
+                        y2: margin.top + innerHeight - ((meanY / 100) * innerHeight),
+                        html: tooltipText('Cohort mean: behavioural / functional', [
+                            'Average behavioural / functional score: ' + formatPercent(meanY),
+                            'Points above this line are above the cohort mean on runtime and browser evidence.'
+                        ])
+                    });
+                }
+
+                if (meanX !== null && meanX !== undefined && meanY !== null && meanY !== undefined) {
+                    var quadrantX = margin.left + ((meanX / 100) * innerWidth);
+                    var quadrantY = margin.top + innerHeight - ((meanY / 100) * innerHeight);
+                    [
+                        {
+                            x: margin.left,
+                            y: margin.top,
+                            width: quadrantX - margin.left,
+                            height: quadrantY - margin.top,
+                            title: 'High Function / Low Quality',
+                            lines: [
+                                'Behavioural / functional attainment is above the cohort mean.',
+                                'Static / code quality attainment is below the cohort mean.',
+                                'These submissions work relatively well but rely on weaker structural or code-quality evidence.'
+                            ]
+                        },
+                        {
+                            x: quadrantX,
+                            y: margin.top,
+                            width: (margin.left + innerWidth) - quadrantX,
+                            height: quadrantY - margin.top,
+                            title: 'Strong Overall',
+                            lines: [
+                                'Both static / code quality and behavioural / functional attainment are above the cohort means.',
+                                'These submissions are strong on both structural evidence and observed behaviour.'
+                            ]
+                        },
+                        {
+                            x: margin.left,
+                            y: quadrantY,
+                            width: quadrantX - margin.left,
+                            height: (margin.top + innerHeight) - quadrantY,
+                            title: 'Weak Overall',
+                            lines: [
+                                'Both static / code quality and behavioural / functional attainment are below the cohort means.',
+                                'These submissions are weaker across both structural evidence and observed behaviour.'
+                            ]
+                        },
+                        {
+                            x: quadrantX,
+                            y: quadrantY,
+                            width: (margin.left + innerWidth) - quadrantX,
+                            height: (margin.top + innerHeight) - quadrantY,
+                            title: 'High Quality / Low Function',
+                            lines: [
+                                'Static / code quality attainment is above the cohort mean.',
+                                'Behavioural / functional attainment is below the cohort mean.',
+                                'These submissions show stronger structure than observed runtime or interactive behaviour.'
+                            ]
+                        }
+                    ].forEach(function (region) {
+                        appendQuadrantHoverRegion(svg, region);
+                    });
+                }
+            }
+
+            hoverTargets.forEach(function (target) {
+                appendReferenceHoverLine(svg, target.x1, target.y1, target.x2, target.y2, target.html);
+            });
+
+            data.points.forEach(function (point) {
+                var cx = margin.left + (((point.static_score_percent == null ? 0 : point.static_score_percent) / 100) * innerWidth);
+                var cy = margin.top + innerHeight - (((point.behavioural_score_percent == null ? 0 : point.behavioural_score_percent) / 100) * innerHeight);
+                var circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', cx);
+                circle.setAttribute('cy', cy);
+                circle.setAttribute('r', point.manual_review_recommended ? '8' : '6');
+                circle.setAttribute('fill', point.confidence === 'low' ? graphColor('danger') : (point.confidence === 'medium' ? graphColor('warning') : graphColor('success')));
+                circle.setAttribute('fill-opacity', point.functional_evidence_limited ? '0.45' : (point.manual_review_recommended ? '0.94' : '0.78'));
+                circle.setAttribute('stroke', point.manual_review_recommended ? graphColor('ink') : '#ffffff');
+                circle.setAttribute('stroke-width', point.manual_review_recommended ? '2.5' : '1.6');
+                if (point.functional_evidence_limited) {
+                    circle.setAttribute('stroke-dasharray', '4 3');
+                }
+                circle.setAttribute('class', 'analytics-chart-point');
+                circle.setAttribute('tabindex', '0');
+                bindTooltip(circle, tooltipText(studentDisplayName(point), [
+                    'Overall mark: ' + formatPercent(point.overall_mark_percent),
+                    'Static / code quality: ' + formatPercent(point.static_score_percent),
+                    'Behavioural / functional: ' + formatPercent(point.behavioural_score_percent),
+                    'Confidence: ' + String(point.confidence || 'n/a'),
+                    point.primary_issue ? ('Primary issue: ' + point.primary_issue) : '',
+                    point.functional_evidence_limited ? 'Behavioural evidence is limited for this submission.' : ''
+                ]));
+                circle.addEventListener('click', function () {
+                    setSelectedGraphNode(circle);
+                    openStudentDrawer({
+                        label: 'Submission focus: ' + studentDisplayName(point),
+                        subtitle: 'Latest active submission detail for this static-versus-functional comparison point.',
+                        studentIds: point.student_ids || [point.student_id],
+                        badgeText: 'Overall ' + formatPercent(point.overall_mark_percent)
+                    });
+                    filterReviewQueueToStudents(point.student_ids || [point.student_id], 'Scatter selection: ' + studentDisplayName(point));
+                });
+                svg.appendChild(circle);
+            });
+
+            svg.appendChild(createSvgText(margin.left + (innerWidth / 2), height - 18, 'Static / Code Quality Score', 'analytics-chart-text axis-title', 'middle'));
+            svg.appendChild(createSvgText(24, margin.top + (innerHeight / 2), 'Behavioural / Functional Score', 'analytics-chart-text axis-title', 'middle', -90));
+
+            container.innerHTML = '';
+            container.appendChild(svg);
+        }
+
+        function drawRequirementMatrix() {
+            var container = document.getElementById('graph-requirement-matrix');
+            var data = graphData && graphData.requirement_coverage_matrix;
+            if (!container) return;
+            if (!data || !data.rows || !data.rows.length) {
+                container.innerHTML = '<div class="analytics-graph-empty">Requirement-level matrix data is not available yet.</div>';
+                return;
+            }
+            container.innerHTML = '';
+            var header = document.createElement('div');
+            header.className = 'analytics-matrix-row';
+            header.innerHTML = '<div></div>' + ['Met', 'Partial', 'Unmet', 'Not evaluable'].map(function (label) {
+                return '<div class="analytics-helper" style="padding:0.25rem 0.45rem; font-weight:700;">' + escapeHtml(label) + '</div>';
+            }).join('');
+            container.appendChild(header);
+            data.rows.forEach(function (row) {
+                var rowEl = document.createElement('div');
+                rowEl.className = 'analytics-matrix-row';
+                var rowHeader = document.createElement('div');
+                rowHeader.className = 'analytics-matrix-row-header';
+                rowHeader.innerHTML = '<strong>' + escapeHtml(row.title) + '</strong><div class="analytics-table-note">' + escapeHtml(String(row.rule_count || 0)) + ' required rule' + ((row.rule_count || 0) === 1 ? '' : 's') + '</div>';
+                rowEl.appendChild(rowHeader);
+                (row.cells || []).forEach(function (cell) {
+                    var button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'analytics-matrix-cell cell-' + String(cell.label || '').toLowerCase().replace(/\s+/g, '-');
+                    button.innerHTML = '<strong>' + escapeHtml(String(cell.count)) + '</strong><div class="analytics-table-note">' + escapeHtml(cell.label) + '</div>';
+                    bindTooltip(button, tooltipText(row.title + ': ' + cell.label, [
+                        cell.count + ' student' + (cell.count === 1 ? '' : 's'),
+                        Math.round(cell.percent || 0) + '% of active submissions'
+                    ]));
+                    button.addEventListener('click', function () {
+                        setSelectedGraphNode(button);
+                        focusRequirement(row.component, row.title + ' - ' + cell.label);
+                        navigateToSection('requirement-coverage');
+                        openStudentDrawer({
+                            label: row.title + ' - ' + cell.label,
+                            subtitle: 'Students in this requirement state for the current assignment cohort.',
+                            studentIds: cell.student_ids || [],
+                            badgeText: Math.round(cell.percent || 0) + '% of cohort'
+                        });
+                        filterReviewQueueToStudents(cell.student_ids || [], row.title + ' - ' + cell.label);
+                    });
+                    rowEl.appendChild(button);
+                });
+                container.appendChild(rowEl);
+            });
+        }
+
+        function drawReliabilityBreakdown() {
+            var container = document.getElementById('graph-reliability-breakdown');
+            var data = graphData && graphData.confidence_reliability_breakdown;
+            if (!container) return;
+            if (!data || (!data.groups || !data.groups.length)) {
+                container.innerHTML = '<div class="analytics-graph-empty">Reliability segments will appear once assignment confidence data is available.</div>';
+                return;
+            }
+            container.innerHTML = '';
+            (data.groups || []).forEach(function (group) {
+                var wrapper = document.createElement('div');
+                wrapper.className = 'analytics-segment-bar';
+                wrapper.innerHTML = '<div class="analytics-stage-meta"><strong>' + escapeHtml(group.label) + '</strong></div>';
+                var track = document.createElement('div');
+                track.className = 'analytics-segment-track';
+                (group.segments || []).forEach(function (segment) {
+                    if (!segment.count) return;
+                    var button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'analytics-segment-button segment-' + inferSegmentTone(segment.label);
+                    button.style.width = Math.max(segment.percent || 0, 8) + '%';
+                    button.innerHTML = '<strong>' + escapeHtml(String(segment.count)) + '</strong><span>' + escapeHtml(segment.label) + '</span>';
+                    bindTooltip(button, tooltipText(segment.label, [
+                        segment.count + ' student' + (segment.count === 1 ? '' : 's'),
+                        Math.round(segment.percent || 0) + '% of active submissions'
+                    ]));
+                    button.addEventListener('click', function () {
+                        setSelectedGraphNode(button);
+                        openStudentDrawer({
+                            label: segment.label,
+                            subtitle: 'Students in this reliability segment within the current assignment scope.',
+                            studentIds: segment.student_ids || [],
+                            badgeText: Math.round(segment.percent || 0) + '% of cohort'
+                        });
+                        if (String(segment.id || '').indexOf('confidence_') === 0 && attentionControls.confidence) {
+                            attentionControls.confidence.value = String(segment.label || '').split(' ')[0].toLowerCase();
+                            navigateToSection('needs-attention');
+                            renderAttention();
+                        } else {
+                            filterReviewQueueToStudents(segment.student_ids || [], segment.label);
+                        }
+                    });
+                    track.appendChild(button);
+                });
+                wrapper.appendChild(track);
+                container.appendChild(wrapper);
+            });
+
+            if (data.limitation_rows && data.limitation_rows.length) {
+                var limitationList = document.createElement('div');
+                limitationList.className = 'analytics-bar-list';
+                data.limitation_rows.forEach(function (segment) {
+                    var button = chartButton(
+                        segment.label,
+                        Math.round(segment.percent || 0) + '% of active submissions',
+                        segment.count,
+                        Math.min(segment.percent || 0, 100),
+                        inferSegmentTone(segment.label),
+                        tooltipText(segment.label, [
+                            segment.count + ' student' + (segment.count === 1 ? '' : 's'),
+                            Math.round(segment.percent || 0) + '% of active submissions'
+                        ])
+                    );
+                    button.addEventListener('click', function () {
+                        setSelectedGraphNode(button);
+                        openStudentDrawer({
+                            label: segment.label,
+                            subtitle: 'Students affected by this confidence or moderation limitation.',
+                            studentIds: segment.student_ids || []
+                        });
+                        filterReviewQueueToStudents(segment.student_ids || [], segment.label);
+                    });
+                    limitationList.appendChild(button);
+                });
+                container.appendChild(limitationList);
+            }
+        }
+
+        function drawCoverageChart() {
+            var container = document.getElementById('graph-submission-coverage');
+            var data = graphData && graphData.missing_incomplete_submission_coverage_chart;
+            if (!container) return;
+            if (!data || !data.stages || !data.stages.length) {
+                container.innerHTML = '<div class="analytics-graph-empty">Coverage stages will appear once assignment scope data is available.</div>';
+                return;
+            }
+            var maxCount = Math.max.apply(null, data.stages.map(function (stage) { return stage.count || 0; }).concat([1]));
+            container.innerHTML = '';
+            data.stages.forEach(function (stage) {
+                var stageKind = 'stage-success';
+                if (String(stage.id).indexOf('missing') !== -1 || String(stage.id).indexOf('excluded') !== -1) stageKind = 'stage-gap';
+                if (String(stage.id).indexOf('not_analysable') !== -1 || String(stage.id).indexOf('partially') !== -1) stageKind = 'stage-risk';
+                var button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'analytics-stage-button ' + stageKind;
+                button.innerHTML = '' +
+                    '<div class="analytics-stage-meta"><strong>' + escapeHtml(stage.label) + '</strong><span>' + escapeHtml(String(stage.count)) + '</span></div>' +
+                    '<div class="analytics-stage-visual"><span style="width:' + ((stage.count / maxCount) * 100) + '%;"></span></div>';
+                bindTooltip(button, tooltipText(stage.label, [
+                    stage.count + ' student' + (stage.count === 1 ? '' : 's'),
+                    (stage.student_ids || []).length ? 'Click to inspect the affected subset.' : 'No student subset is available for this stage.'
+                ]));
+                button.addEventListener('click', function () {
+                    setSelectedGraphNode(button);
+                    navigateToSection('coverage-detail');
+                    openStudentDrawer({
+                        label: stage.label,
+                        subtitle: 'Coverage subset for the current assignment scope.',
+                        studentIds: stage.student_ids || [],
+                        badgeText: 'Count: ' + stage.count
+                    });
+                    if (stage.student_ids && stage.student_ids.length) {
+                        filterReviewQueueToStudents(stage.student_ids, stage.label);
+                    }
+                });
+                container.appendChild(button);
+            });
+        }
+
+        function drawComponentDistribution() {
+            var container = document.getElementById('graph-component-distribution');
+            var data = graphData && graphData.component_performance_distribution;
+            if (!container) return;
+            if (!data || !data.components || !data.components.length) {
+                container.innerHTML = '<div class="analytics-graph-empty">Component distribution data is not available yet.</div>';
+                return;
+            }
+            container.innerHTML = '';
+            data.components.forEach(function (component) {
+                var card = document.createElement('article');
+                card.className = 'analytics-component-card';
+                card.innerHTML = '<div class="analytics-stage-meta"><strong>' + escapeHtml(component.title) + '</strong><span>' + escapeHtml(component.average_percent == null ? 'No average' : formatPercent(component.average_percent)) + '</span></div><div class="analytics-component-stack"></div>';
+                var stack = card.querySelector('.analytics-component-stack');
+                (component.segments || []).forEach(function (segment) {
+                    if (!segment.count) return;
+                    var button = chartButton(
+                        segment.label,
+                        Math.round(segment.percent || 0) + '% of active submissions',
+                        segment.count,
+                        Math.min(segment.percent || 0, 100),
+                        inferSegmentTone(segment.label),
+                        tooltipText(component.title + ' - ' + segment.label, [
+                            segment.count + ' student' + (segment.count === 1 ? '' : 's'),
+                            Math.round(segment.percent || 0) + '% of active submissions'
+                        ])
+                    );
+                    button.addEventListener('click', function () {
+                        setSelectedGraphNode(button);
+                        focusRequirement(component.component, component.title + ' - ' + segment.label);
+                        navigateToSection('component-performance');
+                        if (ruleControls.component) ruleControls.component.value = component.component;
+                        renderRuleRows();
+                        openStudentDrawer({
+                            label: component.title + ' - ' + segment.label,
+                            subtitle: 'Students in this component score state.',
+                            studentIds: segment.student_ids || [],
+                            badgeText: component.average_percent == null ? '' : ('Average ' + formatPercent(component.average_percent))
+                        });
+                        filterReviewQueueToStudents(segment.student_ids || [], component.title + ' - ' + segment.label);
+                    });
+                    stack.appendChild(button);
+                });
+                container.appendChild(card);
+            });
+        }
+
+        function renderInteractiveGraphs() {
+            drawMarkDistribution();
+            drawStaticFunctionalScatter();
+            drawRequirementMatrix();
+            drawReliabilityBreakdown();
+            drawCoverageChart();
+            drawComponentDistribution();
+        }
+
         function clearAttentionFilters() {
             Object.keys(attentionControls).forEach(function (key) {
                 if (attentionControls[key]) attentionControls[key].value = '';
@@ -1820,6 +3401,19 @@
             });
             renderRuleRows();
         }
+
+        if (studentDrawerFilterQueue) {
+            studentDrawerFilterQueue.addEventListener('click', function () {
+                if (!currentDrawerStudentIds.length) return;
+                filterReviewQueueToStudents(currentDrawerStudentIds, currentDrawerLabel);
+            });
+        }
+        if (closeStudentDrawer) closeStudentDrawer.addEventListener('click', closeDrawer);
+        if (clearGraphSelectionButton) clearGraphSelectionButton.addEventListener('click', clearGraphSelection);
+        Array.prototype.slice.call(document.querySelectorAll('[data-drawer-close="true"]')).forEach(function (element) {
+            element.addEventListener('click', closeDrawer);
+        });
+        if (clearRequirementFocusButton) clearRequirementFocusButton.addEventListener('click', clearRequirementFocus);
 
         Object.keys(attentionControls).forEach(function (key) {
             var control = attentionControls[key];
@@ -1919,11 +3513,19 @@
         window.addEventListener('resize', function () {
             setAnalyticsOffsets();
             requestActiveNavSync();
+            hideTooltip();
+        });
+        window.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                closeDrawer();
+                hideTooltip();
+            }
         });
 
         renderAttention();
         renderRuleRows();
         renderSignalCards();
+        renderInteractiveGraphs();
         updateRulesExportLink();
         setAnalyticsOffsets();
         if (window.location.hash) {
