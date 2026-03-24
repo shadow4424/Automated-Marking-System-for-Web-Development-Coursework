@@ -15,11 +15,14 @@
 {% set score_composition = analytics.score_composition|default([], true) %}
 {% set interactive_graphs = analytics.interactive_graphs|default({}, true) %}
 {% set histogram_graph = interactive_graphs.mark_distribution_histogram|default({}, true) %}
-{% set component_graph = interactive_graphs.component_performance_distribution|default({}, true) %}
-{% set requirement_matrix_graph = interactive_graphs.requirement_coverage_matrix|default({}, true) %}
 {% set reliability_graph = interactive_graphs.confidence_reliability_breakdown|default({}, true) %}
 {% set comparison_scatter_graph = interactive_graphs.static_functional_scatter_plot|default({}, true) %}
-{% set coverage_graph = interactive_graphs.missing_incomplete_submission_coverage_chart|default({}, true) %}
+{% set reliability_groups = reliability_graph.groups|default([], true) %}
+{% set confidence_mix_segments = (reliability_groups|selectattr('id', 'equalto', 'confidence')|map(attribute='segments')|first)|default([], true) %}
+{% if not confidence_mix_segments and reliability_groups|length > 1 %}
+{% set confidence_mix_segments = reliability_groups[1].segments|default([], true) %}
+{% endif %}
+{% set limitation_segments = reliability_graph.limitation_rows|default([], true) %}
 {% set insights = teaching_insights|default(analytics.teaching_insights|default([], true), true) %}
 {% set small_cohort = analytics.small_cohort|default({}, true) %}
 {% set small_cohort_enabled = small_cohort.enabled|default(false, true) %}
@@ -38,6 +41,13 @@
 {% set high_confidence = confidence.high|default(0, true) %}
 {% set medium_confidence = confidence.medium|default(0, true) %}
 {% set low_confidence = confidence.low|default(0, true) %}
+{% if not confidence_mix_segments %}
+{% set confidence_mix_segments = [
+    {'label': 'High confidence', 'count': high_confidence, 'percent': ((high_confidence / active_in_scope) * 100) if active_in_scope else 0, 'student_ids': []},
+    {'label': 'Medium confidence', 'count': medium_confidence, 'percent': ((medium_confidence / active_in_scope) * 100) if active_in_scope else 0, 'student_ids': []},
+    {'label': 'Low confidence', 'count': low_confidence, 'percent': ((low_confidence / active_in_scope) * 100) if active_in_scope else 0, 'student_ids': []}
+] %}
+{% endif %}
 {% set default_rule_limit = small_cohort.rule_limit|default(8, true) %}
 {% set default_signal_limit = small_cohort.signal_limit|default(6, true) %}
 
@@ -425,6 +435,167 @@
         margin-top: 0.35rem;
         color: var(--color-text-muted);
         font-size: var(--text-sm);
+    }
+    .analytics-compact-note {
+        margin-bottom: var(--space-md);
+        color: var(--color-text-muted);
+        font-size: var(--text-sm);
+        line-height: 1.5;
+    }
+    .analytics-summary-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: var(--space-sm);
+        margin-bottom: var(--space-lg);
+    }
+    .analytics-summary-tile {
+        padding: 0.9rem 1rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-surface-elevated);
+    }
+    .analytics-summary-tile strong {
+        display: block;
+        margin-top: 0.4rem;
+        color: var(--color-text);
+        font-size: 1.12rem;
+    }
+    .analytics-compact-panel {
+        padding: 1rem 1.05rem;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-surface-elevated);
+        display: grid;
+        gap: 0.85rem;
+    }
+    .analytics-compact-split {
+        display: grid;
+        grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.1fr);
+        gap: var(--space-lg);
+        margin-bottom: var(--space-lg);
+    }
+    .analytics-compare-table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--color-border-light);
+        border-radius: var(--radius-lg);
+        background: var(--color-surface-elevated);
+    }
+    .analytics-compare-table {
+        width: 100%;
+        min-width: 920px;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .analytics-compare-table th,
+    .analytics-compare-table td {
+        padding: 0.85rem 0.9rem;
+        border-bottom: 1px solid var(--color-border-light);
+        vertical-align: middle;
+        text-align: left;
+    }
+    .analytics-compare-table thead th {
+        color: var(--color-text-muted);
+        font-size: 0.76rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        background: rgba(248, 250, 252, 0.82);
+    }
+    .analytics-compare-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+    .analytics-compare-primary {
+        min-width: 220px;
+    }
+    .analytics-inline-distribution {
+        display: flex;
+        width: 100%;
+        min-width: 210px;
+        height: 0.8rem;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.14);
+        box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
+    }
+    .analytics-inline-distribution--confidence {
+        min-width: 0;
+        height: 0.95rem;
+    }
+    .analytics-distribution-segment {
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        margin: 0;
+        cursor: pointer;
+    }
+    .analytics-distribution-segment--met,
+    .analytics-distribution-segment--high {
+        background: rgba(22, 163, 74, 0.82);
+    }
+    .analytics-distribution-segment--partial,
+    .analytics-distribution-segment--medium {
+        background: rgba(245, 158, 11, 0.82);
+    }
+    .analytics-distribution-segment--unmet,
+    .analytics-distribution-segment--low {
+        background: rgba(239, 68, 68, 0.86);
+    }
+    .analytics-distribution-segment--neutral {
+        background: rgba(148, 163, 184, 0.78);
+    }
+    .analytics-state-button {
+        min-width: 52px;
+        padding: 0.35rem 0.6rem;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.26);
+        background: rgba(255, 255, 255, 0.96);
+        color: var(--color-text);
+        font-size: 0.88rem;
+        font-weight: 700;
+        cursor: pointer;
+    }
+    .analytics-state-button.is-empty {
+        color: var(--color-text-muted);
+        background: rgba(248, 250, 252, 0.92);
+    }
+    .analytics-state-button.is-selected,
+    .analytics-diagnostic-action.is-selected,
+    .analytics-distribution-segment.is-selected {
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+        border-color: rgba(37, 99, 235, 0.45);
+    }
+    .analytics-diagnostic-list {
+        display: grid;
+        border: 1px solid var(--color-border-light);
+        border-radius: var(--radius-lg);
+        background: var(--color-surface-elevated);
+        overflow: hidden;
+    }
+    .analytics-diagnostic-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: var(--space-md);
+        align-items: center;
+        padding: 0.85rem 1rem;
+        border-bottom: 1px solid var(--color-border-light);
+    }
+    .analytics-diagnostic-row:last-child {
+        border-bottom: none;
+    }
+    .analytics-diagnostic-meta strong {
+        display: block;
+        color: var(--color-text);
+    }
+    .analytics-diagnostic-value {
+        color: var(--color-text);
+        font-weight: 700;
+        white-space: nowrap;
+    }
+    .analytics-diagnostic-action {
+        justify-self: end;
+    }
+    .analytics-requirement-row.is-selected td {
+        background: rgba(37, 99, 235, 0.08);
     }
     .analytics-coverage-grid,
     .analytics-signals-grid,
@@ -950,6 +1121,7 @@
         }
         .analytics-kpi-strip,
         .analytics-reliability-grid,
+        .analytics-summary-strip,
         .analytics-coverage-grid,
         .analytics-signals-grid,
         .analytics-score-source-grid {
@@ -960,6 +1132,9 @@
         .analytics-graph-triple,
         .analytics-component-grid,
         .analytics-stage-list {
+            grid-template-columns: 1fr;
+        }
+        .analytics-compact-split {
             grid-template-columns: 1fr;
         }
         .analytics-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -975,6 +1150,9 @@
         }
         .analytics-kpi-strip,
         .analytics-reliability-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .analytics-summary-strip {
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }
         .analytics-matrix-row {
@@ -994,6 +1172,7 @@
         }
         .analytics-kpi-strip,
         .analytics-reliability-grid,
+        .analytics-summary-strip,
         .analytics-coverage-grid,
         .analytics-signals-grid,
         .analytics-score-source-grid,
@@ -1006,9 +1185,14 @@
         .analytics-info-banner,
         .analytics-coverage-detail-item,
         .analytics-limitation-item,
+        .analytics-diagnostic-row,
         .analytics-collapse-card > summary,
         .analytics-chart-axis-meta {
             flex-direction: column;
+        }
+        .analytics-diagnostic-row {
+            grid-template-columns: 1fr;
+            align-items: start;
         }
     }
 </style>
@@ -1094,7 +1278,7 @@
                     <span class="analytics-local-nav-count">{{ signals|length }}</span>
                     {% endif %}
                 </a>
-                <a href="#analytics-diagnostics" class="analytics-local-nav-link" data-analytics-target="analytics-diagnostics">Diagnostics</a>
+                <a href="#scoring-sources" class="analytics-local-nav-link" data-analytics-target="scoring-sources">Scoring Sources</a>
             </div>
             {% endif %}
         </div>
@@ -1654,11 +1838,7 @@
             </div>
         </summary>
         <div class="analytics-collapse-body">
-        <div class="analytics-section-heading">
-            <div>
-                <p class="analytics-section-note">A requirement area only counts as met when the full required rule set was satisfied; partial progress does not count as fully met.</p>
-            </div>
-        </div>
+        <p class="analytics-compact-note">Fully met requires the full required rule set. Partial progress does not count as fully met.</p>
         {% if requirements %}
         <div id="requirement-focus-banner" class="analytics-requirement-focus" aria-live="polite">
             <div>
@@ -1667,42 +1847,50 @@
             </div>
             <button type="button" id="clear-requirement-focus" class="btn btn-ghost btn-sm">Clear focus</button>
         </div>
-        <div class="analytics-graph-card" style="margin-bottom: var(--space-lg); padding: 1rem;">
-            <div class="analytics-graph-header">
-                <div>
-                    <h3>Requirement Coverage Matrix</h3>
-                </div>
-            </div>
-            <div class="analytics-chart-axis-meta">
-                <span>Y-axis: Requirement area</span>
-                <span>X-axis: Requirement state</span>
-            </div>
-            <div id="graph-requirement-matrix" class="analytics-matrix" data-graph-card="requirement_coverage_matrix"></div>
-        </div>
-        <div class="analytics-coverage-grid">
+        <div class="analytics-compare-table-wrap">
+        <table class="analytics-compare-table">
+            <thead>
+                <tr>
+                    <th>Requirement area</th>
+                    <th>Attainment mix</th>
+                    <th>Met</th>
+                    <th>Partial</th>
+                    <th>Unmet</th>
+                    <th>Not evaluable</th>
+                    <th>Fully met</th>
+                </tr>
+            </thead>
+            <tbody>
             {% for requirement in requirements %}
-            <article class="analytics-coverage-card analytics-requirement-card" data-requirement-component="{{ requirement.component }}">
-                <div class="analytics-summary-badges" style="justify-content: space-between;">
-                    <strong>{{ requirement.title }}</strong>
+            {% set requirement_total = requirement.students_met + requirement.students_partial + requirement.students_unmet + requirement.students_not_evaluable %}
+            <tr class="analytics-requirement-row analytics-requirement-card" data-requirement-component="{{ requirement.component }}">
+                <td>
+                    <div class="analytics-compare-primary">
+                        <strong>{{ requirement.title }}</strong>
+                        <div class="analytics-table-note">{{ requirement.rule_count }} required rule{{ '' if requirement.rule_count == 1 else 's' }}</div>
+                    </div>
+                </td>
+                <td>
+                    <div class="analytics-inline-distribution" aria-label="{{ requirement.title }} attainment mix">
+                        <button type="button" class="analytics-distribution-segment analytics-distribution-segment--met js-subset-button" style="width: {{ '%.2f'|format((requirement.students_met / requirement_total * 100) if requirement_total else 0) }}%;" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Met" data-badge="{{ requirement.met_percent|round|int }}% fully met" data-students="{{ requirement.met_students|join('|') }}" title="Met: {{ requirement.students_met }}"></button>
+                        <button type="button" class="analytics-distribution-segment analytics-distribution-segment--partial js-subset-button" style="width: {{ '%.2f'|format((requirement.students_partial / requirement_total * 100) if requirement_total else 0) }}%;" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Partial" data-badge="{{ requirement.students_partial }} partial" data-students="{{ requirement.partial_students|join('|') }}" title="Partial: {{ requirement.students_partial }}"></button>
+                        <button type="button" class="analytics-distribution-segment analytics-distribution-segment--unmet js-subset-button" style="width: {{ '%.2f'|format((requirement.students_unmet / requirement_total * 100) if requirement_total else 0) }}%;" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Unmet" data-badge="{{ requirement.students_unmet }} unmet" data-students="{{ requirement.unmet_students|join('|') }}" title="Unmet: {{ requirement.students_unmet }}"></button>
+                        <button type="button" class="analytics-distribution-segment analytics-distribution-segment--neutral js-subset-button" style="width: {{ '%.2f'|format((requirement.students_not_evaluable / requirement_total * 100) if requirement_total else 0) }}%;" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Not evaluable" data-badge="{{ requirement.students_not_evaluable }} not evaluable" data-students="{{ requirement.not_evaluable_students|join('|') }}" title="Not evaluable: {{ requirement.students_not_evaluable }}"></button>
+                    </div>
+                </td>
+                <td><button type="button" class="analytics-state-button js-subset-button {% if not requirement.students_met %}is-empty{% endif %}" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Met" data-badge="{{ requirement.met_percent|round|int }}% fully met" data-students="{{ requirement.met_students|join('|') }}">{{ requirement.students_met }}</button></td>
+                <td><button type="button" class="analytics-state-button js-subset-button {% if not requirement.students_partial %}is-empty{% endif %}" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Partial" data-badge="{{ requirement.students_partial }} partial" data-students="{{ requirement.partial_students|join('|') }}">{{ requirement.students_partial }}</button></td>
+                <td><button type="button" class="analytics-state-button js-subset-button {% if not requirement.students_unmet %}is-empty{% endif %}" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Unmet" data-badge="{{ requirement.students_unmet }} unmet" data-students="{{ requirement.unmet_students|join('|') }}">{{ requirement.students_unmet }}</button></td>
+                <td><button type="button" class="analytics-state-button js-subset-button {% if not requirement.students_not_evaluable %}is-empty{% endif %}" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Not evaluable" data-badge="{{ requirement.students_not_evaluable }} not evaluable" data-students="{{ requirement.not_evaluable_students|join('|') }}">{{ requirement.students_not_evaluable }}</button></td>
+                <td>
                     <span class="badge {% if requirement.met_percent >= 70 %}badge-success{% elif requirement.met_percent >= 40 %}badge-warning{% else %}badge-danger{% endif %}">
-                        {{ requirement.students_met }} / {{ submitted_count }} fully met
+                        {{ requirement.met_percent|round|int }}%
                     </span>
-                </div>
-                <p class="analytics-section-note">{{ requirement.rule_count }} required rule{{ '' if requirement.rule_count == 1 else 's' }} in this area.</p>
-                <div class="analytics-list-stack">
-                    <div class="analytics-coverage-detail-item"><span>Fully met submissions</span><strong>{{ requirement.students_met }}</strong></div>
-                    <div class="analytics-coverage-detail-item"><span>Partial submissions</span><strong>{{ requirement.students_partial }}</strong></div>
-                    <div class="analytics-coverage-detail-item"><span>Unmet submissions</span><strong>{{ requirement.students_unmet }}</strong></div>
-                    <div class="analytics-coverage-detail-item"><span>Not evaluable submissions</span><strong>{{ requirement.students_not_evaluable }}</strong></div>
-                </div>
-                <p class="analytics-section-note">
-                    {{ requirement.met_percent|round|int }}% of active submissions fully met this area.
-                    {% if requirement.unmet_examples %}
-                    Example unmet students: {{ requirement.unmet_examples|join(', ') }}.
-                    {% endif %}
-                </p>
-            </article>
+                </td>
+            </tr>
             {% endfor %}
+            </tbody>
+        </table>
         </div>
         {% else %}
         <div class="analytics-empty-inline">Requirement-level coverage cannot be calculated yet for this assignment.</div>
@@ -1717,89 +1905,78 @@
             </div>
         </summary>
         <div class="analytics-collapse-body">
-        <div class="analytics-section-heading">
-            <div>
-                <p class="analytics-section-note">Trustworthiness is separated from performance so a low mark is not confused with incomplete evaluation.</p>
-            </div>
-        </div>
-        <div class="analytics-graph-pair" style="margin-bottom: var(--space-lg);">
-            <article class="analytics-graph-card">
-                <div class="analytics-graph-header">
-                    <div>
-                        <h3>Confidence and Reliability Breakdown</h3>
-                    </div>
-                </div>
-                <div class="analytics-chart-axis-meta">
-                    <span>Y-axis: Reliability segment</span>
-                    <span>X-axis: Students in scope</span>
-                </div>
-                <div id="graph-reliability-breakdown" class="analytics-segment-bar" data-graph-card="confidence_reliability_breakdown"></div>
-            </article>
-            <article class="analytics-graph-card">
-                <div class="analytics-graph-header">
-                    <div>
-                        <h3>Missing / Incomplete Submission Coverage Chart</h3>
-                    </div>
-                </div>
-                <div class="analytics-chart-axis-meta">
-                    <span>Y-axis: Coverage stage</span>
-                    <span>X-axis: Students / submissions</span>
-                </div>
-                <div id="graph-submission-coverage" class="analytics-stage-list" data-graph-card="missing_incomplete_submission_coverage_chart"></div>
-            </article>
-        </div>
-        <div class="analytics-reliability-grid">
-            <article class="analytics-reliability-stat">
-                <span class="analytics-helper" title="Submissions where static, runtime, and browser signals completed without known limitations.">Fully evaluated submissions</span>
+        <div class="analytics-summary-strip">
+            <article class="analytics-summary-tile">
+                <span class="analytics-helper">Fully evaluated</span>
                 <strong>{{ fully_evaluated }}</strong>
             </article>
-            <article class="analytics-reliability-stat">
-                <span class="analytics-helper" title="Submissions where some runtime or browser checks were skipped or unavailable.">Partially evaluated submissions</span>
+            <article class="analytics-summary-tile">
+                <span class="analytics-helper">Partially evaluated</span>
                 <strong>{{ partially_evaluated }}</strong>
             </article>
-            <article class="analytics-reliability-stat">
-                <span class="analytics-helper" title="Submissions currently recommended for marker follow-up.">Manual review submissions</span>
+            <article class="analytics-summary-tile">
+                <span class="analytics-helper">Manual review recommended</span>
                 <strong>{{ manual_review_count }}</strong>
             </article>
-            <article class="analytics-reliability-stat">
-                <span class="analytics-helper" title="Limitation incidents count repeated runtime, browser, or analysis-limit events across the active submissions in scope.">Limitation incidents</span>
+            <article class="analytics-summary-tile">
+                <span class="analytics-helper">Limitation incidents</span>
                 <strong>{{ limitation_incidents }}</strong>
-                <span class="analytics-table-note">{{ limitation_categories }} limitation categor{{ 'y' if limitation_categories == 1 else 'ies' }}</span>
             </article>
         </div>
-        <div class="analytics-filter-actions" style="margin-bottom: var(--space-lg);">
-            <span class="analytics-helper">Confidence filters can be pushed directly into the review queue.</span>
-            <button type="button" class="btn btn-ghost btn-sm js-confidence-filter" data-confidence="low">Show low confidence</button>
-            <button type="button" class="btn btn-ghost btn-sm js-confidence-filter" data-confidence="medium">Show medium confidence</button>
-        </div>
-        <div class="analytics-limitation-list">
-            <div class="analytics-limitation-item">
+        <div class="analytics-compact-split">
+            <section class="analytics-compact-panel">
                 <div>
                     <strong>Confidence mix</strong>
-                    <div class="analytics-helper">High, medium, and low confidence refer to trust in the automated interpretation, not student performance.</div>
+                    <div class="analytics-table-note">Confidence reflects trust in the automated interpretation, not student performance.</div>
+                </div>
+                <div class="analytics-inline-distribution analytics-inline-distribution--confidence" aria-label="Confidence mix">
+                    {% for segment in confidence_mix_segments %}
+                    {% set tone = 'high' if 'High' in segment.label else ('medium' if 'Medium' in segment.label else 'low') %}
+                    <button type="button" class="analytics-distribution-segment analytics-distribution-segment--{{ tone }} js-subset-button" style="width: {{ '%.2f'|format(segment.percent|default(0, true)) }}%;" data-label="{{ segment.label }}" data-badge="{{ segment.percent|round|int }}% of active submissions" data-students="{{ segment.student_ids|join('|') }}"></button>
+                    {% endfor %}
                 </div>
                 <div class="analytics-summary-badges">
-                    <span class="badge badge-success">{{ high_confidence }} high</span>
-                    <span class="badge badge-warning">{{ medium_confidence }} medium</span>
-                    <span class="badge badge-danger">{{ low_confidence }} low</span>
+                    {% for segment in confidence_mix_segments %}
+                    {% set tone = 'high' if 'High' in segment.label else ('medium' if 'Medium' in segment.label else 'low') %}
+                    <button type="button" class="analytics-state-button js-subset-button {% if not segment.count %}is-empty{% endif %}" data-label="{{ segment.label }}" data-badge="{{ segment.percent|round|int }}% of active submissions" data-students="{{ segment.student_ids|join('|') }}">
+                        {{ segment.label }} {{ segment.count }}
+                    </button>
+                    {% endfor %}
                 </div>
-            </div>
-            <div class="analytics-limitation-item">
+            </section>
+
+            <section class="analytics-compact-panel">
                 <div>
-                    <strong>Not analysable submissions</strong>
-                    <div class="analytics-helper">Submissions where the automated pipeline could not complete cleanly.</div>
+                    <strong>Top limitation categories</strong>
+                    <div class="analytics-table-note">Focus on repeated runtime and browser limitations that reduce trustworthiness or require marker follow-up.</div>
                 </div>
-                <strong>{{ not_analysable }}</strong>
-            </div>
-            {% for item in reliability.limitation_breakdown|default([], true) %}
-            <div class="analytics-limitation-item">
-                <div>
-                    <strong>{{ item.label }}</strong>
-                    <div class="analytics-helper">{{ item.incident_unit|default('limitation incidents', true)|capitalize }} across active submissions.</div>
+                <div class="analytics-diagnostic-list">
+                    {% set shown_limitations = namespace(count=0) %}
+                    {% for item in limitation_segments %}
+                    {% if item.id != 'manual_review' and item.count and shown_limitations.count < 4 %}
+                    {% set shown_limitations.count = shown_limitations.count + 1 %}
+                    <div class="analytics-diagnostic-row">
+                        <div class="analytics-diagnostic-meta">
+                            <strong>{{ item.label }}</strong>
+                            <div class="analytics-table-note">{{ item.percent|round|int }}% of active submissions</div>
+                        </div>
+                        <div class="analytics-diagnostic-value">{{ item.count }}</div>
+                        <button type="button" class="btn btn-ghost btn-sm analytics-diagnostic-action js-subset-button" data-label="{{ item.label }}" data-badge="{{ item.percent|round|int }}% of active submissions" data-students="{{ item.student_ids|join('|') }}">Inspect</button>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                    {% if shown_limitations.count == 0 %}
+                    <div class="analytics-diagnostic-row">
+                        <div class="analytics-diagnostic-meta">
+                            <strong>No repeated limitation categories</strong>
+                            <div class="analytics-table-note">No runtime or browser limitation category is currently affecting multiple submissions.</div>
+                        </div>
+                        <div class="analytics-diagnostic-value">0</div>
+                        <div class="analytics-helper">Nothing to inspect</div>
+                    </div>
+                    {% endif %}
                 </div>
-                <strong>{{ item.incident_count }}</strong>
-            </div>
-            {% endfor %}
+            </section>
         </div>
         </div>
         </details>
@@ -1858,83 +2035,10 @@
         </div>
         </details>
 
-        <details class="card analytics-collapse-card" id="component-performance">
-        <summary>
-            <div>
-                <h2 class="card-title">Component Performance Distribution</h2>
-            </div>
-        </summary>
-        <div class="analytics-collapse-body">
-        <div class="analytics-section-heading">
-            <div>
-                <p class="analytics-section-note">See whether each technical layer is failing outright, clustering around partial credit, or reaching full attainment.</p>
-            </div>
-        </div>
-        {% if component_graph.components|default([], true) %}
-        <div class="analytics-chart-axis-meta" style="margin-bottom: var(--space-md);">
-            <span>Y-axis: Component</span>
-            <span>X-axis: Students in each score state</span>
-        </div>
-        <div id="graph-component-distribution" class="analytics-component-grid" data-graph-card="component_performance_distribution"></div>
-        {% else %}
-        <div class="analytics-empty-inline">Component-level score distributions are not available yet for this assignment.</div>
-        {% endif %}
-        </div>
-        </details>
-
-        <details class="card analytics-collapse-card" id="coverage-detail">
-        <summary>
-            <div>
-                <h2 class="card-title">Coverage Detail</h2>
-            </div>
-        </summary>
-        <div class="analytics-collapse-body">
-        <div class="analytics-section-heading">
-            <div>
-                <p class="analytics-section-note">Why assignment-wide coverage is or is not complete across assigned students and active submissions in scope.</p>
-            </div>
-        </div>
-        <div class="analytics-coverage-detail-list">
-            <div class="analytics-coverage-detail-item">
-                <div>
-                    <strong>Assigned but never submitted</strong>
-                    <div class="analytics-helper">Assigned students who currently have no active submission in scope.</div>
-                </div>
-                <strong>{{ coverage.missing_assigned|default(0, true) }}</strong>
-            </div>
-            <div class="analytics-coverage-detail-item">
-                <div>
-                    <strong>Submitted but not analysable</strong>
-                    <div class="analytics-helper">Active submissions where the automatic pipeline did not complete cleanly.</div>
-                </div>
-                <strong>{{ coverage.not_analysable|default(0, true) }}</strong>
-            </div>
-            <div class="analytics-coverage-detail-item">
-                <div>
-                    <strong>Excluded or superseded submissions</strong>
-                    <div class="analytics-helper">Inactive or replaced submissions that are no longer counted in assignment scope.</div>
-                </div>
-                <strong>{{ coverage.inactive_or_superseded|default(0, true) }}</strong>
-            </div>
-            <div class="analytics-coverage-detail-item">
-                <div>
-                    <strong>Active submissions in scope</strong>
-                    <div class="analytics-helper">Latest active submissions currently counted in this dashboard.</div>
-                </div>
-                <strong>{{ active_in_scope }}</strong>
-            </div>
-        </div>
-        {% if coverage.missing_students %}
-        <p class="analytics-section-note" style="margin-top: var(--space-md);">Missing assigned students: {{ coverage.missing_students|join(', ') }}</p>
-        {% endif %}
-        </div>
-        </details>
-
-        <details class="card analytics-collapse-card" id="scoring-sources">
+        <details class="card analytics-collapse-card analytics-nav-target" id="scoring-sources">
         <summary>
             <div>
                 <h2 class="card-title">Scoring Sources and Confidence Effects</h2>
-                <p class="analytics-section-note">This is an interpretation aid, not a true score decomposition. It shows which scoring layers were active, where fail-level or warning-level issues were recorded, and which layers reduced confidence.</p>
             </div>
         </summary>
         <div class="analytics-collapse-body">
@@ -1946,19 +2050,18 @@
                         <strong>{{ source.label }}</strong>
                         <span class="badge badge-secondary">{{ source.submissions_affected|default(source.students_affected, true) }} submission{{ '' if (source.submissions_affected|default(source.students_affected, true)) == 1 else 's' }}</span>
                     </div>
-                    <p class="analytics-section-note">{{ source.description }}</p>
                     <div class="analytics-list-stack">
                         <div class="analytics-coverage-detail-item"><span>Fail incidents</span><strong>{{ source.fail_incidents|default(0, true) }}</strong></div>
                         <div class="analytics-coverage-detail-item"><span>Warning incidents</span><strong>{{ source.warning_incidents|default(0, true) }}</strong></div>
                         <div class="analytics-coverage-detail-item"><span>Skipped incidents</span><strong>{{ source.skipped_incidents|default(0, true) }}</strong></div>
                         <div class="analytics-coverage-detail-item"><span>Confidence-reduced submissions</span><strong>{{ source.confidence_reduced_submissions|default(0, true) }}</strong></div>
                     </div>
-                    <p class="analytics-section-note">
-                        {{ source.percent|round|int }}% of active submissions were affected by this source.
+                    <div class="analytics-summary-badges">
+                        <span class="analytics-chip">{{ source.percent|round|int }}% of active submissions affected</span>
                         {% if source.examples %}
-                        Example students: {{ source.examples|join(', ') }}.
+                        <span class="analytics-chip">Examples: {{ source.examples|join(', ') }}</span>
                         {% endif %}
-                    </p>
+                    </div>
                 </article>
                 {% endfor %}
             </div>
@@ -2068,20 +2171,18 @@
         var localNavLinks = Array.prototype.slice.call(document.querySelectorAll('.analytics-local-nav-link'));
         var jumpControls = Array.prototype.slice.call(document.querySelectorAll('[data-analytics-target]'));
         var collapsibleSections = Array.prototype.slice.call(document.querySelectorAll('.analytics-collapse-card'));
-        var trackedSections = ['analytics-overview', 'interactive-graphs', 'needs-attention', 'top-rules', 'requirement-coverage', 'confidence-reliability', 'cohort-issues', 'analytics-diagnostics']
-            .map(function (id) {
-                return { id: id, element: document.getElementById(id) };
-            })
-            .filter(function (item) { return !!item.element; });
-        var navAliases = {
-            'coverage-detail': 'analytics-diagnostics',
-            'scoring-sources': 'analytics-diagnostics'
-        };
-        var expansionTargets = {
-            'analytics-diagnostics': ['coverage-detail'],
-            'component-performance': ['analytics-diagnostics'],
-            'coverage-detail': ['analytics-diagnostics']
-        };
+        var trackedSections = [
+            { id: 'analytics-overview', element: document.getElementById('analytics-overview') },
+            { id: 'interactive-graphs', element: document.getElementById('interactive-graphs') },
+            { id: 'needs-attention', element: document.getElementById('needs-attention') },
+            { id: 'top-rules', element: document.getElementById('top-rules') },
+            { id: 'requirement-coverage', element: document.getElementById('requirement-coverage') },
+            { id: 'confidence-reliability', element: document.getElementById('confidence-reliability') },
+            { id: 'cohort-issues', element: document.getElementById('cohort-issues') },
+            { id: 'scoring-sources', element: document.getElementById('scoring-sources') }
+        ].filter(function (item) { return !!item.element; });
+        var navAliases = {};
+        var expansionTargets = {};
         var scrollSyncPending = false;
 
         function splitList(value) {
@@ -3160,228 +3261,9 @@
             container.appendChild(svg);
         }
 
-        function drawRequirementMatrix() {
-            var container = document.getElementById('graph-requirement-matrix');
-            var data = graphData && graphData.requirement_coverage_matrix;
-            if (!container) return;
-            if (!data || !data.rows || !data.rows.length) {
-                container.innerHTML = '<div class="analytics-graph-empty">Requirement-level matrix data is not available yet.</div>';
-                return;
-            }
-            container.innerHTML = '';
-            var header = document.createElement('div');
-            header.className = 'analytics-matrix-row';
-            header.innerHTML = '<div></div>' + ['Met', 'Partial', 'Unmet', 'Not evaluable'].map(function (label) {
-                return '<div class="analytics-helper" style="padding:0.25rem 0.45rem; font-weight:700;">' + escapeHtml(label) + '</div>';
-            }).join('');
-            container.appendChild(header);
-            data.rows.forEach(function (row) {
-                var rowEl = document.createElement('div');
-                rowEl.className = 'analytics-matrix-row';
-                var rowHeader = document.createElement('div');
-                rowHeader.className = 'analytics-matrix-row-header';
-                rowHeader.innerHTML = '<strong>' + escapeHtml(row.title) + '</strong><div class="analytics-table-note">' + escapeHtml(String(row.rule_count || 0)) + ' required rule' + ((row.rule_count || 0) === 1 ? '' : 's') + '</div>';
-                rowEl.appendChild(rowHeader);
-                (row.cells || []).forEach(function (cell) {
-                    var button = document.createElement('button');
-                    button.type = 'button';
-                    button.className = 'analytics-matrix-cell cell-' + String(cell.label || '').toLowerCase().replace(/\s+/g, '-');
-                    button.innerHTML = '<strong>' + escapeHtml(String(cell.count)) + '</strong><div class="analytics-table-note">' + escapeHtml(cell.label) + '</div>';
-                    bindTooltip(button, tooltipText(row.title + ': ' + cell.label, [
-                        cell.count + ' student' + (cell.count === 1 ? '' : 's'),
-                        Math.round(cell.percent || 0) + '% of active submissions'
-                    ]));
-                    button.addEventListener('click', function () {
-                        setSelectedGraphNode(button);
-                        focusRequirement(row.component, row.title + ' - ' + cell.label);
-                        navigateToSection('requirement-coverage');
-                        openStudentDrawer({
-                            label: row.title + ' - ' + cell.label,
-                            subtitle: 'Students in this requirement state for the current assignment cohort.',
-                            studentIds: cell.student_ids || [],
-                            badgeText: Math.round(cell.percent || 0) + '% of cohort'
-                        });
-                        filterReviewQueueToStudents(cell.student_ids || [], row.title + ' - ' + cell.label);
-                    });
-                    rowEl.appendChild(button);
-                });
-                container.appendChild(rowEl);
-            });
-        }
-
-        function drawReliabilityBreakdown() {
-            var container = document.getElementById('graph-reliability-breakdown');
-            var data = graphData && graphData.confidence_reliability_breakdown;
-            if (!container) return;
-            if (!data || (!data.groups || !data.groups.length)) {
-                container.innerHTML = '<div class="analytics-graph-empty">Reliability segments will appear once assignment confidence data is available.</div>';
-                return;
-            }
-            container.innerHTML = '';
-            (data.groups || []).forEach(function (group) {
-                var wrapper = document.createElement('div');
-                wrapper.className = 'analytics-segment-bar';
-                wrapper.innerHTML = '<div class="analytics-stage-meta"><strong>' + escapeHtml(group.label) + '</strong></div>';
-                var track = document.createElement('div');
-                track.className = 'analytics-segment-track';
-                (group.segments || []).forEach(function (segment) {
-                    if (!segment.count) return;
-                    var button = document.createElement('button');
-                    button.type = 'button';
-                    button.className = 'analytics-segment-button segment-' + inferSegmentTone(segment.label);
-                    button.style.width = Math.max(segment.percent || 0, 8) + '%';
-                    button.innerHTML = '<strong>' + escapeHtml(String(segment.count)) + '</strong><span>' + escapeHtml(segment.label) + '</span>';
-                    bindTooltip(button, tooltipText(segment.label, [
-                        segment.count + ' student' + (segment.count === 1 ? '' : 's'),
-                        Math.round(segment.percent || 0) + '% of active submissions'
-                    ]));
-                    button.addEventListener('click', function () {
-                        setSelectedGraphNode(button);
-                        openStudentDrawer({
-                            label: segment.label,
-                            subtitle: 'Students in this reliability segment within the current assignment scope.',
-                            studentIds: segment.student_ids || [],
-                            badgeText: Math.round(segment.percent || 0) + '% of cohort'
-                        });
-                        if (String(segment.id || '').indexOf('confidence_') === 0 && attentionControls.confidence) {
-                            attentionControls.confidence.value = String(segment.label || '').split(' ')[0].toLowerCase();
-                            navigateToSection('needs-attention');
-                            renderAttention();
-                        } else {
-                            filterReviewQueueToStudents(segment.student_ids || [], segment.label);
-                        }
-                    });
-                    track.appendChild(button);
-                });
-                wrapper.appendChild(track);
-                container.appendChild(wrapper);
-            });
-
-            if (data.limitation_rows && data.limitation_rows.length) {
-                var limitationList = document.createElement('div');
-                limitationList.className = 'analytics-bar-list';
-                data.limitation_rows.forEach(function (segment) {
-                    var button = chartButton(
-                        segment.label,
-                        Math.round(segment.percent || 0) + '% of active submissions',
-                        segment.count,
-                        Math.min(segment.percent || 0, 100),
-                        inferSegmentTone(segment.label),
-                        tooltipText(segment.label, [
-                            segment.count + ' student' + (segment.count === 1 ? '' : 's'),
-                            Math.round(segment.percent || 0) + '% of active submissions'
-                        ])
-                    );
-                    button.addEventListener('click', function () {
-                        setSelectedGraphNode(button);
-                        openStudentDrawer({
-                            label: segment.label,
-                            subtitle: 'Students affected by this confidence or moderation limitation.',
-                            studentIds: segment.student_ids || []
-                        });
-                        filterReviewQueueToStudents(segment.student_ids || [], segment.label);
-                    });
-                    limitationList.appendChild(button);
-                });
-                container.appendChild(limitationList);
-            }
-        }
-
-        function drawCoverageChart() {
-            var container = document.getElementById('graph-submission-coverage');
-            var data = graphData && graphData.missing_incomplete_submission_coverage_chart;
-            if (!container) return;
-            if (!data || !data.stages || !data.stages.length) {
-                container.innerHTML = '<div class="analytics-graph-empty">Coverage stages will appear once assignment scope data is available.</div>';
-                return;
-            }
-            var maxCount = Math.max.apply(null, data.stages.map(function (stage) { return stage.count || 0; }).concat([1]));
-            container.innerHTML = '';
-            data.stages.forEach(function (stage) {
-                var stageKind = 'stage-success';
-                if (String(stage.id).indexOf('missing') !== -1 || String(stage.id).indexOf('excluded') !== -1) stageKind = 'stage-gap';
-                if (String(stage.id).indexOf('not_analysable') !== -1 || String(stage.id).indexOf('partially') !== -1) stageKind = 'stage-risk';
-                var button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'analytics-stage-button ' + stageKind;
-                button.innerHTML = '' +
-                    '<div class="analytics-stage-meta"><strong>' + escapeHtml(stage.label) + '</strong><span>' + escapeHtml(String(stage.count)) + '</span></div>' +
-                    '<div class="analytics-stage-visual"><span style="width:' + ((stage.count / maxCount) * 100) + '%;"></span></div>';
-                bindTooltip(button, tooltipText(stage.label, [
-                    stage.count + ' student' + (stage.count === 1 ? '' : 's'),
-                    (stage.student_ids || []).length ? 'Click to inspect the affected subset.' : 'No student subset is available for this stage.'
-                ]));
-                button.addEventListener('click', function () {
-                    setSelectedGraphNode(button);
-                    navigateToSection('coverage-detail');
-                    openStudentDrawer({
-                        label: stage.label,
-                        subtitle: 'Coverage subset for the current assignment scope.',
-                        studentIds: stage.student_ids || [],
-                        badgeText: 'Count: ' + stage.count
-                    });
-                    if (stage.student_ids && stage.student_ids.length) {
-                        filterReviewQueueToStudents(stage.student_ids, stage.label);
-                    }
-                });
-                container.appendChild(button);
-            });
-        }
-
-        function drawComponentDistribution() {
-            var container = document.getElementById('graph-component-distribution');
-            var data = graphData && graphData.component_performance_distribution;
-            if (!container) return;
-            if (!data || !data.components || !data.components.length) {
-                container.innerHTML = '<div class="analytics-graph-empty">Component distribution data is not available yet.</div>';
-                return;
-            }
-            container.innerHTML = '';
-            data.components.forEach(function (component) {
-                var card = document.createElement('article');
-                card.className = 'analytics-component-card';
-                card.innerHTML = '<div class="analytics-stage-meta"><strong>' + escapeHtml(component.title) + '</strong><span>' + escapeHtml(component.average_percent == null ? 'No average' : formatPercent(component.average_percent)) + '</span></div><div class="analytics-component-stack"></div>';
-                var stack = card.querySelector('.analytics-component-stack');
-                (component.segments || []).forEach(function (segment) {
-                    if (!segment.count) return;
-                    var button = chartButton(
-                        segment.label,
-                        Math.round(segment.percent || 0) + '% of active submissions',
-                        segment.count,
-                        Math.min(segment.percent || 0, 100),
-                        inferSegmentTone(segment.label),
-                        tooltipText(component.title + ' - ' + segment.label, [
-                            segment.count + ' student' + (segment.count === 1 ? '' : 's'),
-                            Math.round(segment.percent || 0) + '% of active submissions'
-                        ])
-                    );
-                    button.addEventListener('click', function () {
-                        setSelectedGraphNode(button);
-                        focusRequirement(component.component, component.title + ' - ' + segment.label);
-                        navigateToSection('component-performance');
-                        if (ruleControls.component) ruleControls.component.value = component.component;
-                        renderRuleRows();
-                        openStudentDrawer({
-                            label: component.title + ' - ' + segment.label,
-                            subtitle: 'Students in this component score state.',
-                            studentIds: segment.student_ids || [],
-                            badgeText: component.average_percent == null ? '' : ('Average ' + formatPercent(component.average_percent))
-                        });
-                        filterReviewQueueToStudents(segment.student_ids || [], component.title + ' - ' + segment.label);
-                    });
-                    stack.appendChild(button);
-                });
-                container.appendChild(card);
-            });
-        }
-
         function renderInteractiveGraphs() {
             drawMarkDistribution();
             drawStaticFunctionalScatter();
-            drawRequirementMatrix();
-            drawReliabilityBreakdown();
-            drawCoverageChart();
-            drawComponentDistribution();
         }
 
         function clearAttentionFilters() {
@@ -3443,7 +3325,7 @@
 
         jumpControls.forEach(function (control) {
             control.addEventListener('click', function (event) {
-                var targetId = control.dataset.analyticsTarget;
+                var targetId = control.dataset.analyticsScrollTarget || control.dataset.analyticsTarget;
                 if (!targetId) return;
                 event.preventDefault();
                 navigateToSection(targetId);
@@ -3473,6 +3355,30 @@
                 attentionState.signalStudents = splitList(button.dataset.students).map(function (item) { return item.toLowerCase(); });
                 navigateToSection('needs-attention');
                 renderAttention();
+            });
+        });
+
+        Array.prototype.slice.call(document.querySelectorAll('.js-subset-button')).forEach(function (button) {
+            button.addEventListener('click', function () {
+                var studentIds = splitList(button.dataset.students);
+                var label = button.dataset.label || 'Student subset';
+                var badgeText = button.dataset.badge || '';
+                var component = button.dataset.component || '';
+                var focusLabel = button.dataset.focusLabel || label;
+                var shouldFilter = button.dataset.filter !== 'false';
+                setSelectedGraphNode(button);
+                if (component) {
+                    focusRequirement(component, focusLabel);
+                }
+                if (!studentIds.length) return;
+                openStudentDrawer({
+                    label: label,
+                    studentIds: studentIds,
+                    badgeText: badgeText
+                });
+                if (shouldFilter) {
+                    filterReviewQueueToStudents(studentIds, label);
+                }
             });
         });
 

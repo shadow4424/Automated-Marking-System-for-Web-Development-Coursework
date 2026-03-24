@@ -1144,10 +1144,16 @@ def test_assignment_analytics_page_renders_interactive_graph_sections(tmp_path: 
     assert "Static / Code Quality vs Behavioural / Functional Score" in body
     assert "Review Queue Scatter Plot" not in body
     assert "Top Failing Rules Chart" not in body
-    assert "Requirement Coverage Matrix" in body
-    assert "Confidence and Reliability Breakdown" in body
-    assert "Component Performance Distribution" in body
-    assert "Missing / Incomplete Submission Coverage Chart" in body
+    assert "Requirement Coverage" in body
+    assert "Confidence and Reliability" in body
+    assert "Requirement Coverage Matrix" not in body
+    assert "Confidence and Reliability Breakdown" not in body
+    assert "Component Performance Distribution" not in body
+    assert "Missing / Incomplete Submission Coverage Chart" not in body
+    assert "Confidence mix" in body
+    assert "Top limitation categories" in body
+    assert "Scoring Sources and Confidence Effects" in body
+    assert "Coverage Detail" not in body
     assert "Score Distribution" not in body
 
 
