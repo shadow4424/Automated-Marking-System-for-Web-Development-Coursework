@@ -626,6 +626,135 @@ def test_mark_route_resolves_profile_from_selected_assignment(tmp_path: Path, mo
     assert run_info["assignment_id"] == "assignment1"
 
 
+def test_student_pages_link_assignment_ids_to_submission_reports(tmp_path: Path, monkeypatch) -> None:
+    client, _ = _client(tmp_path)
+    authenticate_client(client, role="student")
+
+    monkeypatch.setattr(
+        "ams.web.auth.get_user",
+        lambda user_id: {
+            "userID": "student1",
+            "role": "student",
+            "firstName": "Test",
+            "lastName": "Student",
+            "email": "student1@example.com",
+        },
+    )
+    monkeypatch.setattr(
+        "ams.web.routes_student.list_assignments_for_student",
+        lambda student_id: [
+            {
+                "assignmentID": "assignment1",
+                "title": "Assignment 1",
+                "profile": "frontend",
+                "due_date": "2026-03-01T12:00",
+                "assigned_students": ["student1"],
+            },
+            {
+                "assignmentID": "assignment2",
+                "title": "Assignment 2",
+                "profile": "fullstack",
+                "due_date": "2026-03-01T12:00",
+                "assigned_students": ["student1"],
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        "ams.web.routes_student.get_assignment",
+        lambda assignment_id: {"assignmentID": assignment_id, "marks_released": True},
+    )
+    monkeypatch.setattr("ams.web.routes_student.get_runs_root", lambda app: tmp_path)
+    monkeypatch.setattr(
+        "ams.web.routes_student.list_runs",
+        lambda _runs_root: [
+            {
+                "id": "20260320-090000_mark_frontend_old",
+                "mode": "mark",
+                "profile": "frontend",
+                "created_at": "2026-03-20T09:00:00Z",
+                "assignment_id": "assignment1",
+                "student_id": "student1",
+                "score": 55.0,
+                "status": "completed",
+            },
+            {
+                "id": "20260321-120000_batch_fullstack_visible",
+                "mode": "batch",
+                "profile": "fullstack",
+                "created_at": "2026-03-21T12:00:00Z",
+                "assignment_id": "assignment2",
+                "status": "completed",
+                "submissions": [
+                    {
+                        "submission_id": "student1_assignment2",
+                        "student_id": "student1",
+                        "assignment_id": "assignment2",
+                        "overall": 0.72,
+                    }
+                ],
+            },
+            {
+                "id": "20260322-140000_mark_frontend_new",
+                "mode": "mark",
+                "profile": "frontend",
+                "created_at": "2026-03-22T14:00:00Z",
+                "assignment_id": "assignment1",
+                "student_id": "student1",
+                "score": 81.0,
+                "status": "completed",
+            },
+        ],
+    )
+
+    dashboard = client.get("/student/")
+    assert dashboard.status_code == 200
+    dashboard_body = dashboard.get_data(as_text=True)
+    assert '<a href="/runs/20260320-090000_mark_frontend_old" class="table-title-link"><code>assignment1</code></a>' in dashboard_body
+    assert '<a href="/batch/20260321-120000_batch_fullstack_visible/submissions/student1_assignment2/view" class="table-title-link"><code>assignment2</code></a>' in dashboard_body
+
+    coursework = client.get("/student/coursework")
+    assert coursework.status_code == 200
+    coursework_body = coursework.get_data(as_text=True)
+    completed_section = coursework_body.split("My submissions", 1)[0]
+    assert '<a href="/runs/20260322-140000_mark_frontend_new" class="table-title-link"><code>assignment1</code></a>' in completed_section
+    assert '<a href="/batch/20260321-120000_batch_fullstack_visible/submissions/student1_assignment2/view" class="table-title-link"><code>assignment2</code></a>' in completed_section
+    assert '/runs/20260320-090000_mark_frontend_old' not in completed_section
+
+
+def test_student_submission_report_shows_view_analytics_button_when_marks_released(tmp_path: Path, monkeypatch) -> None:
+    run_id, _run_dir = _seed_mark_run(tmp_path, assignment_id="assignment1", student_id="student1")
+    app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
+    client = app.test_client()
+    authenticate_client(client, role="student")
+
+    monkeypatch.setattr(
+        "ams.web.auth.get_user",
+        lambda user_id: {
+            "userID": "student1",
+            "role": "student",
+            "firstName": "Test",
+            "lastName": "Student",
+            "email": "student1@example.com",
+        },
+    )
+    monkeypatch.setattr(
+        "ams.webui.get_assignment",
+        lambda assignment_id: {
+            "assignmentID": assignment_id,
+            "title": "Assignment 1",
+            "profile": "frontend",
+            "marks_released": True,
+        },
+    )
+
+    response = client.get(f"/runs/{run_id}")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'href="/student/assignment/assignment1/analytics"' in body
+    assert "View analytics" in body
+
+
 def test_create_assignment_route_passes_selected_teachers(tmp_path: Path, monkeypatch) -> None:
     client, _ = _client(tmp_path)
     captured: dict[str, object] = {}

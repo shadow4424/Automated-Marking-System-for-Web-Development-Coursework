@@ -109,6 +109,7 @@
                         <th>Profile</th>
                         <th>Due date</th>
                         <th>Status</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -116,7 +117,15 @@
                     <tr>
                         <td>
                             <strong>{{ a.title }}</strong>
-                            <span class="table-meta"><code>{{ a.assignmentID }}</code></span>
+                            <span class="table-meta">
+                                {% set latest_run = a.get('_latest_submission_run') %}
+                                {% if latest_run and latest_run._marks_released %}
+                                    {% set result_url = url_for('batch_submission_view', run_id=latest_run.id, submission_id=latest_run._batch_submission_id) if latest_run.get('_batch_submission_id') else url_for('run_detail', run_id=latest_run.id) %}
+                                <a href="{{ result_url }}" class="table-title-link"><code>{{ a.assignmentID }}</code></a>
+                                {% else %}
+                                <code>{{ a.assignmentID }}</code>
+                                {% endif %}
+                            </span>
                         </td>
                         <td><span class="badge badge-secondary">{{ a.profile }}</span></td>
                         <td>{{ a.due_date[:16].replace('T', ' ') if a.due_date else '-' }}</td>
@@ -125,6 +134,14 @@
                             <span class="badge badge-success">Uploaded</span>
                             {% else %}
                             <span class="badge badge-danger">Late</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% set latest_run = a.get('_latest_submission_run') %}
+                            {% if latest_run and latest_run._marks_released %}
+                            <a href="{{ url_for('student.assignment_analytics', assignment_id=a.assignmentID) }}" class="btn btn-secondary btn-sm">Analytics</a>
+                            {% else %}
+                            <span class="table-meta">Unavailable</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -164,8 +181,15 @@
                     {% endif %}
                 </div>
                 <div class="run-card-content">
+                    {% set result_url = url_for('batch_submission_view', run_id=run.id, submission_id=run._batch_submission_id) if run.get('_batch_submission_id') else url_for('run_detail', run_id=run.id) %}
                     <div class="run-card-title">
-                        {% if run.get('assignment_id') %}<code>{{ run.assignment_id }}</code>{% endif %}
+                        {% if run.get('assignment_id') %}
+                            {% if run._marks_released %}
+                        <a href="{{ result_url }}" class="table-title-link"><code>{{ run.assignment_id }}</code></a>
+                            {% else %}
+                        <code>{{ run.assignment_id }}</code>
+                            {% endif %}
+                        {% endif %}
                         <span class="badge {% if run.get('_submission_record') %}badge-info{% else %}badge-primary{% endif %}">{% if run.get('_submission_record') %}Batch{% else %}Individual{% endif %}</span>
                     </div>
                     <div class="run-card-meta">
@@ -182,11 +206,8 @@
                 </div>
                 <div class="run-card-actions">
                     {% if run._marks_released %}
-                        {% if run.get('_batch_submission_id') %}
-                    <a href="{{ url_for('batch_submission_view', run_id=run.id, submission_id=run._batch_submission_id) }}" class="btn btn-secondary btn-sm">View result</a>
-                        {% else %}
-                    <a href="{{ url_for('run_detail', run_id=run.id) }}" class="btn btn-secondary btn-sm">View result</a>
-                        {% endif %}
+                    <a href="{{ url_for('student.assignment_analytics', assignment_id=run.assignment_id) }}" class="btn btn-ghost btn-sm">Analytics</a>
+                    <a href="{{ result_url }}" class="btn btn-secondary btn-sm">View result</a>
                     {% endif %}
                 </div>
             </div>

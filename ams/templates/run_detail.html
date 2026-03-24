@@ -12,6 +12,14 @@
     .submission-detail-body-grid,
     .submission-evidence-row { display:grid; gap:var(--space-md); }
     .submission-detail-shell { gap:var(--space-xl); }
+    .submission-hero-actions { display:flex; align-items:center; gap:var(--space-sm); flex-wrap:wrap; }
+    .submission-hero-action-link {
+        min-height: 42px;
+        padding-inline: 1rem;
+        border-radius: 999px;
+        font-weight: 700;
+        box-shadow: 0 10px 24px rgba(37, 99, 235, 0.18);
+    }
     .submission-detail-banner {
         display:grid; gap:var(--space-lg); padding:clamp(1.1rem, 2vw, 1.5rem);
         border-radius:var(--radius-lg); border:1px solid rgba(148,163,184,0.22);
@@ -331,11 +339,17 @@
 {% set can_manage_submission = user_role in ['teacher', 'admin'] %}
 {% set can_rerun_submission = can_manage_submission and run_status != 'pending' and (batch_submission_id or run.mode != 'batch') %}
 {% set can_download_json = report and (batch_submission_id or run.mode != 'batch') %}
+{% set can_view_assignment_analytics = viewer_role == 'student' and run.assignment_id and marks_released %}
 
 <div class="submission-detail-shell">
     <section class="page-hero page-hero--split">
         <div class="page-hero-main">
-            <a href="{{ back_target }}" class="page-back-link">{{ back_label }}</a>
+            <div class="submission-hero-actions">
+                <a href="{{ back_target }}" class="page-back-link">{{ back_label }}</a>
+                {% if can_view_assignment_analytics %}
+                <a href="{{ url_for('student.assignment_analytics', assignment_id=run.assignment_id) }}" class="btn btn-primary submission-hero-action-link">View analytics</a>
+                {% endif %}
+            </div>
             <div class="page-kicker">{% if viewer_role == 'student' %}Submission report{% else %}Marker review{% endif %}</div>
             <h1>{% if run.student_id and run.assignment_id %}{{ run.student_id }} / {{ run.assignment_id }}{% elif run.assignment_id %}{{ run.assignment_id }}{% else %}Submission result{% endif %}</h1>
             <div class="page-status-row">

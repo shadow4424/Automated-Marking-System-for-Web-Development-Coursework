@@ -68,8 +68,15 @@
                     {% endif %}
                 </div>
                 <div class="run-card-content">
+                    {% set result_url = url_for('batch_submission_view', run_id=run.id, submission_id=run._batch_submission_id) if run.get('_batch_submission_id') else url_for('run_detail', run_id=run.id) %}
                     <div class="run-card-title">
-                        {% if run.get('assignment_id') %}<code>{{ run.assignment_id }}</code>{% endif %}
+                        {% if run.get('assignment_id') %}
+                            {% if run._marks_released %}
+                        <a href="{{ result_url }}" class="table-title-link"><code>{{ run.assignment_id }}</code></a>
+                            {% else %}
+                        <code>{{ run.assignment_id }}</code>
+                            {% endif %}
+                        {% endif %}
                         <span class="badge {% if run.get('_submission_record') %}badge-info{% else %}badge-primary{% endif %}">{% if run.get('_submission_record') %}Batch{% else %}Individual{% endif %}</span>
                     </div>
                     <div class="run-card-meta">
@@ -84,11 +91,8 @@
                 </div>
                 <div class="run-card-actions">
                     {% if run._marks_released %}
-                        {% if run.get('_batch_submission_id') %}
-                    <a href="{{ url_for('batch_submission_view', run_id=run.id, submission_id=run._batch_submission_id) }}" class="btn btn-ghost btn-sm">View result</a>
-                        {% else %}
-                    <a href="{{ url_for('run_detail', run_id=run.id) }}" class="btn btn-ghost btn-sm">View result</a>
-                        {% endif %}
+                    <a href="{{ url_for('student.assignment_analytics', assignment_id=run.assignment_id) }}" class="btn btn-secondary btn-sm">Analytics</a>
+                    <a href="{{ result_url }}" class="btn btn-ghost btn-sm">View result</a>
                     {% endif %}
                 </div>
             </div>

@@ -1,5 +1,5 @@
 from __future__ import annotations
 
-from .assignment_analytics import generate_assignment_analytics, FINDING_LABELS
+from .assignment_analytics import generate_assignment_analytics, generate_student_assignment_analytics, FINDING_LABELS
 
-__all__ = ["generate_assignment_analytics", "FINDING_LABELS"]
+__all__ = ["generate_assignment_analytics", "generate_student_assignment_analytics", "FINDING_LABELS"]

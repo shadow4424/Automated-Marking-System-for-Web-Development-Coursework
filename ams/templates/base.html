@@ -64,7 +64,7 @@
                     <a href="{{ url_for('student.dashboard') }}"
                         class="nav-link {% if request.endpoint == 'student.dashboard' %}active{% endif %}">Dashboard</a>
                     <a href="{{ url_for('student.coursework') }}"
-                        class="nav-link {% if request.endpoint == 'student.coursework' %}active{% endif %}">Coursework</a>
+                        class="nav-link {% if request.endpoint in ('student.coursework', 'student.assignment_analytics') %}active{% endif %}">Coursework</a>
                     <a href="{{ url_for('mark') }}"
                         class="nav-link {% if request.endpoint == 'mark' %}active{% endif %}">Submit</a>
                     {% endif %}
