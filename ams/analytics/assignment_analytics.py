@@ -617,37 +617,40 @@ def _build_analytics(
         signal["default_visible"] = index < int(small_cohort.get("signal_limit", 6) or 6)
     for index, rule in enumerate(top_failing_rules):
         rule["default_visible"] = index < int(small_cohort.get("rule_limit", 8) or 8)
+    overall_summary = {
+        "mean": overall_stats.get("mean") if overall_stats else None,
+        "median": overall_stats.get("median") if overall_stats else None,
+        "min": overall_stats.get("min") if overall_stats else None,
+        "max": overall_stats.get("max") if overall_stats else None,
+        "standard_deviation": overall_stats.get("standard_deviation") if overall_stats else None,
+        "total": total_records,
+        "grade_counts": grade_counts,
+        "buckets": {
+            "No attempt (0%)": buckets["zero"],
+            "Partial (1-50%)": buckets["gt_0_to_0_5"],
+            "Good partial (51-99%)": buckets["gt_0_5_to_1"],
+            "Full marks (100%)": buckets["one"],
+        },
+    }
     teaching_insight_context = _teaching_insight_context(
         profile=profile,
+        overall=overall_summary,
         coverage=coverage,
+        components=components,
         requirement_coverage=requirement_coverage,
         top_failing_rules=top_failing_rules,
         reliability=reliability,
+        needs_attention=needs_attention,
+        interactive_graphs=interactive_graphs,
         total_records=total_records,
         small_cohort=small_cohort,
     )
-    teaching_insights = _teaching_insights(
-        context=teaching_insight_context,
-    )
+    teaching_insights = _teaching_insights(context=teaching_insight_context)
 
     return {
         "profile": profile,
         "small_cohort": small_cohort,
-        "overall": {
-            "mean": overall_stats.get("mean") if overall_stats else None,
-            "median": overall_stats.get("median") if overall_stats else None,
-            "min": overall_stats.get("min") if overall_stats else None,
-            "max": overall_stats.get("max") if overall_stats else None,
-            "standard_deviation": overall_stats.get("standard_deviation") if overall_stats else None,
-            "total": total_records,
-            "grade_counts": grade_counts,
-            "buckets": {
-                "No attempt (0%)": buckets["zero"],
-                "Partial (1-50%)": buckets["gt_0_to_0_5"],
-                "Good partial (51-99%)": buckets["gt_0_5_to_1"],
-                "Full marks (100%)": buckets["one"],
-            },
-        },
+        "overall": overall_summary,
         "coverage": coverage,
         "components": components,
         "signals": signals,
@@ -2323,10 +2326,14 @@ def _teaching_insights(
 def _teaching_insight_context(
     *,
     profile: str,
+    overall: Mapping[str, object],
     coverage: Mapping[str, object],
+    components: Sequence[Mapping[str, object]],
     requirement_coverage: Sequence[Mapping[str, object]],
     top_failing_rules: Sequence[Mapping[str, object]],
     reliability: Mapping[str, object],
+    needs_attention: Sequence[Mapping[str, object]],
+    interactive_graphs: Mapping[str, object],
     total_records: int,
     small_cohort: Mapping[str, object],
 ) -> dict:
@@ -2366,29 +2373,211 @@ def _teaching_insight_context(
             "percent": round(float(first_rule.get("percent", 0) or 0), 2),
         }
 
+    score_band_distribution = [
+        {
+            "label": str(label),
+            "count": int(count or 0),
+            "percent": round((int(count or 0) / total_records) * 100, 2) if total_records else 0.0,
+        }
+        for label, count in dict(overall.get("buckets", {}) or {}).items()
+    ]
+    dominant_score_band = None
+    non_zero_score_bands = [item for item in score_band_distribution if int(item.get("count", 0) or 0) > 0]
+    if non_zero_score_bands:
+        max_count = max(int(item.get("count", 0) or 0) for item in non_zero_score_bands)
+        leaders = [item for item in non_zero_score_bands if int(item.get("count", 0) or 0) == max_count]
+        if len(leaders) == 1:
+            dominant_score_band = leaders[0]
+
+    requirement_summary = [
+        {
+            "component": row.get("component"),
+            "title": row.get("title"),
+            "rule_count": int(row.get("rule_count", 0) or 0),
+            "met_count": int(row.get("students_met", 0) or 0),
+            "partial_count": int(row.get("students_partial", 0) or 0),
+            "unmet_count": int(row.get("students_unmet", 0) or 0),
+            "not_evaluable_count": int(row.get("students_not_evaluable", 0) or 0),
+            "fully_met_percent": round(float(row.get("met_percent", 0) or 0), 2),
+        }
+        for row in list(requirement_coverage or [])
+    ]
+
+    component_summary = [
+        {
+            "component": row.get("component"),
+            "title": row.get("title"),
+            "average_component_score": round(float(row.get("average", 0) or 0) * 100, 2) if row.get("average") is not None else None,
+            "median_component_score": round(float(row.get("median", 0) or 0) * 100, 2) if row.get("median") is not None else None,
+            "score_0_count": int(row.get("count_zero", 0) or 0),
+            "score_0_5_count": int(row.get("count_half", 0) or 0),
+            "score_1_count": int(row.get("count_full", 0) or 0),
+            "other_scored_count": int(row.get("count_other", 0) or 0),
+            "total_evaluable": int(row.get("total_evaluable", 0) or 0),
+        }
+        for row in list(components or [])
+    ]
+
+    major_rule_categories_map: dict[str, dict[str, object]] = {}
+    for rule in list(top_failing_rules or []):
+        category = str(rule.get("category") or "other")
+        entry = major_rule_categories_map.setdefault(
+            category,
+            {
+                "category": category,
+                "rules_affected": 0,
+                "students_affected_total": 0,
+                "incident_count_total": 0,
+                "fail_incidents": 0,
+                "warning_incidents": 0,
+            },
+        )
+        entry["rules_affected"] = int(entry["rules_affected"]) + 1
+        entry["students_affected_total"] = int(entry["students_affected_total"]) + int(rule.get("students_affected", 0) or 0)
+        entry["incident_count_total"] = int(entry["incident_count_total"]) + int(rule.get("incident_count", 0) or 0)
+        entry["fail_incidents"] = int(entry["fail_incidents"]) + int(rule.get("fail_incidents", 0) or 0)
+        entry["warning_incidents"] = int(entry["warning_incidents"]) + int(rule.get("warning_incidents", 0) or 0)
+    major_rule_categories = sorted(
+        major_rule_categories_map.values(),
+        key=lambda item: (
+            -int(item.get("students_affected_total", 0) or 0),
+            -int(item.get("incident_count_total", 0) or 0),
+            str(item.get("category") or ""),
+        ),
+    )[:4]
+
+    scatter = dict((interactive_graphs or {}).get("static_functional_scatter_plot", {}) or {})
+    mismatch_examples: List[dict[str, object]] = []
+    high_static_low_behavioural = 0
+    high_behavioural_low_static = 0
+    balanced_submissions = 0
+    plotted_students = 0
+    for point in list(scatter.get("points", []) or []):
+        static_score = _coerce_float(point.get("static_score_percent"))
+        behavioural_score = _coerce_float(point.get("behavioural_score_percent"))
+        if static_score is None or behavioural_score is None:
+            continue
+        plotted_students += 1
+        gap = round(static_score - behavioural_score, 2)
+        if gap >= 20:
+            high_static_low_behavioural += 1
+        elif gap <= -20:
+            high_behavioural_low_static += 1
+        if abs(gap) <= 10:
+            balanced_submissions += 1
+        mismatch_examples.append(
+            {
+                "student_id": point.get("student_id"),
+                "overall_mark_percent": point.get("overall_mark_percent"),
+                "static_score_percent": static_score,
+                "behavioural_score_percent": behavioural_score,
+                "gap_percent": gap,
+                "manual_review_recommended": bool(point.get("manual_review_recommended")),
+                "confidence": point.get("confidence"),
+            }
+        )
+    mismatch_examples.sort(key=lambda item: abs(float(item.get("gap_percent", 0) or 0)), reverse=True)
+
+    flagged_examples = [
+        {
+            "student_id": item.get("student_id"),
+            "severity": item.get("severity"),
+            "confidence": item.get("confidence"),
+            "reason": item.get("reason"),
+            "overall_score": round(float(item.get("overall", 0) or 0) * 100, 2) if isinstance(item.get("overall"), (int, float)) else None,
+            "manual_review_recommended": bool(item.get("manual_review_recommended")),
+        }
+        for item in list(needs_attention or [])[:4]
+    ]
+
+    top_rules_summary = [
+        {
+            "rule_id": item.get("rule_id"),
+            "label": item.get("label"),
+            "component": item.get("component"),
+            "category": item.get("category"),
+            "severity": item.get("severity"),
+            "submissions_affected": int(item.get("submissions_affected", item.get("students_affected", 0)) or 0),
+            "percent": round(float(item.get("percent", 0) or 0), 2),
+            "incident_count": int(item.get("incident_count", 0) or 0),
+            "confidence_affecting": bool(item.get("confidence_affecting")),
+        }
+        for item in list(top_failing_rules or [])[:5]
+    ]
+
     return {
         "profile": profile,
         "assigned_students": int(coverage.get("assigned_students", 0) or 0),
         "active_in_scope": int(coverage.get("active_in_scope", total_records) or 0),
         "coverage_percent": int(coverage.get("coverage_percent", 0) or 0),
         "missing_assigned": int(coverage.get("missing_assigned", 0) or 0),
+        "average_score": round(float(overall.get("mean", 0) or 0) * 100, 2) if overall.get("mean") is not None else None,
+        "median_score": round(float(overall.get("median", 0) or 0) * 100, 2) if overall.get("median") is not None else None,
+        "min_score": round(float(overall.get("min", 0) or 0) * 100, 2) if overall.get("min") is not None else None,
+        "max_score": round(float(overall.get("max", 0) or 0) * 100, 2) if overall.get("max") is not None else None,
+        "score_band_distribution": score_band_distribution,
+        "dominant_score_band": dominant_score_band,
         "fully_evaluated": int(reliability.get("fully_evaluated", 0) or 0),
         "partially_evaluated": int(reliability.get("partially_evaluated", 0) or 0),
         "not_analysable": int(reliability.get("not_analysable", 0) or 0),
         "manual_review": int(reliability.get("manual_review", 0) or 0),
         "limitation_incidents": int(reliability.get("limitation_incidents", 0) or 0),
         "limitation_categories": int(reliability.get("limitation_categories", 0) or 0),
+        "confidence_mix": {
+            "high": {
+                "count": int((reliability.get("confidence", {}) or {}).get("high", 0) or 0),
+                "percent": round(float((reliability.get("confidence", {}) or {}).get("high_percent", 0) or 0), 2),
+            },
+            "medium": {
+                "count": int((reliability.get("confidence", {}) or {}).get("medium", 0) or 0),
+                "percent": round(float((reliability.get("confidence", {}) or {}).get("medium_percent", 0) or 0), 2),
+            },
+            "low": {
+                "count": int((reliability.get("confidence", {}) or {}).get("low", 0) or 0),
+                "percent": round(float((reliability.get("confidence", {}) or {}).get("low_percent", 0) or 0), 2),
+            },
+        },
+        "runtime_skip_count": int(reliability.get("runtime_skipped", 0) or 0),
+        "browser_skip_count": int(reliability.get("browser_skipped", 0) or 0),
+        "runtime_failure_count": int(reliability.get("runtime_issue_submissions", 0) or 0),
+        "browser_failure_count": int(reliability.get("browser_issue_submissions", 0) or 0),
         "major_limitations": [
             {
                 "id": item.get("id"),
                 "label": item.get("label"),
                 "incident_count": int(item.get("incident_count", 0) or 0),
+                "percent": round((int(item.get("incident_count", 0) or 0) / total_records) * 100, 2) if total_records else 0.0,
             }
-            for item in list(reliability.get("limitation_breakdown", []) or [])[:2]
+            for item in list(reliability.get("limitation_breakdown", []) or [])[:4]
         ],
         "strongest_requirement": strongest,
         "weakest_requirement": weakest,
+        "requirement_coverage_summary": requirement_summary,
+        "component_performance_summary": component_summary,
         "top_failing_rule": top_rule,
+        "top_failing_rules": top_rules_summary,
+        "major_rule_categories": major_rule_categories,
+        "static_vs_behavioural_mismatch": {
+            "supported": bool(scatter.get("supported")),
+            "unsupported_reason": str(scatter.get("unsupported_reason") or ""),
+            "plotted_student_count": plotted_students,
+            "behavioural_evaluable_students": int(scatter.get("behavioural_evaluable_students", 0) or 0),
+            "high_static_low_behavioural_count": high_static_low_behavioural,
+            "high_behavioural_low_static_count": high_behavioural_low_static,
+            "balanced_count": balanced_submissions,
+            "mean_static_score": scatter.get("reference_lines", {}).get("static_mean_percent"),
+            "mean_behavioural_score": scatter.get("reference_lines", {}).get("behavioural_mean_percent"),
+            "largest_gap_examples": mismatch_examples[:3],
+        },
+        "high_priority_flagged_submissions": {
+            "count": sum(1 for item in list(needs_attention or []) if str(item.get("severity") or "").lower() == "high"),
+            "medium_or_higher_count": sum(
+                1 for item in list(needs_attention or []) if str(item.get("severity") or "").lower() in {"high", "medium"}
+            ),
+            "low_confidence_count": sum(1 for item in list(needs_attention or []) if str(item.get("confidence") or "").lower() == "low"),
+            "manual_review_count": sum(1 for item in list(needs_attention or []) if bool(item.get("manual_review_recommended"))),
+            "examples": flagged_examples,
+        },
         "small_cohort_enabled": bool(small_cohort.get("enabled")),
         "small_cohort_threshold": int(small_cohort.get("threshold", SMALL_COHORT_THRESHOLD) or SMALL_COHORT_THRESHOLD),
         "small_cohort_note": str(small_cohort.get("note") or ""),

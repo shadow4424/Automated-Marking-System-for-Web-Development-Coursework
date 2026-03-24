@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -76,6 +77,198 @@ def _make_report(student_id: str, assignment_id: str, score: float) -> dict:
                 "name_normalized": student_id,
             },
         },
+    }
+
+
+def _rich_teaching_insight_context() -> dict:
+    return {
+        "assignment_id": "assignment1",
+        "profile": "frontend",
+        "assigned_students": 5,
+        "active_in_scope": 5,
+        "coverage_percent": 100,
+        "missing_assigned": 0,
+        "average_score": 63.4,
+        "median_score": 61.0,
+        "min_score": 27.0,
+        "max_score": 92.0,
+        "score_band_distribution": [
+            {"label": "Partial (1-50%)", "count": 1, "percent": 20.0},
+            {"label": "Good partial (51-99%)", "count": 4, "percent": 80.0},
+        ],
+        "dominant_score_band": {"label": "Good partial (51-99%)", "count": 4, "percent": 80.0},
+        "strongest_requirement": {"component": "js", "title": "Required JavaScript behaviour", "students_met": 2, "met_percent": 40.0},
+        "weakest_requirement": {"component": "sql", "title": "Required SQL/database behaviour", "students_met": 0, "met_percent": 0.0},
+        "requirement_coverage_summary": [
+            {
+                "component": "js",
+                "title": "Required JavaScript behaviour",
+                "rule_count": 10,
+                "met_count": 2,
+                "partial_count": 3,
+                "unmet_count": 0,
+                "not_evaluable_count": 0,
+                "fully_met_percent": 40.0,
+            },
+            {
+                "component": "sql",
+                "title": "Required SQL/database behaviour",
+                "rule_count": 12,
+                "met_count": 0,
+                "partial_count": 3,
+                "unmet_count": 2,
+                "not_evaluable_count": 0,
+                "fully_met_percent": 0.0,
+            },
+        ],
+        "component_performance_summary": [
+            {
+                "component": "css",
+                "title": "Required CSS requirements",
+                "average_component_score": 48.0,
+                "median_component_score": 50.0,
+                "score_0_count": 1,
+                "score_0_5_count": 3,
+                "score_1_count": 1,
+                "other_scored_count": 0,
+                "total_evaluable": 5,
+            }
+        ],
+        "top_failing_rule": {
+            "rule_id": "CSS.HAS_MEDIA_QUERY",
+            "label": "Uses media queries for responsive design",
+            "component": "css",
+            "severity": "FAIL",
+            "submissions_affected": 4,
+            "percent": 80.0,
+        },
+        "top_failing_rules": [
+            {
+                "rule_id": "CSS.HAS_MEDIA_QUERY",
+                "label": "Uses media queries for responsive design",
+                "component": "css",
+                "category": "structure",
+                "severity": "FAIL",
+                "submissions_affected": 4,
+                "percent": 80.0,
+                "incident_count": 4,
+                "confidence_affecting": False,
+            }
+        ],
+        "major_rule_categories": [
+            {
+                "category": "structure",
+                "rules_affected": 2,
+                "students_affected_total": 6,
+                "incident_count_total": 6,
+                "fail_incidents": 5,
+                "warning_incidents": 1,
+            }
+        ],
+        "confidence_mix": {
+            "high": {"count": 1, "percent": 20.0},
+            "medium": {"count": 3, "percent": 60.0},
+            "low": {"count": 1, "percent": 20.0},
+        },
+        "manual_review": 5,
+        "fully_evaluated": 1,
+        "partially_evaluated": 4,
+        "not_analysable": 0,
+        "limitation_incidents": 4,
+        "major_limitations": [
+            {
+                "id": "runtime_skipped",
+                "label": "Runtime checks skipped or unavailable",
+                "incident_count": 4,
+                "percent": 80.0,
+            }
+        ],
+        "runtime_skip_count": 4,
+        "browser_skip_count": 1,
+        "runtime_failure_count": 0,
+        "browser_failure_count": 0,
+        "static_vs_behavioural_mismatch": {
+            "supported": True,
+            "unsupported_reason": "",
+            "plotted_student_count": 5,
+            "behavioural_evaluable_students": 5,
+            "high_static_low_behavioural_count": 2,
+            "high_behavioural_low_static_count": 0,
+            "balanced_count": 2,
+            "mean_static_score": 68.0,
+            "mean_behavioural_score": 51.0,
+            "largest_gap_examples": [
+                {
+                    "student_id": "student3",
+                    "overall_mark_percent": 58.0,
+                    "static_score_percent": 74.0,
+                    "behavioural_score_percent": 39.0,
+                    "gap_percent": 35.0,
+                    "manual_review_recommended": True,
+                    "confidence": "medium",
+                }
+            ],
+        },
+        "high_priority_flagged_submissions": {
+            "count": 2,
+            "medium_or_higher_count": 5,
+            "low_confidence_count": 1,
+            "manual_review_count": 5,
+            "examples": [
+                {
+                    "student_id": "student3",
+                    "severity": "high",
+                    "confidence": "medium",
+                    "reason": "reduced evaluation confidence",
+                    "overall_score": 58.0,
+                    "manual_review_recommended": True,
+                }
+            ],
+        },
+    }
+
+
+def _valid_llm_teacher_summary() -> dict:
+    return {
+        "summary_mode": "llm_teacher_insight",
+        "headline": "The cohort is attempting the assignment, but attainment falls once backend completion and runtime confidence become more important.",
+        "insights": [
+            {
+                "priority": "high",
+                "type": "pattern",
+                "title": "Partial attainment is the main cohort pattern",
+                "text": "Most submissions sit in the 'Good partial (51-99%)' band rather than at full attainment, which points to incomplete implementation rather than non-attempt.",
+                "evidence_keys": ["score_band_distribution", "dominant_score_band"],
+            },
+            {
+                "priority": "medium",
+                "type": "strength",
+                "title": "JavaScript is comparatively stronger",
+                "text": "Required JavaScript behaviour stands out as the strongest requirement area, so the cohort looks more secure on this layer than on the rest of the stack.",
+                "evidence_keys": ["strongest_requirement", "requirement_coverage_summary"],
+            },
+            {
+                "priority": "high",
+                "type": "weakness",
+                "title": "Backend completion is the main weakness",
+                "text": "Required SQL/database behaviour remains the weakest requirement area, which points to difficulty completing the assignment once it depends on backend or data-backed execution.",
+                "evidence_keys": ["weakest_requirement", "requirement_coverage_summary"],
+            },
+            {
+                "priority": "high",
+                "type": "anomaly",
+                "title": "Runtime limits are affecting interpretation",
+                "text": "Runtime-check limitations affect 4 of 5 submissions (80%), so lower-confidence outcomes should be interpreted more cautiously than usual.",
+                "evidence_keys": ["major_limitations", "runtime_skip_count", "manual_review"],
+            },
+            {
+                "priority": "high",
+                "type": "recommendation",
+                "title": "Prioritise manual review before release",
+                "text": "Manual review is currently needed for 5 of 5 submissions (100%). Prioritise work where static progress looks stronger than behavioural evidence before marks are released.",
+                "evidence_keys": ["manual_review", "static_vs_behavioural_mismatch", "high_priority_flagged_submissions"],
+            },
+        ],
     }
 
 
@@ -355,6 +548,17 @@ def test_assignment_analytics_generates_interactive_graph_payloads_from_latest_a
     component_rows = {row["component"]: row for row in graphs["component_performance_distribution"]["components"]}
     assert component_rows["html"]["segments"][3]["count"] == 2
     assert component_rows["html"]["segments"][2]["count"] == 1
+    context = analytics["teaching_insight_context"]
+    assert context["average_score"] == pytest.approx(76.67, abs=0.01)
+    assert context["dominant_score_band"] is None
+    assert "requirement_coverage_summary" in context
+    assert "component_performance_summary" in context
+    assert "top_failing_rules" in context
+    assert "major_rule_categories" in context
+    assert "confidence_mix" in context
+    assert "runtime_skip_count" in context
+    assert "static_vs_behavioural_mismatch" in context
+    assert "high_priority_flagged_submissions" in context
 
 
 def test_assignment_analytics_route_refreshes_on_open_and_reflects_release_state(tmp_path: Path, monkeypatch) -> None:
@@ -646,11 +850,7 @@ def test_teaching_insights_json_falls_back_to_deterministic_copy_when_llm_output
                     "supporting_metric_keys": ["assigned_students", "active_in_scope"],
                 }
             ],
-            "teaching_insight_context": {
-                "assignment_id": "assignment1",
-                "assigned_students": 1,
-                "active_in_scope": 1,
-            },
+            "teaching_insight_context": _rich_teaching_insight_context(),
         },
     )
 
@@ -661,12 +861,15 @@ def test_teaching_insights_json_falls_back_to_deterministic_copy_when_llm_output
             return SimpleNamespace(
                 content=json.dumps(
                     {
+                        "summary_mode": "llm_teacher_insight",
+                        "headline": "The cohort is broadly engaging with the assignment but backend and runtime completion remain fragile.",
                         "insights": [
                             {
-                                "insight_type": "coverage",
-                                "priority": "low",
-                                "text": "All 99 assigned students currently have an active submission in scope.",
-                                "supporting_metric_keys": ["assigned_students", "active_in_scope"],
+                                "priority": "high",
+                                "type": "weakness",
+                                "title": "Backend work is the weakest area",
+                                "text": "Required SQL/database behaviour is the weakest area, which suggests the cohort is struggling to complete the assignment once it depends on backend or data-backed behaviour.",
+                                "evidence_keys": ["weakest_requirement"]
                             }
                         ]
                     }
@@ -682,10 +885,190 @@ def test_teaching_insights_json_falls_back_to_deterministic_copy_when_llm_output
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["source"] == "deterministic"
+    assert payload["summary_mode"] == "deterministic"
+    assert payload["headline"] == ""
+    assert payload["validation_status"] == "rejected"
+    assert payload["fallback_reason_code"] == "too_few_insights"
+    assert "rejected during validation" in payload["fallback_reason"]
     assert payload["insights"][0]["text"] == "All assigned students currently have an active submission in scope."
 
 
 def test_teaching_insights_json_uses_llm_wording_by_default_when_provider_succeeds(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    app = create_app(
+        {
+            "TESTING": True,
+            "AMS_RUNS_ROOT": tmp_path,
+            "AMS_ENABLE_ANALYTICS_LLM_SUMMARY": True,
+        }
+    )
+    client = app.test_client()
+    authenticate_client(client)
+
+    monkeypatch.setattr(
+        "ams.web.routes_teacher.get_assignment",
+        lambda assignment_id: {
+            "assignmentID": assignment_id,
+            "title": "Coursework 1",
+            "profile": "frontend",
+            "marks_released": False,
+            "assigned_students": ["student1"],
+        },
+    )
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "ams.web.routes_teacher.generate_assignment_analytics",
+        lambda *_args, **_kwargs: {
+            "teaching_insights": [
+                {
+                    "insight_type": "coverage",
+                    "priority": "low",
+                    "text": "All assigned students currently have an active submission in scope.",
+                    "supporting_metric_keys": ["assigned_students", "active_in_scope"],
+                }
+            ],
+            "teaching_insight_context": _rich_teaching_insight_context(),
+        },
+    )
+
+    class FakeProvider:
+        model_name = "fake"
+
+        def complete(self, prompt, **kwargs):
+            captured["prompt"] = json.loads(prompt)
+            captured["system_prompt"] = kwargs.get("system_prompt", "")
+            return SimpleNamespace(
+                content=json.dumps(
+                    {
+                        "summary_mode": "llm_teacher_insight",
+                        "headline": "The cohort is attempting the assignment, but attainment drops where runtime confidence and backend completion become more important.",
+                        "insights": [
+                            {
+                                "priority": "high",
+                                "type": "pattern",
+                                "title": "Partial attainment is the dominant pattern",
+                                "text": "Most submissions appear to be progressing into partial attainment rather than failing outright, which suggests incomplete implementation is a bigger issue than non-attempt.",
+                                "evidence_keys": ["score_band_distribution", "dominant_score_band"]
+                            },
+                            {
+                                "priority": "medium",
+                                "type": "strength",
+                                "title": "JavaScript is comparatively stronger",
+                                "text": "Required JavaScript behaviour stands out as the strongest requirement area, so the cohort looks more secure on this layer than on the rest of the stack.",
+                                "evidence_keys": ["strongest_requirement", "requirement_coverage_summary"]
+                            },
+                            {
+                                "priority": "high",
+                                "type": "weakness",
+                                "title": "Backend completion is the main weakness",
+                                "text": "Required SQL/database behaviour remains the weakest requirement area, which points to difficulty completing the assignment once it depends on backend or data-backed execution.",
+                                "evidence_keys": ["weakest_requirement", "component_performance_summary"]
+                            },
+                            {
+                                "priority": "high",
+                                "type": "anomaly",
+                                "title": "Reliability limits are affecting interpretation",
+                                "text": "Runtime checks being skipped across much of the cohort means lower-confidence outcomes should be interpreted cautiously, especially where static progress looks better than behavioural evidence.",
+                                "evidence_keys": ["manual_review", "partially_evaluated", "major_limitations", "runtime_skip_count", "static_vs_behavioural_mismatch"]
+                            },
+                            {
+                                "priority": "high",
+                                "type": "recommendation",
+                                "title": "Review medium-confidence partial work before release",
+                                "text": "Manual review should prioritise submissions where static progress is reasonable but behavioural evidence is weaker, and teaching follow-up should focus on responsive CSS and SQL/database completion.",
+                                "evidence_keys": ["manual_review", "top_failing_rule", "weakest_requirement", "static_vs_behavioural_mismatch"]
+                            }
+                        ]
+                    }
+                ),
+                success=True,
+                error=None,
+            )
+
+    monkeypatch.setattr("ams.web.routes_teacher.get_llm_provider", lambda: FakeProvider())
+
+    response = client.get("/teacher/assignment/assignment1/analytics/teaching-insights.json")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["source"] == "llm"
+    assert payload["summary_mode"] == "llm_teacher_insight"
+    assert payload["headline"].startswith("The cohort is attempting the assignment")
+    assert payload["insights"][0]["title"] == "Partial attainment is the dominant pattern"
+    assert payload["insights"][0]["type"] == "pattern"
+    assert payload["insights"][0]["evidence_keys"] == ["score_band_distribution", "dominant_score_band"]
+    assert captured["prompt"]["assignment_analytics"]["average_score"] == 63.4
+    assert "runtime_skip_count" in captured["prompt"]["assignment_analytics"]
+    assert "Do not paraphrase the deterministic summary" in str(captured["system_prompt"])
+    assert "Provide 4 to 6 insights" in str(captured["system_prompt"])
+
+
+def test_teaching_insights_json_accepts_valid_llm_summary_with_rounded_percentages(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    app = create_app(
+        {
+            "TESTING": True,
+            "AMS_RUNS_ROOT": tmp_path,
+            "AMS_ENABLE_ANALYTICS_LLM_SUMMARY": True,
+        }
+    )
+    client = app.test_client()
+    authenticate_client(client)
+
+    context = _rich_teaching_insight_context()
+    context["average_score"] = 31.25
+
+    monkeypatch.setattr(
+        "ams.web.routes_teacher.get_assignment",
+        lambda assignment_id: {
+            "assignmentID": assignment_id,
+            "title": "Coursework 1",
+            "profile": "frontend",
+            "marks_released": False,
+            "assigned_students": ["student1"],
+        },
+    )
+    monkeypatch.setattr(
+        "ams.web.routes_teacher.generate_assignment_analytics",
+        lambda *_args, **_kwargs: {
+            "teaching_insights": [
+                {
+                    "insight_type": "coverage",
+                    "priority": "low",
+                    "text": "All assigned students currently have an active submission in scope.",
+                    "supporting_metric_keys": ["assigned_students", "active_in_scope"],
+                }
+            ],
+            "teaching_insight_context": context,
+        },
+    )
+
+    valid_payload = _valid_llm_teacher_summary()
+    valid_payload["insights"][2]["text"] = "The overall average sits at 31.2%, which indicates the cohort is still struggling to convert attempts into complete backend-capable work."
+    valid_payload["insights"][2]["evidence_keys"] = ["average_score", "weakest_requirement"]
+
+    class FakeProvider:
+        model_name = "fake"
+
+        def complete(self, *args, **kwargs):
+            return SimpleNamespace(content=json.dumps(valid_payload), success=True, error=None)
+
+    monkeypatch.setattr("ams.web.routes_teacher.get_llm_provider", lambda: FakeProvider())
+
+    response = client.get("/teacher/assignment/assignment1/analytics/teaching-insights.json")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["source"] == "llm"
+    assert payload["insights"][2]["text"].startswith("The overall average sits at 31.2%")
+
+
+def test_teaching_insights_json_accepts_integer_percentage_wording_with_exact_counts(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -720,31 +1103,19 @@ def test_teaching_insights_json_uses_llm_wording_by_default_when_provider_succee
                     "supporting_metric_keys": ["assigned_students", "active_in_scope"],
                 }
             ],
-            "teaching_insight_context": {
-                "assignment_id": "assignment1",
-                "assigned_students": 1,
-                "active_in_scope": 1,
-            },
+            "teaching_insight_context": _rich_teaching_insight_context(),
         },
     )
+
+    valid_payload = _valid_llm_teacher_summary()
+    valid_payload["insights"][3]["text"] = "Medium confidence applies to 3 out of 5 submissions (60%), so borderline partial work should be checked before release."
+    valid_payload["insights"][3]["evidence_keys"] = ["confidence_mix", "manual_review"]
 
     class FakeProvider:
         model_name = "fake"
 
         def complete(self, *args, **kwargs):
-            return SimpleNamespace(
-                content=json.dumps(
-                    {
-                        "insights": [
-                            {
-                                "text": "Every assigned student currently has an active submission in scope."
-                            }
-                        ]
-                    }
-                ),
-                success=True,
-                error=None,
-            )
+            return SimpleNamespace(content=json.dumps(valid_payload), success=True, error=None)
 
     monkeypatch.setattr("ams.web.routes_teacher.get_llm_provider", lambda: FakeProvider())
 
@@ -753,7 +1124,132 @@ def test_teaching_insights_json_uses_llm_wording_by_default_when_provider_succee
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["source"] == "llm"
-    assert payload["insights"][0]["text"] == "Every assigned student currently has an active submission in scope."
+    assert payload["insights"][3]["text"].startswith("Medium confidence applies to 3 out of 5 submissions (60%)")
+
+
+def test_teaching_insights_json_rejects_fabricated_percentage_and_logs_reason(
+    tmp_path: Path,
+    monkeypatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    app = create_app(
+        {
+            "TESTING": True,
+            "AMS_RUNS_ROOT": tmp_path,
+            "AMS_ENABLE_ANALYTICS_LLM_SUMMARY": True,
+        }
+    )
+    client = app.test_client()
+    authenticate_client(client)
+
+    monkeypatch.setattr(
+        "ams.web.routes_teacher.get_assignment",
+        lambda assignment_id: {
+            "assignmentID": assignment_id,
+            "title": "Coursework 1",
+            "profile": "frontend",
+            "marks_released": False,
+            "assigned_students": ["student1"],
+        },
+    )
+    monkeypatch.setattr(
+        "ams.web.routes_teacher.generate_assignment_analytics",
+        lambda *_args, **_kwargs: {
+            "teaching_insights": [
+                {
+                    "insight_type": "coverage",
+                    "priority": "low",
+                    "text": "All assigned students currently have an active submission in scope.",
+                    "supporting_metric_keys": ["assigned_students", "active_in_scope"],
+                }
+            ],
+            "teaching_insight_context": _rich_teaching_insight_context(),
+        },
+    )
+
+    invalid_payload = _valid_llm_teacher_summary()
+    invalid_payload["insights"][3]["text"] = "Runtime-check limitations affect 83% of the cohort, so lower-confidence outcomes should be interpreted more cautiously than usual."
+
+    class FakeProvider:
+        model_name = "fake"
+
+        def complete(self, *args, **kwargs):
+            return SimpleNamespace(content=json.dumps(invalid_payload), success=True, error=None)
+
+    monkeypatch.setattr("ams.web.routes_teacher.get_llm_provider", lambda: FakeProvider())
+
+    with caplog.at_level(logging.INFO):
+        response = client.get("/teacher/assignment/assignment1/analytics/teaching-insights.json")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["source"] == "deterministic"
+    assert payload["validation_status"] == "rejected"
+    assert payload["fallback_reason_code"] == "numeric_mismatch"
+    assert "numeric validation failed" in payload["fallback_reason"]
+    assert "numeric_mismatch" in caplog.text
+    assert "83%" in caplog.text
+
+
+def test_teaching_insights_json_rejects_unsupported_most_students_claim(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    app = create_app(
+        {
+            "TESTING": True,
+            "AMS_RUNS_ROOT": tmp_path,
+            "AMS_ENABLE_ANALYTICS_LLM_SUMMARY": True,
+        }
+    )
+    client = app.test_client()
+    authenticate_client(client)
+
+    monkeypatch.setattr(
+        "ams.web.routes_teacher.get_assignment",
+        lambda assignment_id: {
+            "assignmentID": assignment_id,
+            "title": "Coursework 1",
+            "profile": "frontend",
+            "marks_released": False,
+            "assigned_students": ["student1"],
+        },
+    )
+    monkeypatch.setattr(
+        "ams.web.routes_teacher.generate_assignment_analytics",
+        lambda *_args, **_kwargs: {
+            "teaching_insights": [
+                {
+                    "insight_type": "coverage",
+                    "priority": "low",
+                    "text": "All assigned students currently have an active submission in scope.",
+                    "supporting_metric_keys": ["assigned_students", "active_in_scope"],
+                }
+            ],
+            "teaching_insight_context": _rich_teaching_insight_context(),
+        },
+    )
+
+    invalid_payload = _valid_llm_teacher_summary()
+    invalid_payload["insights"][3]["text"] = "Most students are low confidence, so release decisions should be delayed until the cohort is checked manually."
+    invalid_payload["insights"][3]["evidence_keys"] = ["confidence_mix", "manual_review"]
+
+    class FakeProvider:
+        model_name = "fake"
+
+        def complete(self, *args, **kwargs):
+            return SimpleNamespace(content=json.dumps(invalid_payload), success=True, error=None)
+
+    monkeypatch.setattr("ams.web.routes_teacher.get_llm_provider", lambda: FakeProvider())
+
+    response = client.get("/teacher/assignment/assignment1/analytics/teaching-insights.json")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["source"] == "deterministic"
+    assert payload["validation_status"] == "rejected"
+    assert payload["fallback_reason_code"] == "unsupported_claim"
+    assert "unsupported claim detected" in payload["fallback_reason"]
 
 
 def test_assignment_analytics_page_renders_deterministic_summary_and_manual_llm_trigger(
@@ -875,6 +1371,7 @@ def test_assignment_analytics_page_renders_deterministic_summary_and_manual_llm_
     assert b"All assigned students currently have an active submission in scope." in response.data
     assert b"Deterministic wording" in response.data
     assert b"Generate LLM summary" in response.data
+    assert b"payload.fallback_reason" in response.data
     assert provider_calls == []
 
 

@@ -442,6 +442,17 @@
         font-size: var(--text-sm);
         line-height: 1.5;
     }
+    .analytics-summary-headline {
+        margin-bottom: var(--space-md);
+        color: var(--color-text);
+        font-size: 1rem;
+        font-weight: 600;
+        line-height: 1.55;
+    }
+    .analytics-summary-item-title {
+        color: var(--color-text);
+        font-weight: 600;
+    }
     .analytics-summary-strip {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1326,13 +1337,19 @@
                 Deterministic wording is shown by default. Generate the LLM summary only when you need a refined rewrite.
             </div>
             {% endif %}
+            <div id="teaching-summary-headline" class="analytics-summary-headline" hidden></div>
             {% if insights %}
             <ol id="teaching-summary-list" class="analytics-summary-list">
                 {% for insight in insights %}
                 {% set insight_text = insight.text if insight is mapping else insight %}
                 {% set insight_priority = insight.priority if insight is mapping else 'medium' %}
+                {% set insight_title = insight.title if insight is mapping else '' %}
                 <li data-insight-type="{{ insight.insight_type if insight is mapping else 'insight_' ~ loop.index }}">
-                    <strong>{{ insight_priority|title }} priority:</strong> {{ insight_text }}
+                    <strong>{{ insight_priority|title }} priority:</strong>
+                    {% if insight_title %}
+                    <span class="analytics-summary-item-title">{{ insight_title }}:</span>
+                    {% endif %}
+                    {{ insight_text }}
                 </li>
                 {% endfor %}
             </ol>
@@ -2126,6 +2143,7 @@
         var teachingSummaryList = document.getElementById('teaching-summary-list');
         var teachingSummaryStatus = document.getElementById('teaching-summary-status');
         var teachingSummaryFeedback = document.getElementById('teaching-summary-feedback');
+        var teachingSummaryHeadline = document.getElementById('teaching-summary-headline');
         var graphDataScript = document.getElementById('analytics-graph-data');
         var graphConfig = document.getElementById('analytics-js-config');
         var graphData = graphDataScript ? JSON.parse(graphDataScript.textContent || '{}') : {};
@@ -2786,8 +2804,16 @@
             teachingSummaryFeedback.style.color = isError ? 'var(--color-danger)' : '';
         }
 
-        function renderTeachingSummary(insights) {
+        function setTeachingSummaryHeadline(headline) {
+            if (!teachingSummaryHeadline) return;
+            var text = String(headline || '').trim();
+            teachingSummaryHeadline.textContent = text;
+            teachingSummaryHeadline.hidden = !text;
+        }
+
+        function renderTeachingSummary(headline, insights) {
             if (!teachingSummaryList) return;
+            setTeachingSummaryHeadline(headline);
             teachingSummaryList.innerHTML = '';
             (insights || []).forEach(function (insight, index) {
                 var li = document.createElement('li');
@@ -2796,6 +2822,13 @@
                 var strong = document.createElement('strong');
                 strong.textContent = ((insight.priority || 'medium').charAt(0).toUpperCase() + (insight.priority || 'medium').slice(1)) + ' priority:';
                 li.appendChild(strong);
+                if (insight.title) {
+                    li.appendChild(document.createTextNode(' '));
+                    var title = document.createElement('span');
+                    title.className = 'analytics-summary-item-title';
+                    title.textContent = insight.title + ':';
+                    li.appendChild(title);
+                }
                 li.appendChild(document.createTextNode(' ' + (insight.text || '')));
                 teachingSummaryList.appendChild(li);
             });
@@ -2829,7 +2862,9 @@
                 })
                 .then(function (payload) {
                     if (payload && Array.isArray(payload.insights) && payload.insights.length) {
-                        renderTeachingSummary(payload.insights);
+                        renderTeachingSummary(payload.headline || '', payload.insights);
+                    } else {
+                        setTeachingSummaryHeadline('');
                     }
                     if (teachingSummaryStatus) {
                         teachingSummaryStatus.textContent = payload && payload.source === 'llm'
@@ -2840,7 +2875,12 @@
                         setTeachingSummaryFeedback('LLM summary ready.', false);
                         teachingSummaryButton.textContent = 'Refresh LLM summary';
                     } else {
-                        setTeachingSummaryFeedback('LLM summary was unavailable. Deterministic wording remains in place.', true);
+                        setTeachingSummaryFeedback(
+                            (payload && payload.fallback_reason)
+                                ? payload.fallback_reason
+                                : 'LLM summary was unavailable. Deterministic wording remains in place.',
+                            true
+                        );
                         teachingSummaryButton.textContent = 'Generate LLM summary';
                     }
                 })
