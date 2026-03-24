@@ -418,11 +418,11 @@
     <nav id="student-analytics-nav" class="student-analytics-nav">
         <div class="student-analytics-nav-scroll">
             <a href="#student-insights" class="student-analytics-nav-link" data-student-analytics-target="student-insights">Insights</a>
+            <a href="#student-feedback" class="student-analytics-nav-link" data-student-analytics-target="student-feedback">Personal feedback</a>
             <a href="#student-cohort-context" class="student-analytics-nav-link" data-student-analytics-target="student-cohort-context">Cohort context</a>
             <a href="#student-priority" class="student-analytics-nav-link" data-student-analytics-target="student-priority">Improve next</a>
             <a href="#student-requirements" class="student-analytics-nav-link" data-student-analytics-target="student-requirements">Requirements</a>
             <a href="#student-checks" class="student-analytics-nav-link" data-student-analytics-target="student-checks">Detailed checks</a>
-            <a href="#student-feedback" class="student-analytics-nav-link" data-student-analytics-target="student-feedback">Personal feedback</a>
         </div>
     </nav>
 
@@ -449,6 +449,36 @@
                     </article>
                     {% endfor %}
                 </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="student-feedback" class="card student-analytics-anchor">
+        <div class="section-heading-row">
+            <div><h2 class="card-title">Personalised feedback</h2></div>
+            {% if llm_feedback_enabled %}
+            <div class="student-analytics-feedback-actions">
+                <span id="student-feedback-status" class="badge badge-secondary">Deterministic wording</span>
+                <button type="button" id="generate-student-feedback" class="btn btn-secondary">Generate personalised feedback</button>
+            </div>
+            {% endif %}
+        </div>
+        <div id="student-feedback-panel" class="student-analytics-feedback-panel">
+            <div style="display:grid; gap: var(--space-md);">
+                {% if deterministic_feedback.headline %}
+                <div class="student-analytics-card" style="padding:1rem;">
+                    <strong>{{ deterministic_feedback.headline }}</strong>
+                </div>
+                {% endif %}
+                {% for item in deterministic_feedback.feedback %}
+                <article class="student-analytics-check-card">
+                    <strong>{{ item.title }}</strong>
+                    <div class="student-analytics-tagline" style="margin-top:0.55rem;">{{ item.text }}</div>
+                </article>
+                {% endfor %}
+                {% if not deterministic_feedback.headline and not deterministic_feedback.feedback %}
+                <div class="student-analytics-feedback-empty">Personalised feedback is not available for this submission yet.</div>
+                {% endif %}
             </div>
         </div>
     </section>
@@ -597,35 +627,6 @@
         </div>
     </section>
 
-    <section id="student-feedback" class="card student-analytics-anchor">
-        <div class="section-heading-row">
-            <div><h2 class="card-title">Personalised feedback</h2></div>
-            {% if llm_feedback_enabled %}
-            <div class="student-analytics-feedback-actions">
-                <span id="student-feedback-status" class="badge badge-secondary">Deterministic wording</span>
-                <button type="button" id="generate-student-feedback" class="btn btn-secondary">Generate personalised feedback</button>
-            </div>
-            {% endif %}
-        </div>
-        <div id="student-feedback-panel" class="student-analytics-feedback-panel">
-            <div style="display:grid; gap: var(--space-md);">
-                {% if deterministic_feedback.headline %}
-                <div class="student-analytics-card" style="padding:1rem;">
-                    <strong>{{ deterministic_feedback.headline }}</strong>
-                </div>
-                {% endif %}
-                {% for item in deterministic_feedback.feedback %}
-                <article class="student-analytics-check-card">
-                    <strong>{{ item.title }}</strong>
-                    <div class="student-analytics-tagline" style="margin-top:0.55rem;">{{ item.text }}</div>
-                </article>
-                {% endfor %}
-                {% if not deterministic_feedback.headline and not deterministic_feedback.feedback %}
-                <div class="student-analytics-feedback-empty">Personalised feedback is not available for this submission yet.</div>
-                {% endif %}
-            </div>
-        </div>
-    </section>
 </div>
 
 <div id="analytics-tooltip" class="analytics-tooltip" role="status" aria-hidden="true"></div>
