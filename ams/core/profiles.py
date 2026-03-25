@@ -63,6 +63,7 @@ RequiredCSSRule  = _make_rule_factory("needle")
 RequiredJSRule   = _make_rule_factory("needle")
 RequiredPHPRule  = _make_rule_factory("needle")
 RequiredSQLRule  = _make_rule_factory("needle")
+RequiredAPIRule  = _make_rule_factory("needle")
 
 
 @dataclass(frozen=True)
@@ -133,6 +134,7 @@ class ProfileSpec:
     required_files: List[str]
     relevant_artefacts: List[str]
     optional_components: List[str] = field(default_factory=list)
+    required_api: List[RequiredRule] = field(default_factory=list)
     expected_layers: List[str] = field(default_factory=list)
     enabled_static_checks: List[str] = field(default_factory=list)
     enabled_behavioural_checks: List[str] = field(default_factory=list)
@@ -158,6 +160,7 @@ class ProfileSpec:
             "js": self.required_js,
             "php": self.required_php,
             "sql": self.required_sql,
+            "api": self.required_api,
         }
         rules = rule_map.get(component, [])
         return len(rules) > 0
@@ -169,6 +172,7 @@ class ProfileSpec:
             "js": list(self.required_js),
             "php": list(self.required_php),
             "sql": list(self.required_sql),
+            "api": list(self.required_api),
         }
 
     def enabled_components(self) -> List[str]:
@@ -1168,6 +1172,23 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
         ),
     ]
 
+    api_required_rules = [
+        RequiredAPIRule(
+            id="api.json_encode",
+            description="Server-side script encodes responses as JSON",
+            needle="json_encode",
+            min_count=1,
+            weight=1.5,
+        ),
+        RequiredAPIRule(
+            id="api.json_content_type",
+            description="Server-side script sets JSON Content-Type header",
+            needle="application/json",
+            min_count=1,
+            weight=1.0,
+        ),
+    ]
+
     frontend_basic = ProfileSpec(
         name="frontend_basic",
         required_html=html_rules,
@@ -1308,6 +1329,7 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
         required_php=[],
         required_sql=[],
         behavioral_rules=behavioral_rules_api,
+        required_api=api_required_rules,
         required_files=[".html", ".js"],
         relevant_artefacts=["html", "css", "js", "api"],
         optional_components=["php", "sql"],
@@ -1594,6 +1616,7 @@ __all__ = [
     "RequiredJSRule",
     "RequiredPHPRule",
     "RequiredSQLRule",
+    "RequiredAPIRule",
     "BehavioralRule",
     "RequirementDefinition",
     "ProfileSpec",

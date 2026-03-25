@@ -44,14 +44,22 @@ Submissions flow through a rigorous, rule-based pipeline:
    cd Automated-Marking-System-for-Web-Development-Coursework
    ```
 2. **Install the package and dependencies:**
-   To install the CLI and all necessary extras (including the Web UI and demo tooling):
+   To install the CLI and all necessary extras (including the Web UI, demo tooling, and test suite):
    ```bash
    pip install -e .[demo,dev]
    ```
+   This installs all core dependencies (`flask`, `requests`, `pydantic`, `numpy`) plus dev/demo extras (`pytest`, `playwright`, `matplotlib`, `openai`).
+
+   **Optional — LLM provider only** (if you do not need the full dev suite):
+   ```bash
+   pip install -e .[llm]
+   ```
+   This adds `openai` for connecting to OpenAI-compatible endpoints (OpenAI API, LM Studio local models, etc.).
+
 3. **Install Playwright Browsers:**
    Required for UI testing.
    ```bash
-   playwright install
+   python -m playwright install
    ```
 
 ### Running the Docker Sandbox

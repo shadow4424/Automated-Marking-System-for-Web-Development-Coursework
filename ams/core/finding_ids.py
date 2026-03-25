@@ -145,6 +145,21 @@ class SQL:
     REQ_READ_ERROR = "SQL.REQ.READ_ERROR"
 
 
+class API:
+    """Finding IDs emitted by API assessors."""
+
+    # --- Static assessor ---
+    MISSING_FILES = "API.MISSING_FILES"
+    SKIPPED = "API.SKIPPED"
+    EVIDENCE = "API.EVIDENCE"
+
+    # --- Required assessor ---
+    REQ_PASS = "API.REQ.PASS"
+    REQ_FAIL = "API.REQ.FAIL"
+    REQ_SKIPPED = "API.REQ.SKIPPED"
+    REQ_MISSING_FILES = "API.REQ.MISSING_FILES"
+
+
 class CONSISTENCY:
     """Finding IDs emitted by the consistency assessor."""
 
@@ -213,6 +228,7 @@ __all__ = [
     "JS",
     "PHP",
     "SQL",
+    "API",
     "CONSISTENCY",
     "BROWSER",
     "BEHAVIOUR",

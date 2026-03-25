@@ -456,6 +456,7 @@ def _derive_statuses(
     invalid: bool = False,
 ) -> tuple[str, str, str]:
     status = str(run_info.get("status") or "").strip().lower()
+    threat_flagged = bool(run_info.get("threat_flagged"))
     system_failure_flagged = (
         bool(run_info.get("llm_error_flagged"))
         or bool(run_info.get("system_error_flagged"))
@@ -466,6 +467,8 @@ def _derive_statuses(
         return "pending", "pending", "pending"
     if invalid:
         return "failed", "failed", "invalid"
+    if threat_flagged:
+        return "completed", "failed", "invalid"
     if system_failure_flagged:
         return "completed", "failed", "invalid"
     if report is not None:

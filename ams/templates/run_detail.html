@@ -757,6 +757,53 @@
                         </summary>
 
                         <div class="disclosure-body">
+                            {% if item.kind == 'ux' %}
+                            {%- set _ux_finding = item.raw_findings[0] if item.raw_findings else none -%}
+                            {%- set _ux_ev = (_ux_finding.evidence if _ux_finding and _ux_finding.evidence is mapping else {}) -%}
+                            {%- set _ux_review = (_ux_ev.get('ux_review') or {}) if _ux_ev is mapping else {} -%}
+                            {%- set _ux_vision = (_ux_ev.get('vision_analysis') or {}) if _ux_ev is mapping else {} -%}
+                            <div style="display:flex; gap:1.5rem; align-items:flex-start;">
+                                <div style="flex:0 0 auto; width:42%; min-width:200px;">
+                                    {% if _ux_finding and _ux_finding.screenshots %}
+                                        {% for shot in _ux_finding.screenshots %}
+                                        <img src="{{ artifact_url(shot) }}" alt="Page screenshot" class="submission-screenshot" style="width:100%; border-radius:4px; display:block;" onerror="this.parentElement.innerHTML='<p class=\'submission-detail-note\'>Screenshot unavailable.</p>'">
+                                        {% endfor %}
+                                    {% else %}
+                                    <div class="submission-empty">No screenshot captured.</div>
+                                    {% endif %}
+                                </div>
+                                <div style="flex:1 1 0; min-width:0;">
+                                    <article class="submission-evidence-block">
+                                        <div class="submission-card-title">UX Review</div>
+                                        {% if item.detail %}
+                                        <p class="submission-detail-note">{{ item.detail }}</p>
+                                        {% endif %}
+                                        {% if _ux_review %}
+                                        <dl class="submission-detail-kv">
+                                            {% if _ux_review.get('status') %}<dt>Status</dt><dd>{{ _ux_review.get('status') }}</dd>{% endif %}
+                                            {% if _ux_review.get('overall_score') is not none %}<dt>Score</dt><dd>{{ _ux_review.get('overall_score') }}</dd>{% endif %}
+                                            {% if _ux_review.get('improvement_recommendation') and _ux_review.get('improvement_recommendation') != item.detail %}
+                                            <dt>Improvements</dt><dd>{{ _ux_review.get('improvement_recommendation') }}</dd>
+                                            {% endif %}
+                                        </dl>
+                                        {% endif %}
+                                        {% if _ux_vision %}
+                                        {%- set _vision_summary = _ux_vision.get('description') or _ux_vision.get('summary') -%}
+                                        {% if _vision_summary %}
+                                        <div class="submission-card-title" style="margin-top:0.75rem">Vision analysis</div>
+                                        <p class="submission-detail-note">{{ _vision_summary }}</p>
+                                        {% endif %}
+                                        {% endif %}
+                                    </article>
+                                    {% if _ux_finding %}
+                                    <article class="submission-evidence-block">
+                                        <div class="submission-secondary-id">{{ _ux_finding.id }}</div>
+                                        {{ render_mapping(_ux_ev, ('snippet', 'snippets', 'content', 'llm_feedback', 'hybrid_score', 'vision_analysis', 'ux_review', 'screenshot', 'page')) }}
+                                    </article>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% else %}
                             <div class="submission-detail-body-grid">
                                 <div class="submission-issue-list">
                                     {% if item.kind == 'requirement' and item.requirement %}
@@ -789,6 +836,27 @@
                                     </article>
                                     {% endif %}
 
+                                    {% if item.kind == 'behavioural' and item._bev %}
+                                    <article class="submission-evidence-block">
+                                        <div class="submission-card-title">Behavioural test execution</div>
+                                        <dl class="submission-detail-kv">
+                                            <dt>Test</dt><dd>{{ item._bev.test_id }}</dd>
+                                            <dt>Status</dt><dd>{{ item._bev.status }}</dd>
+                                            <dt>Component</dt><dd>{{ item._bev.component }}</dd>
+                                            {% if item._bev.duration_ms is not none %}<dt>Duration</dt><dd>{{ item._bev.duration_ms }} ms</dd>{% endif %}
+                                            {% if item._bev.exit_code is not none %}<dt>Exit code</dt><dd>{{ item._bev.exit_code }}</dd>{% endif %}
+                                        </dl>
+                                        {% if item._bev.stderr %}
+                                        <div class="submission-card-title" style="margin-top:0.5rem">Stderr</div>
+                                        <pre class="submission-code-block">{{ item._bev.stderr[:500] }}</pre>
+                                        {% endif %}
+                                        {% if item._bev.stdout %}
+                                        <div class="submission-card-title" style="margin-top:0.5rem">Stdout</div>
+                                        <pre class="submission-code-block">{{ item._bev.stdout[:500] }}</pre>
+                                        {% endif %}
+                                    </article>
+                                    {% endif %}
+
                                     {% if item.requirement and item.requirement.evidence %}
                                     <article class="submission-evidence-block">
                                         <div class="submission-card-title">Requirement evidence</div>
@@ -809,11 +877,12 @@
                                         {% for finding in item.raw_findings %}
                                         {{ render_raw_finding_detail(finding) }}
                                         {% endfor %}
-                                    {% else %}
+                                    {% elif item.kind != 'behavioural' %}
                                     <div class="submission-empty">No additional finding-level evidence was attached to this row.</div>
                                     {% endif %}
                                 </div>
                             </div>
+                            {% endif %}
                         </div>
                     </details>
                     {% endfor %}

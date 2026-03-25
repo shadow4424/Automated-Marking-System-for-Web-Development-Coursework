@@ -408,7 +408,7 @@
 
         window.setInterval(function () {
             if (_activeJobs().length > 0) _render();
-        }, 5000);
+        }, 1000);
 
         _interceptForm('markForm');
         _interceptForm('batchForm');

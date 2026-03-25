@@ -448,6 +448,7 @@ class ScoringEngine:
             "js": lambda f: self._score_js(f, browser_evidence),
             "php": lambda f: self._score_php(f, behavioural_evidence),
             "sql": lambda f: self._score_sql(f, behavioural_evidence),
+            "api": lambda f: self._score_api(f, behavioural_evidence),
         }
         scorer = dispatcher.get(component)
         if scorer is None:
@@ -923,13 +924,6 @@ class ScoringEngine:
         any_fail = php_smoke in {"fail", "timeout", "error"} or php_form in {"fail", "timeout", "error"}
         static_attempt = has_usage or tag_ok or syntax_ok or syntax_partial
 
-        # API behavioural results
-        api_exec = behavioural_view.get("api_exec")
-        if api_exec == "pass":
-            any_pass = True
-        elif api_exec in {"fail", "timeout", "error"}:
-            any_fail = True
-
         if any_pass:
             base_score = max(base_score, 0.5)
             rationale.append({"rule": "php_behavioural_pass", "finding_ids": ["BEHAVIOUR.PHP_SMOKE_PASS" if php_smoke == "pass" else "BEHAVIOUR.PHP_FORM_RUN_PASS"], "note": "Behavioural PHP test passed"})
@@ -1029,6 +1023,74 @@ class ScoringEngine:
         elif sql_exec == "skipped":
             base_score = min(base_score, 0.5)
             rationale.append({"rule": "sql_behavioural_skipped", "finding_ids": ["BEHAVIOUR.SQL_EXEC_SKIPPED"], "note": "SQL behavioural checks skipped"})
+
+        return base_score, rationale, summaries
+
+    def _score_api(self, findings: List[Finding], behavioural_evidence: List[BehaviouralEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+        rationale: List[dict] = []
+        summaries: Dict[str, object] = {}
+        summaries["static_summary"] = self._static_summary("api", findings)
+        ids = {f.id for f in findings}
+
+        if "API.SKIPPED" in ids:
+            rationale.append({"rule": "api_skipped", "finding_ids": ["API.SKIPPED"], "note": "API not required for this profile"})
+            return 0.0, rationale, summaries
+
+        if "API.MISSING_FILES" in ids or "API.REQ.MISSING_FILES" in ids:
+            missing_ids = [fid for fid in ids if "MISSING_FILES" in fid]
+            rationale.append({"rule": "api_missing", "finding_ids": missing_ids, "note": "API required but no server-side or client-side files found"})
+            return 0.0, rationale, summaries
+
+        # Static evidence: any API.EVIDENCE finding indicates detected patterns
+        evidence_findings = [f for f in findings if f.id == "API.EVIDENCE"]
+        php_api_evidence = [ev for ev in evidence_findings if ev.evidence.get("file_type") == "php" and ev.evidence.get("is_api_endpoint")]
+        js_api_evidence = [ev for ev in evidence_findings if ev.evidence.get("file_type") == "js" and ev.evidence.get("has_api_patterns")]
+        has_server_endpoint = len(php_api_evidence) > 0
+        has_client_calls = len(js_api_evidence) > 0
+        has_static_evidence = has_server_endpoint or has_client_calls
+
+        # Calculate weighted required rule score
+        weighted_rule_score, rule_details = self._calculate_weighted_rule_score(findings, "api")
+        if rule_details:
+            rationale.extend(rule_details)
+            summaries["required_rules_weighted_score"] = weighted_rule_score
+
+        base_score = 0.0
+
+        if has_static_evidence:
+            base_score = 0.5
+            rationale.append({
+                "rule": "api_static_evidence",
+                "finding_ids": [f.id for f in evidence_findings],
+                "evidence": {
+                    "server_endpoint_detected": has_server_endpoint,
+                    "client_calls_detected": has_client_calls,
+                    "evidence_file_count": len(evidence_findings),
+                },
+            })
+
+        if weighted_rule_score > 0:
+            base_score = max(base_score, weighted_rule_score)
+
+        # Behavioural: API exec result
+        behavioural_view = self._behavioural_view(behavioural_evidence)
+        summaries["behavioural_summary"] = behavioural_view
+        api_exec = behavioural_view.get("api_exec")
+
+        if api_exec == "pass":
+            base_score = max(base_score, 1.0) if has_static_evidence else max(base_score, 0.5)
+            rationale.append({"rule": "api_exec_pass", "finding_ids": ["BEHAVIOUR.API_EXEC_PASS"], "note": "API endpoint executed and returned valid JSON"})
+        elif api_exec in {"fail", "timeout", "error"}:
+            if has_static_evidence:
+                base_score = min(base_score, 0.5)
+            else:
+                base_score = 0.0
+            rationale.append({"rule": "api_exec_fail", "finding_ids": ["BEHAVIOUR.API_EXEC_FAIL"], "note": "API endpoint execution failed or returned invalid response"})
+        elif api_exec == "skipped":
+            rationale.append({"rule": "api_exec_skipped", "finding_ids": ["BEHAVIOUR.API_EXEC_SKIPPED"], "note": "API behavioural test skipped (no endpoint or php unavailable)"})
+
+        if not rationale:
+            rationale.append({"rule": "api_no_evidence", "finding_ids": [], "note": "No API evidence detected"})
 
         return base_score, rationale, summaries
 

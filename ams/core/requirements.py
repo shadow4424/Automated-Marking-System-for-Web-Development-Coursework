@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Iterable, List, Mapping, Sequence
 
 from ams.assessors.html_parser import TagCountingParser
-from ams.core.finding_ids import CSS as CID, HTML as HID, JS as JID, PHP as PID, SQL as SID
+from ams.core.finding_ids import API as AID, CSS as CID, HTML as HID, JS as JID, PHP as PID, SQL as SID
 from ams.core.models import Finding, FindingCategory, RequirementEvaluationResult, Severity, SubmissionContext
 from ams.core.profiles import AggregationMode, BehavioralRule, ProfileSpec, RequirementDefinition, RequiredRule
 
@@ -48,7 +48,7 @@ class RequirementEvaluationEngine:
                     self._finding_from_requirement(result, profile_name=profile_name)
                 )
 
-        for component in ("html", "css", "js", "php", "sql"):
+        for component in ("html", "css", "js", "php", "sql", "api"):
             if profile.is_component_required(component):
                 continue
             generated_findings.append(
@@ -593,6 +593,7 @@ class RequirementEvaluationEngine:
             "js": (JID.REQ_PASS, JID.REQ_FAIL, JID.REQ_SKIPPED, JID.REQ_MISSING_FILES),
             "php": (PID.REQ_PASS, PID.REQ_FAIL, PID.REQ_SKIPPED, PID.REQ_MISSING_FILES),
             "sql": (SID.REQ_PASS, SID.REQ_FAIL, SID.REQ_SKIPPED, SID.REQ_MISSING_FILES),
+            "api": (AID.REQ_PASS, AID.REQ_FAIL, AID.REQ_SKIPPED, AID.REQ_MISSING_FILES),
         }
         passed_id, failed_id, skipped_id, missing_id = mapping[component]
         if result.status == "PASS":
@@ -876,6 +877,27 @@ def _evaluate_rule(component: str, rule: RequiredRule, content: str) -> tuple[in
         if needle == "aggregate" or rule.id == "sql.has_aggregate":
             patterns = ["count(", "sum(", "avg(", "min(", "max(", "group by"]
             count = sum(1 for item in patterns if item in lowered)
+            return count, count >= rule.min_count
+        count = lowered.count(needle)
+        return count, count >= rule.min_count
+
+    if component == "api":
+        needle = rule.needle.lower()
+        if needle == "json_encode" or rule.id == "api.json_encode":
+            count = lowered.count("json_encode(")
+            return count, count >= rule.min_count
+        if needle == "application/json" or rule.id == "api.json_content_type":
+            count = lowered.count("application/json")
+            return count, count >= rule.min_count
+        if needle == "request_method" or rule.id == "api.request_method":
+            patterns = ['$_server["request_method"]', "$_server['request_method']", "request_method"]
+            count = sum(1 for item in patterns if item in lowered)
+            return count, count >= rule.min_count
+        if needle == "json_decode" or rule.id == "api.json_decode":
+            count = lowered.count("json_decode(")
+            return count, count >= rule.min_count
+        if needle == "fetch" or rule.id == "api.fetch":
+            count = lowered.count("fetch(") + lowered.count("fetch (")
             return count, count >= rule.min_count
         count = lowered.count(needle)
         return count, count >= rule.min_count

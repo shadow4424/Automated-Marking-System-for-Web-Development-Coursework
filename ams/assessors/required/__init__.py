@@ -5,6 +5,7 @@ from .css import CSSRequiredRulesAssessor
 from .js import JSRequiredFeaturesAssessor
 from .php import PHPRequiredFeaturesAssessor
 from .sql import SQLRequiredFeaturesAssessor
+from .api import APIRequiredFeaturesAssessor
 
 __all__ = [
     "HTMLRequiredElementsAssessor",
@@ -12,4 +13,5 @@ __all__ = [
     "JSRequiredFeaturesAssessor",
     "PHPRequiredFeaturesAssessor",
     "SQLRequiredFeaturesAssessor",
+    "APIRequiredFeaturesAssessor",
 ]

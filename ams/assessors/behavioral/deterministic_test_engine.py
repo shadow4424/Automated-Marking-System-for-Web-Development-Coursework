@@ -578,7 +578,7 @@ class DeterministicTestEngine(Assessor):
         if not api_endpoint:
             evidence = BehaviouralEvidence(
                 test_id="API.EXEC",
-                component="php",
+                component="api",
                 status="skipped",
                 exit_code=None,
                 stdout="",
@@ -602,7 +602,7 @@ class DeterministicTestEngine(Assessor):
         if not self._is_php_available():
             evidence = BehaviouralEvidence(
                 test_id="API.EXEC",
-                component="php",
+                component="api",
                 status="skipped",
                 exit_code=None,
                 stdout="",
@@ -626,7 +626,7 @@ class DeterministicTestEngine(Assessor):
         if self._timed_out(started_at):
             evidence = BehaviouralEvidence(
                 test_id="API.EXEC",
-                component="php",
+                component="api",
                 status="timeout",
                 exit_code=None,
                 stdout="",
@@ -670,7 +670,7 @@ class DeterministicTestEngine(Assessor):
         if result.timed_out:
             evidence = BehaviouralEvidence(
                 test_id="API.EXEC",
-                component="php",
+                component="api",
                 status="timeout",
                 exit_code=result.exit_code,
                 stdout=self._cap(result.stdout),
@@ -713,7 +713,7 @@ class DeterministicTestEngine(Assessor):
 
         evidence = BehaviouralEvidence(
             test_id="API.EXEC",
-            component="php",
+            component="api",
             status=status,
             exit_code=result.exit_code,
             stdout=self._cap(result.stdout),

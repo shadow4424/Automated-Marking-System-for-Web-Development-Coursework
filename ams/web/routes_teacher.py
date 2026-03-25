@@ -348,13 +348,7 @@ def _build_assignment_submission_groups(assignment_runs: Sequence[Mapping[str, A
             }
         )
 
-    groups.sort(
-        key=lambda group: (
-            str(group["primary"].get("created_at") or ""),
-            str(group["student_id"] or ""),
-        ),
-        reverse=True,
-    )
+    groups.sort(key=lambda group: str(group["student_id"] or "").lower())
     return groups
 
 

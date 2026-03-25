@@ -390,25 +390,54 @@ def _describe_identifier(identifier: object) -> str:
     return description
 
 
+_ARTIFACT_ROOTS = ("artifacts/", "runs/", "reports/", "evaluation/", "submission/")
+
+
+def _to_relative_artifact_path(path: str) -> str:
+    """Strip any absolute prefix from an artifact path, keeping only the run-relative portion.
+
+    Screenshot paths stored in findings may be absolute Windows paths
+    (e.g. ``E:\\...\\runs\\run-id\\artifacts\\page.png``).  The
+    ``/runs/<id>/artifacts/<relpath>`` route only accepts paths whose first
+    component is one of the known allowed roots.  This function finds the
+    first occurrence of a known root segment and returns the suffix from that
+    point, with backslashes normalised to forward slashes.
+    """
+    normalised = path.replace("\\", "/")
+    for root in _ARTIFACT_ROOTS:
+        idx = normalised.find(root)
+        if idx >= 0:
+            return normalised[idx:]
+    return normalised
+
+
 def _gather_screenshots(evidence: object) -> list[str]:
     if not isinstance(evidence, Mapping):
         return []
     screenshots: list[str] = []
+    seen: set[str] = set()
+
+    def _add(raw: str) -> None:
+        normalised = _to_relative_artifact_path(raw.strip())
+        if normalised not in seen:
+            seen.add(normalised)
+            screenshots.append(normalised)
+
     direct = evidence.get("screenshot")
     if isinstance(direct, str) and direct.strip():
-        screenshots.append(direct.strip())
+        _add(direct)
     ux_review = evidence.get("ux_review")
     if isinstance(ux_review, Mapping):
         shot = ux_review.get("screenshot")
-        if isinstance(shot, str) and shot.strip() and shot.strip() not in screenshots:
-            screenshots.append(shot.strip())
+        if isinstance(shot, str) and shot.strip():
+            _add(shot)
     vision = evidence.get("vision_analysis")
     if isinstance(vision, Mapping):
         meta = vision.get("meta")
         if isinstance(meta, Mapping):
             shot = meta.get("screenshot")
-            if isinstance(shot, str) and shot.strip() and shot.strip() not in screenshots:
-                screenshots.append(shot.strip())
+            if isinstance(shot, str) and shot.strip():
+                _add(shot)
     return screenshots
 
 
@@ -778,6 +807,51 @@ def _build_submission_detail_view(
                 "check": None,
                 "raw_findings": [finding],
                 "search_text": f"{finding['id']} {page_name} {feedback} ux browser".lower(),
+            }
+        )
+
+    for bev in behavioural_evidence:
+        test_id = str(bev.get("test_id") or "").strip()
+        if not test_id:
+            continue
+        bev_status = str(bev.get("status") or "").strip().lower()
+        status_map = {"pass": "PASS", "fail": "FAIL", "timeout": "FAIL", "skipped": "SKIPPED", "error": "FAIL"}
+        status = status_map.get(bev_status, "SKIPPED")
+        duration = bev.get("duration_ms")
+        detail_parts = []
+        if bev.get("stderr"):
+            detail_parts.append(str(bev["stderr"])[:300])
+        if duration is not None:
+            detail_parts.append(f"Duration: {duration} ms")
+        detail = " — ".join(detail_parts) if detail_parts else ""
+        evidence_items.append(
+            {
+                "kind": "behavioural",
+                "type_label": "Behavioural",
+                "title": _humanize_identifier(test_id),
+                "secondary_id": test_id,
+                "status": status,
+                "badge_label": status,
+                "tone": _status_tone(status),
+                "component": str(bev.get("component") or "").strip().lower(),
+                "component_label": "Behavioural",
+                "component_filter": "behavioural",
+                "stage": "runtime",
+                "stage_label": "Behavioural",
+                "detail": detail,
+                "required": False,
+                "score_display": None,
+                "requirement": None,
+                "check": None,
+                "raw_findings": [],
+                "search_text": " ".join([
+                    test_id,
+                    _humanize_identifier(test_id),
+                    str(bev.get("component") or ""),
+                    bev_status,
+                    detail,
+                ]).lower(),
+                "_bev": bev,
             }
         )
 

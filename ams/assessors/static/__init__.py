@@ -5,6 +5,7 @@ from .css import CSSStaticAssessor
 from .js import JSStaticAssessor
 from .php import PHPStaticAssessor
 from .sql import SQLStaticAssessor
+from .api import APIStaticAssessor
 
 __all__ = [
     "HTMLStaticAssessor",
@@ -12,4 +13,5 @@ __all__ = [
     "JSStaticAssessor",
     "PHPStaticAssessor",
     "SQLStaticAssessor",
+    "APIStaticAssessor",
 ]

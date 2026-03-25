@@ -12,6 +12,7 @@ from ams.assessors.behavioral import DeterministicTestEngine, HTMLBehavioralAsse
 from ams.assessors.playwright_assessor import PlaywrightAssessor
 from ams.assessors.consistency_assessor import ConsistencyAssessor
 from ams.assessors.static import (
+    APIStaticAssessor,
     CSSStaticAssessor,
     HTMLStaticAssessor,
     JSStaticAssessor,
@@ -1234,6 +1235,7 @@ def _default_assessors(
         HTMLStaticAssessor(),
         CSSStaticAssessor(),
         JSStaticAssessor(),
+        APIStaticAssessor(),
         PHPStaticAssessor(),
         SQLStaticAssessor(),
         ConsistencyAssessor(),  # Cross-file consistency checks after static/required

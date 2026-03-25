@@ -1,0 +1,167 @@
+from __future__ import annotations
+
+import re
+from typing import List
+
+from ams.assessors import Assessor
+from ams.core.finding_ids import API as AID
+from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
+from ams.core.profiles import get_profile_spec
+
+
+class APIStaticAssessor(Assessor):
+    """Deterministic API static checks — detects RESTful patterns in PHP and JS files."""
+
+    name = "api_static"
+
+    def run(self, context: SubmissionContext) -> List[Finding]:
+        findings: List[Finding] = []
+
+        profile_name = context.metadata.get("profile")
+        is_required = False
+        if profile_name:
+            try:
+                profile_spec = get_profile_spec(profile_name)
+                is_required = profile_spec.is_component_required("api")
+            except ValueError:
+                pass
+
+        php_files = sorted(context.files_for("php", relevant_only=True))
+        js_files = sorted(context.files_for("js", relevant_only=True))
+        candidate_files = php_files + js_files
+
+        if not candidate_files:
+            if is_required:
+                findings.append(
+                    Finding(
+                        id=AID.MISSING_FILES,
+                        category="api",
+                        message="No PHP or JS files found; API component is required for this profile.",
+                        severity=Severity.FAIL,
+                        evidence={
+                            "expected_extensions": [".php", ".js"],
+                            "discovered_count": 0,
+                            "profile": profile_name,
+                            "required": True,
+                        },
+                        source=self.name,
+                        finding_category=FindingCategory.MISSING,
+                        profile=profile_name,
+                        required=True,
+                    )
+                )
+            else:
+                findings.append(
+                    Finding(
+                        id=AID.SKIPPED,
+                        category="api",
+                        message="No PHP or JS files found; API component is not required for this profile.",
+                        severity=Severity.SKIPPED,
+                        evidence={
+                            "expected_extensions": [".php", ".js"],
+                            "discovered_count": 0,
+                            "profile": profile_name,
+                            "required": False,
+                        },
+                        source=self.name,
+                        finding_category=FindingCategory.OTHER,
+                        profile=profile_name,
+                        required=False,
+                    )
+                )
+            return findings
+
+        for path in candidate_files:
+            try:
+                content = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+
+            evidence = self._detect_api_patterns(path, content)
+            if evidence.get("is_api_endpoint") or evidence.get("has_api_patterns"):
+                findings.append(
+                    Finding(
+                        id=AID.EVIDENCE,
+                        category="api",
+                        message="API usage patterns detected.",
+                        severity=Severity.INFO,
+                        evidence=evidence,
+                        source=self.name,
+                        finding_category=FindingCategory.EVIDENCE,
+                    )
+                )
+
+        return findings
+
+    # ------------------------------------------------------------------ helpers
+    def _detect_api_patterns(self, path, content: str) -> dict:
+        lowered = content.lower()
+        suffix = path.suffix.lower()
+
+        if suffix == ".php":
+            return self._detect_php_api(content, lowered, path)
+        elif suffix == ".js":
+            return self._detect_js_api(content, lowered, path)
+        return {}
+
+    def _detect_php_api(self, content: str, lowered: str, path) -> dict:
+        json_content_type = bool(re.search(
+            r"""header\s*\(\s*['"]Content-Type\s*:\s*application/json""",
+            content,
+            re.IGNORECASE,
+        ))
+        json_encode_count = lowered.count("json_encode(")
+        method_routing = bool(re.search(
+            r"""\$_SERVER\s*\[\s*['"]REQUEST_METHOD['"]\s*\]""",
+            content,
+        ))
+        php_input = bool(re.search(
+            r"""file_get_contents\s*\(\s*['"]php://input['"]""",
+            content,
+            re.IGNORECASE,
+        ))
+        json_decode_count = lowered.count("json_decode(")
+        http_response_code = bool(re.search(r"""http_response_code\s*\(""", content, re.IGNORECASE))
+
+        is_api_endpoint = json_content_type and json_encode_count > 0
+        has_api_patterns = is_api_endpoint or method_routing or php_input or json_decode_count > 0
+
+        return {
+            "path": str(path),
+            "file_type": "php",
+            "json_content_type_header": json_content_type,
+            "json_encode_count": json_encode_count,
+            "method_routing": method_routing,
+            "php_input_read": php_input,
+            "json_decode_count": json_decode_count,
+            "http_response_code": http_response_code,
+            "is_api_endpoint": is_api_endpoint,
+            "has_api_patterns": has_api_patterns,
+        }
+
+    def _detect_js_api(self, content: str, lowered: str, path) -> dict:
+        fetch_count = lowered.count("fetch(") + lowered.count("fetch (")
+        xhr_count = lowered.count("xmlhttprequest") + lowered.count("xhr.")
+        axios_count = lowered.count("axios.")
+        json_parse_count = lowered.count("json.parse(")
+        json_stringify_count = lowered.count("json.stringify(")
+        async_await = bool(re.search(r'\basync\b.*\bawait\b', content, re.DOTALL))
+
+        has_api_patterns = fetch_count > 0 or xhr_count > 0 or axios_count > 0
+        is_api_endpoint = False  # JS files are clients, not endpoints
+
+        return {
+            "path": str(path),
+            "file_type": "js",
+            "fetch_count": fetch_count,
+            "xhr_count": xhr_count,
+            "axios_count": axios_count,
+            "json_parse_count": json_parse_count,
+            "json_stringify_count": json_stringify_count,
+            "async_await": async_await,
+            "is_api_endpoint": is_api_endpoint,
+            "has_api_patterns": has_api_patterns,
+        }
+
+
+__all__ = ["APIStaticAssessor"]
