@@ -7,6 +7,7 @@
 {% set graphs = analytics.graphs|default({}, true) %}
 {% set histogram = graphs.histogram|default({}, true) %}
 {% set scatter = graphs.scatter|default({}, true) %}
+{% set show_attempt_reason = student.selection_reason and student.selection_reason != 'Active because it is the most recent valid submission.' %}
 
 <style>
     .student-analytics-shell { display: grid; gap: var(--space-xl); }
@@ -397,7 +398,16 @@
                 {% if student.overall_percent is not none %}<span class="badge badge-success">Your result: {{ student.overall_percent }}%</span>{% endif %}
                 <span class="badge {% if student.confidence == 'high' %}badge-success{% elif student.confidence == 'medium' %}badge-warning{% else %}badge-danger{% endif %}">Confidence: {{ student.confidence_label }}</span>
                 {% if student.manual_review_recommended %}<span class="badge badge-warning">Manual review: Recommended</span>{% endif %}
+                {% if student.attempt_number %}<span class="badge badge-secondary">Attempt {{ student.attempt_number }}</span>{% endif %}
+                {% if student.is_active %}<span class="badge badge-success">Active result</span>{% endif %}
+                {% if student.source_type %}<span class="badge badge-secondary">{{ student.source_type|replace('_', ' ')|title }}</span>{% endif %}
             </div>
+            {% if show_attempt_reason %}
+            <div class="callout-card callout-card--info">
+                <div class="callout-title">Submission selection</div>
+                <p class="callout-text">{{ student.selection_reason }}</p>
+            </div>
+            {% endif %}
         </div>
         <aside class="student-analytics-hero-panel">
             <h2 class="card-title">Assignment result</h2>
@@ -1205,7 +1215,7 @@
                     'Static / code quality: ' + formatPercent(staticScore),
                     'Behavioural / functional: ' + formatPercent(behaviouralScore),
                     'Confidence: ' + String(point.confidence || 'n/a'),
-                    point.is_current_student ? 'This point shows your current released result.' : 'This point represents one anonymous cohort result.',
+                    point.is_current_student ? 'This point shows your active assessed result.' : 'This point represents one anonymous cohort result.',
                     point.functional_evidence_limited ? 'Behavioural evidence is limited for this submission.' : '',
                     point.manual_review_recommended ? 'Manual review is recommended for this result.' : ''
                 ]));

@@ -56,7 +56,61 @@ CREATE TABLE IF NOT EXISTS assignments (
     created_at           TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (teacherID) REFERENCES users(userID)
 );
+
+CREATE TABLE IF NOT EXISTS submission_attempts (
+    id                    TEXT PRIMARY KEY,
+    assignment_id         TEXT NOT NULL,
+    student_id            TEXT NOT NULL,
+    attempt_number        INTEGER NOT NULL,
+    source_type           TEXT NOT NULL DEFAULT '',
+    source_actor_user_id  TEXT NOT NULL DEFAULT '',
+    created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+    submitted_at          TEXT NOT NULL DEFAULT '',
+    original_filename     TEXT NOT NULL DEFAULT '',
+    source_ref            TEXT NOT NULL DEFAULT '',
+    ingestion_status      TEXT NOT NULL DEFAULT 'pending',
+    pipeline_status       TEXT NOT NULL DEFAULT 'pending',
+    validity_status       TEXT NOT NULL DEFAULT 'pending',
+    run_id                TEXT NOT NULL DEFAULT '',
+    run_dir               TEXT NOT NULL DEFAULT '',
+    report_path           TEXT NOT NULL DEFAULT '',
+    batch_run_id          TEXT NOT NULL DEFAULT '',
+    batch_submission_id   TEXT NOT NULL DEFAULT '',
+    overall_score         REAL,
+    confidence            TEXT NOT NULL DEFAULT '',
+    manual_review_required INTEGER NOT NULL DEFAULT 0,
+    error_message         TEXT NOT NULL DEFAULT '',
+    is_active             INTEGER NOT NULL DEFAULT 0,
+    selection_reason      TEXT NOT NULL DEFAULT '',
+    updated_at            TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (assignment_id, student_id, attempt_number)
+);
+
+CREATE TABLE IF NOT EXISTS student_assignment_summary (
+    assignment_id      TEXT NOT NULL,
+    student_id         TEXT NOT NULL,
+    latest_attempt_id  TEXT NOT NULL DEFAULT '',
+    active_attempt_id  TEXT NOT NULL DEFAULT '',
+    selection_reason   TEXT NOT NULL DEFAULT '',
+    updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (assignment_id, student_id)
+);
 """
+
+
+def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    return {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+
+
+def _ensure_column(
+    conn: sqlite3.Connection,
+    table_name: str,
+    column_name: str,
+    column_sql: str,
+) -> None:
+    if column_name in _table_columns(conn, table_name):
+        return
+    conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +146,53 @@ def init_db() -> None:
             conn.execute("ALTER TABLE assignments ADD COLUMN due_date TEXT NOT NULL DEFAULT ''")
         if "assigned_teachers" not in cols:
             conn.execute("ALTER TABLE assignments ADD COLUMN assigned_teachers TEXT NOT NULL DEFAULT '[]'")
+
+        for column_name, column_sql in (
+            ("source_type", "TEXT NOT NULL DEFAULT ''"),
+            ("source_actor_user_id", "TEXT NOT NULL DEFAULT ''"),
+            ("created_at", "TEXT NOT NULL DEFAULT ''"),
+            ("submitted_at", "TEXT NOT NULL DEFAULT ''"),
+            ("original_filename", "TEXT NOT NULL DEFAULT ''"),
+            ("source_ref", "TEXT NOT NULL DEFAULT ''"),
+            ("ingestion_status", "TEXT NOT NULL DEFAULT 'pending'"),
+            ("pipeline_status", "TEXT NOT NULL DEFAULT 'pending'"),
+            ("validity_status", "TEXT NOT NULL DEFAULT 'pending'"),
+            ("run_id", "TEXT NOT NULL DEFAULT ''"),
+            ("run_dir", "TEXT NOT NULL DEFAULT ''"),
+            ("report_path", "TEXT NOT NULL DEFAULT ''"),
+            ("batch_run_id", "TEXT NOT NULL DEFAULT ''"),
+            ("batch_submission_id", "TEXT NOT NULL DEFAULT ''"),
+            ("overall_score", "REAL"),
+            ("confidence", "TEXT NOT NULL DEFAULT ''"),
+            ("manual_review_required", "INTEGER NOT NULL DEFAULT 0"),
+            ("error_message", "TEXT NOT NULL DEFAULT ''"),
+            ("is_active", "INTEGER NOT NULL DEFAULT 0"),
+            ("selection_reason", "TEXT NOT NULL DEFAULT ''"),
+            ("updated_at", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            _ensure_column(conn, "submission_attempts", column_name, column_sql)
+
+        for column_name, column_sql in (
+            ("latest_attempt_id", "TEXT NOT NULL DEFAULT ''"),
+            ("active_attempt_id", "TEXT NOT NULL DEFAULT ''"),
+            ("selection_reason", "TEXT NOT NULL DEFAULT ''"),
+            ("updated_at", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            _ensure_column(conn, "student_assignment_summary", column_name, column_sql)
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_submission_attempts_identity "
+            "ON submission_attempts(assignment_id, student_id, attempt_number DESC)"
+        )
+        conn.execute("DROP INDEX IF EXISTS idx_submission_attempts_run_ref")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_submission_attempts_run_ref_lookup "
+            "ON submission_attempts(run_id, batch_submission_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_submission_attempts_active "
+            "ON submission_attempts(assignment_id, is_active)"
+        )
 
         # Provision root admin when missing
         row = conn.execute(

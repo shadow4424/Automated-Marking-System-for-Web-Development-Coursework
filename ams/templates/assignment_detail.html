@@ -264,15 +264,19 @@
         <div class="section-heading-row">
             <div class="section-copy">
                 <h2 class="card-title">Submissions</h2>
+                {% if runs %}
+                <p class="table-meta">{{ runs|length }} attempt{{ '' if runs|length == 1 else 's' }} across {{ submission_groups|length }} student{{ '' if submission_groups|length == 1 else 's' }}.</p>
+                {% endif %}
             </div>
-            <span class="badge badge-secondary">{{ runs|length }}</span>
+            <span class="badge badge-secondary">{{ submission_groups|length }}</span>
         </div>
-        {% if runs %}
+        {% if submission_groups %}
         <div class="table-container">
             <table class="table table-compact">
                 <thead>
                     <tr>
                         <th>Student</th>
+                        <th>Attempt</th>
                         <th>Mode</th>
                         <th>Score</th>
                         <th>Date</th>
@@ -281,65 +285,198 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for r in runs %}
-                    {% set submission = r.get('_submission_record') %}
-                    {% set status = r.get('status', 'completed') %}
-                    {% set row_score = r.get('score') %}
-                    {% if row_score is none and submission and submission.get('overall') is not none %}
-                        {% set row_score = submission.get('overall') * 100 %}
+                    {% for group in submission_groups %}
+                    {% set primary = group.primary %}
+                    {% set primary_submission = primary.get('_submission_record') %}
+                    {% set primary_status = primary.get('status', 'completed') %}
+                    {% set primary_score = primary.get('score') %}
+                    {% if primary_score is none and primary_submission and primary_submission.get('overall') is not none %}
+                        {% set primary_score = primary_submission.get('overall') * 100 %}
                     {% endif %}
-                    {% set detail_url = url_for('batch_submission_view', run_id=r.id, submission_id=r._batch_submission_id) if r.mode == 'batch' and r.get('_batch_submission_id') else url_for('run_detail', run_id=r.id) %}
+                    {% set history_id = 'history-' ~ loop.index %}
                     <tr>
                         <td>
-                            {% if r.student_id and r.student_id != 'batch' %}
-                            <a href="{{ detail_url }}" class="table-title-link"><code>{{ r.student_id }}</code></a>
+                            {% if group.student_id and group.student_id != 'batch' %}
+                            <a href="{{ group.detail_url }}" class="table-title-link"><code>{{ group.student_id }}</code></a>
                             {% else %}
                             <code>-</code>
                             {% endif %}
+                            {% if group.has_history %}
+                            <div style="margin-top: var(--space-xs);">
+                                <button type="button"
+                                    class="attempt-history-toggle"
+                                    aria-expanded="false"
+                                    aria-controls="{{ history_id }}"
+                                    style="display:inline-flex; align-items:center; gap:4px; background:none; border:none; padding:0; cursor:pointer; color:var(--color-text-muted); font-size:0.75rem;">
+                                    <svg class="attempt-history-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" style="transition:transform 0.15s ease; flex-shrink:0;">
+                                        <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    <span>{{ group.history_count }} older attempt{{ '' if group.history_count == 1 else 's' }}</span>
+                                </button>
+                            </div>
+                            {% endif %}
                         </td>
-                        <td><span class="badge {% if r.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">{{ r.mode or 'mark' }}</span></td>
                         <td>
-                            {% if status == 'pending' %}
-                            <span class="badge badge-secondary">Queued</span>
-                            {% elif r.threat_flagged %}
-                            <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span>
-                            {% elif row_score is not none %}
-                            <strong>{{ row_score|round|int }}%</strong>
+                            {% if primary.get('attempt_number') %}
+                            <div class="page-status-row">
+                                <span class="badge badge-secondary">#{{ primary.attempt_number }}</span>
+                                {% if primary.get('is_active') %}<span class="badge badge-success">Active</span>{% endif %}
+                                {% if group.has_fallback %}<span class="badge badge-warning">Fallback</span>{% endif %}
+                            </div>
                             {% else %}
                             -
                             {% endif %}
                         </td>
-                        <td>{{ r.created_at[:10] if r.created_at else '-' }}</td>
+                        <td><span class="badge {% if primary.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">{{ primary.mode or 'mark' }}</span></td>
                         <td>
-                            {% if status == 'pending' %}
-                            <span class="badge badge-warning">Pending</span>
-                            {% elif r.threat_flagged or status == 'threat' %}
+                            {% if primary_status == 'pending' %}
+                            <span class="badge badge-secondary">Queued</span>
+                            {% elif primary.threat_flagged %}
                             <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span>
-                            {% elif r.llm_error_flagged or status == 'llm_error' %}
+                            {% elif primary_score is not none %}
+                            <strong>{{ primary_score|round|int }}%</strong>
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td>{{ primary.created_at[:10] if primary.created_at else '-' }}</td>
+                        <td>
+                            {% if primary_status == 'pending' %}
+                            <span class="badge badge-warning">Pending</span>
+                            {% elif primary.get('validity_status') == 'invalid' %}
+                            <span class="badge badge-danger">Invalid</span>
+                            {% elif primary.threat_flagged or primary_status == 'threat' %}
+                            <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span>
+                            {% elif primary.llm_error_flagged or primary_status == 'llm_error' %}
                             <span class="badge" style="background:#fef3c7;color:#92400e;">LLM error</span>
-                            {% elif status == 'failed' %}
+                            {% elif primary_status == 'failed' %}
                             <span class="badge badge-danger">Failed</span>
-                            {% elif row_score is not none and row_score >= 70 %}
+                            {% elif primary_score is not none and primary_score >= 70 %}
                             <span class="badge badge-success">Excellent</span>
-                            {% elif row_score is not none and row_score >= 40 %}
+                            {% elif primary_score is not none and primary_score >= 40 %}
                             <span class="badge badge-warning">Pass</span>
                             {% else %}
                             <span class="badge badge-danger">Fail</span>
                             {% endif %}
+                            {% if primary.get('source_type') %}
+                            <div class="table-meta" style="margin-top: var(--space-xs);">{{ primary.source_type|replace('_', ' ')|title }}</div>
+                            {% endif %}
                         </td>
                         <td>
                             <div class="page-inline-tools">
-                                <a href="{{ detail_url }}" class="btn btn-secondary btn-sm">Open</a>
+                                <a href="{{ group.detail_url }}" class="btn btn-secondary btn-sm">Open</a>
                                 <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
-                                    <input type="hidden" name="run_id" value="{{ r.id }}">
-                                    {% if r.mode == 'batch' and r.get('_batch_submission_id') %}
-                                    <input type="hidden" name="submission_id" value="{{ r._batch_submission_id }}">
+                                    <input type="hidden" name="run_id" value="{{ primary.id }}">
+                                    {% if primary.mode == 'batch' and primary.get('_batch_submission_id') %}
+                                    <input type="hidden" name="submission_id" value="{{ primary._batch_submission_id }}">
                                     {% endif %}
                                     <button type="submit" class="btn btn-ghost btn-sm">Rerun Submission</button>
                                 </form>
                             </div>
                         </td>
                     </tr>
+                    {% if group.has_history %}
+                    <tr id="{{ history_id }}" class="attempt-history-row" style="display:none;">
+                        <td colspan="7" style="padding:0; background:var(--color-surface-subtle, #f8fafc); border-top:1px solid var(--color-border);">
+                            <div style="padding: var(--space-sm) var(--space-lg); border-bottom: 1px solid var(--color-border-light);">
+                                <span style="font-size:0.8rem; color:var(--color-text-muted);">
+                                    {% if group.has_fallback %}{{ group.selection_reason }}{% else %}Older attempts are preserved here without affecting the active result.{% endif %}
+                                </span>
+                            </div>
+                            <div style="padding-top:0;">
+                                <div class="table-container" style="margin:0;">
+                                        <table class="table table-compact">
+                                            <thead>
+                                                <tr>
+                                                    <th>Attempt</th>
+                                                    <th>Mode</th>
+                                                    <th>Score</th>
+                                                    <th>Date</th>
+                                                    <th>Status</th>
+                                                    <th>Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for attempt in group.history_attempts %}
+                                                {% set submission = attempt.get('_submission_record') %}
+                                                {% set attempt_status = attempt.get('status', 'completed') %}
+                                                {% set attempt_score = attempt.get('score') %}
+                                                {% if attempt_score is none and submission and submission.get('overall') is not none %}
+                                                    {% set attempt_score = submission.get('overall') * 100 %}
+                                                {% endif %}
+                                                {% set detail_url = url_for('batch_submission_view', run_id=attempt.id, submission_id=attempt._batch_submission_id) if attempt.mode == 'batch' and attempt.get('_batch_submission_id') else url_for('run_detail', run_id=attempt.id) %}
+                                                <tr>
+                                                    <td>
+                                                        {% if attempt.get('attempt_number') %}
+                                                        <div class="page-status-row">
+                                                            <span class="badge badge-secondary">#{{ attempt.attempt_number }}</span>
+                                                            {% if group.has_fallback and group.latest.get('attempt_number') == attempt.get('attempt_number') %}
+                                                            <span class="badge badge-warning">Latest invalid</span>
+                                                            {% else %}
+                                                            <span class="badge badge-secondary">History</span>
+                                                            {% endif %}
+                                                        </div>
+                                                        {% else %}
+                                                        -
+                                                        {% endif %}
+                                                    </td>
+                                                    <td><span class="badge {% if attempt.mode == 'batch' %}badge-info{% else %}badge-primary{% endif %}">{{ attempt.mode or 'mark' }}</span></td>
+                                                    <td>
+                                                        {% if attempt_status == 'pending' %}
+                                                        <span class="badge badge-secondary">Queued</span>
+                                                        {% elif attempt.threat_flagged %}
+                                                        <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span>
+                                                        {% elif attempt_score is not none %}
+                                                        <strong>{{ attempt_score|round|int }}%</strong>
+                                                        {% else %}
+                                                        -
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>{{ attempt.created_at[:10] if attempt.created_at else '-' }}</td>
+                                                    <td>
+                                                        {% if attempt_status == 'pending' %}
+                                                        <span class="badge badge-warning">Pending</span>
+                                                        {% elif attempt.get('validity_status') == 'invalid' %}
+                                                        <span class="badge badge-danger">Invalid</span>
+                                                        {% elif attempt.threat_flagged or attempt_status == 'threat' %}
+                                                        <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span>
+                                                        {% elif attempt.llm_error_flagged or attempt_status == 'llm_error' %}
+                                                        <span class="badge" style="background:#fef3c7;color:#92400e;">LLM error</span>
+                                                        {% elif attempt_status == 'failed' %}
+                                                        <span class="badge badge-danger">Failed</span>
+                                                        {% elif attempt_score is not none and attempt_score >= 70 %}
+                                                        <span class="badge badge-success">Excellent</span>
+                                                        {% elif attempt_score is not none and attempt_score >= 40 %}
+                                                        <span class="badge badge-warning">Pass</span>
+                                                        {% else %}
+                                                        <span class="badge badge-danger">Fail</span>
+                                                        {% endif %}
+                                                        {% if attempt.get('source_type') %}
+                                                        <div class="table-meta" style="margin-top: var(--space-xs);">{{ attempt.source_type|replace('_', ' ')|title }}</div>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        <div class="page-inline-tools">
+                                                            <a href="{{ detail_url }}" class="btn btn-secondary btn-sm">Open</a>
+                                                            <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
+                                                                <input type="hidden" name="run_id" value="{{ attempt.id }}">
+                                                                {% if attempt.mode == 'batch' and attempt.get('_batch_submission_id') %}
+                                                                <input type="hidden" name="submission_id" value="{{ attempt._batch_submission_id }}">
+                                                                {% endif %}
+                                                                <button type="submit" class="btn btn-ghost btn-sm">Rerun Submission</button>
+                                                            </form>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
                     {% endfor %}
                 </tbody>
             </table>
@@ -352,4 +489,26 @@
         {% endif %}
     </section>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.attempt-history-toggle').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var targetId = btn.getAttribute('aria-controls');
+        var row = document.getElementById(targetId);
+        var expanded = btn.getAttribute('aria-expanded') === 'true';
+        var chevron = btn.querySelector('.attempt-history-chevron');
+        if (expanded) {
+            row.style.display = 'none';
+            btn.setAttribute('aria-expanded', 'false');
+            chevron.style.transform = '';
+        } else {
+            row.style.display = '';
+            btn.setAttribute('aria-expanded', 'true');
+            chevron.style.transform = 'rotate(180deg)';
+        }
+    });
+});
+</script>
 {% endblock %}

@@ -9,6 +9,7 @@ import pytest
 from flask import Flask
 
 from ams.analytics.assignment_analytics import generate_assignment_analytics, generate_student_assignment_analytics
+from ams.core.db import init_db
 from ams.io.web_storage import save_run_info
 from ams.web.routes_student import _deterministic_student_feedback
 from ams.webui import create_app
@@ -18,6 +19,11 @@ from tests.webui.conftest import authenticate_client
 def _write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _use_temp_db(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("ams.core.db._DEFAULT_DB_PATH", tmp_path / "ams_users.db")
+    init_db()
 
 
 def _make_report(student_id: str, assignment_id: str, score: float) -> dict:
@@ -296,6 +302,32 @@ def _write_mark_run(
             "assignment_id": assignment_id,
             "original_filename": f"{student_id}_{assignment_id}.zip",
             "status": "completed",
+        },
+      )
+
+
+def _write_failed_mark_run(
+    runs_root: Path,
+    *,
+    assignment_id: str,
+    student_id: str,
+    run_id: str,
+    created_at: str,
+) -> None:
+    run_dir = runs_root / assignment_id / student_id / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    save_run_info(
+        run_dir,
+        {
+            "id": run_id,
+            "mode": "mark",
+            "profile": "frontend",
+            "created_at": created_at,
+            "student_id": student_id,
+            "assignment_id": assignment_id,
+            "original_filename": f"{student_id}_{assignment_id}.zip",
+            "status": "failed",
+            "error": "pipeline failed",
         },
     )
 
@@ -696,6 +728,61 @@ def test_student_assignment_analytics_route_renders_private_personal_dashboard(
     assert "Teaching insight summary" not in body
 
 
+def test_student_assignment_analytics_route_shows_active_attempt_context(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _use_temp_db(monkeypatch, tmp_path)
+    _write_mark_run(
+        tmp_path,
+        assignment_id="assignment1",
+        student_id="student1",
+        run_id="20260319-100000_mark_frontend_valid",
+        created_at="2026-03-19T10:00:00Z",
+        score=0.9,
+    )
+    _write_failed_mark_run(
+        tmp_path,
+        assignment_id="assignment1",
+        student_id="student1",
+        run_id="20260320-100000_mark_frontend_invalid",
+        created_at="2026-03-20T10:00:00Z",
+    )
+
+    app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path, "AMS_ENABLE_ANALYTICS_LLM_SUMMARY": True})
+    client = app.test_client()
+    authenticate_client(client, role="student")
+
+    monkeypatch.setattr(
+        "ams.web.auth.get_user",
+        lambda user_id: {
+            "userID": "student1",
+            "role": "student",
+            "firstName": "Test",
+            "lastName": "Student",
+            "email": "student1@example.com",
+        },
+    )
+
+    assignment_payload = {
+        "assignmentID": "assignment1",
+        "title": "Coursework 1",
+        "profile": "frontend",
+        "marks_released": True,
+        "assigned_students": ["student1"],
+    }
+    monkeypatch.setattr("ams.web.routes_student.get_assignment", lambda assignment_id: dict(assignment_payload, assignmentID=assignment_id))
+    monkeypatch.setattr("ams.analytics.assignment_analytics.get_assignment", lambda assignment_id: dict(assignment_payload, assignmentID=assignment_id))
+
+    response = client.get("/student/assignment/assignment1/analytics")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Attempt 1" in body
+    assert "Active result" in body
+    assert "Latest submission was invalid, so the previous valid submission remains active." in body
+
+
 def test_student_personalised_feedback_endpoint_uses_safe_context_only(
     tmp_path: Path,
     monkeypatch,
@@ -1006,7 +1093,7 @@ def test_assignment_detail_has_single_analytics_entry_point(tmp_path: Path, monk
     )
     monkeypatch.setattr("ams.web.routes_teacher.list_users", lambda role=None: [])
     monkeypatch.setattr("ams.web.routes_teacher.get_runs_root", lambda app: tmp_path)
-    monkeypatch.setattr("ams.web.routes_teacher.list_runs", lambda runs_root: [])
+    monkeypatch.setattr("ams.web.routes_teacher.list_runs", lambda runs_root, only_active=True: [])
 
     response = client.get("/teacher/assignment/assignment1")
 

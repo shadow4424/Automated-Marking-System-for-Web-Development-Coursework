@@ -154,11 +154,6 @@ def _format_freshness_label(value: str | None) -> tuple[str, str]:
 
 
 def _submission_matches_assignment(submission: Mapping[str, Any], assignment_id: str) -> bool:
-    if submission.get("invalid") is True:
-        return False
-    status = str(submission.get("status") or "").strip().lower()
-    if status.startswith("invalid"):
-        return False
     return str(submission.get("assignment_id") or "").strip() == assignment_id
 
 
@@ -177,7 +172,7 @@ def _batch_submission_display_status(submission: Mapping[str, Any]) -> str:
 
 def _build_assignment_run_rows(assignment_id: str) -> list[dict]:
     runs_root = get_runs_root(current_app)
-    all_runs = list_runs(runs_root)
+    all_runs = list_runs(runs_root, only_active=False)
     assignment_runs: list[dict] = []
 
     for run in all_runs:
@@ -201,6 +196,15 @@ def _build_assignment_run_rows(assignment_id: str) -> list[dict]:
                 submission_row["_submission_record"] = submission
                 overall = submission.get("overall")
                 submission_row["score"] = float(overall) * 100 if isinstance(overall, (int, float)) else None
+                submission_row["attempt_id"] = submission.get("attempt_id")
+                submission_row["attempt_number"] = submission.get("attempt_number")
+                submission_row["is_active"] = bool(submission.get("is_active"))
+                submission_row["validity_status"] = submission.get("validity_status")
+                submission_row["source_type"] = submission.get("source_type")
+                submission_row["confidence"] = submission.get("confidence")
+                submission_row["manual_review_required"] = bool(submission.get("manual_review_required"))
+                if submission.get("submitted_at"):
+                    submission_row["created_at"] = submission.get("submitted_at")
                 submission_row["status"] = _batch_submission_display_status(submission)
                 submission_row["threat_flagged"] = bool(submission.get("threat_flagged") or submission.get("threat_count"))
                 submission_row["llm_error_flagged"] = bool(submission.get("llm_error_flagged"))
@@ -213,6 +217,23 @@ def _build_assignment_run_rows(assignment_id: str) -> list[dict]:
             run_row = dict(run)
             if matching_submissions and "_submission_record" not in run_row:
                 run_row["_submission_record"] = matching_submissions[0]
+            if matching_submissions:
+                primary_submission = matching_submissions[0]
+                run_row["attempt_id"] = primary_submission.get("attempt_id") or run_row.get("attempt_id")
+                run_row["attempt_number"] = primary_submission.get("attempt_number") or run_row.get("attempt_number")
+                run_row["is_active"] = bool(
+                    primary_submission.get("is_active")
+                    if primary_submission.get("is_active") is not None
+                    else run_row.get("is_active")
+                )
+                run_row["validity_status"] = primary_submission.get("validity_status") or run_row.get("validity_status")
+                run_row["source_type"] = primary_submission.get("source_type") or run_row.get("source_type")
+                run_row["confidence"] = primary_submission.get("confidence") or run_row.get("confidence")
+                run_row["manual_review_required"] = bool(
+                    primary_submission.get("manual_review_required")
+                    if primary_submission.get("manual_review_required") is not None
+                    else run_row.get("manual_review_required")
+                )
             if matching_submissions and not run_row.get("student_id"):
                 run_row["student_id"] = matching_submissions[0].get("student_id") or matching_submissions[0].get("student_name")
             run_row["threat_flagged"] = bool(
@@ -251,6 +272,90 @@ def _build_assignment_run_rows(assignment_id: str) -> list[dict]:
         reverse=True,
     )
     return assignment_runs
+
+
+def _assignment_submission_detail_url(row: Mapping[str, Any]) -> str:
+    if row.get("mode") == "batch" and row.get("_batch_submission_id"):
+        return url_for("batch_submission_view", run_id=row.get("id"), submission_id=row.get("_batch_submission_id"))
+    return url_for("run_detail", run_id=row.get("id"))
+
+
+def _assignment_submission_row_key(row: Mapping[str, Any]) -> tuple[str, str]:
+    return (
+        str(row.get("attempt_id") or row.get("id") or ""),
+        str(row.get("_batch_submission_id") or ""),
+    )
+
+
+def _build_assignment_submission_groups(assignment_runs: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in assignment_runs:
+        student_id = str(row.get("student_id") or "Unknown")
+        grouped.setdefault(student_id, []).append(dict(row))
+
+    groups: list[dict[str, Any]] = []
+    for student_id, rows in grouped.items():
+        rows.sort(
+            key=lambda row: (
+                str(row.get("created_at") or ""),
+                int(row.get("attempt_number") or 0),
+                str(row.get("id") or ""),
+                str(row.get("_batch_submission_id") or ""),
+            ),
+            reverse=True,
+        )
+        latest_row = rows[0]
+        active_row = next((row for row in rows if row.get("is_active")), None)
+        primary_row = active_row or latest_row
+
+        latest_key = (
+            str(latest_row.get("attempt_id") or latest_row.get("id") or ""),
+            str(latest_row.get("_batch_submission_id") or ""),
+        )
+        active_key = (
+            str(primary_row.get("attempt_id") or primary_row.get("id") or ""),
+            str(primary_row.get("_batch_submission_id") or ""),
+        )
+        has_fallback = active_row is not None and active_key != latest_key
+
+        selection_reason = str(primary_row.get("selection_reason") or "").strip()
+        if has_fallback and not selection_reason:
+            selection_reason = "The newest attempt is not usable, so the previous valid attempt remains active."
+        elif primary_row.get("is_active") and not selection_reason:
+            selection_reason = "Active because it is the most recent valid submission."
+
+        primary_key = _assignment_submission_row_key(primary_row)
+        history_attempts = [
+            row
+            for row in rows
+            if _assignment_submission_row_key(row) != primary_key
+        ]
+
+        groups.append(
+            {
+                "student_id": student_id,
+                "primary": primary_row,
+                "latest": latest_row,
+                "active": active_row,
+                "attempts": rows,
+                "attempt_count": len(rows),
+                "has_history": len(rows) > 1,
+                "has_fallback": has_fallback,
+                "history_attempts": history_attempts,
+                "history_count": len(history_attempts),
+                "selection_reason": selection_reason,
+                "detail_url": _assignment_submission_detail_url(primary_row),
+            }
+        )
+
+    groups.sort(
+        key=lambda group: (
+            str(group["primary"].get("created_at") or ""),
+            str(group["student_id"] or ""),
+        ),
+        reverse=True,
+    )
+    return groups
 
 
 def _build_threat_resolution_rows(assignment_runs: Sequence[Mapping[str, Any]]) -> list[dict]:
@@ -1259,6 +1364,7 @@ def assignment_detail(assignment_id: str):
         if teacher["userID"] != assignment.get("teacherID")
     ]
     assignment_runs = _build_assignment_run_rows(assignment_id)
+    submission_groups = _build_assignment_submission_groups(assignment_runs)
     threat_rows = _build_threat_resolution_rows(assignment_runs)
     llm_error_rows = _build_llm_error_resolution_rows(assignment_runs)
 
@@ -1270,6 +1376,7 @@ def assignment_detail(assignment_id: str):
         all_teachers=all_teachers,
         all_students=all_students,
         runs=assignment_runs,
+        submission_groups=submission_groups,
         threat_rows=threat_rows,
         llm_error_rows=llm_error_rows,
         has_unresolved_threats=bool(threat_rows),

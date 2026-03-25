@@ -9,11 +9,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence
 
+from ams.core.attempts import filter_attempts_for_root, list_attempts, sync_attempts_from_storage
 from ams.core.aggregation import aggregate_findings_to_checks, compute_check_stats
 from ams.core.db import get_assignment
 from ams.core.profiles import get_relevant_components
 from ams.io.metadata import MetadataValidator
-from ams.io.web_storage import get_runs_root, load_run_info
+from ams.io.web_storage import get_runs_root
 
 logger = logging.getLogger(__name__)
 
@@ -159,56 +160,103 @@ def _assignment_search_root(runs_root: Path, assignment_id: str) -> Path:
 
 
 def _collect_assignment_records(runs_root: Path, assignment_id: str) -> tuple[List[dict], dict]:
-    latest_by_student: dict[str, tuple[tuple[str, str, str], dict]] = {}
-    search_root = _assignment_search_root(runs_root, assignment_id)
+    sync_attempts_from_storage(runs_root)
+    attempts = filter_attempts_for_root(
+        list_attempts(assignment_id=assignment_id, newest_first=True),
+        runs_root,
+    )
     scan = {
-        "candidate_records": 0,
+        "candidate_records": len(attempts),
         "inactive_submissions": 0,
-        "inactive_student_ids": set(),
-        "superseded_student_ids": set(),
+        "inactive_student_ids": set[str](),
+        "superseded_student_ids": set[str](),
     }
 
-    for run_info_path in search_root.rglob("run_info.json"):
-        run_dir = run_info_path.parent
-        run_info = load_run_info(run_dir)
-        if not run_info or run_info.get("assignment_id") != assignment_id:
+    records: List[dict] = []
+    for attempt in attempts:
+        student_id = str(attempt.get("student_id") or "").strip()
+        if not student_id:
             continue
-
-        if run_info.get("active") is False:
-            inactive_count, inactive_students = _count_run_submissions(run_dir, run_info, assignment_id)
-            scan["inactive_submissions"] += inactive_count
-            scan["inactive_student_ids"].update(inactive_students)
-            continue
-
-        records_from_run = _records_from_run(run_dir, run_info, assignment_id)
-        scan["candidate_records"] += len(records_from_run)
-
-        for record in records_from_run:
-            student_id = str(record.get("student_id") or "").strip()
-            if not student_id:
-                continue
-            sort_key = (
-                str(record.get("_created_at") or ""),
-                str(record.get("run_id") or ""),
-                str(record.get("_submission_id") or ""),
-            )
-            current = latest_by_student.get(student_id)
-            if current is None or sort_key > current[0]:
-                if current is not None:
-                    scan["superseded_student_ids"].add(student_id)
-                latest_by_student[student_id] = (sort_key, record)
-            else:
+        if not bool(attempt.get("is_active")):
+            if str(attempt.get("validity_status") or "").strip().lower() == "valid":
                 scan["superseded_student_ids"].add(student_id)
+            else:
+                scan["inactive_submissions"] += 1
+                scan["inactive_student_ids"].add(student_id)
+            continue
+        record = _record_from_attempt(attempt)
+        if record is not None:
+            records.append(record)
 
-    records = [record for _, record in latest_by_student.values()]
-    for record in records:
-        record.pop("_created_at", None)
-        record.pop("_submission_id", None)
     records.sort(key=lambda rec: rec.get("student_id", ""))
-    scan["superseded_records"] = max(scan["candidate_records"] - len(records), 0)
+    scan["superseded_records"] = max(len(attempts) - len(records) - scan["inactive_submissions"], 0)
     scan["inactive_student_ids"] = sorted(str(student_id) for student_id in scan["inactive_student_ids"] if str(student_id).strip())
     scan["superseded_student_ids"] = sorted(str(student_id) for student_id in scan["superseded_student_ids"] if str(student_id).strip())
     return records, scan
+
+
+def _record_from_attempt(attempt: Mapping[str, object]) -> dict | None:
+    report_path_text = str(attempt.get("report_path") or "").strip()
+    report_path = Path(report_path_text) if report_path_text else None
+    report = _load_json(report_path) if report_path and report_path.exists() else None
+    assignment_id = str(attempt.get("assignment_id") or "").strip()
+    student_id = str(attempt.get("student_id") or "").strip()
+    if not assignment_id or not student_id:
+        return None
+
+    status = _normalize_submission_status(
+        attempt.get("pipeline_status") or attempt.get("validity_status") or "ok"
+    )
+    source_mode = "batch" if str(attempt.get("batch_submission_id") or "").strip() else "mark"
+    run_id = str(attempt.get("run_id") or attempt.get("id") or "")
+    submission_id = str(
+        attempt.get("batch_submission_id")
+        or attempt.get("run_id")
+        or attempt.get("id")
+        or student_id
+    )
+    created_at = str(attempt.get("submitted_at") or attempt.get("created_at") or "")
+    attempt_context = {
+        "attempt_id": str(attempt.get("id") or ""),
+        "attempt_number": int(attempt.get("attempt_number") or 0) or None,
+        "source_type": str(attempt.get("source_type") or ""),
+        "validity_status": str(attempt.get("validity_status") or ""),
+        "is_active": bool(attempt.get("is_active")),
+        "selection_reason": str(attempt.get("selection_reason") or ""),
+        "submitted_at": created_at,
+    }
+
+    if report is not None and report_path is not None:
+        record = _report_to_record(
+            report=report,
+            student_id=student_id,
+            assignment_id=assignment_id,
+            report_path=report_path,
+            run_id=run_id,
+            created_at=created_at,
+            submission_id=submission_id,
+            status=status,
+            source_mode=source_mode,
+        )
+        record.update(attempt_context)
+        return record
+
+    record = _empty_record(
+        student_id=student_id,
+        assignment_id=assignment_id,
+        run_id=run_id,
+        created_at=created_at,
+        submission_id=submission_id,
+        status=status,
+        report_path=report_path_text,
+        original_filename=str(attempt.get("original_filename") or ""),
+        error=str(attempt.get("error_message") or ""),
+        source_mode=source_mode,
+        overall=attempt.get("overall_score"),
+        components={},
+    )
+    record.update(attempt_context)
+    return record
 
 
 def _count_run_submissions(run_dir: Path, run_info: Mapping[str, object], assignment_id: str) -> tuple[int, List[str]]:
@@ -2776,6 +2824,12 @@ def _student_result_summary(
     return {
         "assignment_title": str(assignment.get("title") or assignment.get("assignmentID") or ""),
         "submitted_at": str(student_record.get("_created_at") or ""),
+        "attempt_id": str(student_record.get("attempt_id") or ""),
+        "attempt_number": student_record.get("attempt_number"),
+        "source_type": str(student_record.get("source_type") or ""),
+        "validity_status": str(student_record.get("validity_status") or ""),
+        "is_active": bool(student_record.get("is_active")),
+        "selection_reason": str(student_record.get("selection_reason") or ""),
         "overall_score": student_record.get("overall"),
         "overall_percent": overall_percent,
         "result_label": _student_result_label(student_record),

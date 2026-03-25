@@ -609,6 +609,75 @@ def test_mark_form_shows_assignment_dropdown_and_hides_profile_selector_for_teac
     assert 'name="profile"' not in body
 
 
+def test_mark_and_batch_forms_hide_released_assignments(tmp_path: Path, monkeypatch) -> None:
+    client, _ = _client(tmp_path)
+    monkeypatch.setattr(
+        "ams.webui.list_assignments",
+        lambda teacher_id=None: [
+            {"assignmentID": "assignment_open", "title": "Open Assignment", "profile": "frontend_interactive", "marks_released": False},
+            {"assignmentID": "assignment_released", "title": "Released Assignment", "profile": "frontend_interactive", "marks_released": True},
+        ],
+    )
+
+    mark_response = client.get("/mark")
+    assert mark_response.status_code == 200
+    mark_body = mark_response.get_data(as_text=True)
+    assert "assignment_open - Open Assignment" in mark_body
+    assert "assignment_released - Released Assignment" not in mark_body
+
+    batch_response = client.get("/batch")
+    assert batch_response.status_code == 200
+    batch_body = batch_response.get_data(as_text=True)
+    assert "assignment_open" in batch_body
+    assert "Open Assignment" in batch_body
+    assert "assignment_released" not in batch_body
+    assert "Released Assignment" not in batch_body
+
+
+def test_student_mark_form_hides_released_assignments(tmp_path: Path, monkeypatch) -> None:
+    app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
+    client = app.test_client()
+    authenticate_client(client, role="student")
+
+    monkeypatch.setattr(
+        "ams.web.auth.get_user",
+        lambda user_id: {
+            "userID": "student1",
+            "role": "student",
+            "firstName": "Test",
+            "lastName": "Student",
+            "email": "student1@example.com",
+        },
+    )
+    monkeypatch.setattr(
+        "ams.webui.list_assignments_for_student",
+        lambda student_id: [
+            {
+                "assignmentID": "assignment_open",
+                "title": "Open Assignment",
+                "profile": "frontend_interactive",
+                "due_date": "2026-04-01T12:00",
+                "marks_released": False,
+                "assigned_students": ["student1"],
+            },
+            {
+                "assignmentID": "assignment_released",
+                "title": "Released Assignment",
+                "profile": "frontend_interactive",
+                "due_date": "2026-04-01T12:00",
+                "marks_released": True,
+                "assigned_students": ["student1"],
+            },
+        ],
+    )
+
+    response = client.get("/mark")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Open Assignment - Due 2026-04-01 12:00" in body
+    assert "Released Assignment - Due 2026-04-01 12:00" not in body
+
+
 def test_batch_route_resolves_profile_from_selected_assignment(tmp_path: Path, monkeypatch) -> None:
     client, _ = _client(tmp_path)
     queued = _capture_job_submission(monkeypatch)
@@ -677,6 +746,60 @@ def test_mark_route_resolves_profile_from_selected_assignment(tmp_path: Path, mo
     assert run_info["assignment_id"] == "assignment1"
 
 
+def test_mark_route_rejects_new_submission_when_grades_released(tmp_path: Path, monkeypatch) -> None:
+    client, _ = _client(tmp_path)
+    monkeypatch.setattr(
+        "ams.webui.list_assignments",
+        lambda teacher_id=None: [
+            {"assignmentID": "assignment1", "title": "Assignment 1", "profile": "fullstack_php_sql", "marks_released": True},
+        ],
+    )
+
+    bundle = _make_zip({"index.html": "<!doctype html><html><body>ok</body></html>"})
+    response = client.post(
+        "/mark",
+        data={
+            "student_id": "student1",
+            "assignment_id": "assignment1",
+            "submission_method": "upload",
+            "submission": (io.BytesIO(bundle), "student1_assignment1.zip"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 403
+    body = response.get_data(as_text=True)
+    assert "Grades have already been released for this assignment, so new submissions are locked." in body
+    assert not list(tmp_path.rglob("run_info.json"))
+
+
+def test_batch_route_rejects_new_submission_when_grades_released(tmp_path: Path, monkeypatch) -> None:
+    client, _ = _client(tmp_path)
+    monkeypatch.setattr(
+        "ams.webui.list_assignments",
+        lambda teacher_id=None: [
+            {"assignmentID": "assignment1", "title": "Assignment 1", "profile": "fullstack_php_sql", "marks_released": True},
+        ],
+    )
+
+    inner_submission = _make_zip({"index.html": "<!doctype html><html><body>ok</body></html>"})
+    batch_bundle = _make_zip({"student1_assignment1.zip": inner_submission})
+    response = client.post(
+        "/batch",
+        data={
+            "assignment_id": "assignment1",
+            "submission_method": "upload",
+            "submission": (io.BytesIO(batch_bundle), "batch_submissions.zip"),
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 403
+    body = response.get_data(as_text=True)
+    assert "Grades have already been released for this assignment, so new submissions are locked." in body
+    assert not list(tmp_path.rglob("run_info.json"))
+
+
 def test_student_pages_link_assignment_ids_to_submission_reports(tmp_path: Path, monkeypatch) -> None:
     client, _ = _client(tmp_path)
     authenticate_client(client, role="student")
@@ -717,7 +840,7 @@ def test_student_pages_link_assignment_ids_to_submission_reports(tmp_path: Path,
     monkeypatch.setattr("ams.web.routes_student.get_runs_root", lambda app: tmp_path)
     monkeypatch.setattr(
         "ams.web.routes_student.list_runs",
-        lambda _runs_root: [
+        lambda _runs_root, only_active=True: [
             {
                 "id": "20260320-090000_mark_frontend_old",
                 "mode": "mark",
@@ -760,8 +883,9 @@ def test_student_pages_link_assignment_ids_to_submission_reports(tmp_path: Path,
     dashboard = client.get("/student/")
     assert dashboard.status_code == 200
     dashboard_body = dashboard.get_data(as_text=True)
-    assert '<a href="/runs/20260320-090000_mark_frontend_old" class="table-title-link"><code>assignment1</code></a>' in dashboard_body
+    assert '<a href="/runs/20260322-140000_mark_frontend_new" class="table-title-link"><code>assignment1</code></a>' in dashboard_body
     assert '<a href="/batch/20260321-120000_batch_fullstack_visible/submissions/student1_assignment2/view" class="table-title-link"><code>assignment2</code></a>' in dashboard_body
+    assert '/runs/20260320-090000_mark_frontend_old' not in dashboard_body
 
     coursework = client.get("/student/coursework")
     assert coursework.status_code == 200
@@ -866,7 +990,7 @@ def test_assignment_detail_uses_per_submission_scores_for_batch_rows(tmp_path: P
     monkeypatch.setattr("ams.web.routes_teacher.get_runs_root", lambda app: tmp_path)
     monkeypatch.setattr(
         "ams.web.routes_teacher.list_runs",
-        lambda _runs_root: [
+        lambda _runs_root, only_active=True: [
             {
                 "id": "20260323-020000_batch_fullstack_demo",
                 "mode": "batch",
@@ -1321,7 +1445,7 @@ def test_assignment_detail_shows_rerun_action_for_every_submission(tmp_path: Pat
     )
     monkeypatch.setattr(
         "ams.web.routes_teacher.list_runs",
-        lambda _runs_root: [
+        lambda _runs_root, only_active=True: [
             {
                 "id": "20260323-050000_mark_frontend_demo",
                 "mode": "mark",

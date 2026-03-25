@@ -36,8 +36,8 @@
                     <span class="info-item-value">{{ completed|length }}</span>
                 </div>
                 <div class="info-item">
-                    <span class="info-item-label">Submissions</span>
-                    <span class="info-item-value">{{ my_runs|length }}</span>
+                    <span class="info-item-label">Attempts on record</span>
+                    <span class="info-item-value">{{ submission_attempt_total }}</span>
                 </div>
             </div>
         </aside>
@@ -54,6 +54,7 @@
         {% if recent_runs %}
         <div class="surface-list">
             {% for run in recent_runs %}
+            {% set attempt_count = submission_attempt_counts.get(run.assignment_id, 1) %}
             <div class="run-card" style="cursor:default; transform:none;">
                 <div class="run-card-score">
                     {% if run._marks_released %}
@@ -78,6 +79,9 @@
                             {% endif %}
                         {% endif %}
                         <span class="badge {% if run.get('_submission_record') %}badge-info{% else %}badge-primary{% endif %}">{% if run.get('_submission_record') %}Batch{% else %}Individual{% endif %}</span>
+                        {% if run.get('attempt_number') %}<span class="badge badge-secondary">Attempt {{ run.attempt_number }}</span>{% endif %}
+                        {% if run.get('is_active') %}<span class="badge badge-success">Active</span>{% endif %}
+                        {% if attempt_count > 1 %}<span class="badge badge-secondary">{{ attempt_count }} attempts on record</span>{% endif %}
                     </div>
                     <div class="run-card-meta">
                         {% if run.get('created_at') %}<span>{{ run.created_at[:10] }}</span>{% endif %}
@@ -88,6 +92,9 @@
                         <span class="badge badge-warning">Awaiting release</span>
                         {% endif %}
                     </div>
+                    {% if attempt_count > 1 and run.get('selection_reason') %}
+                    <div class="table-meta" style="margin-top: var(--space-sm);">{{ run.selection_reason }}</div>
+                    {% endif %}
                 </div>
                 <div class="run-card-actions">
                     {% if run._marks_released %}

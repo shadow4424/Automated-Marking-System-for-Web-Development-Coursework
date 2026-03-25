@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from time import time
 
+from ams.core.db import init_db
 from ams.webui import create_app
 from tests.webui.conftest import authenticate_client
 
@@ -55,6 +56,98 @@ def test_runs_history_searches_student_fields(tmp_path: Path) -> None:
     assert res.status_code == 200
     body = res.get_data(as_text=True)
     assert "Dale Mccance" in body
+
+
+def _use_temp_db(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("ams.core.db._DEFAULT_DB_PATH", tmp_path / "ams_users.db")
+    init_db()
+
+
+def _make_attempt_run(
+    runs_root: Path,
+    *,
+    run_id: str,
+    attempt_number: int,
+    created_at: str,
+    score: float,
+) -> None:
+    run_dir = runs_root / "assignment1" / "student1" / "attempts" / f"{attempt_number:03d}_{run_id}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "report.json").write_text(
+        json.dumps(
+            {
+                "scores": {"overall": score, "by_component": {"html": {"score": score}}},
+                "summary": {"confidence": "high"},
+                "findings": [],
+                "metadata": {
+                    "submission_metadata": {
+                        "student_id": "student1",
+                        "assignment_id": "assignment1",
+                        "original_filename": "student1_assignment1.zip",
+                        "attempt_id": run_id,
+                        "attempt_number": attempt_number,
+                        "source_type": "student_zip_upload",
+                        "timestamp": created_at,
+                    },
+                    "student_identity": {"student_id": "student1", "name_normalized": "student1"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "run_info.json").write_text(
+        json.dumps(
+            {
+                "id": run_id,
+                "mode": "mark",
+                "profile": "frontend",
+                "created_at": created_at,
+                "student_id": "student1",
+                "assignment_id": "assignment1",
+                "original_filename": "student1_assignment1.zip",
+                "status": "completed",
+                "attempt_id": run_id,
+                "attempt_number": attempt_number,
+                "source_type": "student_zip_upload",
+                "source_actor_user_id": "student1",
+                "validity_status": "valid",
+                "report": "report.json",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_runs_history_shows_active_and_historical_attempts(tmp_path: Path, monkeypatch) -> None:
+    _use_temp_db(monkeypatch, tmp_path)
+    _make_attempt_run(
+        tmp_path,
+        run_id="attempt_old",
+        attempt_number=1,
+        created_at="2026-03-19T09:00:00Z",
+        score=0.44,
+    )
+    _make_attempt_run(
+        tmp_path,
+        run_id="attempt_new",
+        attempt_number=2,
+        created_at="2026-03-20T09:00:00Z",
+        score=0.82,
+    )
+
+    app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
+    client = app.test_client()
+    authenticate_client(client)
+
+    res = client.get("/runs")
+    assert res.status_code == 200
+    body = res.get_data(as_text=True)
+    assert "attempt_old" in body
+    assert "attempt_new" in body
+    assert "Attempt 1" in body
+    assert "Attempt 2" in body
+    assert "Active" in body
+    assert "History" in body
 
 
 def test_create_app_does_not_delete_persisted_runs_on_startup_by_default(tmp_path: Path) -> None:

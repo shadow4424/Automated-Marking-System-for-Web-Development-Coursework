@@ -59,7 +59,7 @@ def _gather_student_runs(student_id: str) -> tuple[list[dict], set[str]]:
     the student has at least one submission.
     """
     runs_root = get_runs_root(current_app)
-    all_runs = list_runs(runs_root)
+    all_runs = list_runs(runs_root, only_active=False)
     my_runs: list[dict] = []
     submitted_aids: set[str] = set()
 
@@ -103,16 +103,53 @@ def _latest_runs_by_assignment(runs: list[dict]) -> dict[str, dict]:
         assignment_id = str(run.get("assignment_id") or "").strip()
         if not assignment_id:
             continue
+        run_active = bool(
+            run.get("is_active")
+            or (
+                isinstance(run.get("_submission_record"), dict)
+                and run["_submission_record"].get("is_active")
+            )
+        )
         current_latest = latest.get(assignment_id)
+        current_active = bool(
+            current_latest
+            and (
+                current_latest.get("is_active")
+                or (
+                    isinstance(current_latest.get("_submission_record"), dict)
+                    and current_latest["_submission_record"].get("is_active")
+                )
+            )
+        )
         run_key = (str(run.get("created_at") or ""), str(run.get("id") or ""))
         current_key = (
             str(current_latest.get("created_at") or ""),
             str(current_latest.get("id") or ""),
         ) if current_latest else None
-        if current_key is None or run_key > current_key:
+        if current_key is None or (run_active and not current_active) or (run_active == current_active and run_key > current_key):
             latest[assignment_id] = run
 
     return latest
+
+
+def _student_submission_cards(runs: list[dict]) -> tuple[list[dict], dict[str, int]]:
+    latest_runs = _latest_runs_by_assignment(runs)
+    attempt_counts: dict[str, int] = {}
+    for run in runs:
+        assignment_id = str(run.get("assignment_id") or "").strip()
+        if assignment_id:
+            attempt_counts[assignment_id] = attempt_counts.get(assignment_id, 0) + 1
+
+    cards = sorted(
+        latest_runs.values(),
+        key=lambda run: (
+            str(run.get("created_at") or ""),
+            str(run.get("id") or ""),
+            str(run.get("_batch_submission_id") or ""),
+        ),
+        reverse=True,
+    )
+    return cards, attempt_counts
 
 
 def _split_assignments(
@@ -379,6 +416,8 @@ def dashboard():
 
     assignments: list[dict] = []
     my_runs: list[dict] = []
+    submission_cards: list[dict] = []
+    submission_attempt_counts: dict[str, int] = {}
     submitted_aids: set[str] = set()
     latest_runs_by_assignment: dict[str, dict] = {}
 
@@ -389,6 +428,7 @@ def dashboard():
         assignments = list_assignments_for_student(student_id)
         my_runs, submitted_aids = _gather_student_runs(student_id)
         latest_runs_by_assignment = _latest_runs_by_assignment(my_runs)
+        submission_cards, submission_attempt_counts = _student_submission_cards(my_runs)
     elif is_preview:
         # Admin preview mode - show all assignments for UI demo, no runs
         assignments = list_assignments()
@@ -401,7 +441,10 @@ def dashboard():
         todo=todo,
         completed=completed,
         my_runs=my_runs,
-        recent_runs=my_runs[:3],
+        recent_runs=submission_cards[:3],
+        submission_cards=submission_cards,
+        submission_attempt_counts=submission_attempt_counts,
+        submission_attempt_total=len(my_runs),
         student_id=student_id,
         preview_student=preview_student,
     )
@@ -414,6 +457,8 @@ def coursework():
 
     assignments: list[dict] = []
     my_runs: list[dict] = []
+    submission_cards: list[dict] = []
+    submission_attempt_counts: dict[str, int] = {}
     submitted_aids: set[str] = set()
     latest_runs_by_assignment: dict[str, dict] = {}
 
@@ -424,6 +469,7 @@ def coursework():
         assignments = list_assignments_for_student(student_id)
         my_runs, submitted_aids = _gather_student_runs(student_id)
         latest_runs_by_assignment = _latest_runs_by_assignment(my_runs)
+        submission_cards, submission_attempt_counts = _student_submission_cards(my_runs)
     elif is_preview:
         # Admin preview mode - show all assignments for UI demo, no runs
         assignments = list_assignments()
@@ -436,6 +482,9 @@ def coursework():
         todo=todo,
         completed=completed,
         my_runs=my_runs,
+        submission_cards=submission_cards,
+        submission_attempt_counts=submission_attempt_counts,
+        submission_attempt_total=len(my_runs),
         student_id=student_id,
         preview_student=preview_student,
     )

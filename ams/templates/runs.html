@@ -2,7 +2,7 @@
 {% block title %}Run History - AMS{% endblock %}
 
 {% block content %}
-{% set stats = namespace(total=runs|length, batch=0, mark=0, threats=0, pending=0) %}
+{% set stats = namespace(total=runs|length, batch=0, mark=0, threats=0, pending=0, active=0, history=0, invalid=0) %}
 {% for r in runs %}
     {% if r.mode == 'batch' %}
         {% set stats.batch = stats.batch + 1 %}
@@ -14,6 +14,14 @@
     {% endif %}
     {% if r.get('status', 'completed') == 'pending' %}
         {% set stats.pending = stats.pending + 1 %}
+    {% endif %}
+    {% if r.get('validity_status') == 'invalid' %}
+        {% set stats.invalid = stats.invalid + 1 %}
+    {% endif %}
+    {% if r.get('is_active') %}
+        {% set stats.active = stats.active + 1 %}
+    {% elif r.get('attempt_number') %}
+        {% set stats.history = stats.history + 1 %}
     {% endif %}
 {% endfor %}
 {% set runs_back_url = url_for('admin.dashboard') if user_role == 'admin' else url_for('teacher.dashboard') %}
@@ -27,7 +35,7 @@
             {% if user_role == 'admin' %}
             <p class="page-context-line">Inspect system-wide submission processing, identify failed or flagged runs, and move quickly into audit detail.</p>
             {% else %}
-            <p class="page-context-line">Track single submissions and batch cohorts in one place, with search and filters kept directly above the list.</p>
+            <p class="page-context-line">Track active results and historical attempts in one place, with filters for active, history, invalid, and flagged submissions.</p>
             {% endif %}
             <div class="page-action-row">
                 <a href="{{ url_for('mark') }}" class="btn btn-primary">New mark</a>
@@ -46,12 +54,12 @@
                     <span class="info-item-value">{{ stats.pending }}</span>
                 </div>
                 <div class="info-item">
-                    <span class="info-item-label">Single</span>
-                    <span class="info-item-value">{{ stats.mark }}</span>
+                    <span class="info-item-label">Active</span>
+                    <span class="info-item-value">{{ stats.active }}</span>
                 </div>
                 <div class="info-item">
-                    <span class="info-item-label">Batch</span>
-                    <span class="info-item-value">{{ stats.batch }}</span>
+                    <span class="info-item-label">History</span>
+                    <span class="info-item-value">{{ stats.history }}</span>
                 </div>
             </div>
         </aside>
@@ -59,24 +67,24 @@
 
     <section class="summary-strip">
         <article class="summary-card">
-            <span class="summary-card-label">Total runs</span>
+            <span class="summary-card-label">Total records</span>
             <strong class="summary-card-value">{{ stats.total }}</strong>
-            <span class="summary-card-detail">All tracked single and batch processing runs.</span>
+            <span class="summary-card-detail">Active results plus preserved submission history.</span>
         </article>
         <article class="summary-card">
-            <span class="summary-card-label">Single runs</span>
-            <strong class="summary-card-value">{{ stats.mark }}</strong>
-            <span class="summary-card-detail">Direct upload or GitHub single-submission checks.</span>
+            <span class="summary-card-label">Active attempts</span>
+            <strong class="summary-card-value">{{ stats.active }}</strong>
+            <span class="summary-card-detail">The attempts currently driving marks and summaries.</span>
         </article>
         <article class="summary-card">
-            <span class="summary-card-label">Batch runs</span>
-            <strong class="summary-card-value">{{ stats.batch }}</strong>
-            <span class="summary-card-detail">Cohort or assignment-wide processing runs.</span>
+            <span class="summary-card-label">History attempts</span>
+            <strong class="summary-card-value">{{ stats.history }}</strong>
+            <span class="summary-card-detail">Older preserved attempts that no longer drive the active result.</span>
         </article>
         <article class="summary-card">
-            <span class="summary-card-label">Threat flagged</span>
-            <strong class="summary-card-value">{{ stats.threats }}</strong>
-            <span class="summary-card-detail">Runs that need security review or cleanup.</span>
+            <span class="summary-card-label">Invalid attempts</span>
+            <strong class="summary-card-value">{{ stats.invalid }}</strong>
+            <span class="summary-card-detail">Attempts that failed ingestion or could not produce a usable result.</span>
         </article>
     </section>
 
@@ -87,6 +95,9 @@
         <div class="toolbar-filters">
             <button type="button" class="filter-toggle" data-filter="mode:mark">Single</button>
             <button type="button" class="filter-toggle" data-filter="mode:batch">Batch</button>
+            <button type="button" class="filter-toggle" data-filter="state:active">Active</button>
+            <button type="button" class="filter-toggle" data-filter="state:history">History</button>
+            <button type="button" class="filter-toggle" data-filter="validity:invalid">Invalid</button>
             <button type="button" class="filter-toggle" data-filter="threat:true" style="--toggle-active-bg:#dc2626;">Threats</button>
         </div>
         <span class="toolbar-count" data-count></span>
@@ -96,14 +107,18 @@
     <section class="section-stack">
         <div class="flex flex-col gap-md">
             {% for r in runs %}
+            {% set status = r.get('status', 'completed') %}
+            {% set attempt_state = 'active' if r.get('is_active') else 'history' if r.get('attempt_number') else 'current' %}
+            {% set validity = r.get('validity_status') or '' %}
             <a href="{{ url_for('run_detail', run_id=r.id) }}"
                 class="run-card{% if r.threat_flagged %} run-card--threat{% endif %}" data-filterable
                 data-mode="{{ r.mode or 'mark' }}"
                 data-threat="{{ 'true' if r.threat_flagged else 'false' }}"
-                data-search="{{ r.id }} {{ r.student_id|default('') }} {{ r.assignment_id|default('') }} {{ r.original_filename|default('') }}">
+                data-state="{{ attempt_state }}"
+                data-validity="{{ validity|lower }}"
+                data-search="{{ r.id }} {{ r.student_id|default('') }} {{ r.assignment_id|default('') }} {{ r.original_filename|default('') }} {{ r.source_type|default('') }} {{ r.selection_reason|default('') }} {{ r.attempt_number|default('') }}">
 
                 <div class="run-card-score">
-                    {% set status = r.get('status', 'completed') %}
                     {% if status == 'pending' %}
                     <span class="score-badge badge-muted" style="font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">...</span>
                     {% elif status == 'failed' %}
@@ -134,10 +149,21 @@
                             {{ r.mode or 'mark' }}
                         </span>
                         <span>{{ r.profile or 'unknown' }}</span>
+                        {% if r.get('attempt_number') %}
+                        <span class="badge badge-secondary">Attempt {{ r.attempt_number }}</span>
+                        {% endif %}
+                        {% if r.get('is_active') %}
+                        <span class="badge badge-success">Active</span>
+                        {% elif r.get('attempt_number') %}
+                        <span class="badge badge-secondary">History</span>
+                        {% endif %}
                         {% if status == 'pending' %}
                         <span class="badge badge-warning">Pending</span>
                         {% elif status == 'failed' %}
                         <span class="badge" style="background:#dc2626;color:#fff;">Failed</span>
+                        {% endif %}
+                        {% if validity == 'invalid' %}
+                        <span class="badge badge-danger">Invalid</span>
                         {% endif %}
                         {% if r.threat_flagged %}
                         <span class="badge" style="background:#dc2626;color:#fff;">Security threat</span>
@@ -162,7 +188,13 @@
                         {% if r.created_at %}
                         <span>{{ r.created_at[:10] }}</span>
                         {% endif %}
+                        {% if r.source_type %}
+                        <span>{{ r.source_type|replace('_', ' ')|title }}</span>
+                        {% endif %}
                     </div>
+                    {% if r.selection_reason and (r.get('attempt_number') or not r.get('is_active')) %}
+                    <div class="table-meta" style="margin-top: var(--space-xs);">{{ r.selection_reason }}</div>
+                    {% endif %}
                 </div>
 
                 <div class="run-card-actions">

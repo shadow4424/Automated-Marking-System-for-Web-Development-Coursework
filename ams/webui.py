@@ -44,6 +44,18 @@ from ams.core.db import (
     list_assignments_for_student,
     PREVIEW_STUDENT_ID,
 )
+from ams.core.attempts import (
+    create_attempt,
+    create_attempt_storage_dir,
+    filter_attempts_for_root,
+    get_attempt_by_run_reference,
+    get_student_assignment_summary,
+    list_attempts,
+    recompute_active_attempt,
+    sync_attempts_from_storage,
+    update_attempt,
+    utc_now_iso,
+)
 from ams.core.pipeline import AssessmentPipeline
 from ams.core.config import (
     ScoringMode,
@@ -65,12 +77,10 @@ from ams.io.web_storage import (
     find_submission_root,
     get_runs_root,
     list_runs,
-    load_metadata,
     load_run_info,
     safe_extract_zip,
     save_metadata,
     save_run_info,
-    store_submission_with_metadata,
     validate_file_size,
     validate_file_type,
 )
@@ -1050,88 +1060,8 @@ def _replace_existing_submissions(
     *,
     current_run_id: str,
 ) -> None:
-    replacement_keys = {key for key in submissions if key[0] and key[1]}
-    if not replacement_keys:
-        return
-
-    for run_info_path in list(runs_root.rglob("run_info.json")):
-        run_dir = run_info_path.parent
-        if run_dir.name == current_run_id:
-            continue
-
-        run_info = load_run_info(run_dir)
-        if not run_info:
-            continue
-
-        if run_info.get("mode") == "mark":
-            identity = _submission_identity(
-                str(run_info.get("student_id") or ""),
-                str(run_info.get("assignment_id") or ""),
-            )
-            if identity not in replacement_keys:
-                continue
-
-            if run_info.get("status") == "pending":
-                updated_run_info = dict(run_info)
-                updated_run_info["active"] = False
-                updated_run_info["superseded_by"] = current_run_id
-                save_run_info(run_dir, updated_run_info)
-            else:
-                shutil.rmtree(run_dir, ignore_errors=True)
-            continue
-
-        if run_info.get("mode") != "batch":
-            continue
-
-        batch_summary_path = run_dir / "batch_summary.json"
-        if not batch_summary_path.exists():
-            pending_submissions = run_info.get("pending_submissions", []) or []
-            if not isinstance(pending_submissions, list):
-                continue
-
-            remaining_pending = [
-                dict(submission)
-                for submission in pending_submissions
-                if _submission_identity(
-                    str(submission.get("student_id") or ""),
-                    str(submission.get("assignment_id") or run_info.get("assignment_id") or ""),
-                ) not in replacement_keys
-            ]
-            if len(remaining_pending) == len(pending_submissions):
-                continue
-
-            updated_run_info = dict(run_info)
-            updated_run_info["pending_submissions"] = remaining_pending
-            save_run_info(run_dir, updated_run_info)
-            continue
-
-        try:
-            batch_summary = json.loads(batch_summary_path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-
-        records = batch_summary.get("records", []) or []
-        remaining_records: list[dict] = []
-        removed_submission_ids: list[str] = []
-        for record in records:
-            identity = _submission_identity(
-                str(record.get("student_id") or ""),
-                str(record.get("assignment_id") or run_info.get("assignment_id") or ""),
-            )
-            if identity in replacement_keys:
-                submission_id = record.get("id")
-                if isinstance(submission_id, str) and submission_id:
-                    removed_submission_ids.append(submission_id)
-                continue
-            remaining_records.append(record)
-
-        if len(remaining_records) == len(records):
-            continue
-
-        for submission_id in removed_submission_ids:
-            shutil.rmtree(run_dir / "runs" / submission_id, ignore_errors=True)
-
-        _rebuild_batch_outputs(run_dir, run_info, remaining_records)
+    # Submission attempts are immutable. This compatibility shim intentionally does nothing.
+    return
 
 
 def create_app(config: Mapping[str, object] | None = None) -> Flask:
@@ -1176,6 +1106,10 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
 
     # ── RBAC: initialise database & register blueprints ───────────────
     init_db()
+    try:
+        sync_attempts_from_storage(get_runs_root(app))
+    except Exception as exc:
+        logger.warning("Attempt backfill failed during startup: %s", exc)
 
     from ams.web.auth import auth_bp, inject_user_context
     from ams.web.routes_admin import admin_bp
@@ -1208,6 +1142,12 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
 def _register_routes(app: Flask) -> None:
     from ams.web.auth import login_required, teacher_or_admin_required, get_current_user
 
+    def _assignment_submission_locked(assignment: Mapping[str, Any] | None) -> bool:
+        return bool((assignment or {}).get("marks_released"))
+
+    def _submission_lock_message() -> str:
+        return "Grades have already been released for this assignment, so new submissions are locked."
+
     @app.route("/")
     def home():
         if "user_id" in session and session.get("2fa_verified"):
@@ -1224,7 +1164,7 @@ def _register_routes(app: Flask) -> None:
     @app.route("/mark", methods=["GET", "POST"])
     @login_required
     def mark():
-        def _mark_assignment_context() -> tuple[str, str, str, list[dict], bool]:
+        def _mark_assignment_context(include_released: bool = False) -> tuple[str, str, str, list[dict], bool]:
             user_role = session.get("user_role", "")
             view_as_role = session.get("view_as_role")
             effective_role = view_as_role or user_role
@@ -1249,6 +1189,12 @@ def _register_routes(app: Flask) -> None:
             else:
                 assignments = list_assignments() if user_role == "admin" else list_assignments(teacher_id=user_id)
 
+            if not include_released:
+                assignments = [
+                    assignment
+                    for assignment in assignments
+                    if not _assignment_submission_locked(assignment)
+                ]
             return user_role, effective_role, user_id, assignments, is_preview
 
         def _render_mark_page(status_code: int = 200, selected_assignment_id: str = ""):
@@ -1280,7 +1226,7 @@ def _register_routes(app: Flask) -> None:
 
         # ── Sandbox enforcement ──────────────────────────────────────
         selected_assignment_id = request.form.get("assignment_id", "").strip()
-        user_role, effective_role, user_id, assignment_options, is_preview = _mark_assignment_context()
+        user_role, effective_role, user_id, assignment_options, is_preview = _mark_assignment_context(include_released=True)
         assignment_map = {
             str(assignment.get("assignmentID") or "").strip(): assignment
             for assignment in assignment_options
@@ -1313,6 +1259,9 @@ def _register_routes(app: Flask) -> None:
         # ── Determine submission source (ZIP upload vs GitHub) ──
         using_github = bool(github_repo)
         tmp_zip_path: Path | None = None
+        run_dir: Path | None = None
+        attempt_id = ""
+        attempt_number = 0
 
         if using_github:
             # ------ GitHub submission path ------
@@ -1325,33 +1274,6 @@ def _register_routes(app: Flask) -> None:
             if "/" not in github_repo or github_repo.count("/") != 1:
                 flash("Invalid GitHub repository format. Use owner/repo.", "error")
                 return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
-
-            try:
-                # Branch-specific zipball (Gradescope-style)
-                if github_branch:
-                    zipball_url = f"https://api.github.com/repos/{github_repo}/zipball/{github_branch}"
-                else:
-                    zipball_url = f"https://api.github.com/repos/{github_repo}/zipball"
-                gh_resp = _requests.get(
-                    zipball_url,
-                    headers={
-                        "Authorization": f"Bearer {github_token}",
-                        "Accept": "application/vnd.github+json",
-                    },
-                    stream=True,
-                    timeout=60,
-                )
-                gh_resp.raise_for_status()
-            except _requests.RequestException as exc:
-                logger.warning("GitHub zipball download failed for %s: %s", github_repo, exc)
-                flash(f"Failed to download repository from GitHub: {exc}", "error")
-                return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
-
-            # Save to a temporary ZIP file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
-                for chunk in gh_resp.iter_content(chunk_size=8192):
-                    tmp_file.write(chunk)
-                tmp_zip_path = Path(tmp_file.name)
 
             branch_suffix = f"_{github_branch}" if github_branch else ""
             original_filename = f"{github_repo.replace('/', '_')}{branch_suffix}.zip"
@@ -1366,22 +1288,9 @@ def _register_routes(app: Flask) -> None:
                 flash("Invalid file type. Please upload a .zip file.", "error")
                 return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
 
-            # Save to temp file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
-                file.save(tmp_file.name)
-                tmp_zip_path = Path(tmp_file.name)
-
             original_filename = MetadataValidator.sanitize_filename(file.filename)
 
         # ── Strict ZIP content validation (magic-byte check) ─────
-        if not validate_is_zipfile(tmp_zip_path):
-            try:
-                tmp_zip_path.unlink()
-            except Exception:
-                pass
-            flash("The uploaded file is not a valid ZIP archive.", "error")
-            return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
-        
         # Validate and convert scoring mode
         try:
             scoring_mode = ScoringMode(scoring_mode_str)
@@ -1401,6 +1310,9 @@ def _register_routes(app: Flask) -> None:
         if assignment is None:
             flash("Select a valid assignment from the list.", "error")
             return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
+        if _assignment_submission_locked(assignment):
+            flash(_submission_lock_message(), "error")
+            return _render_mark_page(status_code=403, selected_assignment_id=selected_assignment_id)
 
         if effective_role == "student":
             student_id = PREVIEW_STUDENT_ID if is_preview else user_id
@@ -1434,32 +1346,183 @@ def _register_routes(app: Flask) -> None:
         )
         
         runs_root = get_runs_root(app)
+        created_at = utc_now_iso()
+        source_type = (
+            "student_github_submission"
+            if using_github and effective_role == "student"
+            else "teacher_github_submission"
+            if using_github
+            else "student_zip_upload"
+            if effective_role == "student"
+            else "teacher_upload"
+        )
+        source_ref = github_repo if using_github else ""
+        attempt = create_attempt(
+            assignment_id=assignment_id,
+            student_id=student_id,
+            source_type=source_type,
+            source_actor_user_id=str(user_id or ""),
+            original_filename=original_filename,
+            source_ref=source_ref,
+            created_at=created_at,
+            submitted_at=created_at,
+        )
+        attempt_id = str(attempt.get("id") or "")
+        attempt_number = int(attempt.get("attempt_number") or 0)
+        run_id = str(attempt.get("run_id") or attempt_id)
+        run_dir = create_attempt_storage_dir(runs_root, assignment_id, student_id, attempt_number, attempt_id)
+        update_attempt(attempt_id, run_dir=str(run_dir))
+
+        initial_run_info = {
+            "id": run_id,
+            "mode": "mark",
+            "profile": profile,
+            "scoring_mode": scoring_mode.value,
+            "created_at": created_at,
+            "student_id": student_id,
+            "assignment_id": assignment_id,
+            "original_filename": original_filename,
+            "source": "github" if using_github else "upload",
+            "source_type": source_type,
+            "source_actor_user_id": str(user_id or ""),
+            "source_ref": source_ref,
+            "attempt_id": attempt_id,
+            "attempt_number": attempt_number,
+            "ingestion_status": "pending",
+            "pipeline_status": "pending",
+            "validity_status": "pending",
+            "status": "pending",
+        }
+        if using_github:
+            initial_run_info["github_repo"] = github_repo
+        save_run_info(run_dir, initial_run_info)
         
         try:
+            if using_github:
+                try:
+                    if github_branch:
+                        zipball_url = f"https://api.github.com/repos/{github_repo}/zipball/{github_branch}"
+                    else:
+                        zipball_url = f"https://api.github.com/repos/{github_repo}/zipball"
+                    gh_resp = _requests.get(
+                        zipball_url,
+                        headers={
+                            "Authorization": f"Bearer {github_token}",
+                            "Accept": "application/vnd.github+json",
+                        },
+                        stream=True,
+                        timeout=60,
+                    )
+                    gh_resp.raise_for_status()
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
+                        for chunk in gh_resp.iter_content(chunk_size=8192):
+                            tmp_file.write(chunk)
+                        tmp_zip_path = Path(tmp_file.name)
+                except _requests.RequestException as exc:
+                    error_message = f"Failed to download repository from GitHub: {exc}"
+                    logger.warning("GitHub zipball download failed for %s: %s", github_repo, exc)
+                    failed_info = dict(
+                        initial_run_info,
+                        status="failed",
+                        ingestion_status="failed",
+                        pipeline_status="failed",
+                        validity_status="invalid",
+                        error=error_message,
+                    )
+                    save_run_info(run_dir, failed_info)
+                    update_attempt(
+                        attempt_id,
+                        ingestion_status="failed",
+                        pipeline_status="failed",
+                        validity_status="invalid",
+                        error_message=error_message,
+                    )
+                    recompute_active_attempt(runs_root, assignment_id, student_id)
+                    flash(error_message, "error")
+                    return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
+            else:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp_file:
+                    file.save(tmp_file.name)
+                    tmp_zip_path = Path(tmp_file.name)
+
             # Validate file size
             valid_size, size_error = validate_file_size(tmp_zip_path, MAX_UPLOAD_MB)
             if not valid_size:
-                flash(size_error or "File size exceeds maximum limit.")
+                error_message = size_error or "File size exceeds maximum limit."
+                failed_info = dict(
+                    initial_run_info,
+                    status="failed",
+                    ingestion_status="failed",
+                    pipeline_status="failed",
+                    validity_status="invalid",
+                    error=error_message,
+                )
+                save_run_info(run_dir, failed_info)
+                update_attempt(
+                    attempt_id,
+                    ingestion_status="failed",
+                    pipeline_status="failed",
+                    validity_status="invalid",
+                    error_message=error_message,
+                )
+                recompute_active_attempt(runs_root, assignment_id, student_id)
+                flash(error_message)
                 return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
             
-            # Store submission with metadata
-            run_id, run_dir = store_submission_with_metadata(
-                runs_root=runs_root,
-                mode="mark",
-                profile=profile,
-                metadata=metadata,
-                zip_file=tmp_zip_path,
-                versioned=True,
-            )
-            
-            # Extract for processing
+            if not validate_is_zipfile(tmp_zip_path):
+                failed_info = dict(
+                    initial_run_info,
+                    status="failed",
+                    ingestion_status="failed",
+                    pipeline_status="failed",
+                    validity_status="invalid",
+                    error="The uploaded file is not a valid ZIP archive.",
+                )
+                save_run_info(run_dir, failed_info)
+                update_attempt(
+                    attempt_id,
+                    ingestion_status="failed",
+                    pipeline_status="failed",
+                    validity_status="invalid",
+                    error_message="The uploaded file is not a valid ZIP archive.",
+                )
+                recompute_active_attempt(runs_root, assignment_id, student_id)
+                flash("The uploaded file is not a valid ZIP archive.", "error")
+                return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
+
             upload_zip = run_dir / original_filename
+            shutil.copy2(tmp_zip_path, upload_zip)
+            update_attempt(attempt_id, ingestion_status="stored")
+
+            # Extract for processing
             extracted = run_dir / "uploaded_extract"
             extracted.mkdir(parents=True, exist_ok=True)
-            safe_extract_zip(upload_zip, extracted, max_size_mb=MAX_UPLOAD_MB)
+            try:
+                safe_extract_zip(upload_zip, extracted, max_size_mb=MAX_UPLOAD_MB)
+            except Exception as exc:
+                failed_info = dict(
+                    initial_run_info,
+                    status="failed",
+                    ingestion_status="failed",
+                    pipeline_status="failed",
+                    validity_status="invalid",
+                    error=str(exc),
+                )
+                save_run_info(run_dir, failed_info)
+                update_attempt(
+                    attempt_id,
+                    ingestion_status="failed",
+                    pipeline_status="failed",
+                    validity_status="invalid",
+                    error_message=str(exc),
+                )
+                recompute_active_attempt(runs_root, assignment_id, student_id)
+                flash(f"Failed to extract ZIP archive: {exc}", "error")
+                return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
             
             # ── Find true root of submission (bypassing macOS folders or zip wrappers)
             submission_root = find_submission_root(extracted)
+            update_attempt(attempt_id, ingestion_status="completed")
             
             # ── Zero-content guard ───────────────────────────────────────
             # Reject the submission instantly if there are zero relevant web files
@@ -1470,12 +1533,24 @@ def _register_routes(app: Flask) -> None:
             )
 
             if not has_web_files:
-                try:
-                    shutil.rmtree(run_dir, ignore_errors=True)
-                    if tmp_zip_path.exists():
-                        tmp_zip_path.unlink()
-                except Exception:
-                    pass
+                error_message = "No web development files (HTML, CSS, JS, PHP, SQL) were found in this repository. Please select the correct repository."
+                failed_info = dict(
+                    initial_run_info,
+                    status="failed",
+                    ingestion_status="completed",
+                    pipeline_status="failed",
+                    validity_status="invalid",
+                    error=error_message,
+                )
+                save_run_info(run_dir, failed_info)
+                update_attempt(
+                    attempt_id,
+                    ingestion_status="completed",
+                    pipeline_status="failed",
+                    validity_status="invalid",
+                    error_message=error_message,
+                )
+                recompute_active_attempt(runs_root, assignment_id, student_id)
                 flash("No web development files (HTML, CSS, JS, PHP, SQL) were found in this repository. Please select the correct repository.", "error")
                 return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
 
@@ -1499,27 +1574,15 @@ def _register_routes(app: Flask) -> None:
             # Heavy pipeline work is submitted to the thread pool so the
             # HTTP request returns immediately with a job ID.
             meta_dict = metadata.to_dict()
-
-            # Write run_info immediately so the run appears in history
-            initial_run_info = {
-                "id": run_id,
-                "mode": "mark",
-                "profile": profile,
-                "scoring_mode": scoring_mode.value,
-                "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                "student_id": student_id,
-                "assignment_id": assignment_id,
-                "original_filename": original_filename,
-                "source": "github" if using_github else "upload",
-                "status": "pending",
-            }
-            if using_github:
-                initial_run_info["github_repo"] = github_repo
-            save_run_info(run_dir, initial_run_info)
-            _replace_existing_submissions(
-                runs_root,
-                [(assignment_id, student_id)],
-                current_run_id=run_id,
+            meta_dict.update(
+                {
+                    "attempt_id": attempt_id,
+                    "attempt_number": attempt_number,
+                    "source_type": source_type,
+                    "source_actor_user_id": str(user_id or ""),
+                    "created_at": created_at,
+                    "submitted_at": created_at,
+                }
             )
 
             def _run_mark_job() -> dict:
@@ -1533,6 +1596,15 @@ def _register_routes(app: Flask) -> None:
                     )
                     report_data = json.loads(report_path.read_text(encoding="utf-8"))
                     review_flags = extract_review_flags_from_report(report_data)
+                    score_evidence = report_data.get("score_evidence", {}) or {}
+                    confidence = (
+                        str((score_evidence.get("confidence", {}) or {}).get("level") or "")
+                        or str((report_data.get("summary", {}) or {}).get("confidence") or "")
+                    )
+                    manual_review_required = bool((score_evidence.get("review", {}) or {}).get("recommended"))
+                    llm_error_flagged = bool(review_flags.get("llm_error_flagged"))
+                    pipeline_status = "failed" if llm_error_flagged else "completed"
+                    validity_status = "invalid" if llm_error_flagged else "valid"
                     run_info = {
                         "id": run_id,
                         "mode": "mark",
@@ -1545,10 +1617,20 @@ def _register_routes(app: Flask) -> None:
                         "assignment_id": assignment_id,
                         "original_filename": original_filename,
                         "source": "github" if using_github else "upload",
-                        "status": "llm_error" if review_flags.get("llm_error_flagged") else "completed",
+                        "source_type": source_type,
+                        "source_actor_user_id": str(user_id or ""),
+                        "source_ref": source_ref,
+                        "attempt_id": attempt_id,
+                        "attempt_number": attempt_number,
+                        "ingestion_status": "completed",
+                        "pipeline_status": pipeline_status,
+                        "validity_status": validity_status,
+                        "confidence": confidence,
+                        "manual_review_required": manual_review_required,
+                        "status": "llm_error" if llm_error_flagged else "completed",
                         "threat_flagged": bool(review_flags.get("threat_flagged")),
                         "threat_count": int(review_flags.get("threat_count") or 0),
-                        "llm_error_flagged": bool(review_flags.get("llm_error_flagged")),
+                        "llm_error_flagged": llm_error_flagged,
                         "llm_error_message": review_flags.get("llm_error_message"),
                         "llm_error_messages": list(review_flags.get("llm_error_messages") or []),
                     }
@@ -1556,10 +1638,39 @@ def _register_routes(app: Flask) -> None:
                         run_info["github_repo"] = github_repo
                     save_run_info(run_dir, run_info)
                     _write_run_index_mark(run_dir, run_info, report_path)
+                    update_attempt(
+                        attempt_id,
+                        run_dir=str(run_dir),
+                        report_path=str(report_path),
+                        ingestion_status="completed",
+                        pipeline_status=pipeline_status,
+                        validity_status=validity_status,
+                        overall_score=(report_data.get("scores", {}) or {}).get("overall"),
+                        confidence=confidence,
+                        manual_review_required=manual_review_required,
+                        error_message=str(review_flags.get("llm_error_message") or ""),
+                    )
+                    recompute_active_attempt(runs_root, assignment_id, student_id)
                     return {"run_id": run_id}
                 except Exception as exc:
-                    failed_info = dict(initial_run_info, status="failed", error=str(exc))
+                    failed_info = dict(
+                        initial_run_info,
+                        status="failed",
+                        ingestion_status="completed",
+                        pipeline_status="failed",
+                        validity_status="invalid",
+                        error=str(exc),
+                    )
                     save_run_info(run_dir, failed_info)
+                    update_attempt(
+                        attempt_id,
+                        run_dir=str(run_dir),
+                        ingestion_status="completed",
+                        pipeline_status="failed",
+                        validity_status="invalid",
+                        error_message=str(exc),
+                    )
+                    recompute_active_attempt(runs_root, assignment_id, student_id)
                     raise
 
             job_id = job_manager.submit_job("single_mark", _run_mark_job)
@@ -1567,17 +1678,26 @@ def _register_routes(app: Flask) -> None:
         finally:
             # Clean up temporary file
             try:
-                tmp_zip_path.unlink()
+                if tmp_zip_path is not None:
+                    tmp_zip_path.unlink()
             except Exception:
                 pass
 
     @app.route("/batch", methods=["GET", "POST"])
     @teacher_or_admin_required
     def batch():
-        def _available_batch_assignments() -> list[dict]:
+        def _available_batch_assignments(include_released: bool = False) -> list[dict]:
             if session.get("user_role") == "admin":
-                return list_assignments()
-            return list_assignments(teacher_id=session.get("user_id"))
+                assignments = list_assignments()
+            else:
+                assignments = list_assignments(teacher_id=session.get("user_id"))
+            if not include_released:
+                assignments = [
+                    assignment
+                    for assignment in assignments
+                    if not _assignment_submission_locked(assignment)
+                ]
+            return assignments
 
         assignment_options = _available_batch_assignments()
         selected_assignment_id = request.form.get("assignment_id", "").strip() if request.method == "POST" else ""
@@ -1618,9 +1738,10 @@ def _register_routes(app: Flask) -> None:
         scoring_mode = ScoringMode("static_plus_llm")  # Always use static + LLM
         github_connected = bool(session.get("github_token"))
         github_user = session.get("github_user", "")
+        assignment_options_all = _available_batch_assignments(include_released=True)
         assignment_map = {
             str(assignment.get("assignmentID") or "").strip(): assignment
-            for assignment in assignment_options
+            for assignment in assignment_options_all
         }
         
         # ── Determine submission source (ZIP upload vs GitHub) ──
@@ -1754,6 +1875,20 @@ def _register_routes(app: Flask) -> None:
                 github_connected=github_connected,
                 github_user=github_user,
             ), 400
+        if _assignment_submission_locked(assignment):
+            if tmp_zip_path and tmp_zip_path.exists():
+                try:
+                    tmp_zip_path.unlink()
+                except Exception:
+                    pass
+            flash(_submission_lock_message(), "error")
+            return render_template(
+                "batch.html",
+                assignments=assignment_options,
+                selected_assignment_id=selected_assignment_id,
+                github_connected=github_connected,
+                github_user=github_user,
+            ), 403
         profile = str(assignment.get("profile") or "frontend_interactive").strip()
         
         runs_root = get_runs_root(app)
@@ -1923,7 +2058,7 @@ def _register_routes(app: Flask) -> None:
     @login_required
     def runs():
         runs_root = get_runs_root(app)
-        all_runs = list_runs(runs_root)
+        all_runs = list_runs(runs_root, only_active=False)
         mode_filter = request.args.get("mode") or ""
         profile_filter = request.args.get("profile") or ""
         query = request.args.get("q") or ""
@@ -2178,7 +2313,10 @@ def _register_routes(app: Flask) -> None:
             component: ((by_component.get(component) or {}).get("score"))
             for component in ("html", "css", "js", "php", "sql", "api")
         }
-        record["status"] = "llm_error" if review_flags.get("llm_error_flagged") else "ok"
+        llm_error_flagged = bool(review_flags.get("llm_error_flagged"))
+        record["status"] = "llm_error" if llm_error_flagged else "ok"
+        record["pipeline_status"] = "failed" if llm_error_flagged else "completed"
+        record["validity_status"] = "invalid" if llm_error_flagged else "valid"
         record["rerun_pending"] = False
         record["invalid"] = False
         record.pop("error", None)
@@ -2188,7 +2326,7 @@ def _register_routes(app: Flask) -> None:
             record["threat_count"] = int(review_flags.get("threat_count") or 0)
         else:
             record.pop("threat_count", None)
-        record["llm_error_flagged"] = bool(review_flags.get("llm_error_flagged"))
+        record["llm_error_flagged"] = llm_error_flagged
         record["llm_error_message"] = review_flags.get("llm_error_message")
         record["llm_error_messages"] = list(review_flags.get("llm_error_messages") or [])
 
@@ -2221,16 +2359,19 @@ def _register_routes(app: Flask) -> None:
             raise
         report_data = json.loads(report_path.read_text(encoding="utf-8"))
         review_flags = extract_review_flags_from_report(report_data)
+        llm_error_flagged = bool(review_flags.get("llm_error_flagged"))
         updated_run_info = dict(run_info)
         updated_run_info["report"] = report_path.name
         updated_run_info["summary"] = "summary.txt"
-        updated_run_info["status"] = "llm_error" if review_flags.get("llm_error_flagged") else "completed"
+        updated_run_info["status"] = "llm_error" if llm_error_flagged else "completed"
+        updated_run_info["pipeline_status"] = "failed" if llm_error_flagged else "completed"
+        updated_run_info["validity_status"] = "invalid" if llm_error_flagged else "valid"
         updated_run_info["threat_flagged"] = bool(review_flags.get("threat_flagged"))
         if review_flags.get("threat_count"):
             updated_run_info["threat_count"] = int(review_flags.get("threat_count") or 0)
         else:
             updated_run_info.pop("threat_count", None)
-        updated_run_info["llm_error_flagged"] = bool(review_flags.get("llm_error_flagged"))
+        updated_run_info["llm_error_flagged"] = llm_error_flagged
         updated_run_info["llm_error_message"] = review_flags.get("llm_error_message")
         updated_run_info["llm_error_messages"] = list(review_flags.get("llm_error_messages") or [])
         updated_run_info["last_rerun_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -2538,6 +2679,7 @@ def _register_routes(app: Flask) -> None:
     @login_required
     def run_detail(run_id: str):
         runs_root = get_runs_root(app)
+        sync_attempts_from_storage(runs_root)
         run_dir = find_run_by_id(runs_root, run_id)
         if run_dir is None:
             return "Run not found", 404
@@ -2568,7 +2710,44 @@ def _register_routes(app: Flask) -> None:
         assignment = get_assignment(assignment_id) if assignment_id else None
         marks_released = assignment["marks_released"] if assignment else True  # default True for non-assignment runs
 
-        context = {"run": run_info, "run_id": run_id, "marks_released": marks_released}
+        attempt = get_attempt_by_run_reference(run_id, runs_root=runs_root)
+        attempt_history = []
+        attempt_summary = None
+        if assignment_id and run_info.get("student_id"):
+            attempt_history = filter_attempts_for_root(
+                list_attempts(
+                    assignment_id=str(assignment_id),
+                    student_id=str(run_info.get("student_id") or ""),
+                    newest_first=True,
+                ),
+                runs_root,
+            )
+            attempt_summary = get_student_assignment_summary(
+                str(assignment_id),
+                str(run_info.get("student_id") or ""),
+            )
+        if attempt:
+            run_info = dict(run_info, **{
+                "attempt_id": attempt.get("id"),
+                "attempt_number": attempt.get("attempt_number"),
+                "source_type": attempt.get("source_type"),
+                "source_actor_user_id": attempt.get("source_actor_user_id"),
+                "submitted_at": attempt.get("submitted_at"),
+                "validity_status": attempt.get("validity_status"),
+                "confidence": attempt.get("confidence"),
+                "manual_review_required": bool(attempt.get("manual_review_required")),
+                "is_active": bool(attempt.get("is_active")),
+                "selection_reason": attempt.get("selection_reason"),
+            })
+
+        context = {
+            "run": run_info,
+            "run_id": run_id,
+            "marks_released": marks_released,
+            "attempt": attempt,
+            "attempt_history": attempt_history,
+            "attempt_summary": attempt_summary,
+        }
         if run_info.get("mode") == "mark":
             report_path = run_dir / run_info.get("report", "report.json")
             run_status = str(run_info.get("status") or "").strip().lower()
@@ -2726,6 +2905,7 @@ def _register_routes(app: Flask) -> None:
     def batch_submission_view(run_id: str, submission_id: str):
         """View a batch submission's report in the browser (like a single submission)."""
         runs_root = get_runs_root(app)
+        sync_attempts_from_storage(runs_root)
         run_dir = find_run_by_id(runs_root, run_id)
         if run_dir is None:
             return "Run not found", 404
@@ -2773,6 +2953,7 @@ def _register_routes(app: Flask) -> None:
         #  we need just the parsed student part e.g. "testStudent")
         real_student_id = submission_id  # fallback
         real_assignment_id = run_info.get("assignment_id", "")
+        attempt = get_attempt_by_run_reference(run_id, submission_id, runs_root=runs_root)
 
         # Try report metadata first (most reliable — set during pipeline run)
         report_meta = (report or {}).get("metadata", {}).get("submission_metadata", {})
@@ -2800,6 +2981,21 @@ def _register_routes(app: Flask) -> None:
 
         assignment = get_assignment(real_assignment_id) if real_assignment_id else None
         marks_released = assignment["marks_released"] if assignment else True
+        attempt_history = []
+        attempt_summary = None
+        if real_assignment_id and real_student_id:
+            attempt_history = filter_attempts_for_root(
+                list_attempts(
+                    assignment_id=str(real_assignment_id),
+                    student_id=str(real_student_id),
+                    newest_first=True,
+                ),
+                runs_root,
+            )
+            attempt_summary = get_student_assignment_summary(
+                str(real_assignment_id),
+                str(real_student_id),
+            )
         back_url = (
             url_for("student.coursework")
             if user and user["role"] == "student"
@@ -2822,6 +3018,21 @@ def _register_routes(app: Flask) -> None:
             "llm_error_message": (record or {}).get("llm_error_message"),
             "llm_error_messages": list((record or {}).get("llm_error_messages") or []),
         }
+        if attempt:
+            submission_run_info.update(
+                {
+                    "attempt_id": attempt.get("id"),
+                    "attempt_number": attempt.get("attempt_number"),
+                    "source_type": attempt.get("source_type"),
+                    "source_actor_user_id": attempt.get("source_actor_user_id"),
+                    "submitted_at": attempt.get("submitted_at"),
+                    "validity_status": attempt.get("validity_status"),
+                    "confidence": attempt.get("confidence"),
+                    "manual_review_required": bool(attempt.get("manual_review_required")),
+                    "is_active": bool(attempt.get("is_active")),
+                    "selection_reason": attempt.get("selection_reason"),
+                }
+            )
 
         # submission_dir doubles as the "run_dir" for threat file loading
         # because batch sub-runs store their files under runs/<id>/submission/
@@ -2837,6 +3048,9 @@ def _register_routes(app: Flask) -> None:
             threat_file_contents=_load_threat_file_contents(
                 (detail_report or {}).get("findings", []), submission_dir
             ),
+            attempt=attempt,
+            attempt_history=attempt_history,
+            attempt_summary=attempt_summary,
             batch_submission_id=submission_id,  # Flag to show back button
             back_url=back_url,
         )
@@ -3512,6 +3726,11 @@ def _write_run_index_mark(run_dir: Path, run_info: dict, report_path: Path) -> N
         "assignment_id": submission_meta.get("assignment_id") or run_info.get("assignment_id"),
         "original_filename": submission_meta.get("original_filename") or meta.get("original_filename") or run_info.get("original_filename"),
         "upload_timestamp": submission_meta.get("timestamp") or run_info.get("created_at"),
+        "attempt_id": submission_meta.get("attempt_id") or run_info.get("attempt_id"),
+        "attempt_number": submission_meta.get("attempt_number") or run_info.get("attempt_number"),
+        "source_type": submission_meta.get("source_type") or run_info.get("source_type"),
+        "validity_status": submission_meta.get("validity_status") or run_info.get("validity_status"),
+        "is_active": submission_meta.get("is_active") if submission_meta.get("is_active") is not None else run_info.get("is_active"),
         "threat_count": int(review_flags.get("threat_count") or 0),
         "threat_flagged": bool(review_flags.get("threat_flagged")),
         "llm_error_flagged": bool(review_flags.get("llm_error_flagged")),
@@ -3526,6 +3745,11 @@ def _write_run_index_mark(run_dir: Path, run_info: dict, report_path: Path) -> N
         "created_at": run_info.get("created_at"),
         "overall": report.get("scores", {}).get("overall"),
         "status": "llm_error" if review_flags.get("llm_error_flagged") else "ok",
+        "attempt_id": run_info.get("attempt_id"),
+        "attempt_number": run_info.get("attempt_number"),
+        "source_type": run_info.get("source_type"),
+        "validity_status": run_info.get("validity_status"),
+        "is_active": run_info.get("is_active"),
         "submissions": [sub_entry],
     }
     (run_dir / "run_index.json").write_text(json.dumps(index, indent=2), encoding="utf-8")
@@ -3549,6 +3773,11 @@ def _write_run_index_batch(run_dir: Path, run_info: dict) -> None:
             "assignment_id": rec.get("assignment_id"),
             "original_filename": rec.get("original_filename"),
             "upload_timestamp": rec.get("upload_timestamp"),
+            "attempt_id": rec.get("attempt_id"),
+            "attempt_number": rec.get("attempt_number"),
+            "source_type": rec.get("source_type"),
+            "validity_status": rec.get("validity_status"),
+            "is_active": rec.get("is_active"),
             "overall": rec.get("overall"),
             "components": rec.get("components") or {},
             "threat_count": rec.get("threat_count"),

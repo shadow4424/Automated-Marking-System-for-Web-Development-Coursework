@@ -340,6 +340,10 @@
 {% set can_rerun_submission = can_manage_submission and run_status != 'pending' and (batch_submission_id or run.mode != 'batch') %}
 {% set can_download_json = report and (batch_submission_id or run.mode != 'batch') %}
 {% set can_view_assignment_analytics = viewer_role == 'student' and run.assignment_id and marks_released %}
+{% set current_attempt = attempt|default({}, true) %}
+{% set attempt_history_list = attempt_history|default([], true) %}
+{% set active_attempt_id = attempt_summary.active_attempt_id|default('', true) if attempt_summary else '' %}
+{% set latest_attempt_id = attempt_summary.latest_attempt_id|default('', true) if attempt_summary else '' %}
 
 <div class="submission-detail-shell">
     <section class="page-hero page-hero--split">
@@ -355,8 +359,17 @@
             <div class="page-status-row">
                 <span class="badge {{ marks_badge }}">{{ 'Marks released' if marks_released else 'Marks withheld' }}</span>
                 <span class="badge badge-secondary">{{ (detail.assessment_context.profile|default(run.profile|default('unknown'), true))|replace('_', ' ')|title }}</span>
+                {% if current_attempt.attempt_number %}<span class="badge badge-secondary">Attempt {{ current_attempt.attempt_number }}</span>{% endif %}
+                {% if run.is_active %}<span class="badge badge-success">Active attempt</span>{% elif current_attempt.attempt_number %}<span class="badge badge-secondary">History attempt</span>{% endif %}
                 {% if run_status == 'pending' %}<span class="badge badge-warning">Rerun queued</span>{% elif run_status in ['failed', 'error'] %}<span class="badge badge-danger">Latest rerun failed</span>{% elif run.llm_error_flagged %}<span class="badge badge-warning">Manual review required</span>{% endif %}
             </div>
+
+            {% if attempt_summary and attempt_summary.selection_reason and (attempt_history_list|length > 1 or not run.is_active) %}
+            <div class="callout-card callout-card--info" style="margin-top: var(--space-md);">
+                <div class="callout-title">{% if run.is_active %}Current selection{% else %}Attempt status{% endif %}</div>
+                <p class="callout-text">{{ attempt_summary.selection_reason }}</p>
+            </div>
+            {% endif %}
 
             {% if not hide_grades %}
             <div class="submission-detail-banner">
@@ -399,7 +412,33 @@
                 <div class="info-item"><span class="info-item-label">Assignment</span><span class="info-item-value">{{ run.assignment_id|default('Standalone') }}</span></div>
                 <div class="info-item"><span class="info-item-label">Profile</span><span class="info-item-value">{{ detail.assessment_context.profile|default(run.profile|default('Unknown'), true)|replace('_', ' ')|title }}</span></div>
                 <div class="info-item"><span class="info-item-label">Submitted</span><span class="info-item-value">{{ submitted_label }}</span></div>
+                {% if current_attempt.source_type %}<div class="info-item"><span class="info-item-label">Source</span><span class="info-item-value">{{ current_attempt.source_type|replace('_', ' ')|title }}</span></div>{% endif %}
+                {% if current_attempt.validity_status %}<div class="info-item"><span class="info-item-label">Validity</span><span class="info-item-value">{{ current_attempt.validity_status|title }}</span></div>{% endif %}
             </div>
+            {% if attempt_history_list %}
+            <div style="margin-top: var(--space-lg);">
+                <div class="submission-card-title">Submission history</div>
+                <div class="submission-system-list">
+                    {% for item in attempt_history_list[:6] %}
+                    {% set item_url = url_for('batch_submission_view', run_id=item.run_id, submission_id=item.batch_submission_id) if item.batch_submission_id else url_for('run_detail', run_id=item.run_id) %}
+                    <article class="submission-system-item">
+                        <div class="submission-card-head">
+                            <div>
+                                <h4 class="submission-card-title"><a href="{{ item_url }}" class="table-title-link">Attempt {{ item.attempt_number }}</a></h4>
+                                <div class="submission-secondary-id">{{ item.submitted_at|format_submission_datetime }}</div>
+                            </div>
+                            <div class="page-status-row">
+                                {% if item.id == active_attempt_id %}<span class="badge badge-success">Active</span>{% endif %}
+                                {% if item.id == latest_attempt_id %}<span class="badge badge-secondary">Latest</span>{% endif %}
+                                <span class="badge {% if item.validity_status == 'valid' %}badge-success{% elif item.validity_status == 'pending' %}badge-warning{% else %}badge-danger{% endif %}">{{ item.validity_status|title }}</span>
+                            </div>
+                        </div>
+                        <p class="submission-detail-note">{{ item.source_type|replace('_', ' ')|title }}{% if item.overall_score is not none %} • {{ (item.overall_score * 100)|round|int }}%{% endif %}</p>
+                    </article>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
         </aside>
     </section>
 

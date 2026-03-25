@@ -69,6 +69,9 @@ def build_submission_report_pdf(report: Mapping[str, Any], submission_id: str) -
         (
             "Metadata",
             [
+                ("Attempt Number", meta.get("attempt_number")),
+                ("Active Attempt", _format_bool(meta.get("is_active"))),
+                ("Submission Source", meta.get("source_type")),
                 ("Student ID", meta.get("student_id")),
                 ("Assignment ID", meta.get("assignment_id")),
                 ("Original Filename", meta.get("original_filename")),

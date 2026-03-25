@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Optional, Tuple, List
 from zipfile import ZipFile
 
+from ams.core.attempts import attempt_maps, sync_attempts_from_storage
 from ams.io.metadata import MetadataValidator, SubmissionMetadata
 
 
@@ -310,6 +311,22 @@ def extract_review_flags_from_report(report: Mapping[str, Any]) -> dict[str, obj
 
 
 def _submission_is_active_candidate(run: Mapping[str, object], submission: Mapping[str, object] | None = None) -> bool:
+    if submission is not None and (
+        "attempt_id" in submission or "is_active" in submission or "validity_status" in submission
+    ):
+        validity_status = str(submission.get("validity_status") or "").strip().lower()
+        if validity_status == "valid":
+            return bool(submission.get("is_active"))
+        if validity_status in {"invalid", "pending"}:
+            return False
+        return bool(submission.get("is_active"))
+    if submission is None and ("attempt_id" in run or "is_active" in run or "validity_status" in run):
+        validity_status = str(run.get("validity_status") or "").strip().lower()
+        if validity_status == "valid":
+            return bool(run.get("is_active"))
+        if validity_status in {"invalid", "pending"}:
+            return False
+        return bool(run.get("is_active"))
     if submission is not None:
         if submission.get("invalid") is True:
             return False
@@ -328,7 +345,44 @@ def _assignment_ids_from_submissions(run: Mapping[str, object]) -> list[str]:
     )
 
 
-def _filter_latest_submissions(runs: list[dict]) -> list[dict]:
+def _apply_attempt_metadata(target: dict[str, object], attempt: Mapping[str, object]) -> None:
+    target["attempt_id"] = attempt.get("id")
+    target["attempt_number"] = attempt.get("attempt_number")
+    target["source_type"] = attempt.get("source_type")
+    target["source_actor_user_id"] = attempt.get("source_actor_user_id")
+    target["submitted_at"] = attempt.get("submitted_at")
+    target["ingestion_status"] = attempt.get("ingestion_status")
+    target["pipeline_status"] = attempt.get("pipeline_status")
+    target["validity_status"] = attempt.get("validity_status")
+    target["confidence"] = attempt.get("confidence")
+    target["manual_review_required"] = bool(attempt.get("manual_review_required"))
+    target["is_active"] = bool(attempt.get("is_active"))
+    target["selection_reason"] = attempt.get("selection_reason")
+    if attempt.get("overall_score") is not None and target.get("overall") is None:
+        target["overall"] = attempt.get("overall_score")
+    if attempt.get("report_path") and not target.get("report_path"):
+        target["report_path"] = attempt.get("report_path")
+    if attempt.get("batch_run_id"):
+        target["batch_run_id"] = attempt.get("batch_run_id")
+    if attempt.get("batch_submission_id"):
+        target["batch_submission_id"] = attempt.get("batch_submission_id")
+
+
+def _filter_latest_submissions(
+    runs: list[dict],
+    *,
+    only_active: bool,
+) -> list[dict]:
+    if not only_active:
+        runs.sort(
+            key=lambda r: (
+                str(r.get("created_at") or ""),
+                str(r.get("id") or ""),
+            ),
+            reverse=True,
+        )
+        return runs
+
     latest_by_identity: dict[tuple[str, str], tuple[tuple[str, str, str], tuple[str, str | None]]] = {}
 
     for run in runs:
@@ -402,20 +456,22 @@ def _filter_latest_submissions(runs: list[dict]) -> list[dict]:
     return filtered_runs
 
 
-def list_runs(runs_root: Path) -> list[dict]:
+def list_runs(runs_root: Path, only_active: bool = True) -> list[dict]:
     """List all runs, searching recursively through the nested directory structure."""
     runs: list[dict] = []
     if not runs_root.exists():
         return runs
-    
+    sync_attempts_from_storage(runs_root)
+    mark_attempt_map, batch_attempt_map = attempt_maps(runs_root)
+
     # Search recursively for run_info.json files (marker for a run directory)
     for run_info_path in runs_root.rglob("run_info.json"):
         run_dir = run_info_path.parent
         info = load_run_info(run_dir)
         if info:
-            if info.get("active") is False:
+            if only_active and info.get("active") is False:
                 continue
-            info["id"] = run_dir.name
+            info["id"] = str(info.get("id") or run_dir.name)
             info["_run_dir"] = str(run_dir)  # Store full path for lookups
             batch_summary_data: dict | None = None
             
@@ -510,6 +566,13 @@ def list_runs(runs_root: Path) -> list[dict]:
                 pending_submissions = info.get("pending_submissions", []) or []
                 if isinstance(pending_submissions, list):
                     info["submissions"] = [dict(sub) for sub in pending_submissions]
+
+            if info.get("mode") == "batch":
+                info["submissions"] = [
+                    dict(submission)
+                    for submission in list(info.get("submissions", []) or [])
+                    if not str((submission or {}).get("materialized_run_id") or "").strip()
+                ]
             
             # Ensure every submission entry has usable student_name and student_id
             for sub in info.get("submissions", []):
@@ -519,6 +582,9 @@ def list_runs(runs_root: Path) -> list[dict]:
                     sub["student_id"] = sub.get("student_name") or "Unknown"
                 if sub.get("invalid") is None:
                     sub["invalid"] = False
+                attempt = batch_attempt_map.get((str(info.get("id") or ""), str(sub.get("submission_id") or "")))
+                if attempt:
+                    _apply_attempt_metadata(sub, attempt)
 
             if info.get("mode") == "batch" and batch_summary_data is not None and info.get("submissions"):
                 summary_by_id = {
@@ -563,10 +629,17 @@ def list_runs(runs_root: Path) -> list[dict]:
                 info["_assignment_ids"] = assignment_ids
                 if len(assignment_ids) == 1 and str(info.get("assignment_id") or "").strip() not in assignment_ids:
                     info["assignment_id"] = assignment_ids[0]
+            if info.get("mode") == "mark":
+                attempt = mark_attempt_map.get(str(info.get("id") or ""))
+                if attempt:
+                    _apply_attempt_metadata(info, attempt)
+                    submissions = list(info.get("submissions", []) or [])
+                    if submissions:
+                        _apply_attempt_metadata(submissions[0], attempt)
             runs.append(info)
     
     # Sort by run id (timestamp-based) descending
-    return _filter_latest_submissions(runs)
+    return _filter_latest_submissions(runs, only_active=only_active)
 
 
 def find_run_by_id(runs_root: Path, run_id: str) -> Optional[Path]:
@@ -591,6 +664,12 @@ def find_run_by_id(runs_root: Path, run_id: str) -> Optional[Path]:
     for run_info_path in runs_root.rglob("run_info.json"):
         run_dir = run_info_path.parent
         if run_dir.name == run_id:
+            return run_dir
+        try:
+            run_info = json.loads(run_info_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if str(run_info.get("id") or "") == str(run_id):
             return run_dir
     
     return None

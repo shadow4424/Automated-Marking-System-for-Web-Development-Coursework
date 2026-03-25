@@ -328,12 +328,15 @@ def _process_one_submission(
         comps = scores.get("by_component", {}) or {}
         record["components"] = {k: comps.get(k, {}).get("score") for k in _empty_components().keys()}
         review_flags = extract_review_flags_from_report(report_data)
-        record["status"] = "llm_error" if review_flags.get("llm_error_flagged") else "ok"
+        llm_error_flagged = bool(review_flags.get("llm_error_flagged"))
+        record["status"] = "llm_error" if llm_error_flagged else "ok"
+        record["pipeline_status"] = "failed" if llm_error_flagged else "completed"
+        record["validity_status"] = "invalid" if llm_error_flagged else "valid"
         if review_flags.get("threat_count"):
             record["threat_count"] = int(review_flags.get("threat_count") or 0)
         if review_flags.get("threat_flagged"):
             record["threat_flagged"] = True
-        if review_flags.get("llm_error_flagged"):
+        if llm_error_flagged:
             record["llm_error_flagged"] = True
             record["llm_error_message"] = review_flags.get("llm_error_message")
             record["llm_error_messages"] = list(review_flags.get("llm_error_messages") or [])

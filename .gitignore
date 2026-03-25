@@ -36,3 +36,7 @@ ams/cache.db
 # VS Code
 .vscode/mcp.json
 ams/ams_analytics/test_assignment1_analytics.json
+
+# Planning artifacts
+.planning/
+.claude/
