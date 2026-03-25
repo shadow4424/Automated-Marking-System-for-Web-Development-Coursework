@@ -2381,6 +2381,12 @@ def _register_routes(app: Flask) -> None:
         updated_run_info.pop("threat_override_at", None)
         save_run_info(run_dir, updated_run_info)
         _write_run_index_mark(run_dir, updated_run_info, report_path)
+        runs_root = get_runs_root(app)
+        assignment_id = str(updated_run_info.get("assignment_id") or "")
+        student_id = str(updated_run_info.get("student_id") or "")
+        if assignment_id and student_id:
+            sync_attempts_from_storage(runs_root)
+            recompute_active_attempt(runs_root, assignment_id, student_id)
         return updated_run_info
 
     def _rerun_batch_submission(run_dir: Path, run_info: Mapping[str, object], submission_id: str) -> dict:
@@ -2433,6 +2439,12 @@ def _register_routes(app: Flask) -> None:
         updated_run_info.pop("error", None)
         updated_run_info = _persist_batch_outputs(run_dir, updated_run_info, records)
         save_run_info(run_dir, updated_run_info)
+        runs_root = get_runs_root(app)
+        assignment_id = str(target.get("assignment_id") or run_info.get("assignment_id") or "")
+        student_id = str(target.get("student_id") or "")
+        if assignment_id and student_id:
+            sync_attempts_from_storage(runs_root)
+            recompute_active_attempt(runs_root, assignment_id, student_id)
         return target
 
     def _is_async_job_request() -> bool:
