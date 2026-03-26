@@ -330,3 +330,148 @@ def _normalize_text(value: Any) -> str:
 
 def _escape_pdf_text(text: str) -> str:
     return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def build_rich_submission_pdf(report: Any) -> bytes:
+    """Produce a comprehensive assessment PDF from an ExportReport instance.
+
+    Uses the existing _build_pdf/_PdfLine infrastructure. Called from
+    ams.io.export_report.export_pdf via a lazy import to avoid circular dependencies.
+    """
+    lines: list[_PdfLine] = []
+
+    # ── Title block ──────────────────────────────────────────────────────
+    lines.append(_PdfLine(_normalize_text("Submission Assessment Report"), size=16, bold=True))
+    lines.append(_PdfLine(_normalize_text(f"Generated: {report.generated_at}"), size=9))
+    if report.run_id:
+        lines.append(_PdfLine(_normalize_text(f"Run ID: {report.run_id}"), size=9))
+    lines.append(_PdfLine(""))
+
+    # ── Section 1: Submission Details ────────────────────────────────────
+    lines.append(_PdfLine("", separator=True))
+    lines.append(_PdfLine("Submission Details", size=13, bold=True, spacing_before=4))
+    for label, val in [
+        ("Student ID", report.student_id),
+        ("Assignment ID", report.assignment_id),
+        ("Original Filename", report.original_filename),
+        ("Submitted At", report.submitted_at),
+        ("Profile", report.profile),
+        ("Scoring Mode", report.scoring_mode),
+        ("Pipeline Version", report.pipeline_version),
+    ]:
+        if val:
+            lines.extend(_format_field(label, _normalize_text(str(val))))
+    lines.append(_PdfLine(""))
+
+    # ── Section 2: Overall Result ─────────────────────────────────────────
+    lines.append(_PdfLine("", separator=True))
+    lines.append(_PdfLine("Overall Result", size=13, bold=True, spacing_before=4))
+    score_display = f"{report.overall_pct}  —  {report.overall_label}"
+    lines.append(_PdfLine(_normalize_text(score_display), size=12, bold=True, indent=16, spacing_before=4))
+    if report.confidence_level:
+        lines.extend(_format_field("Confidence", report.confidence_level))
+    for reason in report.confidence_reasons[:4]:
+        lines.append(_PdfLine(_normalize_text(f"  - {reason}"), size=9, indent=24))
+    manual_str = "Yes" if report.manual_review else "No"
+    lines.extend(_format_field("Manual Review Recommended", manual_str))
+    for reason in (report.manual_review_reasons[:3] if report.manual_review else []):
+        lines.append(_PdfLine(_normalize_text(f"  - {reason}"), size=9, indent=24))
+    lines.append(_PdfLine(""))
+
+    # ── Section 3: Component Scores ───────────────────────────────────────
+    if report.components:
+        lines.append(_PdfLine("", separator=True))
+        lines.append(_PdfLine("Component Scores", size=13, bold=True, spacing_before=4))
+        for comp in report.components:
+            req_note = "" if comp.required else "  (not required for this profile)"
+            comp_label = _normalize_text(comp.name.upper())
+            comp_score = _normalize_text(comp.score_pct + req_note)
+            lines.extend(_format_field(comp_label, comp_score))
+            if comp.required and any([comp.met, comp.partial, comp.failed, comp.skipped]):
+                counts = f"Met: {comp.met}  Partial: {comp.partial}  Failed: {comp.failed}  Skipped: {comp.skipped}  (weight: {comp.weight:.2f})"
+                lines.append(_PdfLine(_normalize_text(counts), size=9, indent=32, spacing_before=2))
+        lines.append(_PdfLine(""))
+
+    # ── Section 4: Key Findings ───────────────────────────────────────────
+    # Only show FAIL, WARN, THREAT findings (not INFO/SKIPPED) to keep PDF concise
+    key_findings = [f for f in report.findings if f.severity in ("FAIL", "WARN", "THREAT")][:25]
+    if key_findings:
+        lines.append(_PdfLine("", separator=True))
+        lines.append(_PdfLine("Key Findings", size=13, bold=True, spacing_before=4))
+        current_comp = None
+        for finding in key_findings:
+            if finding.component != current_comp:
+                current_comp = finding.component
+                lines.append(_PdfLine(_normalize_text(current_comp.upper()), size=10, bold=True, indent=8, spacing_before=6))
+            label = f"[{finding.severity}] {finding.finding_id}"
+            lines.append(_PdfLine(_normalize_text(label), size=9, bold=True, indent=16, spacing_before=3))
+            for wrapped_line in _wrap_line(finding.message, size=9, indent=24):
+                lines.append(wrapped_line)
+        lines.append(_PdfLine(""))
+
+    # ── Section 5: Rule Outcomes ──────────────────────────────────────────
+    # Group by component; skip all-skipped rules to reduce noise
+    non_skipped_outcomes = [r for r in report.rule_outcomes
+                            if r.status not in ("SKIPPED_BY_PROFILE",)]
+    if non_skipped_outcomes:
+        lines.append(_PdfLine("", separator=True))
+        lines.append(_PdfLine("Rule Outcomes", size=13, bold=True, spacing_before=4))
+        # Group by component
+        by_comp: dict[str, list] = {}
+        for outcome in non_skipped_outcomes[:40]:  # cap at 40 for PDF length
+            by_comp.setdefault(outcome.component, []).append(outcome)
+        for comp_name, outcomes in sorted(by_comp.items()):
+            lines.append(_PdfLine(_normalize_text(comp_name.upper()), size=10, bold=True, indent=8, spacing_before=6))
+            for outcome in outcomes:
+                score_display = outcome.score_pct if hasattr(outcome, 'score_pct') else str(outcome.score)
+                # score_pct may not exist on RuleOutcome - compute inline
+                if isinstance(outcome.score, (int, float)):
+                    score_display = f"{float(outcome.score) * 100:.2f}%"
+                else:
+                    score_display = str(outcome.score)
+                status_line = f"{outcome.requirement_id}  [{outcome.status}]  Score: {score_display}"
+                lines.append(_PdfLine(_normalize_text(status_line), size=9, bold=True, indent=16, spacing_before=4))
+                stage_info = f"Stage: {outcome.stage}  |  Weight: {outcome.weight:.2f}"
+                lines.append(_PdfLine(_normalize_text(stage_info), size=8, indent=24))
+                if outcome.description:
+                    for dl in _wrap_line(outcome.description, size=9, indent=24):
+                        lines.append(dl)
+                if outcome.score_label:
+                    label_text = f"Rationale: {outcome.score_label}"
+                    for ll in _wrap_line(label_text, size=9, indent=24):
+                        lines.append(ll)
+        lines.append(_PdfLine(""))
+
+    # ── Section 6: Execution Summary ──────────────────────────────────────
+    lines.append(_PdfLine("", separator=True))
+    lines.append(_PdfLine("Execution Summary", size=13, bold=True, spacing_before=4))
+    php_str = "available" if report.execution.php_available else "unavailable"
+    browser_str = "available" if report.execution.browser_available else "unavailable"
+    lines.extend(_format_field("PHP Runtime", php_str))
+    lines.extend(_format_field("Browser Runtime", browser_str))
+    beh_count = len(report.execution.behavioural_results)
+    brow_count = len(report.execution.browser_results)
+    lines.extend(_format_field("Behavioural Tests", f"{beh_count} run" if report.execution.behavioural_tests_run else "not run"))
+    lines.extend(_format_field("Browser Tests", f"{brow_count} run" if report.execution.browser_tests_run else "not run"))
+    for result in report.execution.behavioural_results[:8]:
+        entry = f"{result.get('test_id', '')}: {result.get('status', '')}"
+        if result.get("diagnostic"):
+            entry += f" — {result['diagnostic'][:80]}"
+        lines.append(_PdfLine(_normalize_text(entry), size=8, indent=24, spacing_before=2))
+    for result in report.execution.browser_results[:8]:
+        entry = f"{result.get('test_id', '')}: {result.get('status', '')}"
+        if result.get("diagnostic"):
+            entry += f" — {result['diagnostic'][:80]}"
+        lines.append(_PdfLine(_normalize_text(entry), size=8, indent=24, spacing_before=2))
+    lines.append(_PdfLine(""))
+
+    # ── Section 7: Marking Policy Notes ──────────────────────────────────
+    if report.policy_notes:
+        lines.append(_PdfLine("", separator=True))
+        lines.append(_PdfLine("Marking Policy Notes", size=13, bold=True, spacing_before=4))
+        for note in report.policy_notes:
+            for nl in _wrap_line(f"- {note}", size=9, indent=8):
+                lines.append(nl)
+        lines.append(_PdfLine(""))
+
+    return _build_pdf(lines)
