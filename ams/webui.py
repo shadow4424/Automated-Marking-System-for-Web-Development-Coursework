@@ -1189,11 +1189,13 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
     from ams.web.routes_admin import admin_bp
     from ams.web.routes_teacher import teacher_bp
     from ams.web.routes_student import student_bp
+    from ams.web.routes_account import account_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(teacher_bp)
     app.register_blueprint(student_bp)
+    app.register_blueprint(account_bp)
 
     app.context_processor(inject_user_context)
 

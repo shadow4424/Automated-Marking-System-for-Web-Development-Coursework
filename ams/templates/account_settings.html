@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Account Settings — AMS{% endblock %}
+
+{% block content %}
+<div class="page-shell">
+
+    {# ── Page header ── #}
+    <section class="page-hero page-hero--split">
+        <div class="page-hero-main">
+            <div class="page-kicker">My account</div>
+            <h1>Account Settings</h1>
+            <p class="page-context-line">Update your email address or change your password. Your user ID, first name, and last name cannot be changed here.</p>
+        </div>
+        <aside class="page-side-panel">
+            <h2 class="card-title">Your identity</h2>
+            <div class="info-grid info-grid--2" style="margin-top:var(--space-md);">
+                <div class="info-item" style="grid-column:1/-1;">
+                    <span class="info-item-label">User ID</span>
+                    <span class="info-item-value" style="font-family:var(--font-mono);font-size:1rem;">{{ user.userID }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">First name</span>
+                    <span class="info-item-value">{{ user.firstName }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-item-label">Last name</span>
+                    <span class="info-item-value">{{ user.lastName }}</span>
+                </div>
+                <div class="info-item" style="grid-column:1/-1;">
+                    <span class="info-item-label">Role</span>
+                    <span class="info-item-value">{{ user.role|capitalize }}</span>
+                </div>
+            </div>
+            <p class="form-hint" style="margin-top:var(--space-md);">User ID, first name, and last name are managed by an administrator and cannot be changed here.</p>
+        </aside>
+    </section>
+
+    {# ── Email update card ── #}
+    <section class="card">
+        <div class="section-heading-row">
+            <div class="section-copy">
+                <h2 class="card-title">Email address</h2>
+            </div>
+            <span class="badge badge-info">Editable</span>
+        </div>
+
+        <p class="form-hint" style="margin-bottom:var(--space-lg);">
+            Current email: <strong>{{ user.email }}</strong>
+        </p>
+
+        <form method="POST" action="{{ url_for('account.update_email') }}" style="max-width:480px;">
+            <div class="form-group">
+                <label class="form-label" for="email">New email address <span class="required">*</span></label>
+                <input type="email" id="email" name="email" class="form-input"
+                       placeholder="you@example.com" required autocomplete="email">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="email_current_password">Current password <span class="required">*</span></label>
+                <input type="password" id="email_current_password" name="current_password" class="form-input"
+                       placeholder="Enter your current password" required autocomplete="current-password">
+                <p class="form-hint">Required to confirm your identity before changing your email.</p>
+            </div>
+            <button type="submit" class="btn btn-primary">Update email</button>
+        </form>
+    </section>
+
+    {# ── Password change card ── #}
+    <section class="card">
+        <div class="section-heading-row">
+            <div class="section-copy">
+                <h2 class="card-title">Change password</h2>
+            </div>
+            <span class="badge badge-info">Editable</span>
+        </div>
+
+        <form method="POST" action="{{ url_for('account.update_password') }}" style="max-width:480px;">
+            <div class="form-group">
+                <label class="form-label" for="pw_current">Current password <span class="required">*</span></label>
+                <input type="password" id="pw_current" name="current_password" class="form-input"
+                       placeholder="Enter your current password" required autocomplete="current-password">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="pw_new">New password <span class="required">*</span></label>
+                <input type="password" id="pw_new" name="new_password" class="form-input"
+                       placeholder="At least 8 characters" required autocomplete="new-password" minlength="8">
+                <p class="form-hint">Minimum 8 characters.</p>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="pw_confirm">Confirm new password <span class="required">*</span></label>
+                <input type="password" id="pw_confirm" name="confirm_password" class="form-input"
+                       placeholder="Repeat your new password" required autocomplete="new-password" minlength="8">
+            </div>
+            <button type="submit" class="btn btn-primary">Change password</button>
+        </form>
+    </section>
+
+</div>
+{% endblock %}
