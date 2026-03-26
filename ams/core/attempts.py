@@ -1001,14 +1001,20 @@ def sync_attempts_from_storage(runs_root: Path) -> None:
                 """,
                 (assignment_id, student_id),
             ).fetchall()
-            existing_identity = filter_attempts_for_root([_row_to_dict(row) for row in existing_rows], runs_root)
+            all_db_rows = [_row_to_dict(row) for row in existing_rows]
+            existing_identity = filter_attempts_for_root(all_db_rows, runs_root)
             existing_refs = {
                 (str(row.get("run_id") or ""), str(row.get("batch_submission_id") or "")): row
                 for row in existing_identity
             }
+            # Use ALL rows for this (assignment, student) pair when reserving attempt
+            # numbers — not just those belonging to the current runs_root — so that
+            # numbers already claimed by records from other roots are never reused,
+            # avoiding a UNIQUE constraint violation on (assignment_id, student_id,
+            # attempt_number).
             used_attempt_numbers = {
                 int(row.get("attempt_number") or 0)
-                for row in existing_identity
+                for row in all_db_rows
                 if int(row.get("attempt_number") or 0) > 0
             }
             next_attempt_number = max(used_attempt_numbers, default=0) + 1
