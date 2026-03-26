@@ -68,6 +68,14 @@ from ams.core.aggregation import aggregate_findings_to_checks, compute_check_sta
 from ams.analytics import FINDING_LABELS
 from ams.io.metadata import MetadataValidator, SubmissionMetadata
 from ams.pdf_exports import build_submission_report_pdf
+from ams.io.export_report import (
+    build_export_report,
+    validate_export_report,
+    export_json as _export_json,
+    export_txt,
+    export_csv_zip,
+    export_pdf as _export_pdf,
+)
 from ams.io.web_storage import (
     allowed_download,
     cleanup_batch_run_storage,
@@ -3170,88 +3178,32 @@ def _register_routes(app: Flask) -> None:
         dl_name = f"report_{submission_id}_{profile}_{run_id}.json"
         return send_file(report_path, as_attachment=True, download_name=dl_name)
 
-    def _report_to_csv(report: dict) -> str:
-        """Convert a report JSON to CSV format."""
-        output = io.StringIO()
-        summary = report.get("summary", {})
-        components = report.get("components", {})
-        meta = report.get("metadata", {}).get("submission_metadata", {})
+    def _export_report_content(
+        report: dict, run_id: str, fmt: str
+    ) -> tuple:
+        """Build an ExportReport from a raw report dict and render the requested format.
 
-        # Headers for main summary
-        writer = csv.writer(output)
-        writer.writerow(["Section", "Field", "Value"])
-
-        # Summary section
-        writer.writerow(["Summary", "Overall Score", summary.get("overall", "")])
-        writer.writerow(["Summary", "Grade", summary.get("grade", "")])
-        writer.writerow(["Summary", "Confidence", summary.get("confidence", "")])
-
-        # Metadata
-        writer.writerow(["Metadata", "Student ID", meta.get("student_id", "")])
-        writer.writerow(["Metadata", "Assignment ID", meta.get("assignment_id", "")])
-
-        # Components
-        for comp_name, comp_data in components.items():
-            if isinstance(comp_data, dict):
-                writer.writerow(["Component", comp_name, comp_data.get("score", "")])
-                for key, val in comp_data.items():
-                    if key != "score":
-                        writer.writerow([f"Component.{comp_name}", key, str(val)[:500]])
-
-        return output.getvalue()
-
-    def _report_to_txt(report: dict) -> str:
-        """Convert a report JSON to plain text format."""
-        lines = []
-        summary = report.get("summary", {})
-        components = report.get("components", {})
-        meta = report.get("metadata", {}).get("submission_metadata", {})
-
-        lines.append("=" * 60)
-        lines.append("SUBMISSION REPORT")
-        lines.append("=" * 60)
-        lines.append("")
-
-        # Summary
-        lines.append("SUMMARY")
-        lines.append("-" * 40)
-        lines.append(f"Overall Score: {summary.get('overall', 'N/A')}")
-        lines.append(f"Grade: {summary.get('grade', 'N/A')}")
-        lines.append(f"Confidence: {summary.get('confidence', 'N/A')}")
-        lines.append("")
-
-        # Metadata
-        lines.append("METADATA")
-        lines.append("-" * 40)
-        lines.append(f"Student ID: {meta.get('student_id', 'N/A')}")
-        lines.append(f"Assignment ID: {meta.get('assignment_id', 'N/A')}")
-        lines.append("")
-
-        # Components
-        lines.append("COMPONENTS")
-        lines.append("-" * 40)
-        for comp_name, comp_data in components.items():
-            if isinstance(comp_data, dict):
-                lines.append(f"\n{comp_name.upper()}")
-                lines.append(f"  Score: {comp_data.get('score', 'N/A')}")
-                for key, val in comp_data.items():
-                    if key != "score":
-                        val_str = str(val)[:200]
-                        lines.append(f"  {key}: {val_str}")
-
-        lines.append("")
-        lines.append("=" * 60)
-        return "\n".join(lines)
-
-    def _report_to_pdf(report: dict, submission_id: str) -> bytes:
-        """Generate a PDF report as bytes."""
-        return build_submission_report_pdf(report, submission_id)
+        Returns (content, mimetype, file_extension).
+        Raises ValueError if the report is too incomplete to export meaningfully.
+        Supported fmt values: "json", "txt", "csv", "pdf".
+        """
+        er = build_export_report(report, run_id=run_id)
+        validate_export_report(er)
+        if fmt == "json":
+            return _export_json(er), "application/json", "json"
+        if fmt == "txt":
+            return export_txt(er), "text/plain", "txt"
+        if fmt == "csv":
+            return export_csv_zip(er), "application/zip", "zip"
+        if fmt == "pdf":
+            return _export_pdf(er), "application/pdf", "pdf"
+        raise ValueError(f"Unknown export format: {fmt}")
 
     @app.route("/batch/<run_id>/submissions/<submission_id>/export/<format>")
     @login_required
     def batch_submission_export(run_id: str, submission_id: str, format: str):
-        """Export batch submission in various formats (csv, txt, pdf)."""
-        if format not in ("csv", "txt", "pdf"):
+        """Export batch submission in various formats (csv, txt, pdf, json)."""
+        if format not in ("csv", "txt", "pdf", "json"):
             return "Invalid format", 400
 
         runs_root = get_runs_root(app)
@@ -3282,35 +3234,22 @@ def _register_routes(app: Flask) -> None:
         profile = run_info.get("profile", "")
         base_name = f"report_{submission_id}_{profile}_{run_id}"
 
-        if format == "csv":
-            content = _report_to_csv(report)
-            return Response(
-                content,
-                mimetype="text/csv",
-                headers={"Content-Disposition": f'attachment; filename="{base_name}.csv"'},
-            )
-        elif format == "txt":
-            content = _report_to_txt(report)
-            return Response(
-                content,
-                mimetype="text/plain",
-                headers={"Content-Disposition": f'attachment; filename="{base_name}.txt"'},
-            )
-        elif format == "pdf":
-            pdf_bytes = _report_to_pdf(report, submission_id)
-            return Response(
-                pdf_bytes,
-                mimetype="application/pdf",
-                headers={"Content-Disposition": f'attachment; filename="{base_name}.pdf"'},
-            )
-
-        return "Invalid format", 400
+        try:
+            content, mimetype, ext = _export_report_content(report, run_id=run_id, fmt=format)
+        except ValueError as exc:
+            app.logger.warning("Export failed for batch submission %s: %s", submission_id, exc)
+            return "Report data insufficient for export", 422
+        return Response(
+            content,
+            mimetype=mimetype,
+            headers={"Content-Disposition": f'attachment; filename="{base_name}.{ext}"'},
+        )
 
     @app.route("/run/<run_id>/export/<format>")
     @login_required
     def individual_submission_export(run_id: str, format: str):
-        """Export individual submission in various formats (csv, txt, pdf)."""
-        if format not in ("csv", "txt", "pdf"):
+        """Export individual submission in various formats (csv, txt, pdf, json)."""
+        if format not in ("csv", "txt", "pdf", "json"):
             return "Invalid format", 400
 
         runs_root = get_runs_root(app)
@@ -3337,29 +3276,16 @@ def _register_routes(app: Flask) -> None:
         profile = run_info.get("profile", "")
         base_name = f"report_{profile}_{run_id}"
 
-        if format == "csv":
-            content = _report_to_csv(report)
-            return Response(
-                content,
-                mimetype="text/csv",
-                headers={"Content-Disposition": f'attachment; filename="{base_name}.csv"'},
-            )
-        elif format == "txt":
-            content = _report_to_txt(report)
-            return Response(
-                content,
-                mimetype="text/plain",
-                headers={"Content-Disposition": f'attachment; filename="{base_name}.txt"'},
-            )
-        elif format == "pdf":
-            pdf_bytes = _report_to_pdf(report, run_id)
-            return Response(
-                pdf_bytes,
-                mimetype="application/pdf",
-                headers={"Content-Disposition": f'attachment; filename="{base_name}.pdf"'},
-            )
-
-        return "Invalid format", 400
+        try:
+            content, mimetype, ext = _export_report_content(report, run_id=run_id, fmt=format)
+        except ValueError as exc:
+            app.logger.warning("Export failed for run %s: %s", run_id, exc)
+            return "Report data insufficient for export", 422
+        return Response(
+            content,
+            mimetype=mimetype,
+            headers={"Content-Disposition": f'attachment; filename="{base_name}.{ext}"'},
+        )
 
     @app.route("/batch/<run_id>/submissions/<submission_id>/rerun", methods=["POST"])
     @teacher_or_admin_required
