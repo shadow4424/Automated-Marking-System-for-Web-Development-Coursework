@@ -55,6 +55,10 @@ class TagCountingParser(HTMLParser):
         self.input_count = 0
         self.link_count = 0
 
+        # Stylesheet and script linkage
+        self.link_stylesheet_count = 0  # <link rel="stylesheet">
+        self.script_count = 0           # <script> tags (inline or src)
+
     def handle_starttag(self, tag: str, attrs) -> None:  # type: ignore[override]
         lowered = tag.lower()
         self.counts[lowered] = self.counts.get(lowered, 0) + 1
@@ -110,6 +114,16 @@ class TagCountingParser(HTMLParser):
         # Labels
         if lowered == "label":
             self.label_count += 1
+
+        # Stylesheet linkage: <link rel="stylesheet" ...>
+        if lowered == "link":
+            rel = attrs_dict.get("rel", "") or ""
+            if "stylesheet" in rel.lower():
+                self.link_stylesheet_count += 1
+
+        # Script tags: <script> or <script src="...">
+        if lowered == "script":
+            self.script_count += 1
 
     def handle_startendtag(self, tag: str, attrs) -> None:  # type: ignore[override]
         self.handle_starttag(tag, attrs)

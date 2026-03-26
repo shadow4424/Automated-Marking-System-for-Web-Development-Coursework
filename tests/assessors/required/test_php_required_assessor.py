@@ -25,3 +25,28 @@ def test_php_required_fail(build_submission, run_pipeline):
     fails = [f for f in data["findings"] if f["id"] == "PHP.REQ.FAIL"]
     assert any(f["evidence"]["rule_id"] == "php.uses_request" for f in fails)
     assert any(f["evidence"]["rule_id"] == "php.outputs" for f in fails)
+
+
+def test_php_response_path_complete_pass(build_submission, run_pipeline):
+    """Complete request-process-output path → php.response_path_complete passes."""
+    php = (
+        "<?php\n"
+        "if (isset($_POST['name'])) {\n"
+        "    $name = htmlspecialchars($_POST['name']);\n"
+        "    echo 'Hello ' . $name;\n"
+        "}\n"
+    )
+    submission = build_submission({"form.php": php})
+    data = run_pipeline(submission, profile="fullstack")
+    passes = [f for f in data["findings"] if f["id"] == "PHP.REQ.PASS"]
+    rule_ids = {f["evidence"]["rule_id"] for f in passes}
+    assert "php.response_path_complete" in rule_ids
+
+
+def test_php_response_path_complete_fail(build_submission, run_pipeline):
+    """No input, no processing, no output → php.response_path_complete fails (count=0)."""
+    php = "<?php $x = 1; ?>"
+    submission = build_submission({"form.php": php})
+    data = run_pipeline(submission, profile="fullstack")
+    fails = [f for f in data["findings"] if f["id"] == "PHP.REQ.FAIL"]
+    assert any(f["evidence"]["rule_id"] == "php.response_path_complete" for f in fails)

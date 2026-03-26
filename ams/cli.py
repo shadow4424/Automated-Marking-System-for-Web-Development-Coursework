@@ -40,7 +40,8 @@ def _print_sandbox_banner() -> None:
 
 
 def _create_parser() -> argparse.ArgumentParser:
-    profile_choices = list(get_visible_profile_specs().keys()) + ["custom_profile"]
+    from ams.core.profiles import list_profile_names
+    profile_choices = list_profile_names(include_aliases=True, visible_only=True) + ["custom_profile"]
     parser = argparse.ArgumentParser(prog="ams", description="Automated Marking System")
     subparsers = parser.add_subparsers(dest="command", required=True)
 

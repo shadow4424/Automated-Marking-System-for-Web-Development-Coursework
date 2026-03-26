@@ -450,6 +450,56 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
             severity="medium",
             llm_guidance="Lang attribute is binary - either present or not.",
         ),
+        # === ASSETS / LINKAGE (0.04 total, weights trimmed from structure rules) ===
+        RequiredHTMLRule(
+            id="html.links_stylesheet",
+            description="Page links to an external stylesheet via <link rel='stylesheet'>",
+            selector="link_stylesheet",
+            min_count=1,
+            weight=0.04,
+            category="Structure",
+            partial_allowed=False,
+            partial_range=(0.0, 0.0),
+            severity="high",
+            llm_guidance="Stylesheet linkage is binary - either present or not.",
+        ),
+        RequiredHTMLRule(
+            id="html.links_script_or_js",
+            description="Page includes JavaScript execution path via <script> tag",
+            selector="link_script",
+            min_count=0,
+            weight=0.02,
+            category="Structure",
+            partial_allowed=False,
+            partial_range=(0.0, 0.0),
+            severity="low",
+            llm_guidance="Script linkage is optional. Award if present.",
+        ),
+        # === CONTENT ELEMENTS (optional - bonus if used) ===
+        RequiredHTMLRule(
+            id="html.has_table",
+            description="Page uses table markup when tabular content is expected",
+            selector="table",
+            min_count=0,
+            weight=0.02,
+            category="Content",
+            partial_allowed=False,
+            partial_range=(0.0, 0.0),
+            severity="low",
+            llm_guidance="Table usage is optional. Award if present.",
+        ),
+        RequiredHTMLRule(
+            id="html.has_image",
+            description="Page uses image elements when visual content is expected",
+            selector="img",
+            min_count=0,
+            weight=0.02,
+            category="Content",
+            partial_allowed=False,
+            partial_range=(0.0, 0.0),
+            severity="low",
+            llm_guidance="Image usage is optional. Award if present.",
+        ),
     ]
 
     
@@ -620,6 +670,120 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
             severity="low",
             llm_guidance="Comments are optional. Award if present.",
         ),
+        # === QUALITY / RESET (new generic rules) ===
+        RequiredCSSRule(
+            id="css.has_universal_reset",
+            description="Applies a universal CSS reset or box-sizing strategy",
+            needle="universal_reset",
+            min_count=0,
+            weight=0.04,
+            category="Reset",
+            partial_allowed=False,
+            partial_range=(0.0, 0.0),
+            severity="low",
+            llm_guidance="Universal reset is optional. Award if * selector or explicit reset strategy is present.",
+        ),
+        RequiredCSSRule(
+            id="css.parses_cleanly",
+            description="CSS is syntactically valid with balanced braces",
+            needle="parses_cleanly",
+            min_count=1,
+            weight=0.06,
+            category="Quality",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="medium",
+            llm_guidance="Award 0.5 for minor brace imbalance (1-2 unmatched). 0 for severely broken CSS.",
+        ),
+    ]
+
+    # CSS Lab Rules — extends css_rules with visual/design-intent checks for CSS-specific labs
+    # These rules are only required by the frontend_css_lab profile.
+    css_lab_rules = list(css_rules) + [
+        RequiredCSSRule(
+            id="css.body_card_layout",
+            description="Body or main container uses card-like layout (max-width, centred, padding, shadow, radius)",
+            needle="body_card_layout",
+            min_count=1,
+            weight=0.10,
+            category="Layout",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="medium",
+            llm_guidance="Full credit for max-width + margin:auto + padding + box-shadow + border-radius. Partial for 2-3 of these traits.",
+        ),
+        RequiredCSSRule(
+            id="css.h1_styled",
+            description="Main heading (h1) has non-default colour and size styling",
+            needle="h1_styled",
+            min_count=1,
+            weight=0.08,
+            category="Typography",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="medium",
+            llm_guidance="Full credit for colour + size + alignment. Partial for one or two of these.",
+        ),
+        RequiredCSSRule(
+            id="css.table_profile_layout",
+            description="Table element has width, spacing, or centering applied",
+            needle="table_profile_layout",
+            min_count=0,
+            weight=0.06,
+            category="Layout",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="low",
+            llm_guidance="Award for table with max-width/width + margin or border-spacing. Optional if no table in task.",
+        ),
+        RequiredCSSRule(
+            id="css.image_rounding_shadow",
+            description="Images use border-radius (circular/rounded) and box-shadow",
+            needle="image_rounding_shadow",
+            min_count=0,
+            weight=0.06,
+            category="Styling",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="low",
+            llm_guidance="Full credit for both border-radius + box-shadow. Partial for one.",
+        ),
+        RequiredCSSRule(
+            id="css.h2_section_style",
+            description="Section headings (h2) have colour and size styling",
+            needle="h2_section_style",
+            min_count=1,
+            weight=0.06,
+            category="Typography",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="medium",
+            llm_guidance="Full credit for colour + size + spacing. Partial for one or two.",
+        ),
+        RequiredCSSRule(
+            id="css.list_readability_style",
+            description="List elements (ul/li) have custom bullets or spacing for readability",
+            needle="list_readability_style",
+            min_count=0,
+            weight=0.06,
+            category="Styling",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="low",
+            llm_guidance="Award for list-style + spacing on ul or li. Optional if no lists in task.",
+        ),
+        RequiredCSSRule(
+            id="css.link_hover_style",
+            description="Links have a distinct hover state (underline or colour change)",
+            needle="link_hover_style",
+            min_count=1,
+            weight=0.08,
+            category="Interaction",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="medium",
+            llm_guidance="Full credit for clear hover + normal state differentiation. Partial for hover only or very subtle change.",
+        ),
     ]
 
     
@@ -781,7 +945,132 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
         ),
     ]
 
-    
+    # JavaScript Calculator Rules — extends js_rules with calculator-specific DOM and logic checks.
+    # Only required by the frontend_calculator profile.
+    js_calculator_rules = list(js_rules) + [
+        RequiredJSRule(
+            id="js.creates_display_dom",
+            description="JavaScript creates or references the calculator display (input#theDisplay)",
+            needle="creates_display_dom",
+            min_count=1,
+            weight=0.08,
+            category="Calculator",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="high",
+            llm_guidance="Full credit for getElementById('theDisplay') or createElement of display input. Partial for display element referenced but not explicitly created.",
+        ),
+        RequiredJSRule(
+            id="js.creates_digit_buttons",
+            description="JavaScript creates digit buttons (0-9, decimal, equals) dynamically",
+            needle="creates_digit_buttons",
+            min_count=1,
+            weight=0.06,
+            category="Calculator",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="high",
+            llm_guidance="Full credit for all 12 digit/decimal/equals buttons. Partial for 4-7 digit buttons.",
+        ),
+        RequiredJSRule(
+            id="js.creates_operator_buttons",
+            description="JavaScript creates operator buttons (+, -, *, /)",
+            needle="creates_operator_buttons",
+            min_count=1,
+            weight=0.06,
+            category="Calculator",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="high",
+            llm_guidance="Full credit for all 4 operators. Partial for 2-3.",
+        ),
+        RequiredJSRule(
+            id="js.has_updateDisplay",
+            description="Function or logic appends clicked value to the calculator display",
+            needle="has_updatedisplay",
+            min_count=1,
+            weight=0.08,
+            category="Calculator",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="high",
+            llm_guidance="Full credit for updateDisplay function or equivalent display.value += pattern. Partial for partially correct logic.",
+        ),
+        RequiredJSRule(
+            id="js.has_prevalue_preop_state",
+            description="Tracks previous value (preValue) and previous operator (preOp) for chained calculations",
+            needle="has_prevalue_preop",
+            min_count=1,
+            weight=0.08,
+            category="Calculator",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="high",
+            llm_guidance="Full credit for explicit preValue + preOp state. Partial for equivalent state tracking without those names.",
+        ),
+        RequiredJSRule(
+            id="js.has_doCalc",
+            description="Performs the stored arithmetic operation (doCalc function or equivalent)",
+            needle="has_docalc",
+            min_count=1,
+            weight=0.08,
+            category="Calculator",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="high",
+            llm_guidance="Full credit for doCalc function handling all 4 operations. Partial for 2-3 operations handled.",
+        ),
+        RequiredJSRule(
+            id="js.clears_or_updates_display_correctly",
+            description="Operator press clears the display; equals shows the result",
+            needle="clears_display",
+            min_count=1,
+            weight=0.06,
+            category="Calculator",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="medium",
+            llm_guidance="Full credit for both clear-on-operator and result-on-equals. Partial for one only.",
+        ),
+        RequiredJSRule(
+            id="js.uses_createElement",
+            description="Uses document.createElement() for dynamic DOM construction",
+            needle="uses_createelement",
+            min_count=1,
+            weight=0.06,
+            category="Modern Practices",
+            partial_allowed=False,
+            partial_range=(0.0, 0.0),
+            severity="medium",
+            llm_guidance="createElement usage is binary in the calculator context.",
+        ),
+        RequiredJSRule(
+            id="js.avoids_document_write",
+            description="Does not rely on document.write() for UI construction",
+            needle="avoids_document_write",
+            min_count=1,
+            weight=0.06,
+            category="Modern Practices",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="medium",
+            llm_guidance="Full credit for no document.write. Partial for minimal leftover non-core use.",
+        ),
+        RequiredJSRule(
+            id="js.extra_features",
+            description="Implements optional calculator extras (clear, sqrt, percentage, memory, etc.)",
+            needle="extra_features",
+            min_count=0,
+            weight=0.04,
+            category="Calculator",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="low",
+            llm_guidance="Award for one or more working extras. Partial for attempted but broken extras.",
+        ),
+    ]
+
+
     # PHP Rules - Expanded with comprehensive web development criteria
     # Weights are normalised so that the total = 1.0 for the PHP component.
     # Categories: Structure, Input, Output, Database, Sessions, Functions, Control Flow, Error Handling, Includes
@@ -939,9 +1228,22 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
             severity="medium",
             llm_guidance="Error handling is optional. Award if present.",
         ),
+        # === RESPONSE PATH / ALIGNMENT (new generic checks) ===
+        RequiredPHPRule(
+            id="php.response_path_complete",
+            description="Script has a complete request-receive-process-output path",
+            needle="response_path_complete",
+            min_count=1,
+            weight=0.06,
+            category="Architecture",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="medium",
+            llm_guidance="Full credit for input superglobal + conditional logic + output. Partial for partial path only.",
+        ),
     ]
 
-    
+
     # SQL Rules - Expanded with comprehensive database design criteria
     # Weights are normalised so that the total = 1.0 for the SQL component.
     # Categories: Schema, Constraints, CRUD, Queries, Advanced
@@ -1095,6 +1397,19 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
             severity="low",
             llm_guidance="Aggregate functions are optional. Award if present.",
         ),
+        # === QUALITY ===
+        RequiredSQLRule(
+            id="sql.parses_cleanly",
+            description="SQL is syntactically valid with semicolons and balanced structure",
+            needle="parses_cleanly",
+            min_count=1,
+            weight=0.06,
+            category="Quality",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="medium",
+            llm_guidance="Full credit for valid SQL with semicolons. Partial for minor syntax issues.",
+        ),
     ]
 
 
@@ -1106,14 +1421,28 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
             description="HTML page renders without errors in browser",
             test_type="page_load",
             component="html",
-            weight=0.40,
+            weight=0.30,
         ),
         BehavioralRule(
             id="behavior.js_interactive",
             description="JavaScript responds to user events and modifies DOM",
             test_type="js_interaction",
             component="js",
-            weight=0.60,
+            weight=0.40,
+        ),
+        BehavioralRule(
+            id="behavior.hover_style_visible",
+            description="Link hover state creates a visible style change in browser",
+            test_type="hover_check",
+            component="css",
+            weight=0.15,
+        ),
+        BehavioralRule(
+            id="behavior.responsive_resize",
+            description="Layout remains structurally usable after viewport change (mobile/desktop)",
+            test_type="viewport_resize",
+            component="css",
+            weight=0.15,
         ),
     ]
 
@@ -1186,6 +1515,79 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
             needle="application/json",
             min_count=1,
             weight=1.0,
+        ),
+        RequiredAPIRule(
+            id="api.accepts_method",
+            description="API handler checks or routes by HTTP request method",
+            needle="accepts_method",
+            min_count=1,
+            weight=0.8,
+            category="HTTP",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="medium",
+            llm_guidance="Full credit for explicit method routing. Partial for any method awareness.",
+        ),
+        RequiredAPIRule(
+            id="api.valid_json_shape",
+            description="JSON response has a meaningful structure (array or keyed object)",
+            needle="valid_json_shape",
+            min_count=1,
+            weight=1.0,
+            category="Response",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="medium",
+            llm_guidance="Full credit for json_encode with array/object. Partial for bare variable encode.",
+        ),
+        RequiredAPIRule(
+            id="api.http_status_codes",
+            description="Uses appropriate HTTP status codes for success and error responses",
+            needle="http_status_codes",
+            min_count=0,
+            weight=0.6,
+            category="HTTP",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="low",
+            llm_guidance="Award for http_response_code() or header() status codes. Optional.",
+        ),
+        RequiredAPIRule(
+            id="api.error_response_path",
+            description="Error conditions produce a structured JSON error response",
+            needle="error_response_path",
+            min_count=0,
+            weight=0.6,
+            category="Response",
+            partial_allowed=True,
+            partial_range=(0.0, 0.5),
+            severity="low",
+            llm_guidance="Award for json_encode inside if/catch with error key. Optional.",
+        ),
+    ]
+
+    # Calculator-specific behavioral rules
+    behavioral_rules_calculator = [
+        BehavioralRule(
+            id="behavior.calculator_sequence",
+            description="Calculator correctly computes standard arithmetic sequences (2+3=5, 9-4=5, 6*7=42, 8/2=4)",
+            test_type="calculator_sequence",
+            component="js",
+            weight=0.40,
+        ),
+        BehavioralRule(
+            id="behavior.display_append",
+            description="Clicking digits 1, 2, 3 sequentially shows 123 in the display",
+            test_type="calculator_display",
+            component="js",
+            weight=0.30,
+        ),
+        BehavioralRule(
+            id="behavior.operator_state_flow",
+            description="Operator press stores state and clears display; equals shows result",
+            test_type="calculator_operator",
+            component="js",
+            weight=0.30,
         ),
     ]
 
@@ -1356,6 +1758,63 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
         frontend_only=False,
     )
 
+    frontend_css_lab = ProfileSpec(
+        name="frontend_css_lab",
+        required_html=html_rules,
+        required_css=css_lab_rules,
+        required_js=js_rules,
+        required_php=[],
+        required_sql=[],
+        behavioral_rules=behavioral_rules_frontend,
+        required_files=[".html", ".css"],
+        relevant_artefacts=["html", "css", "js"],
+        optional_components=[],
+        expected_layers=["html", "css", "js"],
+        enabled_static_checks=["html", "css", "js", "consistency"],
+        enabled_behavioural_checks=["page_load", "js_interaction", "hover_check", "viewport_resize"],
+        enabled_browser_checks=["page_load", "interaction", "console", "computed_style", "extended_browser"],
+        enabled_layout_checks=["responsive", "visibility", "computed_style"],
+        expected_entrypoint_types=["html"],
+        component_weights={"html": 0.30, "css": 0.45, "js": 0.25},
+        missing_component_treatment={"html": "zero", "css": "zero", "js": "warning"},
+        role_expectations={
+            "primary_page": "single primary HTML page with profile layout",
+            "stylesheet_set": "linked CSS stylesheet with visual design",
+        },
+        frontend_only=True,
+        aliases=("css_lab",),
+    )
+
+    frontend_calculator = ProfileSpec(
+        name="frontend_calculator",
+        required_html=html_rules,
+        required_css=css_rules,
+        required_js=js_calculator_rules,
+        required_php=[],
+        required_sql=[],
+        behavioral_rules=behavioral_rules_frontend + behavioral_rules_calculator,
+        required_files=[".html", ".js"],
+        relevant_artefacts=["html", "css", "js"],
+        optional_components=[],
+        expected_layers=["html", "css", "js"],
+        enabled_static_checks=["html", "css", "js", "consistency"],
+        enabled_behavioural_checks=[
+            "page_load", "js_interaction",
+            "calculator_sequence", "calculator_display", "calculator_operator",
+        ],
+        enabled_browser_checks=["page_load", "interaction", "console", "extended_browser"],
+        enabled_layout_checks=["responsive", "visibility"],
+        expected_entrypoint_types=["html"],
+        component_weights={"html": 0.25, "css": 0.20, "js": 0.55},
+        missing_component_treatment={"html": "zero", "css": "warning", "js": "zero"},
+        role_expectations={
+            "primary_page": "calculator HTML page",
+            "script_set": "JavaScript calculator logic",
+        },
+        frontend_only=True,
+        aliases=("calculator",),
+    )
+
     specs = {
         spec.name: spec
         for spec in (
@@ -1364,6 +1823,8 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
             fullstack_form_php,
             fullstack_php_sql,
             api_backed_web,
+            frontend_css_lab,
+            frontend_calculator,
         )
     }
     return specs
@@ -1507,6 +1968,9 @@ def _static_aggregation_mode(component: str, rule: RequiredRule) -> str:
         "html.has_lang_attribute",
         "html.has_alt_attributes",
         "html.has_labels",
+        "html.links_stylesheet",
+        "css.parses_cleanly",
+        "sql.parses_cleanly",
     }
     if rule.id in strict_ids:
         return AggregationMode.ALL_RELEVANT.value
@@ -1516,7 +1980,8 @@ def _static_aggregation_mode(component: str, rule: RequiredRule) -> str:
 
 
 def _behavioural_aggregation_mode(rule: BehavioralRule) -> str:
-    if rule.test_type in {"form_submit", "db_persist", "api_exec"}:
+    if rule.test_type in {"form_submit", "db_persist", "api_exec",
+                          "calculator_sequence", "calculator_display", "calculator_operator"}:
         return AggregationMode.EXPECTED_SET.value
     return AggregationMode.ANY.value
 
@@ -1605,6 +2070,108 @@ def _default_profile_level_requirements(profile: ProfileSpec) -> List[Requiremen
                 expected_roles=_expected_roles_for_component(component),
             )
         )
+
+    # Cross-file alignment rules — added when both PHP and HTML are required
+    if profile.is_component_required("php") and profile.is_component_required("html"):
+        definitions.append(
+            RequirementDefinition(
+                id="php.form_handler_alignment",
+                component="php",
+                description="PHP request keys match the HTML form field names",
+                stage="consistency",
+                aggregation_mode=AggregationMode.ANY.value,
+                weight=0.0,
+                required=True,
+                evaluator="cross_file_php_form",
+                expected_roles=("backend_entrypoint",),
+            )
+        )
+
+    if profile.is_component_required("sql") and profile.is_component_required("php"):
+        definitions.append(
+            RequirementDefinition(
+                id="sql.matches_application_usage",
+                component="sql",
+                description="SQL schema tables and columns align with PHP/application references",
+                stage="consistency",
+                aggregation_mode=AggregationMode.ANY.value,
+                weight=0.0,
+                required=True,
+                evaluator="cross_file_sql_alignment",
+                expected_roles=("database_schema_file",),
+            )
+        )
+
+    if profile.is_component_required("api"):
+        definitions.append(
+            RequirementDefinition(
+                id="api.client_server_alignment",
+                component="api",
+                description="JS/client fetch URLs match server-side API route handlers",
+                stage="consistency",
+                aggregation_mode=AggregationMode.ANY.value,
+                weight=0.0,
+                required=True,
+                evaluator="cross_file_api_alignment",
+                expected_roles=("api_client_code",),
+            )
+        )
+
+    # Extended browser checks — added only for profiles with extended_browser flag
+    if "extended_browser" in profile.enabled_browser_checks:
+        definitions.append(
+            RequirementDefinition(
+                id="browser.console_clean",
+                component="js",
+                description="No fatal console errors (uncaught exceptions or critical failures) during page load",
+                stage="browser",
+                aggregation_mode=AggregationMode.ANY.value,
+                weight=0.0,
+                required=profile.is_component_required("js"),
+                evaluator="browser_console_clean",
+                expected_roles=("primary_page",),
+            )
+        )
+        definitions.append(
+            RequirementDefinition(
+                id="browser.network_assets_resolve",
+                component="html",
+                description="Core linked assets (CSS, JS, images) resolve without 404 errors",
+                stage="browser",
+                aggregation_mode=AggregationMode.ANY.value,
+                weight=0.0,
+                required=profile.is_component_required("html"),
+                evaluator="browser_network_assets",
+                expected_roles=("primary_page",),
+            )
+        )
+        definitions.append(
+            RequirementDefinition(
+                id="browser.dom_expected_structure",
+                component="html",
+                description="Runtime DOM contains expected structural elements after scripts execute",
+                stage="browser",
+                aggregation_mode=AggregationMode.ANY.value,
+                weight=0.0,
+                required=profile.is_component_required("html"),
+                evaluator="browser_dom_structure",
+                expected_roles=("primary_page",),
+            )
+        )
+        definitions.append(
+            RequirementDefinition(
+                id="browser.accessible_interaction_targets",
+                component="html",
+                description="Required interactive elements (buttons, links, inputs) are in viewport and interactable",
+                stage="browser",
+                aggregation_mode=AggregationMode.ANY.value,
+                weight=0.0,
+                required=profile.is_component_required("html"),
+                evaluator="browser_accessibility",
+                expected_roles=("primary_page",),
+            )
+        )
+
     return definitions
 
 

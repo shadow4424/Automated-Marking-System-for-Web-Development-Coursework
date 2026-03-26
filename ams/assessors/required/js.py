@@ -121,7 +121,99 @@ class JSRequiredFeaturesAssessor(BaseRequiredAssessor):
         if needle == "`" or rule.id == "js.has_template_literals":
             count = content_lower.count("`")
             return count, count >= rule.min_count
-        
+
+        # === CALCULATOR: DISPLAY DOM ===
+        if needle == "creates_display_dom" or rule.id == "js.creates_display_dom":
+            # Check for theDisplay reference (exact name from spec) or equivalent display input
+            has_thedisplay = "thedisplay" in content_lower
+            # Also accept getElementById with any 'display' related id
+            has_getelm_display = "getelementbyid" in content_lower and "display" in content_lower
+            count = 1 if (has_thedisplay or has_getelm_display) else 0
+            return count, count >= rule.min_count
+
+        # === CALCULATOR: DIGIT BUTTONS ===
+        if needle == "creates_digit_buttons" or rule.id == "js.creates_digit_buttons":
+            # Count how many digit characters appear as string literals in a createElement context
+            has_createelement = "createelement" in content_lower
+            if not has_createelement:
+                return 0, rule.min_count == 0
+            # Count digits 0-9 present as string values
+            digit_count = sum(1 for d in "0123456789" if f'"{d}"' in content_lower or f"'{d}'" in content_lower)
+            # Also check for decimal and equals
+            has_decimal = '"." ' in content_lower or "'.' " in content_lower or '"."' in content_lower or "'.''" in content_lower
+            has_equals = '"="' in content_lower or "'='" in content_lower
+            total = digit_count + (1 if has_decimal else 0) + (1 if has_equals else 0)
+            return total, total >= 8  # Full pass: 8+ of 12 digit/decimal/equals buttons
+
+        # === CALCULATOR: OPERATOR BUTTONS ===
+        if needle == "creates_operator_buttons" or rule.id == "js.creates_operator_buttons":
+            has_createelement = "createelement" in content_lower
+            if not has_createelement:
+                # May still have operators as button text even without createElement
+                pass
+            operators_found = sum(1 for op in ['"+"', '"-"', '"*"', '"/"', "'+'" , "'-'", "'*'", "'/'"]
+                                  if op in content_lower)
+            # Deduplicate (+/- might both match)
+            distinct_ops = sum(1 for op, alts in [('"+"', "'+'" ), ('"-"', "'-'"), ('"*"', "'*'"), ('"/"', "'/'")]
+                               if any(a in content_lower for a in [op, alts]))
+            return distinct_ops, distinct_ops >= 4  # Full pass: all 4 operators
+
+        # === CALCULATOR: UPDATE DISPLAY ===
+        if needle == "has_updatedisplay" or rule.id == "js.has_updateDisplay":
+            has_fn_name = "updatedisplay" in content_lower
+            # Also detect display.value += pattern
+            has_value_concat = ("display.value" in content_lower and "+=" in content_lower) or \
+                               ("thedisplay" in content_lower and "+=" in content_lower)
+            count = 1 if (has_fn_name or has_value_concat) else 0
+            return count, count >= rule.min_count
+
+        # === CALCULATOR: STATE TRACKING ===
+        if needle == "has_prevalue_preop" or rule.id == "js.has_prevalue_preop_state":
+            has_prevalue = "prevalue" in content_lower or "prevvalue" in content_lower
+            has_preop = "preop" in content_lower or "prevop" in content_lower or "operator" in content_lower
+            count = sum([has_prevalue, has_preop])
+            return count, count >= rule.min_count  # min_count=1, need at least 1
+
+        # === CALCULATOR: doCalc ===
+        if needle == "has_docalc" or rule.id == "js.has_doCalc":
+            has_fn_name = "docalc" in content_lower or "calculate" in content_lower or "compute" in content_lower
+            # Count how many arithmetic operators are handled in logic
+            ops_handled = sum(1 for op in ['"+"', '"-"', '"*"', '"/"', "'+'" , "'-'", "'*'", "'/'",
+                                           "case '+'", "case '-'", 'case "+"', 'case "-"']
+                              if op in content_lower)
+            has_arithmetic = ops_handled >= 2
+            count = 1 if (has_fn_name or has_arithmetic) else 0
+            return count, count >= rule.min_count
+
+        # === CALCULATOR: DISPLAY CLEAR/RESULT ===
+        if needle == "clears_display" or rule.id == "js.clears_or_updates_display_correctly":
+            # Check for display value being cleared (set to "" or "0")
+            has_clear = ('display.value = ""' in content_lower or
+                         "display.value = ''" in content_lower or
+                         "display.value=''" in content_lower or
+                         'display.value=""' in content_lower or
+                         "thedisplay.value = ''" in content_lower)
+            count = 1 if has_clear else 0
+            return count, count >= rule.min_count
+
+        # === createElement USAGE ===
+        if needle == "uses_createelement" or rule.id == "js.uses_createElement":
+            count = content_lower.count("createelement(")
+            return count, count >= rule.min_count
+
+        # === AVOIDS document.write ===
+        if needle == "avoids_document_write" or rule.id == "js.avoids_document_write":
+            # Inverted check: passes when document.write is absent
+            uses_docwrite = "document.write(" in content_lower
+            count = 0 if uses_docwrite else 1
+            return count, count >= rule.min_count  # min_count=1 → passes only when absent
+
+        # === EXTRA FEATURES ===
+        if needle == "extra_features" or rule.id == "js.extra_features":
+            extras = ["sqrt", "math.sqrt", "percent", "memory", "sin", "cos", "tan", "clear", "clearall", "backspace"]
+            count = sum(1 for e in extras if e in content_lower)
+            return count, count >= rule.min_count  # min_count=0 → optional
+
         # === STANDARD NEEDLE COUNTING ===
         count = content_lower.count(needle)
         return count, count >= rule.min_count
@@ -130,10 +222,6 @@ class JSRequiredFeaturesAssessor(BaseRequiredAssessor):
         """Build a human-readable message for rule evaluation result."""
         status = "PASS" if passed else "FAIL"
         return f"Rule {rule.id} {status}: found {count}, required {rule.min_count}"
-
-
-__all__ = ["JSRequiredFeaturesAssessor"]
-
 
 
 __all__ = ["JSRequiredFeaturesAssessor"]

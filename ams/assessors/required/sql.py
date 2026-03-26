@@ -97,6 +97,20 @@ class SQLRequiredFeaturesAssessor(BaseRequiredAssessor):
             count = sum(1 for p in agg_patterns if p in content_lower)
             return count, count >= rule.min_count
         
+        # === PARSES CLEANLY ===
+        if needle == "parses_cleanly" or rule.id == "sql.parses_cleanly":
+            # A valid SQL file should have semicolons and CREATE TABLE or SELECT statements
+            has_semicolons = ";" in content_lower
+            has_statements = "create table" in content_lower or "select " in content_lower or "insert " in content_lower
+            # Check for balanced parentheses as a proxy for structural integrity
+            open_parens = content_lower.count("(")
+            close_parens = content_lower.count(")")
+            parens_balanced = abs(open_parens - close_parens) <= 2
+            if not has_semicolons or not has_statements:
+                return 0, False
+            count = 1 if parens_balanced else 0
+            return count, count >= rule.min_count
+
         # === STANDARD NEEDLE COUNTING ===
         count = content_lower.count(needle)
         return count, count >= rule.min_count
@@ -105,10 +119,6 @@ class SQLRequiredFeaturesAssessor(BaseRequiredAssessor):
         """Build a human-readable message for rule evaluation result."""
         status = "PASS" if passed else "FAIL"
         return f"Rule {rule.id} {status}: found {count}, required {rule.min_count}"
-
-
-__all__ = ["SQLRequiredFeaturesAssessor"]
-
 
 
 __all__ = ["SQLRequiredFeaturesAssessor"]
