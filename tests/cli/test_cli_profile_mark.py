@@ -27,14 +27,14 @@ def _run_mark(tmp_path: Path, profile: str) -> dict:
 
 
 def test_cli_mark_profile_frontend_skips_backend(tmp_path: Path) -> None:
-    data = _run_mark(tmp_path, "frontend")
+    data = _run_mark(tmp_path, "frontend_interactive")
     by_component = data["scores"]["by_component"]
     assert by_component["php"]["score"] == "SKIPPED"
     assert by_component["sql"]["score"] == "SKIPPED"
 
 
 def test_cli_mark_profile_fullstack_scores_backend_as_zero(tmp_path: Path) -> None:
-    data = _run_mark(tmp_path, "fullstack")
+    data = _run_mark(tmp_path, "fullstack_php_sql")
     by_component = data["scores"]["by_component"]
     assert by_component["php"]["score"] == 0.0
     assert by_component["sql"]["score"] == 0.0

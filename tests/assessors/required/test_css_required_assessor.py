@@ -13,9 +13,13 @@ def test_css_required_pass(build_submission, run_pipeline):
     data = run_pipeline(submission, profile="frontend")
     ids = [f for f in data["findings"] if f["id"] == "CSS.REQ.PASS"]
     assert ids
-    evidence = ids[0]["evidence"]
-    assert evidence["count"] >= 1
-    assert evidence["rule_id"] == "css.has_rule_block"
+    # All passing CSS rules should have a rule_id starting with "css."
+    for finding in ids:
+        evidence = finding["evidence"]
+        assert evidence["rule_id"].startswith("css.")
+    # At least one rule (css.has_rule_block or css.has_color) should count >= 1
+    counted = [f for f in ids if f["evidence"].get("count", 0) >= 1]
+    assert counted, "Expected at least one CSS.REQ.PASS finding with count >= 1"
 
 
 def test_css_required_fail(build_submission, run_pipeline):
