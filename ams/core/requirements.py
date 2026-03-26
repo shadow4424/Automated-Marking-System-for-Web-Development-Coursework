@@ -108,6 +108,20 @@ class RequirementEvaluationEngine:
             return self._evaluate_quality_penalty(definition, findings)
         if evaluator == "api_usage_presence":
             return self._evaluate_api_usage(definition, context, findings)
+        if evaluator == "cross_file_php_form":
+            return self._evaluate_cross_file_result(definition, context, "php_form_alignment")
+        if evaluator == "cross_file_sql_alignment":
+            return self._evaluate_cross_file_result(definition, context, "sql_alignment")
+        if evaluator == "cross_file_api_alignment":
+            return self._evaluate_cross_file_result(definition, context, "api_alignment")
+        if evaluator == "browser_console_clean":
+            return self._evaluate_browser_console_clean(definition, context)
+        if evaluator == "browser_network_assets":
+            return self._evaluate_browser_network_assets(definition, context)
+        if evaluator == "browser_dom_structure":
+            return self._evaluate_browser_dom_structure(definition, context)
+        if evaluator == "browser_accessibility":
+            return self._evaluate_browser_accessibility(definition, context)
         raise ValueError(f"Unsupported requirement evaluator: {evaluator}")
 
     def _evaluate_static_rule(
@@ -239,6 +253,15 @@ class RequirementEvaluationEngine:
                 statuses.append(item.status.lower())
                 evidence_rows.append(item.to_dict())
             elif rule.test_type == "api_exec" and test_id.startswith("API.EXEC"):
+                statuses.append(item.status.lower())
+                evidence_rows.append(item.to_dict())
+            elif rule.test_type in {"calculator_sequence", "calculator_display", "calculator_operator"} and test_id.startswith("BEHAVIOUR.CALCULATOR"):
+                statuses.append(item.status.lower())
+                evidence_rows.append(item.to_dict())
+            elif rule.test_type == "hover_check" and test_id.startswith("BEHAVIOUR.HOVER"):
+                statuses.append(item.status.lower())
+                evidence_rows.append(item.to_dict())
+            elif rule.test_type == "viewport_resize" and test_id.startswith("BEHAVIOUR.VIEWPORT"):
                 statuses.append(item.status.lower())
                 evidence_rows.append(item.to_dict())
 
@@ -561,6 +584,232 @@ class RequirementEvaluationEngine:
             confidence_flags=["runtime_skipped"] if score == "SKIPPED" else [],
         )
 
+    def _evaluate_cross_file_result(
+        self,
+        definition: RequirementDefinition,
+        context: SubmissionContext,
+        result_key: str,
+    ) -> RequirementEvaluationResult:
+        """Evaluate a cross-file alignment result from context metadata."""
+        cross_file_results: dict = context.metadata.get("cross_file_results", {})  # type: ignore[assignment]
+        result = cross_file_results.get(result_key) if cross_file_results else None
+        if result is None:
+            return RequirementEvaluationResult(
+                requirement_id=definition.id,
+                component=definition.component,
+                description=definition.description,
+                stage=definition.stage,
+                aggregation_mode=definition.aggregation_mode,
+                score="SKIPPED",
+                status="SKIPPED",
+                weight=definition.weight,
+                required=definition.required,
+                evidence={"reason": "cross_file_check_not_run"},
+                skipped_reason="cross_file_check_not_run",
+                confidence_flags=["cross_file_skipped"],
+            )
+        score = result.get("score", 0.0)
+        status = result.get("status", "FAIL")
+        return RequirementEvaluationResult(
+            requirement_id=definition.id,
+            component=definition.component,
+            description=definition.description,
+            stage=definition.stage,
+            aggregation_mode=definition.aggregation_mode,
+            score=score,
+            status=status,
+            weight=definition.weight,
+            required=definition.required,
+            evidence=result.get("evidence", {}),
+        )
+
+    def _evaluate_browser_console_clean(
+        self,
+        definition: RequirementDefinition,
+        context: SubmissionContext,
+    ) -> RequirementEvaluationResult:
+        """Evaluate whether the browser console is free of fatal errors."""
+        if not context.browser_evidence:
+            return RequirementEvaluationResult(
+                requirement_id=definition.id,
+                component=definition.component,
+                description=definition.description,
+                stage=definition.stage,
+                aggregation_mode=definition.aggregation_mode,
+                score="SKIPPED",
+                status="SKIPPED",
+                weight=definition.weight,
+                required=definition.required,
+                evidence={"reason": "no_browser_evidence"},
+                skipped_reason="no_browser_evidence",
+                confidence_flags=["browser_skipped"],
+            )
+        browser = context.browser_evidence[0]
+        errors = browser.console_errors or []
+        fatal_errors = [e for e in errors if isinstance(e, str) and any(
+            kw in e.lower() for kw in ("uncaught", "typeerror", "referenceerror", "syntaxerror")
+        )]
+        if not fatal_errors:
+            score, status = 1.0, "PASS"
+        elif len(fatal_errors) <= 2:
+            score, status = 0.5, "PARTIAL"
+        else:
+            score, status = 0.0, "FAIL"
+        return RequirementEvaluationResult(
+            requirement_id=definition.id,
+            component=definition.component,
+            description=definition.description,
+            stage=definition.stage,
+            aggregation_mode=definition.aggregation_mode,
+            score=score,
+            status=status,
+            weight=definition.weight,
+            required=definition.required,
+            evidence={"fatal_error_count": len(fatal_errors), "console_errors": errors[:5]},
+            confidence_flags=["browser_console"] if fatal_errors else [],
+        )
+
+    def _evaluate_browser_network_assets(
+        self,
+        definition: RequirementDefinition,
+        context: SubmissionContext,
+    ) -> RequirementEvaluationResult:
+        """Evaluate whether all linked network assets resolved successfully."""
+        if not context.browser_evidence:
+            return RequirementEvaluationResult(
+                requirement_id=definition.id,
+                component=definition.component,
+                description=definition.description,
+                stage=definition.stage,
+                aggregation_mode=definition.aggregation_mode,
+                score="SKIPPED",
+                status="SKIPPED",
+                weight=definition.weight,
+                required=definition.required,
+                evidence={"reason": "no_browser_evidence"},
+                skipped_reason="no_browser_evidence",
+                confidence_flags=["browser_skipped"],
+            )
+        browser = context.browser_evidence[0]
+        network_errors = getattr(browser, "network_errors", []) or []
+        asset_errors = [e for e in network_errors if isinstance(e, str) and any(
+            ext in e.lower() for ext in (".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".woff")
+        )]
+        if not asset_errors:
+            score, status = 1.0, "PASS"
+        elif len(asset_errors) <= 2:
+            score, status = 0.5, "PARTIAL"
+        else:
+            score, status = 0.0, "FAIL"
+        return RequirementEvaluationResult(
+            requirement_id=definition.id,
+            component=definition.component,
+            description=definition.description,
+            stage=definition.stage,
+            aggregation_mode=definition.aggregation_mode,
+            score=score,
+            status=status,
+            weight=definition.weight,
+            required=definition.required,
+            evidence={"asset_error_count": len(asset_errors), "network_errors": network_errors[:5]},
+        )
+
+    def _evaluate_browser_dom_structure(
+        self,
+        definition: RequirementDefinition,
+        context: SubmissionContext,
+    ) -> RequirementEvaluationResult:
+        """Evaluate DOM structure from browser evidence."""
+        if not context.browser_evidence:
+            return RequirementEvaluationResult(
+                requirement_id=definition.id,
+                component=definition.component,
+                description=definition.description,
+                stage=definition.stage,
+                aggregation_mode=definition.aggregation_mode,
+                score="SKIPPED",
+                status="SKIPPED",
+                weight=definition.weight,
+                required=definition.required,
+                evidence={"reason": "no_browser_evidence"},
+                skipped_reason="no_browser_evidence",
+                confidence_flags=["browser_skipped"],
+            )
+        browser = context.browser_evidence[0]
+        dom_structure = getattr(browser, "dom_structure", None) or {}
+        has_body = bool(dom_structure.get("has_body", True))  # default True if not checked
+        element_count = dom_structure.get("element_count", 0)
+        if browser.status == "pass" and has_body and element_count > 0:
+            score, status = 1.0, "PASS"
+        elif browser.status == "pass":
+            score, status = 0.5, "PARTIAL"
+        else:
+            score, status = 0.0, "FAIL"
+        return RequirementEvaluationResult(
+            requirement_id=definition.id,
+            component=definition.component,
+            description=definition.component,
+            stage=definition.stage,
+            aggregation_mode=definition.aggregation_mode,
+            score=score,
+            status=status,
+            weight=definition.weight,
+            required=definition.required,
+            evidence={"dom_structure": dom_structure, "browser_status": browser.status},
+        )
+
+    def _evaluate_browser_accessibility(
+        self,
+        definition: RequirementDefinition,
+        context: SubmissionContext,
+    ) -> RequirementEvaluationResult:
+        """Evaluate whether interactive elements are accessible (have labels/aria)."""
+        if not context.browser_evidence:
+            return RequirementEvaluationResult(
+                requirement_id=definition.id,
+                component=definition.component,
+                description=definition.description,
+                stage=definition.stage,
+                aggregation_mode=definition.aggregation_mode,
+                score="SKIPPED",
+                status="SKIPPED",
+                weight=definition.weight,
+                required=definition.required,
+                evidence={"reason": "no_browser_evidence"},
+                skipped_reason="no_browser_evidence",
+                confidence_flags=["browser_skipped"],
+            )
+        browser = context.browser_evidence[0]
+        # Check via static HTML analysis if browser check not available
+        html_files = context.files_for("html", relevant_only=True)
+        has_labels = False
+        has_aria = False
+        for html_file in html_files[:2]:
+            try:
+                content = html_file.read_text(encoding="utf-8", errors="replace").lower()
+                has_labels = has_labels or "for=" in content or "<label" in content
+                has_aria = has_aria or "aria-label" in content or "aria-labelledby" in content or "role=" in content
+            except OSError:
+                pass
+        if (has_labels or has_aria) and browser.status == "pass":
+            score, status = 1.0, "PASS"
+        elif has_labels or has_aria:
+            score, status = 0.5, "PARTIAL"
+        else:
+            score, status = 0.0, "FAIL"
+        return RequirementEvaluationResult(
+            requirement_id=definition.id,
+            component=definition.component,
+            description=definition.description,
+            stage=definition.stage,
+            aggregation_mode=definition.aggregation_mode,
+            score=score,
+            status=status,
+            weight=definition.weight,
+            required=definition.required,
+            evidence={"has_labels": has_labels, "has_aria": has_aria, "browser_status": browser.status},
+        )
+
     def _evaluate_rule_on_file(
         self,
         component: str,
@@ -744,6 +993,15 @@ def _evaluate_rule(component: str, rule: RequiredRule, content: str) -> tuple[in
         if selector == "label" or rule.id == "html.has_labels":
             count = parser.label_count
             return count, count >= rule.min_count
+        if selector == "img" or rule.id == "html.has_image":
+            count = parser.img_count
+            return count, count >= rule.min_count
+        if selector == "link_stylesheet" or rule.id == "html.links_stylesheet":
+            count = parser.link_stylesheet_count
+            return count, count >= rule.min_count
+        if selector == "link_script" or rule.id == "html.links_script_or_js":
+            count = parser.script_count
+            return count, count >= rule.min_count
         count = parser.counts.get(selector, 0)
         return count, count >= rule.min_count
 
@@ -777,6 +1035,62 @@ def _evaluate_rule(component: str, rule: RequiredRule, content: str) -> tuple[in
             return count, count >= rule.min_count
         if needle == "comments" or rule.id == "css.has_comments":
             count = content.count("/*")
+            return count, count >= rule.min_count
+        if needle == "universal_reset" or rule.id == "css.has_universal_reset":
+            has_star = "* {" in lowered or "*{" in lowered
+            has_box_sizing = "box-sizing" in lowered
+            has_margin_reset = "margin: 0" in lowered or "margin:0" in lowered
+            count = 1 if (has_star or has_box_sizing or has_margin_reset) else 0
+            return count, count >= rule.min_count
+        if needle == "parses_cleanly" or rule.id == "css.parses_cleanly":
+            open_count = content.count("{")
+            close_count = content.count("}")
+            if open_count == 0:
+                return 0, False
+            imbalance = abs(open_count - close_count)
+            if imbalance == 0:
+                return 1, True
+            return 1, False
+        if needle == "body_card_layout" or rule.id == "css.body_card_layout":
+            traits = [
+                "max-width" in lowered,
+                "margin: auto" in lowered or "margin:auto" in lowered or "0 auto" in lowered,
+                "padding" in lowered,
+                "box-shadow" in lowered,
+                "border-radius" in lowered,
+            ]
+            count = sum(traits)
+            return count, count >= 4
+        if needle == "h1_styled" or rule.id == "css.h1_styled":
+            has_h1 = "h1" in lowered
+            has_color = "color" in lowered
+            has_size = "font-size" in lowered or "font-weight" in lowered
+            count = 1 if has_h1 and (has_color or has_size) else 0
+            return count, count >= rule.min_count
+        if needle == "table_profile_layout" or rule.id == "css.table_profile_layout":
+            has_table = "table" in lowered
+            has_width = "max-width" in lowered or ("width" in lowered and "table" in lowered)
+            has_spacing = "border-spacing" in lowered or "border-collapse" in lowered
+            count = 1 if (has_table and (has_width or has_spacing)) else 0
+            return count, count >= rule.min_count
+        if needle == "image_rounding_shadow" or rule.id == "css.image_rounding_shadow":
+            count = sum(["border-radius" in lowered, "box-shadow" in lowered])
+            return count, count >= rule.min_count
+        if needle == "h2_section_style" or rule.id == "css.h2_section_style":
+            has_h2 = "h2" in lowered
+            has_color = "color" in lowered
+            has_size = "font-size" in lowered
+            count = 1 if has_h2 and (has_color or has_size) else 0
+            return count, count >= rule.min_count
+        if needle == "list_readability_style" or rule.id == "css.list_readability_style":
+            has_list = "ul" in lowered or "li" in lowered or "ol" in lowered
+            has_style = "list-style" in lowered
+            has_spacing = "padding" in lowered or "margin" in lowered
+            count = 1 if has_list and (has_style or has_spacing) else 0
+            return count, count >= rule.min_count
+        if needle == "link_hover_style" or rule.id == "css.link_hover_style":
+            has_hover = "a:hover" in lowered or ":hover" in lowered
+            count = 1 if has_hover else 0
             return count, count >= rule.min_count
         count = content.count(rule.needle)
         return count, count >= rule.min_count
@@ -813,6 +1127,70 @@ def _evaluate_rule(component: str, rule: RequiredRule, content: str) -> tuple[in
             return count, count >= rule.min_count
         if needle == "`" or rule.id == "js.has_template_literals":
             count = content.count("`")
+            return count, count >= rule.min_count
+        if needle == "creates_display_dom" or rule.id == "js.creates_display_dom":
+            has_thedisplay = "thedisplay" in lowered
+            has_getelm_display = "getelementbyid" in lowered and "display" in lowered
+            count = 1 if (has_thedisplay or has_getelm_display) else 0
+            return count, count >= rule.min_count
+        if needle == "creates_digit_buttons" or rule.id == "js.creates_digit_buttons":
+            has_createelement = "createelement" in lowered
+            if not has_createelement:
+                return 0, rule.min_count == 0
+            digit_count = sum(1 for d in "0123456789" if f'"{d}"' in lowered or f"'{d}'" in lowered)
+            has_decimal = '".". ' in lowered or "'.' " in lowered or '"."' in lowered
+            has_equals = '"="' in lowered or "'='" in lowered
+            total = digit_count + (1 if has_decimal else 0) + (1 if has_equals else 0)
+            return total, total >= 8
+        if needle == "creates_operator_buttons" or rule.id == "js.creates_operator_buttons":
+            distinct_ops = sum(
+                1 for op, alt in [('"+"', "'+'"), ('"-"', "'-'"), ('"*"', "'*'"), ('"/"', "'/'")]
+                if any(a in lowered for a in [op, alt])
+            )
+            return distinct_ops, distinct_ops >= 4
+        if needle == "has_updatedisplay" or rule.id == "js.has_updateDisplay":
+            has_fn = "updatedisplay" in lowered
+            has_value_concat = (
+                ("display.value" in lowered and "+=" in lowered) or
+                ("thedisplay" in lowered and "+=" in lowered)
+            )
+            count = 1 if (has_fn or has_value_concat) else 0
+            return count, count >= rule.min_count
+        if needle == "has_prevalue_preop" or rule.id == "js.has_prevalue_preop_state":
+            has_prevalue = "prevalue" in lowered or "prevvalue" in lowered
+            has_preop = "preop" in lowered or "prevop" in lowered or "operator" in lowered
+            count = sum([has_prevalue, has_preop])
+            return count, count >= rule.min_count
+        if needle == "has_docalc" or rule.id == "js.has_doCalc":
+            has_fn = "docalc" in lowered or "calculate" in lowered or "compute" in lowered
+            ops_handled = sum(
+                1 for op in ['"+"', '"-"', '"*"', '"/"', "'+'", "'-'", "'*'", "'/'",
+                              "case '+'", "case '-'", 'case "+"', 'case "-"']
+                if op in lowered
+            )
+            has_arithmetic = ops_handled >= 2
+            count = 1 if (has_fn or has_arithmetic) else 0
+            return count, count >= rule.min_count
+        if needle == "clears_display" or rule.id == "js.clears_or_updates_display_correctly":
+            has_clear = (
+                'display.value = ""' in lowered or
+                "display.value = ''" in lowered or
+                "display.value=''" in lowered or
+                'display.value=""' in lowered or
+                "thedisplay.value = ''" in lowered
+            )
+            count = 1 if has_clear else 0
+            return count, count >= rule.min_count
+        if needle == "uses_createelement" or rule.id == "js.uses_createElement":
+            count = lowered.count("createelement(")
+            return count, count >= rule.min_count
+        if needle == "avoids_document_write" or rule.id == "js.avoids_document_write":
+            uses_docwrite = "document.write(" in lowered
+            count = 0 if uses_docwrite else 1
+            return count, count >= rule.min_count
+        if needle == "extra_features" or rule.id == "js.extra_features":
+            extras = ["sqrt", "math.sqrt", "percent", "memory", "sin", "cos", "tan", "clear", "clearall", "backspace"]
+            count = sum(1 for e in extras if e in lowered)
             return count, count >= rule.min_count
         count = lowered.count(needle)
         return count, count >= rule.min_count
@@ -857,6 +1235,12 @@ def _evaluate_rule(component: str, rule: RequiredRule, content: str) -> tuple[in
             patterns = ["try", "catch", "error_reporting", "set_error_handler", "exception"]
             count = sum(1 for item in patterns if item in lowered)
             return count, count >= rule.min_count
+        if needle == "response_path_complete" or rule.id == "php.response_path_complete":
+            has_input = "$_post" in lowered or "$_get" in lowered or "$_request" in lowered
+            has_processing = "isset(" in lowered or "if " in lowered or "if(" in lowered
+            has_output = "echo" in lowered or "print" in lowered or "json_encode(" in lowered
+            count = sum([has_input, has_processing, has_output])
+            return count, count >= rule.min_count
         count = lowered.count(needle)
         return count, count >= rule.min_count
 
@@ -878,6 +1262,16 @@ def _evaluate_rule(component: str, rule: RequiredRule, content: str) -> tuple[in
             patterns = ["count(", "sum(", "avg(", "min(", "max(", "group by"]
             count = sum(1 for item in patterns if item in lowered)
             return count, count >= rule.min_count
+        if needle == "parses_cleanly" or rule.id == "sql.parses_cleanly":
+            has_semicolons = ";" in lowered
+            has_statements = "create table" in lowered or "select " in lowered or "insert " in lowered
+            open_parens = lowered.count("(")
+            close_parens = lowered.count(")")
+            parens_balanced = abs(open_parens - close_parens) <= 2
+            if not has_semicolons or not has_statements:
+                return 0, False
+            count = 1 if parens_balanced else 0
+            return count, count >= rule.min_count
         count = lowered.count(needle)
         return count, count >= rule.min_count
 
@@ -898,6 +1292,32 @@ def _evaluate_rule(component: str, rule: RequiredRule, content: str) -> tuple[in
             return count, count >= rule.min_count
         if needle == "fetch" or rule.id == "api.fetch":
             count = lowered.count("fetch(") + lowered.count("fetch (")
+            return count, count >= rule.min_count
+        if needle == "accepts_method" or rule.id == "api.accepts_method":
+            has_request_method = "request_method" in lowered
+            has_in_array = "in_array" in lowered and ("'get'" in lowered or "'post'" in lowered)
+            count = 1 if (has_request_method or has_in_array) else 0
+            return count, count >= rule.min_count
+        if needle == "valid_json_shape" or rule.id == "api.valid_json_shape":
+            has_json_encode = "json_encode(" in lowered
+            has_array_arg = (
+                "json_encode([" in lowered or
+                "json_encode(array(" in lowered or
+                "json_encode(['" in lowered or
+                'json_encode(["' in lowered
+            )
+            count = 1 if (has_json_encode and has_array_arg) else 0
+            return count, count >= rule.min_count
+        if needle == "http_status_codes" or rule.id == "api.http_status_codes":
+            has_response_code = "http_response_code(" in lowered
+            has_header_http = 'header("http/' in lowered or "header('http/" in lowered
+            count = 1 if (has_response_code or has_header_http) else 0
+            return count, count >= rule.min_count
+        if needle == "error_response_path" or rule.id == "api.error_response_path":
+            has_json_encode = "json_encode(" in lowered
+            has_error_key = "'error'" in lowered or '"error"' in lowered or "'message'" in lowered or '"message"' in lowered
+            has_condition = "if " in lowered or "if(" in lowered or "catch" in lowered
+            count = 1 if (has_json_encode and has_error_key and has_condition) else 0
             return count, count >= rule.min_count
         count = lowered.count(needle)
         return count, count >= rule.min_count

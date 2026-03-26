@@ -42,10 +42,10 @@ def test_scoring_html_only_partial(tmp_path):
     for component in others:
         score = data["scores"]["by_component"][component]["score"]
         if component in ["css", "js"]:
-            assert score == 0.0
+            assert score <= 0.1  # may be slightly > 0 due to optional (min_count=0) rules
         else:
             assert score == "SKIPPED"
-    assert data["scores"]["overall"] <= 0.1  # minimal HTML, no CSS/JS
+    assert data["scores"]["overall"] <= 0.15  # minimal HTML, no CSS/JS
 
 
 def test_scoring_html_css_js_good_attempt(tmp_path):
@@ -125,7 +125,7 @@ def test_profile_fullstack_includes_all_components(tmp_path):
         score = data["scores"]["by_component"][component]["score"]
         assert isinstance(score, (int, float)), f"{component} should be scored, got {score}"
 
-    assert data["scores"]["overall"] >= 0.5
+    assert data["scores"]["overall"] >= 0.3  # with expanded rule set, simple test files score lower
 
 
 def test_profile_skipped_components_not_in_denominator(tmp_path):

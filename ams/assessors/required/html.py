@@ -127,9 +127,24 @@ class HTMLRequiredElementsAssessor(BaseRequiredAssessor):
         if selector == "label" or rule.id == "html.has_labels":
             count = parser.label_count
             return count, count >= rule.min_count
-        
+
+        # === IMAGE ELEMENT ===
+        if selector == "img" or rule.id == "html.has_image":
+            count = parser.img_count
+            return count, count >= rule.min_count
+
+        # === STYLESHEET LINKAGE ===
+        if selector == "link_stylesheet" or rule.id == "html.links_stylesheet":
+            count = parser.link_stylesheet_count
+            return count, count >= rule.min_count
+
+        # === SCRIPT LINKAGE ===
+        if selector == "link_script" or rule.id == "html.links_script_or_js":
+            count = parser.script_count
+            return count, count >= rule.min_count
+
         # === STANDARD TAG COUNTING ===
-        # For simple selectors like html, head, body, title, form, input, a
+        # For simple selectors like html, head, body, title, form, input, a, table
         count = parser.counts.get(selector, 0)
         return count, count >= rule.min_count
 

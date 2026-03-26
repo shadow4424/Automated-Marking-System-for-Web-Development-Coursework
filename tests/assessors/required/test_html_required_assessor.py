@@ -19,8 +19,8 @@ def test_html_required_passes_when_all_present(build_submission, run_pipeline) -
     assert len(passed) >= 3
     rule_ids = {f["evidence"]["rule_id"] for f in passed}
     assert {"html.has_form", "html.has_input", "html.has_link"}.issubset(rule_ids)
-    counts = {f["evidence"]["selector"]: f["evidence"]["count"] for f in passed}
-    assert counts.get("form", 0) >= 1
+    counts = {f["evidence"]["rule_id"]: f["evidence"]["count"] for f in passed}
+    assert counts.get("html.has_form", 0) >= 1
 
 
 def test_html_required_fail_when_missing_form(build_submission, run_pipeline) -> None:

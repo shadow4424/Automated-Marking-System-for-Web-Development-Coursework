@@ -74,7 +74,7 @@ class ConsistencyAssessor(Assessor):
         """Run all consistency checks."""
         findings: List[Finding] = []
         profile_name = context.metadata.get("profile", "frontend")
-        
+
         try:
             profile_spec = get_profile_spec(profile_name)
         except ValueError:
@@ -82,22 +82,35 @@ class ConsistencyAssessor(Assessor):
 
         # Extract HTML data
         html_data = self._extract_html_data(context)
-        
+
         # B1: HTML ↔ JS DOM selector consistency
         if profile_spec and (profile_spec.is_component_required("html") or profile_spec.is_component_required("js")):
             findings.extend(self._check_js_html_consistency(context, html_data, profile_name))
-        
+
         # B2: HTML ↔ CSS selector consistency
         if profile_spec and (profile_spec.is_component_required("html") or profile_spec.is_component_required("css")):
             findings.extend(self._check_css_html_consistency(context, html_data, profile_name))
-        
+
         # B3: Form field ↔ PHP variable consistency (fullstack only)
         if profile_spec and profile_spec.is_component_required("php"):
             findings.extend(self._check_php_form_consistency(context, html_data, profile_name))
-        
+
         # B4: Link/action target existence
         findings.extend(self._check_link_targets(context, html_data, profile_name))
-        
+
+        # Cross-file alignment checks (store results for RequirementEvaluationEngine)
+        cross_file_results: Dict[str, object] = {}
+        if profile_spec and profile_spec.is_component_required("php"):
+            cross_file_results["php_form_alignment"] = self._compute_php_form_alignment(
+                context, html_data
+            )
+        if profile_spec and profile_spec.is_component_required("sql") and profile_spec.is_component_required("php"):
+            cross_file_results["sql_alignment"] = self._compute_sql_application_alignment(context)
+        if profile_spec and profile_spec.is_component_required("api"):
+            cross_file_results["api_alignment"] = self._compute_api_client_alignment(context)
+        if cross_file_results:
+            context.metadata["cross_file_results"] = cross_file_results
+
         return findings
 
     def _extract_html_data(self, context: SubmissionContext) -> Dict[str, object]:
@@ -367,6 +380,96 @@ class ConsistencyAssessor(Assessor):
                 )
         
         return findings
+
+    def _compute_php_form_alignment(
+        self, context: SubmissionContext, html_data: Dict[str, object]
+    ) -> Dict[str, object]:
+        """Compute PHP ↔ HTML form field alignment score for RequirementEvaluationEngine."""
+        html_form_fields: Set[str] = set(html_data.get("form_fields", {}).keys())  # type: ignore[arg-type]
+        php_files = sorted(context.files_for("php", relevant_only=True))
+        post_pattern = r'\$_POST\s*\[\s*["\']([^"\']+)["\']'
+        get_pattern = r'\$_GET\s*\[\s*["\']([^"\']+)["\']'
+        php_accessed_keys: Set[str] = set()
+        for php_file in php_files:
+            try:
+                content = php_file.read_text(encoding="utf-8", errors="replace")
+                for pattern in [post_pattern, get_pattern]:
+                    for match in re.finditer(pattern, content, re.IGNORECASE):
+                        php_accessed_keys.add(match.group(1))
+            except Exception:
+                pass
+        if not php_accessed_keys and not html_form_fields:
+            return {"score": "SKIPPED", "status": "SKIPPED", "evidence": {"reason": "no_form_fields"}}
+        matched = php_accessed_keys & html_form_fields
+        total = len(php_accessed_keys | html_form_fields)
+        ratio = len(matched) / total if total > 0 else 0.0
+        if ratio >= 0.8:
+            return {"score": 1.0, "status": "PASS", "evidence": {"matched": list(matched), "php_keys": list(php_accessed_keys), "html_fields": list(html_form_fields)}}
+        elif ratio >= 0.4:
+            return {"score": 0.5, "status": "PARTIAL", "evidence": {"matched": list(matched), "php_keys": list(php_accessed_keys), "html_fields": list(html_form_fields)}}
+        return {"score": 0.0, "status": "FAIL", "evidence": {"matched": list(matched), "php_keys": list(php_accessed_keys), "html_fields": list(html_form_fields)}}
+
+    def _compute_sql_application_alignment(self, context: SubmissionContext) -> Dict[str, object]:
+        """Compute SQL table ↔ PHP/JS application reference alignment score."""
+        sql_files = sorted(context.files_for("sql", relevant_only=True))
+        php_files = sorted(context.files_for("php", relevant_only=True))
+        # Extract SQL table names from CREATE TABLE statements
+        sql_tables: Set[str] = set()
+        create_pattern = re.compile(r'create\s+table\s+(?:if\s+not\s+exists\s+)?[`"\']?(\w+)[`"\']?', re.IGNORECASE)
+        for sql_file in sql_files:
+            try:
+                content = sql_file.read_text(encoding="utf-8", errors="replace")
+                for match in create_pattern.finditer(content):
+                    sql_tables.add(match.group(1).lower())
+            except Exception:
+                pass
+        if not sql_tables:
+            return {"score": "SKIPPED", "status": "SKIPPED", "evidence": {"reason": "no_sql_tables"}}
+        # Check PHP/JS references to those table names
+        app_references: Set[str] = set()
+        for php_file in php_files:
+            try:
+                content = php_file.read_text(encoding="utf-8", errors="replace").lower()
+                for table in sql_tables:
+                    if table in content:
+                        app_references.add(table)
+            except Exception:
+                pass
+        matched = sql_tables & app_references
+        ratio = len(matched) / len(sql_tables) if sql_tables else 0.0
+        if ratio >= 0.8:
+            return {"score": 1.0, "status": "PASS", "evidence": {"sql_tables": list(sql_tables), "referenced": list(matched)}}
+        elif ratio >= 0.4:
+            return {"score": 0.5, "status": "PARTIAL", "evidence": {"sql_tables": list(sql_tables), "referenced": list(matched)}}
+        return {"score": 0.0, "status": "FAIL", "evidence": {"sql_tables": list(sql_tables), "referenced": list(matched)}}
+
+    def _compute_api_client_alignment(self, context: SubmissionContext) -> Dict[str, object]:
+        """Compute JS fetch ↔ PHP route alignment score."""
+        js_files = sorted(context.files_for("js", relevant_only=True))
+        php_files = sorted(context.files_for("php", relevant_only=True))
+        # Extract fetch() endpoints from JS
+        fetch_pattern = re.compile(r"""fetch\s*\(\s*['"]([^'"]+)['"]""", re.IGNORECASE)
+        js_endpoints: Set[str] = set()
+        for js_file in js_files:
+            try:
+                content = js_file.read_text(encoding="utf-8", errors="replace")
+                for match in fetch_pattern.finditer(content):
+                    js_endpoints.add(match.group(1).lower())
+            except Exception:
+                pass
+        if not js_endpoints:
+            return {"score": "SKIPPED", "status": "SKIPPED", "evidence": {"reason": "no_fetch_calls"}}
+        # Check PHP files handle those endpoints (by filename or request_uri pattern)
+        php_routes: Set[str] = set()
+        for php_file in php_files:
+            php_routes.add(php_file.name.lower().replace(".php", ""))
+        matched = {ep for ep in js_endpoints if any(r in ep for r in php_routes)}
+        ratio = len(matched) / len(js_endpoints) if js_endpoints else 0.0
+        if ratio >= 0.7:
+            return {"score": 1.0, "status": "PASS", "evidence": {"js_endpoints": list(js_endpoints), "php_routes": list(php_routes), "matched": list(matched)}}
+        elif ratio >= 0.3:
+            return {"score": 0.5, "status": "PARTIAL", "evidence": {"js_endpoints": list(js_endpoints), "php_routes": list(php_routes), "matched": list(matched)}}
+        return {"score": 0.0, "status": "FAIL", "evidence": {"js_endpoints": list(js_endpoints), "php_routes": list(php_routes), "matched": list(matched)}}
 
     def _check_link_targets(
         self, context: SubmissionContext, html_data: Dict[str, object], profile_name: str

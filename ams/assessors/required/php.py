@@ -129,6 +129,15 @@ class PHPRequiredFeaturesAssessor(BaseRequiredAssessor):
             count = sum(1 for p in error_patterns if p in content_lower)
             return count, count >= rule.min_count
         
+        # === RESPONSE PATH COMPLETE ===
+        if needle == "response_path_complete" or rule.id == "php.response_path_complete":
+            # Check all three stages of a complete request-response path
+            has_input = "$_post" in content_lower or "$_get" in content_lower or "$_request" in content_lower
+            has_processing = "isset(" in content_lower or "if " in content_lower or "if(" in content_lower
+            has_output = "echo" in content_lower or "print" in content_lower or "json_encode(" in content_lower
+            count = sum([has_input, has_processing, has_output])
+            return count, count >= rule.min_count  # min_count=2 → needs input + at least one other
+
         # === STANDARD NEEDLE COUNTING ===
         count = content_lower.count(needle)
         return count, count >= rule.min_count
@@ -137,10 +146,6 @@ class PHPRequiredFeaturesAssessor(BaseRequiredAssessor):
         """Build a human-readable message for rule evaluation result."""
         status = "PASS" if passed else "FAIL"
         return f"Rule {rule.id} {status}: found {count}, required {rule.min_count}"
-
-
-__all__ = ["PHPRequiredFeaturesAssessor"]
-
 
 
 __all__ = ["PHPRequiredFeaturesAssessor"]

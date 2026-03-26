@@ -25,3 +25,22 @@ def test_sql_required_fail(build_submission, run_pipeline):
     fails = [f for f in data["findings"] if f["id"] == "SQL.REQ.FAIL"]
     assert any(f["evidence"]["rule_id"] == "sql.has_create_table" for f in fails)
     assert any(f["evidence"]["rule_id"] == "sql.has_insert" for f in fails)
+
+
+def test_sql_parses_cleanly_pass(build_submission, run_pipeline):
+    """Balanced parens and proper semicolons → sql.parses_cleanly passes."""
+    sql = "CREATE TABLE users (id INT, name VARCHAR(50)); INSERT INTO users VALUES (1, 'Alice'); SELECT * FROM users;"
+    submission = build_submission({"schema.sql": sql})
+    data = run_pipeline(submission, profile="fullstack")
+    passes = [f for f in data["findings"] if f["id"] == "SQL.REQ.PASS"]
+    rule_ids = {f["evidence"]["rule_id"] for f in passes}
+    assert "sql.parses_cleanly" in rule_ids
+
+
+def test_sql_parses_cleanly_fail(build_submission, run_pipeline):
+    """No semicolons → sql.parses_cleanly fails."""
+    sql = "CREATE TABLE t id INT name VARCHAR(50)"
+    submission = build_submission({"schema.sql": sql})
+    data = run_pipeline(submission, profile="fullstack")
+    fails = [f for f in data["findings"] if f["id"] == "SQL.REQ.FAIL"]
+    assert any(f["evidence"]["rule_id"] == "sql.parses_cleanly" for f in fails)

@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import List, Mapping
 
 from ams.assessors import Assessor
-from ams.core.models import BrowserEvidence, Finding, FindingCategory, Severity, SubmissionContext
+from ams.core.finding_ids import BEHAVIOUR as BEHID
+from ams.core.models import BehaviouralEvidence, BrowserEvidence, Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec
 
 
@@ -29,6 +30,10 @@ class BrowserRunResult:
     actions: List[Mapping[str, object]] | None = None
     screenshot_paths: List[str] | None = None
     notes: str = ""
+    calculator_test_results: dict | None = None
+    hover_test_result: dict | None = None
+    viewport_test_result: dict | None = None
+    dom_structure: dict | None = None
 
 
 class BrowserRunner:
@@ -36,6 +41,18 @@ class BrowserRunner:
 
     def run(self, entry_path: Path, workdir: Path, interaction: bool = True) -> BrowserRunResult:  # pragma: no cover - interface
         raise NotImplementedError
+
+    def run_calculator_tests(self, entry_path: Path, workdir: Path) -> dict:  # pragma: no cover
+        """Run calculator click sequences and return result dict. Override in subclasses."""
+        return {"status": "skipped", "reason": "not_implemented"}
+
+    def run_hover_test(self, entry_path: Path, workdir: Path) -> dict:  # pragma: no cover
+        """Run hover style test and return result dict. Override in subclasses."""
+        return {"status": "skipped", "reason": "not_implemented"}
+
+    def run_viewport_test(self, entry_path: Path, workdir: Path) -> dict:  # pragma: no cover
+        """Run viewport resize test and return result dict. Override in subclasses."""
+        return {"status": "skipped", "reason": "not_implemented"}
 
 
 class PlaywrightRunner(BrowserRunner):
@@ -146,6 +163,103 @@ class PlaywrightRunner(BrowserRunner):
                     console_errors=console_errors[:20],
                     network_errors=network_errors[:20],
                 )
+
+    def run_calculator_tests(self, entry_path: Path, workdir: Path) -> dict:  # pragma: no cover
+        """Run calculator button click sequences and assert display output."""
+        try:
+            from playwright.sync_api import sync_playwright
+        except Exception as exc:
+            return {"status": "skipped", "reason": f"playwright_unavailable: {exc}"}
+
+        sequences = [
+            (["2", "+", "3", "="], "5"),
+            (["9", "-", "4", "="], "5"),
+            (["6", "*", "7", "="], "42"),
+            (["8", "/", "2", "="], "4"),
+        ]
+        results = []
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            for seq, expected in sequences:
+                try:
+                    page = browser.new_page()
+                    page.goto(entry_path.as_uri(), wait_until="load", timeout=5000)
+                    for label in seq:
+                        btn = page.query_selector(f"button:has-text('{label}')")
+                        if btn:
+                            btn.click()
+                            page.wait_for_timeout(50)
+                    display = page.query_selector("input[readonly], #theDisplay, #display, .display")
+                    actual = (display.input_value() if display else "").strip() if display else ""
+                    results.append({"seq": "".join(seq), "expected": expected, "actual": actual, "pass": actual == expected})
+                    page.close()
+                except Exception as exc:
+                    results.append({"seq": "".join(seq), "expected": expected, "actual": None, "pass": False, "error": str(exc)})
+            browser.close()
+
+        passed = sum(1 for r in results if r["pass"])
+        total = len(results)
+        if passed == total:
+            status = "pass"
+        elif passed >= total // 2:
+            status = "partial"
+        else:
+            status = "fail"
+        return {"status": status, "passed": passed, "total": total, "results": results}
+
+    def run_hover_test(self, entry_path: Path, workdir: Path) -> dict:  # pragma: no cover
+        """Test that hovering over links changes computed styles."""
+        try:
+            from playwright.sync_api import sync_playwright
+        except Exception as exc:
+            return {"status": "skipped", "reason": f"playwright_unavailable: {exc}"}
+
+        with sync_playwright() as p:
+            try:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                page.goto(entry_path.as_uri(), wait_until="load", timeout=5000)
+                links = page.query_selector_all("a")
+                if not links:
+                    browser.close()
+                    return {"status": "skipped", "reason": "no_links_found"}
+                link = links[0]
+                color_before = page.evaluate("(el) => getComputedStyle(el).color", link)
+                link.hover()
+                page.wait_for_timeout(200)
+                color_after = page.evaluate("(el) => getComputedStyle(el).color", link)
+                changed = color_before != color_after
+                browser.close()
+                return {"status": "pass" if changed else "fail", "changed": changed, "before": color_before, "after": color_after}
+            except Exception as exc:
+                return {"status": "skipped", "reason": str(exc)}
+
+    def run_viewport_test(self, entry_path: Path, workdir: Path) -> dict:  # pragma: no cover
+        """Test layout at mobile (375x667) and desktop (1280x800) viewports."""
+        try:
+            from playwright.sync_api import sync_playwright
+        except Exception as exc:
+            return {"status": "skipped", "reason": f"playwright_unavailable: {exc}"}
+
+        with sync_playwright() as p:
+            try:
+                browser = p.chromium.launch(headless=True)
+                mobile_ok, desktop_ok = True, True
+                for width, height, label in [(375, 667, "mobile"), (1280, 800, "desktop")]:
+                    page = browser.new_page(viewport={"width": width, "height": height})
+                    page.goto(entry_path.as_uri(), wait_until="load", timeout=5000)
+                    # Check for horizontal overflow (a proxy for broken layout)
+                    overflow = page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth")
+                    if label == "mobile":
+                        mobile_ok = not overflow
+                    else:
+                        desktop_ok = not overflow
+                    page.close()
+                browser.close()
+                status = "pass" if (mobile_ok and desktop_ok) else ("partial" if (mobile_ok or desktop_ok) else "fail")
+                return {"status": status, "mobile_ok": mobile_ok, "desktop_ok": desktop_ok}
+            except Exception as exc:
+                return {"status": "skipped", "reason": str(exc)}
 
 
 class PlaywrightAssessor(Assessor):
@@ -400,7 +514,81 @@ class PlaywrightAssessor(Assessor):
                 )
             )
 
+        # Extended behavioral tests based on profile
+        if profile_spec:
+            behavioral_test_types = {rule.test_type for rule in profile_spec.behavioral_rules}
+            if "calculator_sequence" in behavioral_test_types or "calculator_display" in behavioral_test_types or "calculator_operator" in behavioral_test_types:
+                findings.extend(self._run_calculator_behavioral(context, entry, profile))
+            if "hover_check" in behavioral_test_types:
+                findings.extend(self._run_hover_behavioral(context, entry, profile))
+            if "viewport_resize" in behavioral_test_types:
+                findings.extend(self._run_viewport_behavioral(context, entry, profile))
+
         return findings
+
+    def _run_calculator_behavioral(
+        self, context: SubmissionContext, entry: Path, profile: str
+    ) -> List[Finding]:
+        """Run calculator interaction tests and emit behavioural evidence."""
+        result = self.runner.run_calculator_tests(entry, context.workspace_path)
+        status = result.get("status", "skipped")
+        if status == "pass":
+            finding_id = BEHID.CALCULATOR_PASS
+            severity = Severity.INFO
+        elif status == "partial":
+            finding_id = BEHID.CALCULATOR_PARTIAL
+            severity = Severity.WARN
+        elif status == "skipped":
+            finding_id = BEHID.CALCULATOR_SKIPPED
+            severity = Severity.SKIPPED
+        else:
+            finding_id = BEHID.CALCULATOR_FAIL
+            severity = Severity.FAIL
+        context.behavioural_evidence.append(
+            BehaviouralEvidence(
+                test_id="BEHAVIOUR.CALCULATOR_SEQUENCE",
+                component="js",
+                status=status,
+                outputs=result,
+            )
+        )
+        return [self._finding(finding_id, f"Calculator tests: {status}", severity, profile=profile, evidence=result)]
+
+    def _run_hover_behavioral(
+        self, context: SubmissionContext, entry: Path, profile: str
+    ) -> List[Finding]:
+        """Run hover style test and emit behavioural evidence."""
+        result = self.runner.run_hover_test(entry, context.workspace_path)
+        status = result.get("status", "skipped")
+        finding_id = BEHID.HOVER_PASS if status == "pass" else (BEHID.HOVER_SKIPPED if status == "skipped" else BEHID.HOVER_FAIL)
+        severity = Severity.INFO if status == "pass" else (Severity.SKIPPED if status == "skipped" else Severity.WARN)
+        context.behavioural_evidence.append(
+            BehaviouralEvidence(
+                test_id="BEHAVIOUR.HOVER_CHECK",
+                component="css",
+                status=status,
+                outputs=result,
+            )
+        )
+        return [self._finding(finding_id, f"Hover style test: {status}", severity, profile=profile, evidence=result)]
+
+    def _run_viewport_behavioral(
+        self, context: SubmissionContext, entry: Path, profile: str
+    ) -> List[Finding]:
+        """Run viewport resize test and emit behavioural evidence."""
+        result = self.runner.run_viewport_test(entry, context.workspace_path)
+        status = result.get("status", "skipped")
+        finding_id = BEHID.VIEWPORT_PASS if status == "pass" else (BEHID.VIEWPORT_SKIPPED if status == "skipped" else BEHID.VIEWPORT_FAIL)
+        severity = Severity.INFO if status == "pass" else (Severity.SKIPPED if status == "skipped" else Severity.WARN)
+        context.behavioural_evidence.append(
+            BehaviouralEvidence(
+                test_id="BEHAVIOUR.VIEWPORT_RESIZE",
+                component="css",
+                status=status,
+                outputs=result,
+            )
+        )
+        return [self._finding(finding_id, f"Viewport resize test: {status}", severity, profile=profile, evidence=result)]
 
     def _select_entrypoint(self, context: SubmissionContext) -> Path | None:
         html_files = sorted(context.files_for("html", relevant_only=True))
