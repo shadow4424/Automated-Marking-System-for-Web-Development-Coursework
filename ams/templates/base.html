@@ -94,6 +94,9 @@
                 </span>
                 <span class="navbar-user-name">{{ current_user.firstName }}</span>
                 <span class="badge {% if user_role == 'admin' %}badge-primary{% elif user_role == 'teacher' %}badge-success{% else %}badge-info{% endif %}" style="font-size:0.6rem;">{{ user_role|capitalize }}</span>
+                <a href="{{ url_for('account.settings') }}"
+                   class="btn btn-ghost btn-sm {% if request.endpoint and request.endpoint.startswith('account.') %}active{% endif %}"
+                   title="Account Settings" style="margin-left:var(--space-xs);">Settings</a>
                 <a href="{{ url_for('auth.logout') }}" class="btn btn-ghost btn-sm" title="Sign Out" style="margin-left:var(--space-xs);" onclick="try{sessionStorage.removeItem('ams_jobs')}catch(e){}">Sign Out</a>
             </div>
             {% endif %}

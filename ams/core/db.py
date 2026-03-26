@@ -333,6 +333,44 @@ def delete_user(user_id: str) -> bool:
         conn.close()
 
 
+def get_user_by_email(email: str) -> dict | None:
+    """Return the first user with the given email, or None."""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM users WHERE email = ?", (email,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def update_user_email(user_id: str, email: str) -> None:
+    """Update email for *user_id*. Only the email column is touched (whitelist)."""
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE users SET email = ? WHERE userID = ?",
+            (email, user_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def update_user_password(user_id: str, password: str) -> None:
+    """Hash *password* and store it for *user_id*. Only password_hash is touched (whitelist)."""
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE userID = ?",
+            (generate_password_hash(password), user_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 # ---------------------------------------------------------------------------
 #  Assignment CRUD
 # ---------------------------------------------------------------------------

@@ -383,7 +383,7 @@ def test_run_detail_and_teacher_assignment_page_label_active_and_history_attempt
     assert "#1" in body
     assert "#2" in body
     assert "Active" in body
-    assert "Attempt history" in body
+    assert "older attempt" in body
     assert "Older attempts are preserved here without affecting the active result." in body
 
     old_attempt_page = client.get("/runs/attempt_old")

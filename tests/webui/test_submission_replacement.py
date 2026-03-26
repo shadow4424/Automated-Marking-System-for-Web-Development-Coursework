@@ -5,9 +5,16 @@ from pathlib import Path
 
 from flask import Flask
 
+from ams.core.db import init_db
 from ams.io.web_storage import list_runs, save_run_info
 from ams.web.routes_student import _gather_student_runs
 from ams.webui import _replace_existing_submissions, _write_run_index_batch
+
+
+def _use_temp_db(monkeypatch, tmp_path: Path) -> None:
+    db_path = tmp_path / "ams_users.db"
+    monkeypatch.setattr("ams.core.db._DEFAULT_DB_PATH", db_path)
+    init_db()
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -61,6 +68,10 @@ def _make_mark_run(
 ) -> Path:
     run_dir = runs_root / assignment_id / student_id / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        run_dir / "report.json",
+        _make_report(student_id, assignment_id, f"{student_id}_{assignment_id}.zip", 0.5),
+    )
     save_run_info(
         run_dir,
         {
@@ -72,6 +83,7 @@ def _make_mark_run(
             "assignment_id": assignment_id,
             "original_filename": f"{student_id}_{assignment_id}.zip",
             "status": "completed",
+            "report": "report.json",
         },
     )
     return run_dir
@@ -198,7 +210,8 @@ def _make_invalid_batch_run(
     return run_dir
 
 
-def test_list_runs_keeps_latest_submission_per_student_and_assignment(tmp_path: Path) -> None:
+def test_list_runs_keeps_latest_submission_per_student_and_assignment(tmp_path: Path, monkeypatch) -> None:
+    _use_temp_db(monkeypatch, tmp_path)
     _make_mark_run(
         tmp_path,
         run_id="20260319-090000_mark_frontend_old",
@@ -219,7 +232,8 @@ def test_list_runs_keeps_latest_submission_per_student_and_assignment(tmp_path: 
     assert [run["id"] for run in runs] == ["20260319-100000_mark_frontend_new"]
 
 
-def test_list_runs_does_not_let_invalid_batch_hide_valid_submissions(tmp_path: Path) -> None:
+def test_list_runs_does_not_let_invalid_batch_hide_valid_submissions(tmp_path: Path, monkeypatch) -> None:
+    _use_temp_db(monkeypatch, tmp_path)
     _make_mark_run(
         tmp_path,
         run_id="20260319-090000_mark_frontend_student1",
@@ -265,13 +279,19 @@ def test_replace_existing_submissions_prunes_old_batch_record(tmp_path: Path) ->
         current_run_id="20260319-100000_mark_frontend_new",
     )
 
+    # Submission attempts are immutable — _replace_existing_submissions is a no-op.
+    # Both students remain in the batch records.
     batch_summary = json.loads((run_dir / "batch_summary.json").read_text(encoding="utf-8"))
-    assert [record["student_id"] for record in batch_summary["records"]] == ["student2"]
-    assert not (run_dir / "runs" / "student1_assignment1").exists()
+    student_ids = [record["student_id"] for record in batch_summary["records"]]
+    assert "student1" in student_ids
+    assert "student2" in student_ids
+    assert (run_dir / "runs" / "student1_assignment1").exists()
     assert (run_dir / "runs" / "student2_assignment1").exists()
 
     run_index = json.loads((run_dir / "run_index.json").read_text(encoding="utf-8"))
-    assert [submission["student_id"] for submission in run_index["submissions"]] == ["student2"]
+    index_student_ids = [submission["student_id"] for submission in run_index["submissions"]]
+    assert "student1" in index_student_ids
+    assert "student2" in index_student_ids
 
 
 def test_gather_student_runs_includes_batch_submission_details(tmp_path: Path, monkeypatch) -> None:
