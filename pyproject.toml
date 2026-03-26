@@ -31,3 +31,8 @@ demo = ["matplotlib>=3.7.0"]
 markers = [
     "uses_llm: opt a test into real LLM-backed behaviour when that is the behaviour under test",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
