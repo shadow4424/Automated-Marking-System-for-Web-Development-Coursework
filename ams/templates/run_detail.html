@@ -1,4 +1,14 @@
 {% extends "base.html" %}
+{% from "macros/_findings.html" import
+    artifact_url,
+    render_mapping,
+    render_raw_finding_detail,
+    environment_label,
+    status_badge_class,
+    system_item_class,
+    render_environment_state,
+    render_system_check_item %}
+{% from "macros/_ui.html" import status_badge %}
 {% block title %}Run Detail - AMS{% endblock %}
 
 {% block head %}
@@ -6,164 +16,6 @@
 {% endblock %}
 
 {% block content %}
-{% macro artifact_url(relpath) -%}
-    {%- set normalized = relpath|replace('\\', '/') -%}
-    {%- if batch_submission_id is defined and batch_submission_id -%}
-        {{- url_for('runs.run_artifact', run_id=run_id, relpath='runs/' ~ batch_submission_id ~ '/' ~ normalized) -}}
-    {%- else -%}
-        {{- url_for('runs.run_artifact', run_id=run_id, relpath=normalized) -}}
-    {%- endif -%}
-{%- endmacro %}
-
-{% macro render_mapping(mapping, hidden_keys=()) -%}
-    {% if mapping %}
-    <dl class="submission-detail-kv">
-        {% for key, value in mapping.items() %}
-        {% if key not in hidden_keys %}
-        <dt>{{ key }}</dt>
-        <dd>
-            {% if value is mapping %}
-                {% for nested_key, nested_value in value.items() %}
-                <div><strong>{{ nested_key }}:</strong> {{ render_evidence_value(nested_value) }}</div>
-                {% endfor %}
-            {% elif value is iterable and value is not string %}
-                {% if value %}
-                <ul class="submission-inline-list">
-                    {% for item in value %}
-                    <li>{{ render_evidence_value(item) }}</li>
-                    {% endfor %}
-                </ul>
-                {% else %}
-                -
-                {% endif %}
-            {% else %}
-            {{ render_evidence_value(value) }}
-            {% endif %}
-        </dd>
-        {% endif %}
-        {% endfor %}
-    </dl>
-    {% else %}
-    <div class="submission-empty">No structured evidence was recorded.</div>
-    {% endif %}
-{%- endmacro %}
-
-{% macro render_raw_finding_detail(finding) -%}
-    {% set evidence = finding.evidence if finding.evidence is mapping else {} %}
-    {% set hidden_keys = ('snippet', 'snippets', 'content', 'llm_feedback', 'hybrid_score', 'vision_analysis', 'ux_review', 'screenshot') %}
-    <article class="submission-evidence-block">
-        <div class="submission-card-head">
-            <div>
-                <h4 class="submission-card-title">{{ finding.title }}</h4>
-                <div class="submission-secondary-id">{{ finding.id }}</div>
-            </div>
-            <div class="page-status-row">
-                {% if finding.component_label %}<span class="badge badge-info">{{ finding.component_label }}</span>{% endif %}
-                {% if finding.stage %}<span class="badge badge-secondary">{{ finding.stage_label }}</span>{% endif %}
-                <span class="badge {% if finding.tone == 'success' %}badge-success{% elif finding.tone == 'warning' %}badge-warning{% elif finding.tone == 'danger' %}badge-danger{% else %}badge-secondary{% endif %}">{{ finding.badge_label|default(finding.status) }}</span>
-            </div>
-        </div>
-        <p class="submission-detail-note">{{ finding.message }}</p>
-        {% if evidence.snippet %}<div class="submission-code"><pre>{{ evidence.snippet }}</pre></div>{% endif %}
-        {% if finding.screenshots %}
-        <div class="submission-card-grid">
-            {% for shot in finding.screenshots %}
-            <img src="{{ artifact_url(shot) }}" alt="Evidence screenshot" class="submission-screenshot" onerror="this.parentElement.innerHTML='<p class=\'submission-detail-note\'>Screenshot unavailable.</p>'">
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% if evidence %}{{ render_mapping(evidence, hidden_keys) }}{% endif %}
-    </article>
-{%- endmacro %}
-
-{% macro environment_label(key) -%}
-    {% set labels = {
-        'php_available': 'PHP runtime',
-        'browser_available': 'Browser runtime',
-        'behavioural_tests_run': 'Runtime checks',
-        'browser_tests_run': 'Browser checks'
-    } %}
-    {{ labels.get(key, key|replace('_', ' ')|title) }}
-{%- endmacro %}
-
-{% macro status_badge_class(status) -%}
-    {%- set key = status|string|lower -%}
-    {{- 'badge-success' if key in ['pass', 'passed', 'ok'] else ('badge-danger' if key in ['fail', 'failed', 'error', 'threat'] else ('badge-warning' if key in ['warn', 'warning', 'partial'] else 'badge-secondary')) -}}
-{%- endmacro %}
-
-{% macro system_item_class(status) -%}
-    {%- set key = status|string|lower -%}
-    {{- 'is-success' if key in ['pass', 'passed', 'ok'] else ('is-danger' if key in ['fail', 'failed', 'error', 'threat'] else ('is-warning' if key in ['warn', 'warning', 'partial'] else '')) -}}
-{%- endmacro %}
-
-{% macro render_environment_state(mapping) -%}
-    {% if mapping %}
-    <div class="submission-system-state-grid">
-        {% for key, value in mapping.items() %}
-        <article class="submission-system-state-card">
-            <div class="submission-system-state-label">{{ environment_label(key) }}</div>
-            <div class="submission-system-state-value">
-                {% if value is sameas true %}
-                    <span class="badge badge-success">{{ 'Completed' if key in ['behavioural_tests_run', 'browser_tests_run'] else 'Available' }}</span>
-                {% elif value is sameas false %}
-                    <span class="badge badge-warning">{{ 'Unavailable' if key in ['php_available', 'browser_available'] else 'Not completed' }}</span>
-                {% elif value is mapping %}
-                    {% for nested_key, nested_value in value.items() %}
-                    <div><strong>{{ nested_key|replace('_', ' ')|title }}:</strong> {{ render_evidence_value(nested_value) }}</div>
-                    {% endfor %}
-                {% elif value is iterable and value is not string %}
-                    {% if value %}
-                    <ul class="submission-inline-list">
-                        {% for item in value %}
-                        <li>{{ render_evidence_value(item) }}</li>
-                        {% endfor %}
-                    </ul>
-                    {% else %}
-                    -
-                    {% endif %}
-                {% else %}
-                {{ render_evidence_value(value) }}
-                {% endif %}
-            </div>
-        </article>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="submission-empty">No environment summary was recorded.</div>
-    {% endif %}
-{%- endmacro %}
-
-{% macro render_system_check_item(item, source_label) -%}
-    {% set test_id = item.test_id|default('Unknown', true) %}
-    {% set status = item.status|default('Unknown', true) %}
-    {% set note = item.notes|default('', true) %}
-    {% if not note %}{% set note = item.stderr|default('', true) %}{% endif %}
-    {% if not note %}{% set note = item.stdout|default('', true) %}{% endif %}
-    {% if not note and item.console_errors %}{% set note = item.console_errors|join(', ') %}{% endif %}
-    <article class="submission-system-item {{ system_item_class(status) }}">
-        <div class="submission-card-head">
-            <div>
-                <h4 class="submission-card-title">{{ test_id|replace('.', ' ')|replace('_', ' ')|title }}</h4>
-                <div class="submission-secondary-id">{{ test_id }}</div>
-            </div>
-            <div class="page-status-row">
-                <span class="badge badge-secondary">{{ source_label }}</span>
-                <span class="badge {{ status_badge_class(status) }}">{{ status|replace('_', ' ')|title }}</span>
-            </div>
-        </div>
-        {% if note %}
-        <p class="submission-system-note">{{ note }}</p>
-        {% endif %}
-        {% if item.component or item.duration_ms or item.url %}
-        <div class="submission-system-meta">
-            {% if item.component %}<span class="badge badge-info">{{ item.component|replace('_', ' ')|title }}</span>{% endif %}
-            {% if item.duration_ms %}<span class="badge badge-secondary">{{ item.duration_ms }} ms</span>{% endif %}
-            {% if item.url %}<span class="submission-detail-note">{{ item.url }}</span>{% endif %}
-        </div>
-        {% endif %}
-    </article>
-{%- endmacro %}
-
 {% set viewer_role = view_as_role or user_role %}
 {% set back_target = back_url if back_url is defined and back_url else (url_for('student.coursework') if viewer_role == 'student' else (url_for('assignment_mgmt.assignment_detail', assignment_id=run.assignment_id) if run.assignment_id else url_for('runs.runs'))) %}
 {% set back_label = 'Back to coursework' if viewer_role == 'student' else ('Back to assignment' if run.assignment_id else 'Back to runs') %}
@@ -175,7 +27,7 @@
 {% set report = report if report is defined else none %}
 {% set submission_meta = report.metadata.submission_metadata|default({}, true) if report else {} %}
 {% set submitted_label = (submission_meta.timestamp|default(run.created_at, true))|format_submission_datetime %}
-{% set marks_badge = 'badge-success' if marks_released else 'badge-warning' %}
+{% set marks_tone = 'success' if marks_released else 'warning' %}
 {% set tone_class = 'is-success' if decision.tone == 'success' else ('is-warning' if decision.tone == 'warning' else 'is-danger') %}
 {% set can_manage_submission = user_role in ['teacher', 'admin'] %}
 {% set can_rerun_submission = can_manage_submission and run_status != 'pending' and (batch_submission_id or run.mode != 'batch') %}
@@ -198,7 +50,7 @@
             <div class="page-kicker">{% if viewer_role == 'student' %}Submission report{% else %}Marker review{% endif %}</div>
             <h1>{% if run.student_id and run.assignment_id %}{{ run.student_id }} / {{ run.assignment_id }}{% elif run.assignment_id %}{{ run.assignment_id }}{% else %}Submission result{% endif %}</h1>
             <div class="page-status-row">
-                <span class="badge {{ marks_badge }}">{{ 'Marks released' if marks_released else 'Marks withheld' }}</span>
+                {{ status_badge('Marks released' if marks_released else 'Marks withheld', marks_tone) }}
                 <span class="badge badge-secondary">{{ (detail.assessment_context.profile|default(run.profile|default('unknown'), true))|replace('_', ' ')|title }}</span>
                 {% if current_attempt.attempt_number %}<span class="badge badge-secondary">Attempt {{ current_attempt.attempt_number }}</span>{% endif %}
                 {% if run.is_active %}<span class="badge badge-success">Active attempt</span>{% elif current_attempt.attempt_number %}<span class="badge badge-secondary">History attempt</span>{% endif %}
@@ -219,8 +71,8 @@
                     <h2 class="submission-banner-title {{ tone_class }}">{{ decision.outcome|default('Manual decision needed', true) }}</h2>
                     <div class="page-status-row" style="margin-top: var(--space-sm);">
                         <span class="submission-band">Mark band <strong>{{ decision.mark_band|default('Hold', true) }}</strong></span>
-                        <span class="badge {% if decision.manual_review_required %}badge-warning{% else %}badge-success{% endif %}">Manual review {{ decision.manual_review_label|default('Required', true) }}</span>
-                        <span class="badge {% if decision.confidence_level == 'high' %}badge-success{% elif decision.confidence_level == 'medium' %}badge-warning{% else %}badge-danger{% endif %}">{{ decision.confidence_level|default('unknown', true)|title }} confidence</span>
+                        {{ status_badge('Manual review ' ~ decision.manual_review_label|default('Required', true), 'warning' if decision.manual_review_required else 'success') }}
+                        {{ status_badge(decision.confidence_level|default('unknown', true)|title ~ ' confidence', 'success' if decision.confidence_level == 'high' else ('warning' if decision.confidence_level == 'medium' else 'danger')) }}
                     </div>
                 </div>
                 <div class="submission-banner-meta">
@@ -534,43 +386,8 @@
                     <div><h2 class="submission-section-title">Assessment evidence</h2></div>
                 </div>
 
-                <div class="submission-filter-row">
-                    <div class="submission-filter-search">
-                        <input
-                            type="search"
-                            class="form-input"
-                            data-evidence-search
-                            aria-label="Search evidence"
-                            placeholder="Search by rule id, title, component, stage, status, or message"
-                        >
-                    </div>
-                    <div class="submission-filter-count" data-evidence-count>{{ detail.evidence_items|length }} results</div>
-                </div>
-
-                <div class="submission-filter-groups">
-                    <div class="submission-filter-group" role="toolbar" aria-label="Status filters">
-                        <span class="submission-filter-label">Status</span>
-                        <button type="button" class="submission-filter-chip is-active" aria-pressed="true" data-evidence-status="all">All</button>
-                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-status="PASS">Pass</button>
-                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-status="PARTIAL">Partial</button>
-                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-status="FAIL">Fail</button>
-                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-status="WARN">Warn</button>
-                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-status="SKIPPED">Skipped</button>
-                    </div>
-                    <div class="submission-filter-group" role="toolbar" aria-label="Component filters">
-                        <span class="submission-filter-label">Component</span>
-                        <button type="button" class="submission-filter-chip is-active" aria-pressed="true" data-evidence-component="all">All</button>
-                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="html">HTML</button>
-                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="css">CSS</button>
-                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="js">JS</button>
-                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="php">PHP</button>
-                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="sql">SQL</button>
-                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="api">API</button>
-                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="browser">Browser</button>
-                        <button type="button" class="submission-filter-chip" aria-pressed="false" data-evidence-component="behavioural">Behavioural</button>
-                        <button type="button" class="btn btn-ghost btn-sm" data-evidence-reset>Reset</button>
-                    </div>
-                </div>
+                {% set filter_toolbar_variant = 'run_detail_evidence' %}
+                {% include "partials/_filter_toolbar.html" %}
 
                 <div class="page-action-row" style="justify-content:flex-end; margin: var(--space-lg) 0;">
                     <button type="button" class="btn btn-secondary btn-sm" data-disclosure-action="expand" data-disclosure-target="submission-evidence-list">Expand all</button>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/_ui.html" import status_badge %}
 
 {% block title %}Teacher Dashboard - AMS{% endblock %}
 
@@ -24,24 +25,13 @@
         </div>
         <aside class="page-side-panel">
             <h2 class="card-title">Current scope</h2>
-            <div class="info-grid info-grid--2">
-                <div class="info-item">
-                    <span class="info-item-label">Assignments</span>
-                    <span class="info-item-value">{{ assignments|length }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Students</span>
-                    <span class="info-item-value">{{ students|length }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Released</span>
-                    <span class="info-item-value">{{ assignments|selectattr('marks_released')|list|length }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Withheld</span>
-                    <span class="info-item-value">{{ assignments|rejectattr('marks_released')|list|length }}</span>
-                </div>
-            </div>
+            {% set info_grid_items = [
+                {'label': 'Assignments', 'value': assignments|length},
+                {'label': 'Students', 'value': students|length},
+                {'label': 'Released', 'value': assignments|selectattr('marks_released')|list|length},
+                {'label': 'Withheld', 'value': assignments|rejectattr('marks_released')|list|length}
+            ] %}
+            {% include "partials/_info_grid.html" %}
         </aside>
     </section>
 
@@ -77,9 +67,9 @@
                         <td>{{ a.assigned_students|length }} allocated</td>
                         <td>
                             {% if a.marks_released %}
-                            <span class="badge badge-success">Released</span>
+                            {{ status_badge('Released', 'success') }}
                             {% else %}
-                            <span class="badge badge-warning">Withheld</span>
+                            {{ status_badge('Withheld', 'warning') }}
                             {% endif %}
                         </td>
                         <td>

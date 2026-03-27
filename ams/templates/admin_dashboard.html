@@ -17,24 +17,13 @@
         </div>
         <aside class="page-side-panel">
             <h2 class="card-title">System scope</h2>
-            <div class="info-grid info-grid--2">
-                <div class="info-item">
-                    <span class="info-item-label">Users</span>
-                    <span class="info-item-value">{{ users|length }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Assignments</span>
-                    <span class="info-item-value">{{ assignments|length }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Teachers</span>
-                    <span class="info-item-value">{{ teachers|length }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Students</span>
-                    <span class="info-item-value">{{ students|length }}</span>
-                </div>
-            </div>
+            {% set info_grid_items = [
+                {'label': 'Users', 'value': users|length},
+                {'label': 'Assignments', 'value': assignments|length},
+                {'label': 'Teachers', 'value': teachers|length},
+                {'label': 'Students', 'value': students|length}
+            ] %}
+            {% include "partials/_info_grid.html" %}
         </aside>
     </section>
 

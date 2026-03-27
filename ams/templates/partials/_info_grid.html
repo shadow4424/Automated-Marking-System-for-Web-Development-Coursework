@@ -1,0 +1,12 @@
+{#
+  AMS Info Grid Partial
+  Expects `info_grid_items`, a list of mappings with `label` and `value`.
+#}
+<div class="info-grid info-grid--2">
+    {% for item in info_grid_items %}
+    <div class="info-item">
+        <span class="info-item-label">{{ item.label }}</span>
+        <span class="info-item-value">{{ item.value }}</span>
+    </div>
+    {% endfor %}
+</div>

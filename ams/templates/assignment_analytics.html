@@ -386,109 +386,8 @@
             <button type="button" id="clear-drilldown" class="btn btn-ghost btn-sm">Clear filter</button>
         </div>
 
-        <details class="analytics-collapse-card analytics-inline-panel">
-            <summary>
-                <div>
-                    <strong>Search filters</strong>
-                </div>
-            </summary>
-            <div class="analytics-collapse-body">
-                <div class="analytics-filter-panel" style="margin-bottom: 0;">
-                    <div class="analytics-filter-grid" style="margin-bottom: var(--space-md);">
-                        <div class="form-group">
-                            <label for="attention-student-search">Student</label>
-                            <input id="attention-student-search" class="form-input" type="search" placeholder="Search student id">
-                        </div>
-                        <div class="form-group">
-                            <label for="attention-score-band">Score band</label>
-                            <select id="attention-score-band" class="form-select">
-                                <option value="">All score bands</option>
-                                <option value="below_50">Below 50%</option>
-                                <option value="between_50_69">50% to 69%</option>
-                                <option value="70_plus">70% and above</option>
-                                <option value="no_score">No score</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="attention-grade">Grade</label>
-                            <select id="attention-grade" class="form-select">
-                                <option value="">All grades</option>
-                                <option value="unknown">Unknown</option>
-                                <option value="failing">Failing</option>
-                                <option value="poor">Poor</option>
-                                <option value="partial">Partial</option>
-                                <option value="good">Good</option>
-                                <option value="full marks">Full marks</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="attention-severity">Severity</label>
-                            <select id="attention-severity" class="form-select">
-                                <option value="">All severities</option>
-                                <option value="high">High</option>
-                                <option value="medium">Medium</option>
-                                <option value="low">Low</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="attention-confidence">Confidence</label>
-                            <select id="attention-confidence" class="form-select">
-                                <option value="">All confidence levels</option>
-                                <option value="high">High confidence</option>
-                                <option value="medium">Medium confidence</option>
-                                <option value="low">Low confidence</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="attention-reason">Primary reason</label>
-                            <select id="attention-reason" class="form-select">
-                                <option value="">All reasons</option>
-                                <option value="submission not analysable">Submission not analysable</option>
-                                <option value="reduced evaluation confidence">Reduced evaluation confidence</option>
-                                <option value="behavioural runtime issue">Behavioural runtime issue</option>
-                                <option value="browser runtime issue">Browser runtime issue</option>
-                                <option value="consistency issue">Consistency issue</option>
-                                <option value="missing required files">Missing required files</option>
-                                <option value="syntax issue">Syntax issue</option>
-                                <option value="low score">Low score</option>
-                                <option value="other">Other</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="attention-flag">Flag</label>
-                            <select id="attention-flag" class="form-select">
-                                <option value="">All flags</option>
-                                <option value="submission not analysable">Submission not analysable</option>
-                                <option value="no score">No score</option>
-                                <option value="low score">Low score</option>
-                                <option value="runtime checks skipped">Runtime checks skipped</option>
-                                <option value="browser checks skipped">Browser checks skipped</option>
-                                <option value="runtime issue">Runtime issue</option>
-                                <option value="browser issue">Browser issue</option>
-                                <option value="consistency issue">Consistency issue</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="attention-rule-filter">Rule id</label>
-                            <input id="attention-rule-filter" class="form-input" type="text" placeholder="Exact rule id">
-                        </div>
-                        <div class="form-group">
-                            <label for="attention-sort">Sort</label>
-                            <select id="attention-sort" class="form-select">
-                                <option value="severity">Severity then score</option>
-                                <option value="score_asc">Score ascending</option>
-                                <option value="score_desc">Score descending</option>
-                                <option value="grade">Grade</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="analytics-filter-actions">
-                        <button type="button" id="clear-attention-filters" class="btn btn-ghost btn-sm">Clear all filters</button>
-                    </div>
-                </div>
-            </div>
-        </details>
+        {% set filter_toolbar_variant = 'assignment_needs_attention' %}
+        {% include "partials/_filter_toolbar.html" %}
 
         <div id="attention-list" class="analytics-attention-list">
             {% for row in needs_attention %}
@@ -629,49 +528,8 @@
             <button type="button" id="toggle-rules" class="btn btn-ghost btn-sm">Show all rules</button>
             {% endif %}
         </div>
-        <details class="analytics-collapse-card analytics-inline-panel">
-            <summary>
-                <div>
-                    <strong>Search filters</strong>
-                </div>
-            </summary>
-            <div class="analytics-collapse-body">
-                <div class="analytics-filter-panel" style="margin-bottom: 0;">
-                    <div class="analytics-filter-grid" style="margin-bottom: var(--space-md);">
-                        <div class="form-group">
-                            <label for="rule-severity-filter">Severity</label>
-                            <select id="rule-severity-filter" class="form-select">
-                                <option value="">All severities</option>
-                                <option value="FAIL">Fail-level</option>
-                                <option value="WARN">Warning-level</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="rule-component-filter">Component</label>
-                            <select id="rule-component-filter" class="form-select">
-                                <option value="">All components</option>
-                                {% for component in ['html', 'css', 'js', 'php', 'sql', 'runtime', 'other'] %}
-                                <option value="{{ component }}">{{ component|upper }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="rule-impact-filter">Impact type</label>
-                            <select id="rule-impact-filter" class="form-select">
-                                <option value="">All impact types</option>
-                                <option value="fail_level">Fail-level</option>
-                                <option value="warning_level">Warning-level</option>
-                                <option value="weighted">Weighted</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="analytics-filter-actions">
-                        <span class="analytics-helper" title="Counts refer to active submissions affected, not raw uploads. Incident counts refer to repeated rule failures or warnings across the cohort.">Rule counts are assignment-wide and assignment-scoped.</span>
-                        <button type="button" id="clear-rule-filters" class="btn btn-ghost btn-sm">Clear rule filters</button>
-                    </div>
-                </div>
-            </div>
-        </details>
+        {% set filter_toolbar_variant = 'assignment_rule_summary' %}
+        {% include "partials/_filter_toolbar.html" %}
         <div class="table-container">
             <table class="table">
                 <thead>

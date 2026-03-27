@@ -22,24 +22,13 @@
         </div>
         <aside class="page-side-panel">
             <h2 class="card-title">At a glance</h2>
-            <div class="info-grid info-grid--2">
-                <div class="info-item">
-                    <span class="info-item-label">Assignments</span>
-                    <span class="info-item-value">{{ assignments|length }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">To do</span>
-                    <span class="info-item-value">{{ todo|length }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Completed</span>
-                    <span class="info-item-value">{{ completed|length }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Attempts on record</span>
-                    <span class="info-item-value">{{ submission_attempt_total }}</span>
-                </div>
-            </div>
+            {% set info_grid_items = [
+                {'label': 'Assignments', 'value': assignments|length},
+                {'label': 'To do', 'value': todo|length},
+                {'label': 'Completed', 'value': completed|length},
+                {'label': 'Attempts on record', 'value': submission_attempt_total}
+            ] %}
+            {% include "partials/_info_grid.html" %}
         </aside>
     </section>
 

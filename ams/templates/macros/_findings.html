@@ -1,0 +1,164 @@
+{#
+  AMS Finding Macros
+  Shared by: run_detail.html (and future templates needing finding rendering)
+  Imported via: {% from "macros/_findings.html" import ... %}
+#}
+{% from "macros/_ui.html" import status_badge %}
+
+{% macro artifact_url(relpath) -%}
+    {%- set normalized = relpath|replace('\\', '/') -%}
+    {%- if batch_submission_id is defined and batch_submission_id -%}
+        {{- url_for('runs.run_artifact', run_id=run_id, relpath='runs/' ~ batch_submission_id ~ '/' ~ normalized) -}}
+    {%- else -%}
+        {{- url_for('runs.run_artifact', run_id=run_id, relpath=normalized) -}}
+    {%- endif -%}
+{%- endmacro %}
+
+{% macro render_mapping(mapping, hidden_keys=()) -%}
+    {% if mapping %}
+    <dl class="submission-detail-kv">
+        {% for key, value in mapping.items() %}
+        {% if key not in hidden_keys %}
+        <dt>{{ key }}</dt>
+        <dd>
+            {% if value is mapping %}
+                {% for nested_key, nested_value in value.items() %}
+                <div><strong>{{ nested_key }}:</strong> {{ render_evidence_value(nested_value) }}</div>
+                {% endfor %}
+            {% elif value is iterable and value is not string %}
+                {% if value %}
+                <ul class="submission-inline-list">
+                    {% for item in value %}
+                    <li>{{ render_evidence_value(item) }}</li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                -
+                {% endif %}
+            {% else %}
+            {{ render_evidence_value(value) }}
+            {% endif %}
+        </dd>
+        {% endif %}
+        {% endfor %}
+    </dl>
+    {% else %}
+    <div class="submission-empty">No structured evidence was recorded.</div>
+    {% endif %}
+{%- endmacro %}
+
+{% macro render_raw_finding_detail(finding) -%}
+    {% set evidence = finding.evidence if finding.evidence is mapping else {} %}
+    {% set hidden_keys = ('snippet', 'snippets', 'content', 'llm_feedback', 'hybrid_score', 'vision_analysis', 'ux_review', 'screenshot') %}
+    <article class="submission-evidence-block">
+        <div class="submission-card-head">
+            <div>
+                <h4 class="submission-card-title">{{ finding.title }}</h4>
+                <div class="submission-secondary-id">{{ finding.id }}</div>
+            </div>
+            <div class="page-status-row">
+                {% if finding.component_label %}<span class="badge badge-info">{{ finding.component_label }}</span>{% endif %}
+                {% if finding.stage %}<span class="badge badge-secondary">{{ finding.stage_label }}</span>{% endif %}
+                {{ status_badge(finding.badge_label|default(finding.status), finding.tone) }}
+            </div>
+        </div>
+        <p class="submission-detail-note">{{ finding.message }}</p>
+        {% if evidence.snippet %}<div class="submission-code"><pre>{{ evidence.snippet }}</pre></div>{% endif %}
+        {% if finding.screenshots %}
+        <div class="submission-card-grid">
+            {% for shot in finding.screenshots %}
+            <img src="{{ artifact_url(shot) }}" alt="Evidence screenshot" class="submission-screenshot" onerror="this.parentElement.innerHTML='<p class=\'submission-detail-note\'>Screenshot unavailable.</p>'">
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if evidence %}{{ render_mapping(evidence, hidden_keys) }}{% endif %}
+    </article>
+{%- endmacro %}
+
+{% macro environment_label(key) -%}
+    {% set labels = {
+        'php_available': 'PHP runtime',
+        'browser_available': 'Browser runtime',
+        'behavioural_tests_run': 'Runtime checks',
+        'browser_tests_run': 'Browser checks'
+    } %}
+    {{ labels.get(key, key|replace('_', ' ')|title) }}
+{%- endmacro %}
+
+{% macro status_badge_class(status) -%}
+    {%- set key = status|string|lower -%}
+    {{- 'badge-success' if key in ['pass', 'passed', 'ok'] else ('badge-danger' if key in ['fail', 'failed', 'error', 'threat'] else ('badge-warning' if key in ['warn', 'warning', 'partial'] else 'badge-secondary')) -}}
+{%- endmacro %}
+
+{% macro system_item_class(status) -%}
+    {%- set key = status|string|lower -%}
+    {{- 'is-success' if key in ['pass', 'passed', 'ok'] else ('is-danger' if key in ['fail', 'failed', 'error', 'threat'] else ('is-warning' if key in ['warn', 'warning', 'partial'] else '')) -}}
+{%- endmacro %}
+
+{% macro render_environment_state(mapping) -%}
+    {% if mapping %}
+    <div class="submission-system-state-grid">
+        {% for key, value in mapping.items() %}
+        <article class="submission-system-state-card">
+            <div class="submission-system-state-label">{{ environment_label(key) }}</div>
+            <div class="submission-system-state-value">
+                {% if value is sameas true %}
+                    {{ status_badge('Completed' if key in ['behavioural_tests_run', 'browser_tests_run'] else 'Available', 'success') }}
+                {% elif value is sameas false %}
+                    {{ status_badge('Unavailable' if key in ['php_available', 'browser_available'] else 'Not completed', 'warning') }}
+                {% elif value is mapping %}
+                    {% for nested_key, nested_value in value.items() %}
+                    <div><strong>{{ nested_key|replace('_', ' ')|title }}:</strong> {{ render_evidence_value(nested_value) }}</div>
+                    {% endfor %}
+                {% elif value is iterable and value is not string %}
+                    {% if value %}
+                    <ul class="submission-inline-list">
+                        {% for item in value %}
+                        <li>{{ render_evidence_value(item) }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    -
+                    {% endif %}
+                {% else %}
+                {{ render_evidence_value(value) }}
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="submission-empty">No environment summary was recorded.</div>
+    {% endif %}
+{%- endmacro %}
+
+{% macro render_system_check_item(item, source_label) -%}
+    {% set test_id = item.test_id|default('Unknown', true) %}
+    {% set status = item.status|default('Unknown', true) %}
+    {% set note = item.notes|default('', true) %}
+    {% if not note %}{% set note = item.stderr|default('', true) %}{% endif %}
+    {% if not note %}{% set note = item.stdout|default('', true) %}{% endif %}
+    {% if not note and item.console_errors %}{% set note = item.console_errors|join(', ') %}{% endif %}
+    <article class="submission-system-item {{ system_item_class(status) }}">
+        <div class="submission-card-head">
+            <div>
+                <h4 class="submission-card-title">{{ test_id|replace('.', ' ')|replace('_', ' ')|title }}</h4>
+                <div class="submission-secondary-id">{{ test_id }}</div>
+            </div>
+            <div class="page-status-row">
+                <span class="badge badge-secondary">{{ source_label }}</span>
+                <span class="badge {{ status_badge_class(status) }}">{{ status|replace('_', ' ')|title }}</span>
+            </div>
+        </div>
+        {% if note %}
+        <p class="submission-system-note">{{ note }}</p>
+        {% endif %}
+        {% if item.component or item.duration_ms or item.url %}
+        <div class="submission-system-meta">
+            {% if item.component %}<span class="badge badge-info">{{ item.component|replace('_', ' ')|title }}</span>{% endif %}
+            {% if item.duration_ms %}<span class="badge badge-secondary">{{ item.duration_ms }} ms</span>{% endif %}
+            {% if item.url %}<span class="submission-detail-note">{{ item.url }}</span>{% endif %}
+        </div>
+        {% endif %}
+    </article>
+{%- endmacro %}
