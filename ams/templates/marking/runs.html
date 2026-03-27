@@ -98,7 +98,7 @@
             <button type="button" class="filter-toggle" data-filter="state:active">Active</button>
             <button type="button" class="filter-toggle" data-filter="state:history">History</button>
             <button type="button" class="filter-toggle" data-filter="validity:invalid">Invalid</button>
-            <button type="button" class="filter-toggle" data-filter="threat:true" style="--toggle-active-bg:#dc2626;">Threats</button>
+            <button type="button" class="filter-toggle" data-filter="threat:true" style="--toggle-active-bg:#dc2626;">Threats</button> {# layout-specific, intentional #}
         </div>
         <span class="toolbar-count" data-count></span>
     </div>
@@ -120,13 +120,13 @@
 
                 <div class="run-card-score">
                     {% if status == 'pending' %}
-                    <span class="score-badge badge-muted" style="font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">...</span>
+                    <span class="score-badge badge-muted" style="font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">...</span> {# layout-specific, intentional #}
                     {% elif status == 'failed' %}
-                    <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">FAIL</span>
+                    <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">FAIL</span> {# layout-specific, intentional #}
                     {% elif r.threat_flagged %}
-                    <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">THREAT</span>
+                    <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">THREAT</span> {# layout-specific, intentional #}
                     {% elif r.llm_error_flagged %}
-                    <span class="score-badge" style="background:#fef3c7;color:#92400e;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">LLM</span>
+                    <span class="score-badge" style="background:#fef3c7;color:#92400e;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">LLM</span> {# layout-specific, intentional #}
                     {% else %}
                     {% set score = r.get('score') %}
                     {% if score is not none %}
@@ -160,16 +160,16 @@
                         {% if status == 'pending' %}
                         <span class="badge badge-warning">Pending</span>
                         {% elif status == 'failed' %}
-                        <span class="badge" style="background:#dc2626;color:#fff;">Failed</span>
+                        <span class="badge" style="background:#dc2626;color:#fff;">Failed</span> {# layout-specific, intentional #}
                         {% endif %}
                         {% if validity == 'invalid' %}
                         <span class="badge badge-danger">Invalid</span>
                         {% endif %}
                         {% if r.threat_flagged %}
-                        <span class="badge" style="background:#dc2626;color:#fff;">Security threat</span>
+                        <span class="badge" style="background:#dc2626;color:#fff;">Security threat</span> {# layout-specific, intentional #}
                         {% endif %}
                         {% if r.llm_error_flagged %}
-                        <span class="badge" style="background:#fef3c7;color:#92400e;">LLM error</span>
+                        <span class="badge" style="background:#fef3c7;color:#92400e;">LLM error</span> {# layout-specific, intentional #}
                         {% endif %}
                     </div>
                     <div class="run-card-meta">
@@ -193,7 +193,7 @@
                         {% endif %}
                     </div>
                     {% if r.selection_reason and (r.get('attempt_number') or not r.get('is_active')) %}
-                    <div class="table-meta" style="margin-top: var(--space-xs);">{{ r.selection_reason }}</div>
+                    <div class="table-meta mt-xs">{{ r.selection_reason }}</div>
                     {% endif %}
                 </div>
 

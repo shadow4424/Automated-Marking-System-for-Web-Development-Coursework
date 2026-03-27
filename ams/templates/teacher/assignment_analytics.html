@@ -62,7 +62,7 @@
                 <div class="analytics-kicker">Marker dashboard</div>
                 <h1 class="mt-md mb-sm">{{ assignment.title }}</h1>
                 <p class="text-secondary mb-0">Cohort analytics for {{ assignment.assignmentID }}.</p>
-                <div class="analytics-meta" style="margin-top: var(--space-md);">
+                <div class="analytics-meta mt-md">
                     <span class="badge badge-secondary" title="Assessment profile used for this assignment.">{{ assignment.profile|capitalize }} profile</span>
                     {% if assignment.marks_released %}
                     <span class="badge badge-success" title="Released grades are already visible to students.">Marks released</span>
@@ -72,9 +72,9 @@
                     <span class="badge badge-info" title="Analytics are recomputed each time this page opens.">{{ updated_label }}</span>
                 </div>
                 {% if updated_exact %}
-                <p class="analytics-helper" style="margin-top: 0.65rem; margin-bottom: 0;">Exact refresh time: {{ updated_exact }}</p>
+                <p class="analytics-helper" style="margin-top: 0.65rem; margin-bottom: 0;">Exact refresh time: {{ updated_exact }}</p> {# layout-specific, intentional #}
                 {% endif %}
-                <div class="analytics-actions" style="margin-top: var(--space-lg);">
+                <div class="analytics-actions mt-lg">
                     <div class="export-dropdown" data-export-dropdown>
                         <button type="button" class="btn btn-secondary btn-sm export-dropdown-trigger" aria-haspopup="true" aria-expanded="false">
                             Export review queue
@@ -226,7 +226,7 @@
                 </div>
             </div>
             {% if llm_summary_enabled and insights %}
-            <div id="teaching-summary-feedback" class="analytics-helper" aria-live="polite" style="margin-bottom: var(--space-md);">
+            <div id="teaching-summary-feedback" class="analytics-helper mb-md" aria-live="polite">
                 Deterministic wording is shown by default. Generate the LLM summary only when you need a refined rewrite.
             </div>
             {% endif %}
@@ -315,9 +315,9 @@
                     </div>
                     <div class="analytics-graph-body">
                         <div class="analytics-legend analytics-legend--compact">
-                            <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#16a34a;"></span>High confidence</span>
-                            <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#f59e0b;"></span>Medium confidence</span>
-                            <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#ef4444;"></span>Low confidence</span>
+                            <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#16a34a;"></span>High confidence</span> {# layout-specific, intentional #}
+                            <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#f59e0b;"></span>Medium confidence</span> {# layout-specific, intentional #}
+                            <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#ef4444;"></span>Low confidence</span> {# layout-specific, intentional #}
                             <span class="analytics-legend-item"><span class="analytics-legend-swatch analytics-legend-swatch--outlined"></span>Manual review</span>
                         </div>
                         <div id="graph-static-functional-scatter" class="analytics-chart-shell" data-graph-card="static_functional_scatter_plot"></div>
@@ -357,7 +357,7 @@
         <section class="analytics-priority-banner" role="status">
             <div>
                 <strong>Priority follow-up</strong>
-                <p class="analytics-section-note" style="margin-top: 0.35rem;">
+                <p class="analytics-section-note" style="margin-top: 0.35rem;"> {# layout-specific, intentional #}
                     {{ manual_review_count }} submission{{ '' if manual_review_count == 1 else 's' }} currently need manual review.
                     {{ low_confidence }} low-confidence result{{ '' if low_confidence == 1 else 's' }} and {{ not_analysable }} not-analysable submission{{ '' if not_analysable == 1 else 's' }} are already reflected in the queue below.
                 </p>
@@ -453,7 +453,7 @@
                             <strong>Evidence and flagged rules</strong>
                             <p class="analytics-section-note">Rule-level evidence, excerpts, and flags behind this moderation recommendation.</p>
                             {% if row.flags %}
-                            <div class="analytics-chip-list" style="margin-bottom: var(--space-md);">
+                            <div class="analytics-chip-list mb-md">
                                 {% for flag in row.flags %}
                                 <span class="analytics-chip">{{ flag }}</span>
                                 {% endfor %}
@@ -462,14 +462,14 @@
                             {% if row.matched_rules %}
                             <div class="analytics-list-stack">
                                 {% for rule in row.matched_rules %}
-                                <div class="analytics-detail-surface" style="padding: 0.9rem 1rem;">
-                                    <div class="analytics-summary-badges" style="justify-content: space-between;">
+                                <div class="analytics-detail-surface" style="padding: 0.9rem 1rem;"> {# layout-specific, intentional #}
+                                    <div class="analytics-summary-badges jc-between">
                                         <strong>{{ rule.label }}</strong>
                                         <span class="badge {% if rule.status == 'FAIL' %}badge-danger{% elif rule.status == 'WARN' %}badge-warning{% else %}badge-secondary{% endif %}">{{ rule.status|title }}</span>
                                     </div>
                                     <span class="analytics-table-note">{{ rule.id }}</span>
                                     {% if rule.message %}
-                                    <p class="analytics-section-note" style="margin-top: 0.55rem;">{{ rule.message }}</p>
+                                    <p class="analytics-section-note mt-055">{{ rule.message }}</p>
                                     {% endif %}
                                 </div>
                                 {% endfor %}
@@ -482,7 +482,7 @@
                     <div class="analytics-detail-stack">
                         <div class="analytics-detail-surface">
                             <strong>Review note</strong>
-                            <p class="analytics-section-note" style="margin-top: 0.5rem;">{{ row.review_note }}</p>
+                            <p class="analytics-section-note mt-05">{{ row.review_note }}</p>
                             {% if row.evidence_excerpt %}
                             <div class="analytics-table-note">Evidence excerpt: {{ row.evidence_excerpt }}</div>
                             {% endif %}
@@ -503,10 +503,10 @@
                 </div>
             </details>
             {% endfor %}
-            <div id="attention-no-results" class="analytics-empty-inline" style="display:none;">No flagged submissions match the current filters.</div>
+            <div id="attention-no-results" class="analytics-empty-inline d-none">No flagged submissions match the current filters.</div>
         </div>
         {% else %}
-        <div class="empty-state" style="padding: var(--space-xl);">
+        <div class="empty-state" style="padding: var(--space-xl);"> {# layout-specific, intentional #}
             <p class="empty-state-title">No submissions are currently queued for moderation follow-up</p>
             <p class="empty-state-text mb-0">The current assignment cohort does not include any automatically flagged submissions.</p>
         </div>
@@ -523,7 +523,7 @@
         </summary>
         <div class="analytics-collapse-body">
         {% if top_rules %}
-        <div class="analytics-section-tools" style="justify-content: flex-end; margin-bottom: var(--space-lg);">
+        <div class="analytics-section-tools jc-end mb-lg">
             {% if top_rules|selectattr('default_visible', 'equalto', false)|list %}
             <button type="button" id="toggle-rules" class="btn btn-ghost btn-sm">Show all rules</button>
             {% endif %}
@@ -579,7 +579,7 @@
                         <td><button type="button" class="btn btn-ghost btn-sm js-rule-filter" data-rule="{{ rule.rule_id }}">Filter queue</button></td>
                     </tr>
                     {% endfor %}
-                    <tr id="rules-no-results" style="display:none;">
+                    <tr id="rules-no-results" class="d-none">
                         <td colspan="6" class="analytics-empty-inline">No failing rules match the current filters.</td>
                     </tr>
                 </tbody>
@@ -640,10 +640,10 @@
                 </td>
                 <td>
                     <div class="analytics-inline-distribution" aria-label="{{ requirement.title }} attainment mix">
-                        <button type="button" class="analytics-distribution-segment analytics-distribution-segment--met js-subset-button" style="width: {{ '%.2f'|format((requirement.students_met / requirement_total * 100) if requirement_total else 0) }}%;" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Met" data-badge="{{ requirement.met_percent|round|int }}% fully met" data-students="{{ requirement.met_students|join('|') }}" title="Met: {{ requirement.students_met }}"></button>
-                        <button type="button" class="analytics-distribution-segment analytics-distribution-segment--partial js-subset-button" style="width: {{ '%.2f'|format((requirement.students_partial / requirement_total * 100) if requirement_total else 0) }}%;" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Partial" data-badge="{{ requirement.students_partial }} partial" data-students="{{ requirement.partial_students|join('|') }}" title="Partial: {{ requirement.students_partial }}"></button>
-                        <button type="button" class="analytics-distribution-segment analytics-distribution-segment--unmet js-subset-button" style="width: {{ '%.2f'|format((requirement.students_unmet / requirement_total * 100) if requirement_total else 0) }}%;" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Unmet" data-badge="{{ requirement.students_unmet }} unmet" data-students="{{ requirement.unmet_students|join('|') }}" title="Unmet: {{ requirement.students_unmet }}"></button>
-                        <button type="button" class="analytics-distribution-segment analytics-distribution-segment--neutral js-subset-button" style="width: {{ '%.2f'|format((requirement.students_not_evaluable / requirement_total * 100) if requirement_total else 0) }}%;" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Not evaluable" data-badge="{{ requirement.students_not_evaluable }} not evaluable" data-students="{{ requirement.not_evaluable_students|join('|') }}" title="Not evaluable: {{ requirement.students_not_evaluable }}"></button>
+                        <button type="button" class="analytics-distribution-segment analytics-distribution-segment--met js-subset-button" style="width: {{ '%.2f'|format((requirement.students_met / requirement_total * 100) if requirement_total else 0) }}%;" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Met" data-badge="{{ requirement.met_percent|round|int }}% fully met" data-students="{{ requirement.met_students|join('|') }}" title="Met: {{ requirement.students_met }}"></button> {# layout-specific, intentional #}
+                        <button type="button" class="analytics-distribution-segment analytics-distribution-segment--partial js-subset-button" style="width: {{ '%.2f'|format((requirement.students_partial / requirement_total * 100) if requirement_total else 0) }}%;" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Partial" data-badge="{{ requirement.students_partial }} partial" data-students="{{ requirement.partial_students|join('|') }}" title="Partial: {{ requirement.students_partial }}"></button> {# layout-specific, intentional #}
+                        <button type="button" class="analytics-distribution-segment analytics-distribution-segment--unmet js-subset-button" style="width: {{ '%.2f'|format((requirement.students_unmet / requirement_total * 100) if requirement_total else 0) }}%;" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Unmet" data-badge="{{ requirement.students_unmet }} unmet" data-students="{{ requirement.unmet_students|join('|') }}" title="Unmet: {{ requirement.students_unmet }}"></button> {# layout-specific, intentional #}
+                        <button type="button" class="analytics-distribution-segment analytics-distribution-segment--neutral js-subset-button" style="width: {{ '%.2f'|format((requirement.students_not_evaluable / requirement_total * 100) if requirement_total else 0) }}%;" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Not evaluable" data-badge="{{ requirement.students_not_evaluable }} not evaluable" data-students="{{ requirement.not_evaluable_students|join('|') }}" title="Not evaluable: {{ requirement.students_not_evaluable }}"></button> {# layout-specific, intentional #}
                     </div>
                 </td>
                 <td><button type="button" class="analytics-state-button js-subset-button {% if not requirement.students_met %}is-empty{% endif %}" data-component="{{ requirement.component }}" data-focus-label="{{ requirement.title }}" data-label="{{ requirement.title }} - Met" data-badge="{{ requirement.met_percent|round|int }}% fully met" data-students="{{ requirement.met_students|join('|') }}">{{ requirement.students_met }}</button></td>
@@ -700,7 +700,7 @@
                 <div class="analytics-inline-distribution analytics-inline-distribution--confidence" aria-label="Confidence mix">
                     {% for segment in confidence_mix_segments %}
                     {% set tone = 'high' if 'High' in segment.label else ('medium' if 'Medium' in segment.label else 'low') %}
-                    <button type="button" class="analytics-distribution-segment analytics-distribution-segment--{{ tone }} js-subset-button" style="width: {{ '%.2f'|format(segment.percent|default(0, true)) }}%;" data-label="{{ segment.label }}" data-badge="{{ segment.percent|round|int }}% of active submissions" data-students="{{ segment.student_ids|join('|') }}"></button>
+                    <button type="button" class="analytics-distribution-segment analytics-distribution-segment--{{ tone }} js-subset-button" style="width: {{ '%.2f'|format(segment.percent|default(0, true)) }}%;" data-label="{{ segment.label }}" data-badge="{{ segment.percent|round|int }}% of active submissions" data-students="{{ segment.student_ids|join('|') }}"></button> {# layout-specific, intentional #}
                     {% endfor %}
                 </div>
                 <div class="analytics-summary-badges">
@@ -758,7 +758,7 @@
         </summary>
         <div class="analytics-collapse-body">
         {% if signals %}
-        <div class="analytics-section-tools" style="justify-content: flex-end; margin-bottom: var(--space-lg);">
+        <div class="analytics-section-tools jc-end mb-lg">
             {% if signals|selectattr('default_visible', 'equalto', false)|list %}
             <button type="button" id="toggle-signals" class="btn btn-ghost btn-sm">Show all issues</button>
             {% endif %}
@@ -767,7 +767,7 @@
             {% for signal in signals %}
             <article class="analytics-signal-card js-signal-card {% if not signal.default_visible|default(loop.index <= default_signal_limit, true) %}analytics-hidden-card{% endif %}"
                 data-default-visible="{{ 'true' if signal.default_visible|default(loop.index <= default_signal_limit, true) else 'false' }}">
-                <div class="analytics-summary-badges" style="justify-content: space-between;">
+                <div class="analytics-summary-badges jc-between">
                     <strong>{{ signal.title }}</strong>
                     <span class="badge {% if signal.severity == 'FAIL' %}badge-danger{% elif signal.kind == 'reliability' %}badge-warning{% else %}badge-secondary{% endif %}">
                         {{ signal.students_affected }} submission{{ '' if signal.students_affected == 1 else 's' }} affected
@@ -779,16 +779,16 @@
                     <span class="analytics-chip">{{ signal.percent|round|int }}% of active submissions in scope</span>
                 </div>
                 {% if signal.related_rule_labels %}
-                <div class="analytics-chip-list" style="margin-top: var(--space-sm);">
+                <div class="analytics-chip-list mt-sm">
                     {% for label in signal.related_rule_labels[:3] %}
                     <span class="analytics-chip">{{ label }}</span>
                     {% endfor %}
                 </div>
                 {% endif %}
                 {% if signal.evidence_examples %}
-                <p class="analytics-section-note" style="margin-top: var(--space-sm);">Evidence: {{ signal.evidence_examples|join(' | ') }}</p>
+                <p class="analytics-section-note mt-sm">Evidence: {{ signal.evidence_examples|join(' | ') }}</p>
                 {% endif %}
-                <div class="analytics-filter-actions" style="margin-top: var(--space-md);">
+                <div class="analytics-filter-actions mt-md">
                     <button type="button" class="btn btn-ghost btn-sm js-signal-filter" data-label="{{ signal.title }}" data-rules="{{ signal.related_rules|join('|') }}" data-students="{{ signal.affected_students|join('|') }}">Filter review queue</button>
                     {% if signal.examples %}
                     <button type="button" class="btn btn-secondary btn-sm js-student-filter" data-student="{{ signal.examples[0] }}">Inspect {{ signal.examples[0] }}</button>
@@ -814,7 +814,7 @@
             <div class="analytics-score-source-grid">
                 {% for source in score_composition %}
                 <article class="analytics-score-source-card">
-                    <div class="analytics-summary-badges" style="justify-content: space-between;">
+                    <div class="analytics-summary-badges jc-between">
                         <strong>{{ source.label }}</strong>
                         <span class="badge badge-secondary">{{ source.submissions_affected|default(source.students_affected, true) }} submission{{ '' if (source.submissions_affected|default(source.students_affected, true)) == 1 else 's' }}</span>
                     </div>
@@ -860,7 +860,7 @@
             </div>
             <button type="button" id="close-analytics-drawer" class="btn btn-ghost btn-sm">Close</button>
         </div>
-        <div class="analytics-drawer-summary" style="margin-top: var(--space-md);">
+        <div class="analytics-drawer-summary mt-md">
             <div class="analytics-summary-badges" id="analytics-drawer-badges"></div>
             <div class="analytics-actions">
                 <button type="button" id="analytics-drawer-filter-queue" class="btn btn-secondary btn-sm">Filter review queue</button>

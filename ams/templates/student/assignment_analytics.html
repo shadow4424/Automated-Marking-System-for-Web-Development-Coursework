@@ -15,14 +15,14 @@
 
 <div class="student-analytics-shell">
     <section class="card student-analytics-hero">
-        <div style="display:grid; gap: var(--space-lg);">
+        <div class="d-grid gap-lg">
             <div class="student-analytics-kicker">Your performance</div>
             <div class="student-analytics-meta">
                 <a href="{{ url_for('student.coursework') }}" class="page-back-link">Back to coursework</a>
                 <span class="badge badge-secondary">{{ assignment.profile|replace('_', ' ')|title }}</span>
             </div>
             <div>
-                <h1 style="margin-bottom: var(--space-sm);">{{ assignment.title }}</h1>
+                <h1 class="mb-sm">{{ assignment.title }}</h1>
                 <p class="student-analytics-tagline">{{ student.summary_line }}</p>
             </div>
             <div class="student-analytics-badges">
@@ -49,10 +49,10 @@
                 <div class="student-analytics-stat"><span class="student-analytics-tagline">Cohort median</span><strong>{{ cohort.median_score_percent|round|int if cohort.median_score_percent is not none else '-' }}%</strong></div>
                 <div class="student-analytics-stat"><span class="student-analytics-tagline">Cohort size</span><strong>{{ cohort.submission_count }}</strong></div>
             </div>
-            <div class="student-analytics-card" style="padding: 1rem;">
-                <strong style="display:block; margin-bottom:0.4rem;">Confidence and fairness</strong>
+            <div class="student-analytics-card p-4">
+                <strong style="display:block; margin-bottom:0.4rem;">Confidence and fairness</strong> {# layout-specific, intentional #}
                 <div class="student-analytics-tagline">{{ student.confidence_explanation }}</div>
-                <div class="student-analytics-tagline" style="margin-top:0.55rem;">{{ student.confidence_fairness_note }}</div>
+                <div class="student-analytics-tagline mt-055">{{ student.confidence_fairness_note }}</div>
             </div>
         </aside>
     </section>
@@ -79,15 +79,15 @@
                 </ul>
             </div>
             <div class="student-analytics-card">
-                <h3 class="card-title" style="font-size: 1.05rem;">Needs attention</h3>
+                <h3 class="card-title" style="font-size: 1.05rem;">Needs attention</h3> {# layout-specific, intentional #}
                 <div class="student-analytics-check-list">
                     {% for item in analytics.needs_attention %}
                     <article class="student-analytics-check-card">
-                        <div class="student-analytics-badges" style="justify-content: space-between;">
+                        <div class="student-analytics-badges jc-between">
                             <strong>{{ item.title }}</strong>
                             <span class="badge {% if item.severity == 'high' %}badge-danger{% elif item.severity == 'medium' %}badge-warning{% else %}badge-secondary{% endif %}">{{ item.severity|capitalize }}</span>
                         </div>
-                        <div class="student-analytics-tagline" style="margin-top: 0.6rem;">{{ item.text }}</div>
+                        <div class="student-analytics-tagline mt-06">{{ item.text }}</div>
                     </article>
                     {% endfor %}
                 </div>
@@ -106,16 +106,16 @@
             {% endif %}
         </div>
         <div id="student-feedback-panel" class="student-analytics-feedback-panel">
-            <div style="display:grid; gap: var(--space-md);">
+            <div class="d-grid gap-md">
                 {% if deterministic_feedback.headline %}
-                <div class="student-analytics-card" style="padding:1rem;">
+                <div class="student-analytics-card p-4">
                     <strong>{{ deterministic_feedback.headline }}</strong>
                 </div>
                 {% endif %}
                 {% for item in deterministic_feedback.feedback %}
                 <article class="student-analytics-check-card">
                     <strong>{{ item.title }}</strong>
-                    <div class="student-analytics-tagline" style="margin-top:0.55rem;">{{ item.text }}</div>
+                    <div class="student-analytics-tagline mt-055">{{ item.text }}</div>
                 </article>
                 {% endfor %}
                 {% if not deterministic_feedback.headline and not deterministic_feedback.feedback %}
@@ -156,11 +156,11 @@
                 </div>
                 <div class="analytics-graph-body">
                     <div class="analytics-legend analytics-legend--compact">
-                        <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#16a34a;"></span>High confidence</span>
-                        <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#f59e0b;"></span>Medium confidence</span>
-                        <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#ef4444;"></span>Low confidence</span>
+                        <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#16a34a;"></span>High confidence</span> {# layout-specific, intentional #}
+                        <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#f59e0b;"></span>Medium confidence</span> {# layout-specific, intentional #}
+                        <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#ef4444;"></span>Low confidence</span> {# layout-specific, intentional #}
                         <span class="analytics-legend-item"><span class="analytics-legend-swatch analytics-legend-swatch--outlined"></span>Manual review</span>
-                        <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#2563eb; box-shadow:0 0 0 3px rgba(37, 99, 235, 0.18);"></span>You</span>
+                        <span class="analytics-legend-item"><span class="analytics-legend-swatch" style="background:#2563eb; box-shadow:0 0 0 3px rgba(37, 99, 235, 0.18);"></span>You</span> {# layout-specific, intentional #}
                     </div>
                     <div id="student-scatter" class="analytics-chart-shell" aria-label="Static versus functional chart"></div>
                     <div id="student-scatter-quadrant-note" class="analytics-context-note">Click a quadrant to display what that region represents.</div>
@@ -173,7 +173,7 @@
         <div class="section-heading-row"><h2 class="card-title">Your strengths and areas for improvement</h2></div>
         <div class="student-analytics-grid">
             <div class="student-analytics-card">
-                <h3 class="card-title" style="font-size: 1.05rem;">Strengths</h3>
+                <h3 class="card-title" style="font-size: 1.05rem;">Strengths</h3> {# layout-specific, intentional #}
                 <ul class="student-analytics-list">
                     {% for item in analytics.strengths %}
                     <li><strong>{{ item.title }}</strong><br>{{ item.detail }}</li>
@@ -181,7 +181,7 @@
                 </ul>
             </div>
             <div class="student-analytics-card">
-                <h3 class="card-title" style="font-size: 1.05rem;">Improve next</h3>
+                <h3 class="card-title" style="font-size: 1.05rem;">Improve next</h3> {# layout-specific, intentional #}
                 <ul class="student-analytics-list">
                     {% for item in analytics.improvements %}
                     <li><strong>{{ item.title }}</strong><br>{{ item.detail }}</li>
@@ -195,19 +195,19 @@
         <div class="section-heading-row"><h2 class="card-title">Requirement and component comparison</h2></div>
         <div class="student-analytics-grid">
             <div class="student-analytics-card">
-                <h3 class="card-title" style="font-size: 1.05rem;">Component performance</h3>
+                <h3 class="card-title" style="font-size: 1.05rem;">Component performance</h3> {# layout-specific, intentional #}
                 <div class="student-analytics-compare-list">
                     {% for row in analytics.component_comparison %}
                     <article class="student-analytics-compare-row">
-                        <div class="student-analytics-badges" style="justify-content: space-between;">
+                        <div class="student-analytics-badges jc-between">
                             <strong>{{ row.title }}</strong>
                             <span class="badge badge-secondary">{{ row.interpretation }}</span>
                         </div>
                         <div class="student-analytics-tagline">You {{ row.student_percent|round|int if row.student_percent is not none else '-' }}%, cohort median {{ row.cohort_median_percent|round|int if row.cohort_median_percent is not none else '-' }}%</div>
                         <div class="student-analytics-track">
-                            <span class="student-analytics-track-fill" style="width: {{ row.student_percent|default(0, true) }}%;"></span>
+                            <span class="student-analytics-track-fill" style="width: {{ row.student_percent|default(0, true) }}%;"></span> {# layout-specific, intentional #}
                             {% if row.cohort_median_percent is not none %}
-                            <span class="student-analytics-track-marker" style="left: {{ row.cohort_median_percent }}%;"></span>
+                            <span class="student-analytics-track-marker" style="left: {{ row.cohort_median_percent }}%;"></span> {# layout-specific, intentional #}
                             {% endif %}
                         </div>
                     </article>
@@ -215,11 +215,11 @@
                 </div>
             </div>
             <div class="student-analytics-card">
-                <h3 class="card-title" style="font-size: 1.05rem;">Top failing requirements in cohort context</h3>
+                <h3 class="card-title" style="font-size: 1.05rem;">Top failing requirements in cohort context</h3> {# layout-specific, intentional #}
                 <div class="student-analytics-requirement-list">
                     {% for row in analytics.top_failing_context %}
                     <article class="student-analytics-requirement-row">
-                        <div class="student-analytics-badges" style="justify-content: space-between;">
+                        <div class="student-analytics-badges jc-between">
                             <strong>{{ row.label }}</strong>
                             <span class="badge {% if row.student_status == 'FAIL' %}badge-danger{% elif row.student_status == 'PARTIAL' %}badge-warning{% elif row.student_status == 'MET' %}badge-success{% else %}badge-secondary{% endif %}">{{ row.student_label }}</span>
                         </div>
@@ -238,7 +238,7 @@
         <div class="student-analytics-requirement-list">
             {% for row in analytics.requirement_comparison %}
             <article class="student-analytics-requirement-row">
-                <div class="student-analytics-badges" style="justify-content: space-between;">
+                <div class="student-analytics-badges jc-between">
                     <strong>{{ row.title }}</strong>
                     <span class="badge {% if row.student_status == 'MET' %}badge-success{% elif row.student_status == 'PARTIAL' %}badge-warning{% elif row.student_status == 'FAIL' %}badge-danger{% else %}badge-secondary{% endif %}">{{ row.student_label }}</span>
                 </div>
@@ -253,12 +253,12 @@
         <div class="student-analytics-check-list">
             {% for row in analytics.detailed_checks %}
             <article class="student-analytics-check-card">
-                <div class="student-analytics-badges" style="justify-content: space-between;">
+                <div class="student-analytics-badges jc-between">
                     <strong>{{ row.label }}</strong>
                     <span class="badge {% if row.status == 'FAIL' %}badge-danger{% elif row.status == 'WARN' %}badge-warning{% else %}badge-secondary{% endif %}">{{ row.status_label }}</span>
                 </div>
-                <div class="student-analytics-tagline" style="margin-top:0.6rem;">{{ row.message }}</div>
-                <div class="student-analytics-badges" style="margin-top:0.75rem;">
+                <div class="student-analytics-tagline mt-06">{{ row.message }}</div>
+                <div class="student-analytics-badges mt-075">
                     {% if row.component %}<span class="badge badge-secondary">{{ row.component|upper }}</span>{% endif %}
                     {% if row.stage %}<span class="badge badge-secondary">{{ row.stage|replace('_', ' ')|title }}</span>{% endif %}
                     <span class="badge badge-secondary">{{ row.id }}</span>

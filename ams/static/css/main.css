@@ -592,3 +592,65 @@ pre {
         flex-wrap: wrap;
     }
 }
+
+/* =====================================================
+   Utilities - low-specificity single-purpose helpers
+   These replace common inline style="" patterns.
+   ===================================================== */
+
+/* Display */
+.d-flex          { display: flex; }
+.d-grid          { display: grid; }
+.d-block         { display: block; }
+.d-none          { display: none; }
+
+/* Flex / Grid alignment */
+.ai-start        { align-items: flex-start; }
+.ai-center       { align-items: center; }
+.ai-end          { align-items: flex-end; }
+.jc-between      { justify-content: space-between; }
+.jc-center       { justify-content: center; }
+.jc-end          { justify-content: flex-end; }
+.flex-wrap       { flex-wrap: wrap; }
+.flex-col        { flex-direction: column; }
+
+/* Gap */
+.gap-xs          { gap: var(--space-xs); }
+.gap-sm          { gap: var(--space-sm); }
+.gap-md          { gap: var(--space-md); }
+.gap-lg          { gap: var(--space-lg); }
+.gap-xl          { gap: var(--space-xl); }
+
+/* Margin top */
+.mt-xs           { margin-top: var(--space-xs); }
+.mt-sm           { margin-top: var(--space-sm); }
+.mt-md           { margin-top: var(--space-md); }
+.mt-lg           { margin-top: var(--space-lg); }
+.mt-05           { margin-top: 0.5rem; }
+.mt-055          { margin-top: 0.55rem; }
+.mt-06           { margin-top: 0.6rem; }
+.mt-075          { margin-top: 0.75rem; }
+
+/* Margin bottom */
+.mb-0            { margin-bottom: 0; }
+.mb-sm           { margin-bottom: var(--space-sm); }
+.mb-md           { margin-bottom: var(--space-md); }
+.mb-lg           { margin-bottom: var(--space-lg); }
+
+/* Margin left */
+.ml-xs           { margin-left: var(--space-xs); }
+
+/* Misc */
+.mx-auto         { margin-inline: auto; }
+.w-100           { width: 100%; }
+.text-center     { text-align: center; }
+.text-sm         { font-size: var(--font-size-sm); }
+.text-muted      { color: var(--color-text-muted); }
+.fw-bold         { font-weight: 700; }
+.overflow-hidden { overflow: hidden; }
+.gc-full         { grid-column: 1 / -1; }
+.bg-surface      { background: var(--color-surface); }
+.p-4             { padding: 1rem; }
+.border-top-light { border-top: 1px solid var(--color-border-light); }
+.cursor-default  { cursor: default; }
+.transform-none  { transform: none; }

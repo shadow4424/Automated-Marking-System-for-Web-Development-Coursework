@@ -58,7 +58,7 @@
             </div>
 
             {% if attempt_summary and attempt_summary.selection_reason and (attempt_history_list|length > 1 or not run.is_active) %}
-            <div class="callout-card callout-card--info" style="margin-top: var(--space-md);">
+            <div class="callout-card callout-card--info mt-md">
                 <div class="callout-title">{% if run.is_active %}Current selection{% else %}Attempt status{% endif %}</div>
                 <p class="callout-text">{{ attempt_summary.selection_reason }}</p>
             </div>
@@ -69,7 +69,7 @@
                 <div>
                     <div class="submission-banner-kicker">Recommended outcome</div>
                     <h2 class="submission-banner-title {{ tone_class }}">{{ decision.outcome|default('Manual decision needed', true) }}</h2>
-                    <div class="page-status-row" style="margin-top: var(--space-sm);">
+                    <div class="page-status-row mt-sm">
                         <span class="submission-band">Mark band <strong>{{ decision.mark_band|default('Hold', true) }}</strong></span>
                         {{ status_badge('Manual review ' ~ decision.manual_review_label|default('Required', true), 'warning' if decision.manual_review_required else 'success') }}
                         {{ status_badge(decision.confidence_level|default('unknown', true)|title ~ ' confidence', 'success' if decision.confidence_level == 'high' else ('warning' if decision.confidence_level == 'medium' else 'danger')) }}
@@ -109,7 +109,7 @@
                 {% if current_attempt.validity_status %}<div class="info-item"><span class="info-item-label">Validity</span><span class="info-item-value">{{ current_attempt.validity_status|title }}</span></div>{% endif %}
             </div>
             {% if attempt_history_list %}
-            <div style="margin-top: var(--space-lg);">
+            <div class="mt-lg">
                 <div class="submission-card-title">Submission history</div>
                 <div class="submission-system-list">
                     {% for item in attempt_history_list[:6] %}
@@ -389,7 +389,7 @@
                 {% set filter_toolbar_variant = 'run_detail_evidence' %}
                 {% include "partials/_filter_toolbar.html" %}
 
-                <div class="page-action-row" style="justify-content:flex-end; margin: var(--space-lg) 0;">
+                <div class="page-action-row" style="justify-content:flex-end; margin: var(--space-lg) 0;"> {# layout-specific, intentional #}
                     <button type="button" class="btn btn-secondary btn-sm" data-disclosure-action="expand" data-disclosure-target="submission-evidence-list">Expand all</button>
                     <button type="button" class="btn btn-secondary btn-sm" data-disclosure-action="collapse" data-disclosure-target="submission-evidence-list">Collapse all</button>
                 </div>
@@ -420,17 +420,17 @@
                             {%- set _ux_ev = (_ux_finding.evidence if _ux_finding and _ux_finding.evidence is mapping else {}) -%}
                             {%- set _ux_review = (_ux_ev.get('ux_review') or {}) if _ux_ev is mapping else {} -%}
                             {%- set _ux_vision = (_ux_ev.get('vision_analysis') or {}) if _ux_ev is mapping else {} -%}
-                            <div style="display:flex; gap:1.5rem; align-items:flex-start;">
-                                <div style="flex:0 0 auto; width:42%; min-width:200px;">
+                            <div style="display:flex; gap:1.5rem; align-items:flex-start;"> {# layout-specific, intentional #}
+                                <div style="flex:0 0 auto; width:42%; min-width:200px;"> {# layout-specific, intentional #}
                                     {% if _ux_finding and _ux_finding.screenshots %}
                                         {% for shot in _ux_finding.screenshots %}
-                                        <img src="{{ artifact_url(shot) }}" alt="Page screenshot" class="submission-screenshot" style="width:100%; border-radius:4px; display:block;" onerror="this.parentElement.innerHTML='<p class=\'submission-detail-note\'>Screenshot unavailable.</p>'">
+                                        <img src="{{ artifact_url(shot) }}" alt="Page screenshot" class="submission-screenshot" style="width:100%; border-radius:4px; display:block;" onerror="this.parentElement.innerHTML='<p class=\'submission-detail-note\'>Screenshot unavailable.</p>'"> {# layout-specific, intentional #}
                                         {% endfor %}
                                     {% else %}
                                     <div class="submission-empty">No screenshot captured.</div>
                                     {% endif %}
                                 </div>
-                                <div style="flex:1 1 0; min-width:0;">
+                                <div style="flex:1 1 0; min-width:0;"> {# layout-specific, intentional #}
                                     <article class="submission-evidence-block">
                                         <div class="submission-card-title">UX Review</div>
                                         {% if item.detail %}
@@ -448,7 +448,7 @@
                                         {% if _ux_vision %}
                                         {%- set _vision_summary = _ux_vision.get('description') or _ux_vision.get('summary') -%}
                                         {% if _vision_summary %}
-                                        <div class="submission-card-title" style="margin-top:0.75rem">Vision analysis</div>
+                                        <div class="submission-card-title mt-075">Vision analysis</div>
                                         <p class="submission-detail-note">{{ _vision_summary }}</p>
                                         {% endif %}
                                         {% endif %}
@@ -505,11 +505,11 @@
                                             {% if item._bev.exit_code is not none %}<dt>Exit code</dt><dd>{{ item._bev.exit_code }}</dd>{% endif %}
                                         </dl>
                                         {% if item._bev.stderr %}
-                                        <div class="submission-card-title" style="margin-top:0.5rem">Stderr</div>
+                                        <div class="submission-card-title mt-05">Stderr</div>
                                         <pre class="submission-code-block">{{ item._bev.stderr[:500] }}</pre>
                                         {% endif %}
                                         {% if item._bev.stdout %}
-                                        <div class="submission-card-title" style="margin-top:0.5rem">Stdout</div>
+                                        <div class="submission-card-title mt-05">Stdout</div>
                                         <pre class="submission-code-block">{{ item._bev.stdout[:500] }}</pre>
                                         {% endif %}
                                     </article>
@@ -648,7 +648,7 @@
                     </div>
 
                     {% if detail.debug.llm_feedback %}
-                    <article class="submission-evidence-block" style="margin-top: var(--space-lg);">
+                    <article class="submission-evidence-block mt-lg">
                         <div class="submission-card-title">Overall AI feedback</div>
                         <p class="submission-detail-note">{{ detail.debug.llm_feedback }}</p>
                     </article>

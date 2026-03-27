@@ -64,20 +64,20 @@
     <section class="card">
         <div class="section-heading-row">
             <div class="section-copy">
-                <h2 class="card-title" style="color:#991b1b;">Grade release blocked by security threats</h2>
-                <p class="section-note" style="color:#7f1d1d;">Review each flagged submission before grades can be released.</p>
+                <h2 class="card-title" style="color:#991b1b;">Grade release blocked by security threats</h2> {# layout-specific, intentional #}
+                <p class="section-note" style="color:#7f1d1d;">Review each flagged submission before grades can be released.</p> {# layout-specific, intentional #}
             </div>
-            <span class="badge" style="background:#dc2626;color:#fff;">{{ threat_rows|length }}</span>
+            <span class="badge" style="background:#dc2626;color:#fff;">{{ threat_rows|length }}</span> {# layout-specific, intentional #}
         </div>
         <div class="surface-list">
             {% for threat in threat_rows %}
             <div class="surface-item">
-                <div class="page-status-row" style="justify-content: space-between;">
+                <div class="page-status-row jc-between">
                     <strong><code>{{ threat.student_id }}</code></strong>
-                    <span class="badge" style="background:#dc2626;color:#fff;">Threat</span>
+                    <span class="badge" style="background:#dc2626;color:#fff;">Threat</span> {# layout-specific, intentional #}
                 </div>
                 <div class="surface-item-meta">{{ threat.mode|capitalize }} submission{% if threat.threat_count %} with {{ threat.threat_count }} threat finding{{ 's' if threat.threat_count != 1 else '' }}{% endif %}.</div>
-                <div class="page-inline-tools" style="margin-top: var(--space-sm);">
+                <div class="page-inline-tools mt-sm">
                     <a href="{{ threat.detail_url }}" class="btn btn-secondary btn-sm">Review submission</a>
                     <form method="POST" action="{{ url_for('batch.assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
                         <input type="hidden" name="run_id" value="{{ threat.run_id }}">
@@ -100,20 +100,20 @@
     <section class="card">
         <div class="section-heading-row">
             <div class="section-copy">
-                <h2 class="card-title" style="color:#92400e;">Grade release blocked by LLM review errors</h2>
-                <p class="section-note" style="color:#92400e;">One or more submissions failed during LLM-assisted marking. Resolve or rerun each flagged submission before releasing grades.</p>
+                <h2 class="card-title" style="color:#92400e;">Grade release blocked by LLM review errors</h2> {# layout-specific, intentional #}
+                <p class="section-note" style="color:#92400e;">One or more submissions failed during LLM-assisted marking. Resolve or rerun each flagged submission before releasing grades.</p> {# layout-specific, intentional #}
             </div>
-            <span class="badge" style="background:#d97706;color:#fff;">{{ llm_error_rows|length }}</span>
+            <span class="badge" style="background:#d97706;color:#fff;">{{ llm_error_rows|length }}</span> {# layout-specific, intentional #}
         </div>
         <div class="surface-list">
             {% for flagged in llm_error_rows %}
             <div class="surface-item">
-                <div class="page-status-row" style="justify-content: space-between;">
+                <div class="page-status-row jc-between">
                     <strong><code>{{ flagged.student_id }}</code></strong>
-                    <span class="badge" style="background:#fef3c7;color:#92400e;">LLM Error - Requires Review</span>
+                    <span class="badge" style="background:#fef3c7;color:#92400e;">LLM Error - Requires Review</span> {# layout-specific, intentional #}
                 </div>
                 <div class="surface-item-meta">{{ flagged.llm_error_message }}</div>
-                <div class="page-inline-tools" style="margin-top: var(--space-sm);">
+                <div class="page-inline-tools mt-sm">
                     <a href="{{ flagged.detail_url }}" class="btn btn-secondary btn-sm">Review submission</a>
                     <form method="POST" action="{{ url_for('batch.assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
                         <input type="hidden" name="run_id" value="{{ flagged.run_id }}">
@@ -171,7 +171,7 @@
             </table>
         </div>
 
-        <details class="disclosure-card" style="margin-top: var(--space-lg);">
+        <details class="disclosure-card mt-lg">
             <summary>
                 <div class="section-copy">
                     <h2 class="card-title">Edit teaching team</h2>
@@ -192,7 +192,7 @@
                     {% else %}
                     <p class="form-hint">No additional teachers are registered yet.</p>
                     {% endif %}
-                    <button type="submit" class="btn btn-primary btn-sm" style="margin-top: var(--space-md);">Save teaching team</button>
+                    <button type="submit" class="btn btn-primary btn-sm mt-md">Save teaching team</button>
                 </form>
             </div>
         </details>
@@ -233,7 +233,7 @@
         </div>
         {% endif %}
 
-        <details class="disclosure-card" style="margin-top: var(--space-lg);">
+        <details class="disclosure-card mt-lg">
             <summary>
                 <div class="section-copy">
                     <h2 class="card-title">Edit student allocation</h2>
@@ -254,7 +254,7 @@
                     {% else %}
                     <p class="form-hint">No students are registered yet.</p>
                     {% endif %}
-                    <button type="submit" class="btn btn-primary btn-sm" style="margin-top: var(--space-md);">Save allocation</button>
+                    <button type="submit" class="btn btn-primary btn-sm mt-md">Save allocation</button>
                 </form>
             </div>
         </details>
@@ -302,13 +302,13 @@
                             <code>-</code>
                             {% endif %}
                             {% if group.has_history %}
-                            <div style="margin-top: var(--space-xs);">
+                            <div class="mt-xs">
                                 <button type="button"
                                     class="attempt-history-toggle"
                                     aria-expanded="false"
                                     aria-controls="{{ history_id }}"
-                                    style="display:inline-flex; align-items:center; gap:4px; background:none; border:none; padding:0; cursor:pointer; color:var(--color-text-muted); font-size:0.75rem;">
-                                    <svg class="attempt-history-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" style="transition:transform 0.15s ease; flex-shrink:0;">
+                                    style="display:inline-flex; align-items:center; gap:4px; background:none; border:none; padding:0; cursor:pointer; color:var(--color-text-muted); font-size:0.75rem;"> {# layout-specific, intentional #}
+                                    <svg class="attempt-history-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" style="transition:transform 0.15s ease; flex-shrink:0;"> {# layout-specific, intentional #}
                                         <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                                     </svg>
                                     <span>{{ group.history_count }} older attempt{{ '' if group.history_count == 1 else 's' }}</span>
@@ -332,7 +332,7 @@
                             {% if primary_status == 'pending' %}
                             <span class="badge badge-secondary">Queued</span>
                             {% elif primary.threat_flagged %}
-                            <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span>
+                            <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span> {# layout-specific, intentional #}
                             {% elif primary_score is not none %}
                             <strong>{{ primary_score|round|int }}%</strong>
                             {% else %}
@@ -346,9 +346,9 @@
                             {% elif primary.get('validity_status') == 'invalid' %}
                             <span class="badge badge-danger">Invalid</span>
                             {% elif primary.threat_flagged or primary_status == 'threat' %}
-                            <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span>
+                            <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span> {# layout-specific, intentional #}
                             {% elif primary.llm_error_flagged or primary_status == 'llm_error' %}
-                            <span class="badge" style="background:#fef3c7;color:#92400e;">LLM error</span>
+                            <span class="badge" style="background:#fef3c7;color:#92400e;">LLM error</span> {# layout-specific, intentional #}
                             {% elif primary_status == 'failed' %}
                             <span class="badge badge-danger">Failed</span>
                             {% elif primary_score is not none and primary_score >= 70 %}
@@ -359,7 +359,7 @@
                             <span class="badge badge-danger">Fail</span>
                             {% endif %}
                             {% if primary.get('source_type') %}
-                            <div class="table-meta" style="margin-top: var(--space-xs);">{{ primary.source_type|replace('_', ' ')|title }}</div>
+                            <div class="table-meta mt-xs">{{ primary.source_type|replace('_', ' ')|title }}</div>
                             {% endif %}
                         </td>
                         <td>
@@ -376,15 +376,15 @@
                         </td>
                     </tr>
                     {% if group.has_history %}
-                    <tr id="{{ history_id }}" class="attempt-history-row" style="display:none;">
-                        <td colspan="7" style="padding:0; background:var(--color-surface-subtle, #f8fafc); border-top:1px solid var(--color-border);">
-                            <div style="padding: var(--space-sm) var(--space-lg); border-bottom: 1px solid var(--color-border-light);">
-                                <span style="font-size:0.8rem; color:var(--color-text-muted);">
+                    <tr id="{{ history_id }}" class="attempt-history-row d-none">
+                        <td colspan="7" style="padding:0; background:var(--color-surface-subtle, #f8fafc); border-top:1px solid var(--color-border);"> {# layout-specific, intentional #}
+                            <div style="padding: var(--space-sm) var(--space-lg); border-bottom: 1px solid var(--color-border-light);"> {# layout-specific, intentional #}
+                                <span style="font-size:0.8rem; color:var(--color-text-muted);"> {# layout-specific, intentional #}
                                     {% if group.has_fallback %}{{ group.selection_reason }}{% else %}Older attempts are preserved here without affecting the active result.{% endif %}
                                 </span>
                             </div>
-                            <div style="padding-top:0;">
-                                <div class="table-container" style="margin:0;">
+                            <div style="padding-top:0;"> {# layout-specific, intentional #}
+                                <div class="table-container" style="margin:0;"> {# layout-specific, intentional #}
                                         <table class="table table-compact">
                                             <thead>
                                                 <tr>
@@ -425,7 +425,7 @@
                                                         {% if attempt_status == 'pending' %}
                                                         <span class="badge badge-secondary">Queued</span>
                                                         {% elif attempt.threat_flagged %}
-                                                        <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span>
+                                                        <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span> {# layout-specific, intentional #}
                                                         {% elif attempt_score is not none %}
                                                         <strong>{{ attempt_score|round|int }}%</strong>
                                                         {% else %}
@@ -439,9 +439,9 @@
                                                         {% elif attempt.get('validity_status') == 'invalid' %}
                                                         <span class="badge badge-danger">Invalid</span>
                                                         {% elif attempt.threat_flagged or attempt_status == 'threat' %}
-                                                        <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span>
+                                                        <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span> {# layout-specific, intentional #}
                                                         {% elif attempt.llm_error_flagged or attempt_status == 'llm_error' %}
-                                                        <span class="badge" style="background:#fef3c7;color:#92400e;">LLM error</span>
+                                                        <span class="badge" style="background:#fef3c7;color:#92400e;">LLM error</span> {# layout-specific, intentional #}
                                                         {% elif attempt_status == 'failed' %}
                                                         <span class="badge badge-danger">Failed</span>
                                                         {% elif attempt_score is not none and attempt_score >= 70 %}
@@ -452,7 +452,7 @@
                                                         <span class="badge badge-danger">Fail</span>
                                                         {% endif %}
                                                         {% if attempt.get('source_type') %}
-                                                        <div class="table-meta" style="margin-top: var(--space-xs);">{{ attempt.source_type|replace('_', ' ')|title }}</div>
+                                                        <div class="table-meta mt-xs">{{ attempt.source_type|replace('_', ' ')|title }}</div>
                                                         {% endif %}
                                                     </td>
                                                     <td>

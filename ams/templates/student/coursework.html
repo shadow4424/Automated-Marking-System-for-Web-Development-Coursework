@@ -168,7 +168,7 @@
         <div class="surface-list">
             {% for run in submission_cards %}
             {% set attempt_count = submission_attempt_counts.get(run.assignment_id, 1) %}
-            <div class="run-card" style="cursor:default; transform:none;">
+            <div class="run-card cursor-default transform-none">
                 <div class="run-card-score">
                     {% if run._marks_released %}
                         {% if run.get('_submission_record') %}
@@ -178,7 +178,7 @@
                         {% endif %}
                         <div class="score-badge {% if score >= 70 %}score-high{% elif score >= 40 %}score-medium{% else %}score-low{% endif %}">{{ "%.0f"|format(score) }}%</div>
                     {% else %}
-                        <div class="score-badge" style="background:var(--color-surface); color:var(--color-text-muted);">-</div>
+                        <div class="score-badge bg-surface text-muted">-</div>
                     {% endif %}
                 </div>
                 <div class="run-card-content">
@@ -200,7 +200,7 @@
                         {% if run.get('created_at') %}<span>{{ run.created_at[:10] }}</span>{% endif %}
                         <span class="badge badge-secondary">{{ run.get('profile', 'frontend') }}</span>
                     </div>
-                    <div class="table-meta" style="margin-top: var(--space-sm);">
+                    <div class="table-meta mt-sm">
                         {% if run._marks_released %}
                         Marks released
                         {% else %}
@@ -208,7 +208,7 @@
                         {% endif %}
                     </div>
                     {% if attempt_count > 1 and run.get('selection_reason') %}
-                    <div class="table-meta" style="margin-top: var(--space-xs);">{{ run.selection_reason }}</div>
+                    <div class="table-meta mt-xs">{{ run.selection_reason }}</div>
                     {% endif %}
                 </div>
                 <div class="run-card-actions">

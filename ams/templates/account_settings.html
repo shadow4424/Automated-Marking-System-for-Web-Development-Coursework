@@ -14,10 +14,10 @@
         </div>
         <aside class="page-side-panel">
             <h2 class="card-title">Your identity</h2>
-            <div class="info-grid info-grid--2" style="margin-top:var(--space-md);">
-                <div class="info-item" style="grid-column:1/-1;">
+            <div class="info-grid info-grid--2 mt-md">
+                <div class="info-item gc-full">
                     <span class="info-item-label">User ID</span>
-                    <span class="info-item-value" style="font-family:var(--font-mono);font-size:1rem;">{{ user.userID }}</span>
+                    <span class="info-item-value" style="font-family:var(--font-mono);font-size:1rem;">{{ user.userID }}</span> {# layout-specific, intentional #}
                 </div>
                 <div class="info-item">
                     <span class="info-item-label">First name</span>
@@ -27,12 +27,12 @@
                     <span class="info-item-label">Last name</span>
                     <span class="info-item-value">{{ user.lastName }}</span>
                 </div>
-                <div class="info-item" style="grid-column:1/-1;">
+                <div class="info-item gc-full">
                     <span class="info-item-label">Role</span>
                     <span class="info-item-value">{{ user.role|capitalize }}</span>
                 </div>
             </div>
-            <p class="form-hint" style="margin-top:var(--space-md);">User ID, first name, and last name are managed by an administrator and cannot be changed here.</p>
+            <p class="form-hint mt-md">User ID, first name, and last name are managed by an administrator and cannot be changed here.</p>
         </aside>
     </section>
 
@@ -45,11 +45,11 @@
             <span class="badge badge-info">Editable</span>
         </div>
 
-        <p class="form-hint" style="margin-bottom:var(--space-lg);">
+        <p class="form-hint mb-lg">
             Current email: <strong>{{ user.email }}</strong>
         </p>
 
-        <form method="POST" action="{{ url_for('account.update_email') }}" style="max-width:480px;">
+        <form method="POST" action="{{ url_for('account.update_email') }}" style="max-width:480px;"> {# layout-specific, intentional #}
             <div class="form-group">
                 <label class="form-label" for="email">New email address <span class="required">*</span></label>
                 <input type="email" id="email" name="email" class="form-input"
@@ -74,7 +74,7 @@
             <span class="badge badge-info">Editable</span>
         </div>
 
-        <form method="POST" action="{{ url_for('account.update_password') }}" style="max-width:480px;">
+        <form method="POST" action="{{ url_for('account.update_password') }}" style="max-width:480px;"> {# layout-specific, intentional #}
             <div class="form-group">
                 <label class="form-label" for="pw_current">Current password <span class="required">*</span></label>
                 <input type="password" id="pw_current" name="current_password" class="form-input"
