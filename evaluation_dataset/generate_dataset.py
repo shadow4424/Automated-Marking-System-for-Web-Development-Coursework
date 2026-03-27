@@ -718,6 +718,208 @@ _PARTIAL_JS_3 = ""  # Empty JS
 # Incorrect submissions: empty files → all scores 0
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# LLM attempt submissions: fail static checks but show clear student intent
+#
+# These are designed to trigger partial_allowed=True rules so the LLM
+# can be tested on whether it awards partial credit.
+#
+# Targets:
+#   js.has_event_listener  (partial_allowed=True) — use onclick= instead of addEventListener
+#   js.has_dom_manipulation (partial_allowed=True) — use setAttribute/document.write instead of innerHTML
+#   js.has_const_let       (partial_allowed=True) — use var only
+#   css.has_media_queries  (partial_allowed=True) — attempt commented-out or malformed @media
+# ---------------------------------------------------------------------------
+
+# Attempt 1: JS uses var + onclick assignment + setAttribute (shows intent, fails static patterns)
+_ATTEMPT_JS_1 = """\
+// Contact form handler - uses older JavaScript patterns
+// Student attempted event handling and DOM interaction
+
+var form = document.forms['contactForm'];
+var nameField = document.forms['contactForm'].elements['name'];
+var emailField = document.forms['contactForm'].elements['email'];
+
+function validateEmail(email) {
+  return email.indexOf('@') > -1 && email.indexOf('.') > -1;
+}
+
+function showMessage(msg) {
+  var div = document.createElement('div');
+  div.setAttribute('id', 'msg-box');
+  div.setAttribute('class', 'message');
+  document.body.appendChild(div);
+  document.getElementById('msg-box').setAttribute('data-msg', msg);
+}
+
+function handleSubmit() {
+  var name = nameField.value;
+  var email = emailField.value;
+  if (!name || !validateEmail(email)) {
+    showMessage('Please fill in all fields correctly.');
+    return false;
+  }
+  showMessage('Form submitted for ' + name);
+  return false;
+}
+
+// Attempt at event handling using old-style assignment (not addEventListener)
+if (form) {
+  form.onsubmit = handleSubmit;
+}
+
+// Attempt at interacting with inputs using old-style event assignment
+if (nameField) {
+  nameField.onfocus = function() {
+    nameField.setAttribute('style', 'border-color: blue;');
+  };
+  nameField.onblur = function() {
+    nameField.setAttribute('style', 'border-color: \\'\\';');
+  };
+}
+"""
+
+# Attempt 2: JS uses arrow function + some DOM but avoids the exact static patterns
+_ATTEMPT_JS_2 = """\
+// Registration form - student attempted modern JS but with non-standard DOM patterns
+
+const registerForm = document.querySelector('#registerForm');
+const usernameInput = document.querySelector('[name="username"]');
+const passwordInput = document.querySelector('[name="password"]');
+
+const validatePassword = (pw) => pw.length >= 8;
+
+const markInvalid = (field, msg) => {
+  // Attempt DOM feedback using write-back to dataset attributes
+  field.setAttribute('data-error', msg);
+  field.setAttribute('aria-invalid', 'true');
+  // Student tried to show an error but used dataset API not innerHTML
+  var parent = field.parentElement;
+  if (parent) {
+    parent.setAttribute('data-has-error', 'true');
+  }
+};
+
+const clearInvalid = (field) => {
+  field.setAttribute('data-error', '');
+  field.setAttribute('aria-invalid', 'false');
+};
+
+// Student attempted validation logic — shows clear intent
+const validateForm = () => {
+  let isValid = true;
+  const uname = usernameInput.value.trim();
+  const pw = passwordInput.value;
+
+  if (uname.length < 3) {
+    markInvalid(usernameInput, 'Username too short');
+    isValid = false;
+  } else {
+    clearInvalid(usernameInput);
+  }
+
+  if (!validatePassword(pw)) {
+    markInvalid(passwordInput, 'Password must be 8+ chars');
+    isValid = false;
+  } else {
+    clearInvalid(passwordInput);
+  }
+
+  return isValid;
+};
+
+// Attempted event handling via form.onsubmit (not addEventListener)
+if (registerForm) {
+  registerForm.onsubmit = function(e) {
+    e.preventDefault();
+    if (validateForm()) {
+      document.write('<p>Registration successful!</p>');
+    }
+  };
+}
+"""
+
+# Attempt 3: CSS with commented-out media queries and partially correct flexbox
+_ATTEMPT_CSS_3 = """\
+/* Student attempted responsive design and flexbox layout */
+
+:root {
+  --blue: #3498db;
+  --base-font: 16px;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  font-size: var(--base-font);
+  margin: 0;
+  padding: 0;
+  color: #333;
+}
+
+h1 {
+  color: var(--blue);
+  font-size: 2rem;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+/* Student attempted flexbox but only on one element */
+header {
+  background-color: var(--blue);
+  padding: 1rem;
+  display: flex;
+}
+
+nav a {
+  color: white;
+  text-decoration: none;
+  margin-right: 1rem;
+}
+
+#contactForm {
+  max-width: 500px;
+  /* Student attempted flex here but forgot to close properly */
+  display: block;
+  padding: 1rem;
+}
+
+input, textarea {
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  font-size: 1rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+button {
+  background-color: var(--blue);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+footer {
+  text-align: center;
+  padding: 1rem;
+  background: #eee;
+}
+
+/* Student attempted media queries but syntax is incomplete */
+/* @media (max-width: 768px) {
+  .container {
+    padding: 0.5rem;
+  }
+}  */
+
+/* TODO: add responsive breakpoints */
+"""
+
 _INCORRECT_HTML_EMPTY = ""      # Completely empty
 _INCORRECT_CSS_EMPTY = ""
 _INCORRECT_JS_EMPTY = ""
@@ -947,6 +1149,70 @@ def create_dataset() -> list[dict]:
             "notes": note,
         })
 
+    # ── LLM ATTEMPT submissions ───────────────────────────────────────────
+    # These fail static checks on partial_allowed=True rules but show intent,
+    # allowing the LLM to award partial credit. Used for llm_marking evaluation.
+
+    # Attempt 1: Full HTML+CSS, JS uses var + onclick + setAttribute (no addEventListener)
+    _make_submission(DATASET_ROOT / "llm_attempts" / "attempt_001", {
+        "index.html": _FULL_HTML,
+        "style.css":  _FULL_CSS,
+        "script.js":  _ATTEMPT_JS_1,
+    })
+    entries.append({
+        "id": "attempt_001",
+        "path": "llm_attempts/attempt_001",
+        "category": "llm_attempt",
+        "profile": "frontend",
+        "expected_overall": None,
+        "expected_components": {},
+        "notes": (
+            "Full HTML+CSS, JS uses var/onclick/setAttribute. "
+            "Fails js.has_event_listener and js.has_dom_manipulation static checks. "
+            "LLM should detect student intent and award partial credit."
+        ),
+    })
+
+    # Attempt 2: Full HTML+CSS, JS uses querySelector+const but onclick and document.write
+    _make_submission(DATASET_ROOT / "llm_attempts" / "attempt_002", {
+        "index.html": _FULL_HTML_V2,
+        "style.css":  _FULL_CSS_V2,
+        "script.js":  _ATTEMPT_JS_2,
+    })
+    entries.append({
+        "id": "attempt_002",
+        "path": "llm_attempts/attempt_002",
+        "category": "llm_attempt",
+        "profile": "frontend",
+        "expected_overall": None,
+        "expected_components": {},
+        "notes": (
+            "HTML+CSS correct, JS uses onsubmit= and document.write. "
+            "Fails js.has_event_listener and js.has_dom_manipulation. "
+            "Has const/let and DOM queries. LLM should award partial credit."
+        ),
+    })
+
+    # Attempt 3: Full HTML+JS, CSS lacks media queries (commented out) and full flexbox
+    _make_submission(DATASET_ROOT / "llm_attempts" / "attempt_003", {
+        "index.html": _FULL_HTML,
+        "style.css":  _ATTEMPT_CSS_3,
+        "script.js":  _FULL_JS,
+    })
+    entries.append({
+        "id": "attempt_003",
+        "path": "llm_attempts/attempt_003",
+        "category": "llm_attempt",
+        "profile": "frontend",
+        "expected_overall": None,
+        "expected_components": {},
+        "notes": (
+            "Full HTML+JS, CSS has flexbox on one element only and no @media queries "
+            "(commented out). Fails css.has_media_queries and css.has_flexbox fully. "
+            "LLM should detect the attempt and award partial credit."
+        ),
+    })
+
     # ── ROBUSTNESS: missing files ──────────────────────────────────────────
     # Empty directory
     (DATASET_ROOT / "robustness" / "missing_files" / "empty_submission").mkdir(
@@ -1118,7 +1384,7 @@ def main() -> None:
     print(f"Generating evaluation dataset in: {DATASET_ROOT}")
 
     # Clean up existing generated content (keep generate_dataset.py and manifest.json)
-    for subdir in ["correct", "partial", "incorrect", "frontend_only", "robustness"]:
+    for subdir in ["correct", "partial", "incorrect", "frontend_only", "robustness", "llm_attempts"]:
         target = DATASET_ROOT / subdir
         if target.exists():
             shutil.rmtree(target)
@@ -1130,7 +1396,7 @@ def main() -> None:
         "created_at": str(date.today()),
         "description": (
             "AMS evaluation dataset with labelled synthetic submissions. "
-            "Used for accuracy, consistency, and robustness evaluation."
+            "Used for accuracy, consistency, robustness, and LLM marking evaluation."
         ),
         "submissions": entries,
     }

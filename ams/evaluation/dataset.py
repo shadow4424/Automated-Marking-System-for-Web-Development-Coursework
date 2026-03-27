@@ -67,3 +67,11 @@ def get_accuracy_entries(dataset_path: Path) -> list[ManifestEntry]:
 def get_robustness_entries(dataset_path: Path) -> list[ManifestEntry]:
     """Return only robustness entries."""
     return [e for e in load_manifest(dataset_path) if e.is_robustness()]
+
+
+def get_llm_attempt_entries(dataset_path: Path) -> list[ManifestEntry]:
+    """Return only LLM attempt entries (category starts with 'llm_attempt')."""
+    return [
+        e for e in load_manifest(dataset_path)
+        if e.category.startswith("llm_attempt")
+    ]

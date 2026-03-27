@@ -104,6 +104,12 @@ def _create_parser() -> argparse.ArgumentParser:
         metavar="DATASET_PATH",
         help="Run robustness evaluation against the edge-case/adversarial dataset",
     )
+    eval_mode.add_argument(
+        "--llm-marking",
+        type=Path,
+        metavar="DATASET_PATH",
+        help="Compare STATIC_ONLY vs STATIC_PLUS_LLM marking on attempt submissions",
+    )
     eval_parser.add_argument(
         "--runs",
         type=int,
@@ -124,6 +130,16 @@ def _create_parser() -> argparse.ArgumentParser:
             "Path to a custom profile JSON to override the profile for all eval runs. "
             "Useful to disable browser/behavioural checks for static-only evaluation. "
             "Example: evaluation_dataset/eval_profile.json"
+        ),
+    )
+    eval_parser.add_argument(
+        "--llm-profile-config",
+        type=Path,
+        metavar="LLM_PROFILE_CONFIG",
+        help=(
+            "Path to a custom profile JSON for the LLM run in --llm-marking mode. "
+            "Should enable LLM scoring while disabling browser/behavioural checks. "
+            "Example: evaluation_dataset/eval_profile_llm.json"
         ),
     )
     eval_parser.add_argument(
@@ -245,6 +261,22 @@ def main(argv: list[str] | None = None) -> None:
             )
             recoverable = result.get("recoverable_rate", 0)
             print(f"\nRobustness recoverable rate: {recoverable:.2%}  |  Results in: {out_dir}")
+        elif args.llm_marking:
+            from ams.evaluation.llm_marking import run_llm_marking_evaluation
+            llm_profile_config = (
+                Path(args.llm_profile_config)
+                if getattr(args, "llm_profile_config", None)
+                else None
+            )
+            result = run_llm_marking_evaluation(
+                dataset_path=Path(args.llm_marking),
+                out_dir=out_dir,
+                profile=args.profile,
+                static_profile_config=profile_config,
+                llm_profile_config=llm_profile_config,
+            )
+            rate = result.get("partial_credit_rate", 0)
+            print(f"\nLLM partial credit rate: {rate:.2%}  |  Results in: {out_dir}")
     else:
         raise SystemExit(1)
 

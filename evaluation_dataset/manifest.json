@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "created_at": "2026-03-27",
-  "description": "AMS evaluation dataset with labelled synthetic submissions. Used for accuracy, consistency, and robustness evaluation.",
+  "description": "AMS evaluation dataset with labelled synthetic submissions. Used for accuracy, consistency, robustness, and LLM marking evaluation.",
   "submissions": [
     {
       "id": "correct_001",
@@ -145,6 +145,33 @@
         "js": 1.0
       },
       "notes": "Feedback form, frontend profile"
+    },
+    {
+      "id": "attempt_001",
+      "path": "llm_attempts/attempt_001",
+      "category": "llm_attempt",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "Full HTML+CSS, JS uses var/onclick/setAttribute. Fails js.has_event_listener and js.has_dom_manipulation static checks. LLM should detect student intent and award partial credit."
+    },
+    {
+      "id": "attempt_002",
+      "path": "llm_attempts/attempt_002",
+      "category": "llm_attempt",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "HTML+CSS correct, JS uses onsubmit= and document.write. Fails js.has_event_listener and js.has_dom_manipulation. Has const/let and DOM queries. LLM should award partial credit."
+    },
+    {
+      "id": "attempt_003",
+      "path": "llm_attempts/attempt_003",
+      "category": "llm_attempt",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "Full HTML+JS, CSS has flexbox on one element only and no @media queries (commented out). Fails css.has_media_queries and css.has_flexbox fully. LLM should detect the attempt and award partial credit."
     },
     {
       "id": "rob_missing_empty",
