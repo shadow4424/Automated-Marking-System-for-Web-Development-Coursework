@@ -14,79 +14,9 @@ class PHPStaticAssessor(Assessor):
 
     name = "php_static"
 
-    def run(self, context: SubmissionContext) -> List[Finding]:
+    def _check_php_syntax(self, files: list[tuple[object, str]]) -> List[Finding]:
         findings: List[Finding] = []
-        php_files = sorted(context.files_for("php", relevant_only=True))
-        
-        # Determine if PHP is required for this profile
-        profile_name = context.metadata.get("profile")
-        is_required = False
-        if profile_name:
-            try:
-                profile_spec = get_profile_spec(profile_name)
-                is_required = profile_spec.is_component_required("php")
-            except ValueError:
-                pass  # Unknown profile, treat as not required
-
-        if not php_files:
-            if is_required:
-                # Required for profile but missing
-                findings.append(
-                    Finding(
-                        id=PID.MISSING_FILES,
-                        category="php",
-                        message="No PHP files found; PHP is required for this profile.",
-                        severity=Severity.FAIL,
-                        evidence={
-                            "expected_extensions": [".php"],
-                            "discovered_count": 0,
-                            "profile": profile_name,
-                            "required": True,
-                        },
-                        source=self.name,
-                        finding_category=FindingCategory.MISSING,
-                        profile=profile_name,
-                        required=True,
-                    )
-                )
-            else:
-                # Not required for profile, skip
-                findings.append(
-                    Finding(
-                        id=PID.SKIPPED,
-                        category="php",
-                        message="No PHP files found; PHP is not required for this profile.",
-                        severity=Severity.SKIPPED,
-                        evidence={
-                            "expected_extensions": [".php"],
-                            "discovered_count": 0,
-                            "profile": profile_name,
-                            "required": False,
-                        },
-                        source=self.name,
-                        finding_category=FindingCategory.OTHER,
-                        profile=profile_name,
-                        required=False,
-                    )
-                )
-            return findings
-
-        for path in php_files:
-            try:
-                content = path.read_text(encoding="utf-8", errors="replace")
-            except OSError as exc:
-                findings.append(
-                    Finding(
-                        id=PID.READ_ERROR,
-                        category="php",
-                        message="Failed to read PHP file.",
-                        severity=Severity.FAIL,
-                        evidence={"path": str(path), "error": str(exc)},
-                        source=self.name,
-                    )
-                )
-                continue
-
+        for path, content in files:
             lowered = content.lower()
             has_open_tag = "<?php" in lowered
             has_close_tag = "?>" in lowered
@@ -159,7 +89,12 @@ class PHPStaticAssessor(Assessor):
                         source=self.name,
                     )
                 )
+        return findings
 
+    def _check_php_patterns(self, files: list[tuple[object, str]]) -> List[Finding]:
+        findings: List[Finding] = []
+        for path, content in files:
+            lowered = content.lower()
             request_usage = lowered.count("$_get") + lowered.count("$_post") + lowered.count("$_request")
             session_usage = lowered.count("session_start") + lowered.count("$_session")
             db_usage = lowered.count("mysqli") + lowered.count("pdo") + lowered.count("mysql")
@@ -186,12 +121,9 @@ class PHPStaticAssessor(Assessor):
                 )
             )
 
-            # Code Quality Checks
-            # 1. Enforce separation of concerns (logic vs. markup)
-            # Check for excessive mixing of PHP and HTML
-            html_tags_in_php = len(re.findall(r'<[a-z]+[^>]*>', content))
+            lines = content.splitlines()
+            html_tags_in_php = len(re.findall(r"<[a-z]+[^>]*>", content))
             php_tags = content.count("<?php") + content.count("<?=")
-            # If lots of HTML tags and PHP tags mixed, might indicate poor separation
             if html_tags_in_php > 20 and php_tags > 5:
                 findings.append(
                     Finding(
@@ -209,15 +141,12 @@ class PHPStaticAssessor(Assessor):
                     )
                 )
 
-            # 2. Detect SQL queries embedded directly inside echo/print statements
-            # Look for echo/print followed by SQL keywords
-            lines = content.splitlines()
             sql_in_echo = []
             for i, line in enumerate(lines, 1):
                 stripped = line.strip()
-                if re.search(r'\b(echo|print)\s+.*(select|insert|update|delete|create|alter)\s+', stripped, re.IGNORECASE):
+                if re.search(r"\b(echo|print)\s+.*(select|insert|update|delete|create|alter)\s+", stripped, re.IGNORECASE):
                     sql_in_echo.append(i)
-            
+
             if sql_in_echo:
                 findings.append(
                     Finding(
@@ -234,15 +163,12 @@ class PHPStaticAssessor(Assessor):
                     )
                 )
 
-            # Security Checks
-            # 1. Input sanitisation (GET/POST)
-            # Check if $_GET/$_POST are used without sanitization functions
             sanitization_functions = [
                 "htmlspecialchars", "htmlentities", "filter_var", "filter_input",
                 "mysqli_real_escape_string", "addslashes", "strip_tags", "trim"
             ]
             has_sanitization = any(func in lowered for func in sanitization_functions)
-            
+
             if request_usage > 0 and not has_sanitization:
                 findings.append(
                     Finding(
@@ -260,14 +186,12 @@ class PHPStaticAssessor(Assessor):
                     )
                 )
 
-            # 2. Output escaping (HTML entities)
-            # Check if echo/print output is escaped
-            echo_statements = re.findall(r'\b(echo|print)\s+[^;]+', content, re.IGNORECASE)
+            echo_statements = re.findall(r"\b(echo|print)\s+[^;]+", content, re.IGNORECASE)
             escaped_output = any(
                 "htmlspecialchars" in stmt or "htmlentities" in stmt or "esc_html" in stmt.lower()
                 for stmt in echo_statements
             )
-            
+
             if echo_usage > 3 and not escaped_output:
                 findings.append(
                     Finding(
@@ -285,11 +209,9 @@ class PHPStaticAssessor(Assessor):
                     )
                 )
 
-            # 3. Use of prepared statements for database operations
-            # Check for mysqli_query or mysql_query (old style) vs prepared statements
             old_style_queries = lowered.count("mysql_query") + lowered.count("mysqli_query(")
             prepared_statements = lowered.count("prepare(") + lowered.count("bind_param") + lowered.count("pdo")
-            
+
             if db_usage > 0:
                 if old_style_queries > 0 and prepared_statements == 0:
                     findings.append(
@@ -323,11 +245,10 @@ class PHPStaticAssessor(Assessor):
                         )
                     )
 
-            # 4. Proper session handling
             if session_usage > 0:
                 session_start_found = "session_start" in lowered
                 session_regenerate = "session_regenerate_id" in lowered
-                
+
                 if not session_start_found:
                     findings.append(
                         Finding(
@@ -359,9 +280,90 @@ class PHPStaticAssessor(Assessor):
                         )
                     )
 
-            # ---- API Usage Analysis ----
             findings.extend(self._analyse_api_usage(path, content))
+        return findings
 
+    def _check_php_structure(self, files: list[tuple[object, str]]) -> List[Finding]:
+        return []
+
+    def run(self, context: SubmissionContext) -> List[Finding]:
+        findings: List[Finding] = []
+        php_files = sorted(context.files_for("php", relevant_only=True))
+        
+        # Determine if PHP is required for this profile
+        profile_name = context.metadata.get("profile")
+        is_required = False
+        if profile_name:
+            try:
+                profile_spec = get_profile_spec(profile_name)
+                is_required = profile_spec.is_component_required("php")
+            except ValueError:
+                pass  # Unknown profile, treat as not required
+
+        if not php_files:
+            if is_required:
+                # Required for profile but missing
+                findings.append(
+                    Finding(
+                        id=PID.MISSING_FILES,
+                        category="php",
+                        message="No PHP files found; PHP is required for this profile.",
+                        severity=Severity.FAIL,
+                        evidence={
+                            "expected_extensions": [".php"],
+                            "discovered_count": 0,
+                            "profile": profile_name,
+                            "required": True,
+                        },
+                        source=self.name,
+                        finding_category=FindingCategory.MISSING,
+                        profile=profile_name,
+                        required=True,
+                    )
+                )
+            else:
+                # Not required for profile, skip
+                findings.append(
+                    Finding(
+                        id=PID.SKIPPED,
+                        category="php",
+                        message="No PHP files found; PHP is not required for this profile.",
+                        severity=Severity.SKIPPED,
+                        evidence={
+                            "expected_extensions": [".php"],
+                            "discovered_count": 0,
+                            "profile": profile_name,
+                            "required": False,
+                        },
+                        source=self.name,
+                        finding_category=FindingCategory.OTHER,
+                        profile=profile_name,
+                        required=False,
+                    )
+                )
+            return findings
+
+        loaded_files: list[tuple[object, str]] = []
+        for path in php_files:
+            try:
+                content = path.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                findings.append(
+                    Finding(
+                        id=PID.READ_ERROR,
+                        category="php",
+                        message="Failed to read PHP file.",
+                        severity=Severity.FAIL,
+                        evidence={"path": str(path), "error": str(exc)},
+                        source=self.name,
+                    )
+                )
+                continue
+            loaded_files.append((path, content))
+
+        findings.extend(self._check_php_syntax(loaded_files))
+        findings.extend(self._check_php_patterns(loaded_files))
+        findings.extend(self._check_php_structure(loaded_files))
         return findings
 
     # ------------------------------------------------------------------ API

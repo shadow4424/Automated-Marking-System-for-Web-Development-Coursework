@@ -362,45 +362,38 @@ class PlaywrightAssessor(Assessor):
         )
         return results
 
-
-    def run(self, context: SubmissionContext) -> List[Finding]:
-        findings: List[Finding] = []
-        profile = context.metadata.get("profile", "unknown")
-        try:
-            profile_spec = get_profile_spec(profile)
-        except ValueError:
-            profile_spec = None
-
+    def _capture_pages(self, context: SubmissionContext) -> tuple[Path | None, BrowserRunResult | None]:
         entry = self._select_entrypoint(context)
         if not entry:
-            findings.append(
-                self._finding(
-                    "BROWSER.PAGE_LOAD_SKIPPED",
-                    "No HTML entrypoint found for browser automation.",
-                    Severity.SKIPPED,
-                    profile=profile,
-                    evidence={"reason": "no_html_found"},
-                )
-            )
-            return findings
+            return None, None
+        return entry, self.runner.run(entry, context.workspace_path, interaction=True)
 
-        if (
-            profile_spec
-            and profile_spec.is_component_required("php")
-            and context.files_for("php", relevant_only=True)
-        ):
-            # warn or skip if PHP present and we cannot serve dynamically
-            findings.append(
-                self._finding(
-                    "BROWSER.PHP_BACKEND_LIMITATION",
-                    "Browser automation limited to static load; PHP not served.",
-                    Severity.WARN,
-                    profile=profile,
-                    evidence={"entry": str(entry)},
-                )
-            )
+    def _orchestrate_browser_tests(
+        self,
+        context: SubmissionContext,
+        entry: Path,
+        profile: str,
+        profile_spec,
+    ) -> List[Finding]:
+        findings: List[Finding] = []
+        if profile_spec:
+            behavioral_test_types = {rule.test_type for rule in profile_spec.behavioral_rules}
+            if "calculator_sequence" in behavioral_test_types or "calculator_display" in behavioral_test_types or "calculator_operator" in behavioral_test_types:
+                findings.extend(self._run_calculator_behavioral(context, entry, profile))
+            if "hover_check" in behavioral_test_types:
+                findings.extend(self._run_hover_behavioral(context, entry, profile))
+            if "viewport_resize" in behavioral_test_types:
+                findings.extend(self._run_viewport_behavioral(context, entry, profile))
+        return findings
 
-        result = self.runner.run(entry, context.workspace_path, interaction=True)
+    def _collect_browser_evidence(
+        self,
+        context: SubmissionContext,
+        entry: Path,
+        result: BrowserRunResult,
+        profile: str,
+    ) -> List[Finding]:
+        findings: List[Finding] = []
         evidence = BrowserEvidence(
             test_id="BROWSER.PAGE",
             status=result.status,
@@ -459,7 +452,6 @@ class PlaywrightAssessor(Assessor):
                 )
             )
 
-        # Interaction findings
         interacted = any(a.get("type") in {"form_submit", "click"} for a in evidence.actions)
         if any(a.get("type") == "interaction_skipped" for a in evidence.actions):
             findings.append(
@@ -492,7 +484,6 @@ class PlaywrightAssessor(Assessor):
                 )
             )
 
-        # Console findings
         if evidence.console_errors:
             findings.append(
                 self._finding(
@@ -514,15 +505,53 @@ class PlaywrightAssessor(Assessor):
                 )
             )
 
-        # Extended behavioral tests based on profile
-        if profile_spec:
-            behavioral_test_types = {rule.test_type for rule in profile_spec.behavioral_rules}
-            if "calculator_sequence" in behavioral_test_types or "calculator_display" in behavioral_test_types or "calculator_operator" in behavioral_test_types:
-                findings.extend(self._run_calculator_behavioral(context, entry, profile))
-            if "hover_check" in behavioral_test_types:
-                findings.extend(self._run_hover_behavioral(context, entry, profile))
-            if "viewport_resize" in behavioral_test_types:
-                findings.extend(self._run_viewport_behavioral(context, entry, profile))
+        return findings
+
+    def run(self, context: SubmissionContext) -> List[Finding]:
+        findings: List[Finding] = []
+        profile = context.metadata.get("profile", "unknown")
+        try:
+            profile_spec = get_profile_spec(profile)
+        except ValueError:
+            profile_spec = None
+
+        entry = self._select_entrypoint(context)
+        if not entry:
+            findings.append(
+                self._finding(
+                    "BROWSER.PAGE_LOAD_SKIPPED",
+                    "No HTML entrypoint found for browser automation.",
+                    Severity.SKIPPED,
+                    profile=profile,
+                    evidence={"reason": "no_html_found"},
+                )
+            )
+            return findings
+
+        if (
+            profile_spec
+            and profile_spec.is_component_required("php")
+            and context.files_for("php", relevant_only=True)
+        ):
+            # warn or skip if PHP present and we cannot serve dynamically
+            findings.append(
+                self._finding(
+                    "BROWSER.PHP_BACKEND_LIMITATION",
+                    "Browser automation limited to static load; PHP not served.",
+                    Severity.WARN,
+                    profile=profile,
+                    evidence={"entry": str(entry)},
+                )
+            )
+
+        captured_entry, result = self._capture_pages(context)
+        if not captured_entry or not result:
+            return findings
+
+        findings.extend(self._collect_browser_evidence(context, captured_entry, result, profile))
+        if result.status in {"timeout", "error"}:
+            return findings
+        findings.extend(self._orchestrate_browser_tests(context, captured_entry, profile, profile_spec))
 
         return findings
 

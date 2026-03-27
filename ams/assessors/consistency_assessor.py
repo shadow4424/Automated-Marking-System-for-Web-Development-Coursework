@@ -70,9 +70,41 @@ class ConsistencyAssessor(Assessor):
 
     name = "consistency"
 
+    def _assess_js_css_consistency(
+        self,
+        context: SubmissionContext,
+        html_data: Dict[str, object],
+        profile_name: str,
+        profile_spec,
+    ) -> List[Finding]:
+        findings: List[Finding] = []
+        if profile_spec and (profile_spec.is_component_required("html") or profile_spec.is_component_required("js")):
+            findings.extend(self._check_js_html_consistency(context, html_data, profile_name))
+        if profile_spec and (profile_spec.is_component_required("html") or profile_spec.is_component_required("css")):
+            findings.extend(self._check_css_html_consistency(context, html_data, profile_name))
+        return findings
+
+    def _assess_php_routing_consistency(
+        self,
+        context: SubmissionContext,
+        html_data: Dict[str, object],
+        profile_name: str,
+        profile_spec,
+    ) -> List[Finding]:
+        findings: List[Finding] = []
+        if profile_spec and profile_spec.is_component_required("php"):
+            findings.extend(self._check_php_form_consistency(context, html_data, profile_name))
+        findings.extend(self._check_link_targets(context, html_data, profile_name))
+        return findings
+
+    def _aggregate_consistency_results(self, *groups: List[Finding]) -> List[Finding]:
+        findings: List[Finding] = []
+        for group in groups:
+            findings.extend(group)
+        return findings
+
     def run(self, context: SubmissionContext) -> List[Finding]:
         """Run all consistency checks."""
-        findings: List[Finding] = []
         profile_name = context.metadata.get("profile", "frontend")
 
         try:
@@ -80,25 +112,10 @@ class ConsistencyAssessor(Assessor):
         except ValueError:
             profile_spec = None
 
-        # Extract HTML data
         html_data = self._extract_html_data(context)
+        js_css_findings = self._assess_js_css_consistency(context, html_data, profile_name, profile_spec)
+        php_routing_findings = self._assess_php_routing_consistency(context, html_data, profile_name, profile_spec)
 
-        # B1: HTML ↔ JS DOM selector consistency
-        if profile_spec and (profile_spec.is_component_required("html") or profile_spec.is_component_required("js")):
-            findings.extend(self._check_js_html_consistency(context, html_data, profile_name))
-
-        # B2: HTML ↔ CSS selector consistency
-        if profile_spec and (profile_spec.is_component_required("html") or profile_spec.is_component_required("css")):
-            findings.extend(self._check_css_html_consistency(context, html_data, profile_name))
-
-        # B3: Form field ↔ PHP variable consistency (fullstack only)
-        if profile_spec and profile_spec.is_component_required("php"):
-            findings.extend(self._check_php_form_consistency(context, html_data, profile_name))
-
-        # B4: Link/action target existence
-        findings.extend(self._check_link_targets(context, html_data, profile_name))
-
-        # Cross-file alignment checks (store results for RequirementEvaluationEngine)
         cross_file_results: Dict[str, object] = {}
         if profile_spec and profile_spec.is_component_required("php"):
             cross_file_results["php_form_alignment"] = self._compute_php_form_alignment(
@@ -111,7 +128,7 @@ class ConsistencyAssessor(Assessor):
         if cross_file_results:
             context.metadata["cross_file_results"] = cross_file_results
 
-        return findings
+        return self._aggregate_consistency_results(js_css_findings, php_routing_findings)
 
     def _extract_html_data(self, context: SubmissionContext) -> Dict[str, object]:
         """Extract IDs, classes, form fields, and links from HTML files."""

@@ -202,15 +202,16 @@ class DeterministicTestEngine(Assessor):
                 inputs={"reason": "no_php_files"},
                 outputs={},
             )
-            self._record_evidence(context, evidence)
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.PHP_SMOKE_SKIPPED,
                     message="PHP smoke test skipped (no PHP files found).",
                     severity=Severity.SKIPPED,
                     profile=profile,
                     required=component_required,
-                    evidence={"reason": "no_php_files"},
+                    finding_evidence={"reason": "no_php_files"},
                 )
             ]
 
@@ -226,15 +227,16 @@ class DeterministicTestEngine(Assessor):
                 inputs={"target": str(target)},
                 outputs={},
             )
-            self._record_evidence(context, evidence)
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.PHP_SMOKE_SKIPPED,
                     message="PHP smoke test skipped; php binary not available.",
                     severity=Severity.SKIPPED,
                     profile=profile,
                     required=component_required,
-                    evidence={"target": str(target), "php_available": False},
+                    finding_evidence={"target": str(target), "php_available": False},
                 )
             ]
 
@@ -250,15 +252,16 @@ class DeterministicTestEngine(Assessor):
                 inputs={"target": str(target)},
                 outputs={},
             )
-            self._record_evidence(context, evidence)
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.PHP_SMOKE_TIMEOUT,
                     message="PHP smoke test timed out (stage timeout).",
                     severity=Severity.FAIL,
                     profile=profile,
                     required=component_required,
-                    evidence={"target": str(target)},
+                    finding_evidence={"target": str(target)},
                 )
             ]
 
@@ -279,28 +282,31 @@ class DeterministicTestEngine(Assessor):
             inputs={"target": str(target), "mode": "execute"},
             outputs={"timed_out": result.timed_out},
         )
-        self._record_evidence(context, evidence)
 
         if result.timed_out:
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.PHP_SMOKE_TIMEOUT,
                     message="PHP smoke test timed out.",
                     severity=Severity.FAIL,
                     profile=profile,
                     required=component_required,
-                    evidence={"target": str(target), "duration_ms": result.duration_ms},
+                    finding_evidence={"target": str(target), "duration_ms": result.duration_ms},
                 )
             ]
         if result.exit_code == 0:
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.PHP_SMOKE_PASS,
                     message="PHP entrypoint executed without fatal errors.",
                     severity=Severity.INFO,
                     profile=profile,
                     required=component_required,
-                    evidence={
+                    finding_evidence={
                         "target": str(target),
                         "exit_code": result.exit_code,
                         "duration_ms": result.duration_ms,
@@ -308,13 +314,15 @@ class DeterministicTestEngine(Assessor):
                 )
             ]
         return [
-            self._finding(
+            self._record_finding(
+                context,
+                evidence,
                 code=BID.PHP_SMOKE_FAIL,
                 message="PHP entrypoint execution failed.",
                 severity=Severity.FAIL,
                 profile=profile,
                 required=component_required,
-                evidence={
+                finding_evidence={
                     "target": str(target),
                     "exit_code": result.exit_code,
                     "stderr_first_line": self._first_line(result.stderr),
@@ -340,15 +348,16 @@ class DeterministicTestEngine(Assessor):
                 inputs={"target": str(target) if target else None},
                 outputs={},
             )
-            self._record_evidence(context, evidence)
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.PHP_FORM_RUN_SKIPPED,
                     message="PHP form injection test skipped.",
                     severity=Severity.SKIPPED,
                     profile=profile,
                     required=component_required,
-                    evidence={"php_available": php_available, "target": str(target) if target else None},
+                    finding_evidence={"php_available": php_available, "target": str(target) if target else None},
                 )
             ]
 
@@ -364,15 +373,16 @@ class DeterministicTestEngine(Assessor):
                 inputs={"target": str(target)},
                 outputs={},
             )
-            self._record_evidence(context, evidence)
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.PHP_FORM_RUN_TIMEOUT,
                     message="PHP form injection test timed out (stage timeout).",
                     severity=Severity.FAIL,
                     profile=profile,
                     required=component_required,
-                    evidence={"target": str(target)},
+                    finding_evidence={"target": str(target)},
                 )
             ]
 
@@ -405,38 +415,43 @@ class DeterministicTestEngine(Assessor):
             inputs={"target": str(target), "form_inputs": inputs},
             outputs={"timed_out": result.timed_out},
         )
-        self._record_evidence(context, evidence)
 
         if result.timed_out:
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.PHP_FORM_RUN_TIMEOUT,
                     message="PHP form injection test timed out.",
                     severity=Severity.FAIL,
                     profile=profile,
                     required=component_required,
-                    evidence={"target": str(target), "duration_ms": result.duration_ms},
+                    finding_evidence={"target": str(target), "duration_ms": result.duration_ms},
                 )
             ]
         if passed:
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.PHP_FORM_RUN_PASS,
                     message="PHP form injection executed with request variables injected.",
                     severity=Severity.INFO,
                     profile=profile,
                     required=component_required,
-                    evidence={"target": str(target), "exit_code": result.exit_code},
+                    finding_evidence={"target": str(target), "exit_code": result.exit_code},
                 )
             ]
         return [
-            self._finding(
+            self._record_finding(
+                context,
+                evidence,
                 code=BID.PHP_FORM_RUN_FAIL,
                 message="PHP form injection execution failed.",
                 severity=Severity.WARN,
                 profile=profile,
                 required=component_required,
-                evidence={
+                finding_evidence={
                     "target": str(target),
                     "exit_code": result.exit_code,
                     "stderr_first_line": self._first_line(result.stderr),
@@ -460,15 +475,16 @@ class DeterministicTestEngine(Assessor):
                 inputs={"discovered_sql_files": 0},
                 outputs={},
             )
-            self._record_evidence(context, evidence)
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.SQL_EXEC_SKIPPED,
                     message="SQLite execution skipped (no SQL files).",
                     severity=Severity.SKIPPED,
                     profile=profile,
                     required=component_required,
-                    evidence={"discovered_sql_files": 0},
+                    finding_evidence={"discovered_sql_files": 0},
                 )
             ]
 
@@ -484,15 +500,16 @@ class DeterministicTestEngine(Assessor):
                 inputs={"files": [str(p) for p in sql_files]},
                 outputs={},
             )
-            self._record_evidence(context, evidence)
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.SQL_EXEC_TIMEOUT,
                     message="SQLite execution timed out (stage timeout).",
                     severity=Severity.FAIL,
                     profile=profile,
                     required=component_required,
-                    evidence={"files": [str(p) for p in sql_files]},
+                    finding_evidence={"files": [str(p) for p in sql_files]},
                 )
             ]
 
@@ -532,15 +549,16 @@ class DeterministicTestEngine(Assessor):
                 inputs={"files": [str(p) for p in sql_files]},
                 outputs={},
             )
-            self._record_evidence(context, evidence)
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.SQL_EXEC_FAIL,
                     message="SQLite execution failed.",
                     severity=Severity.FAIL,
                     profile=profile,
                     required=component_required,
-                    evidence={"error": str(exc)},
+                    finding_evidence={"error": str(exc)},
                 )
             ]
 
@@ -592,15 +610,16 @@ class DeterministicTestEngine(Assessor):
                 inputs={"reason": "no_api_endpoint"},
                 outputs={},
             )
-            self._record_evidence(context, evidence)
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.API_EXEC_SKIPPED,
                     message="API execution test skipped (no API endpoint discovered).",
                     severity=Severity.SKIPPED,
                     profile=profile,
                     required=component_required,
-                    evidence={"reason": "no_api_endpoint"},
+                    finding_evidence={"reason": "no_api_endpoint"},
                 )
             ]
 
@@ -616,15 +635,16 @@ class DeterministicTestEngine(Assessor):
                 inputs={"target": str(api_endpoint)},
                 outputs={},
             )
-            self._record_evidence(context, evidence)
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.API_EXEC_SKIPPED,
                     message="API execution test skipped; php binary not available.",
                     severity=Severity.SKIPPED,
                     profile=profile,
                     required=component_required,
-                    evidence={"target": str(api_endpoint), "php_available": False},
+                    finding_evidence={"target": str(api_endpoint), "php_available": False},
                 )
             ]
 
@@ -640,15 +660,16 @@ class DeterministicTestEngine(Assessor):
                 inputs={"target": str(api_endpoint)},
                 outputs={},
             )
-            self._record_evidence(context, evidence)
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.API_EXEC_TIMEOUT,
                     message="API execution test timed out (stage timeout).",
                     severity=Severity.FAIL,
                     profile=profile,
                     required=component_required,
-                    evidence={"target": str(api_endpoint)},
+                    finding_evidence={"target": str(api_endpoint)},
                 )
             ]
 
@@ -684,15 +705,16 @@ class DeterministicTestEngine(Assessor):
                 inputs={"target": str(api_endpoint)},
                 outputs={"timed_out": True},
             )
-            self._record_evidence(context, evidence)
             return [
-                self._finding(
+                self._record_finding(
+                    context,
+                    evidence,
                     code=BID.API_EXEC_TIMEOUT,
                     message="API execution test timed out.",
                     severity=Severity.FAIL,
                     profile=profile,
                     required=component_required,
-                    evidence={"target": str(api_endpoint), "duration_ms": duration_ms},
+                    finding_evidence={"target": str(api_endpoint), "duration_ms": duration_ms},
                 )
             ]
 
@@ -993,6 +1015,28 @@ class DeterministicTestEngine(Assessor):
         evidence.stdout = self._cap(evidence.stdout)
         evidence.stderr = self._cap(evidence.stderr)
         context.behavioural_evidence.append(evidence)
+
+    def _record_finding(
+        self,
+        context: SubmissionContext,
+        evidence: BehaviouralEvidence,
+        *,
+        code: str,
+        message: str,
+        severity: Severity,
+        profile: str,
+        required: bool | None = None,
+        finding_evidence: Mapping[str, object] | None = None,
+    ) -> Finding:
+        self._record_evidence(context, evidence)
+        return self._finding(
+            code=code,
+            message=message,
+            severity=severity,
+            profile=profile,
+            evidence=finding_evidence,
+            required=required,
+        )
 
     def _finding(
         self,
