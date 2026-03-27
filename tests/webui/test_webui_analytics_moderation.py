@@ -669,5 +669,6 @@ def test_assignment_analytics_page_renders_deterministic_summary_and_manual_llm_
     assert b"All assigned students currently have an active submission in scope." in response.data
     assert b"Deterministic wording" in response.data
     assert b"Generate LLM summary" in response.data
-    assert b"payload.fallback_reason" in response.data
+    assert b"window.AMS_CHART_DATA =" in response.data
+    assert b"js/pages/analytics-charts.js" in response.data
     assert provider_calls == []
