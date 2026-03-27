@@ -1,0 +1,6 @@
+{
+  "base_profile": "frontend_interactive",
+  "enabled_browser_checks": [],
+  "enabled_behavioural_checks": [],
+  "description": "Evaluation profile: static-only, no browser or behavioural checks. Use for deterministic evaluation without Docker or Playwright."
+}

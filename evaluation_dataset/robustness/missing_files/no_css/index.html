@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Contact Form</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="#contact">Contact</a>
+    </nav>
+  </header>
+  <main>
+    <section id="contact">
+      <h1>Contact Us</h1>
+      <h2>Send a Message</h2>
+      <ul>
+        <li>Fill in the form below</li>
+        <li>Click Submit to send</li>
+      </ul>
+      <form id="contactForm" action="#" method="post">
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" placeholder="Your name" required>
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" placeholder="Your email" required>
+        <label for="message">Message:</label>
+        <textarea id="message" name="message" rows="5" required></textarea>
+        <button type="submit">Submit</button>
+      </form>
+      <img src="logo.png" alt="Site logo" width="100">
+    </section>
+    <article>
+      <p>Thank you for visiting our page.</p>
+    </article>
+  </main>
+  <footer>
+    <p>&copy; 2024 Student Project</p>
+  </footer>
+  <script src="script.js"></script>
+</body>
+</html>

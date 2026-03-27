@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Product Feedback</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="#">Home</a>
+      <a href="#feedback">Feedback</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+  </header>
+  <main>
+    <section id="feedback">
+      <h1>Product Feedback</h1>
+      <h2>Share your experience</h2>
+      <ul>
+        <li>Rating is required</li>
+        <li>Comments are optional</li>
+      </ul>
+      <form id="feedbackForm" method="post" action="#">
+        <label for="product">Product:</label>
+        <input type="text" id="product" name="product" required>
+        <label for="rating">Rating (1-5):</label>
+        <input type="number" id="rating" name="rating" min="1" max="5" required>
+        <label for="comment">Comment:</label>
+        <textarea id="comment" name="comment" rows="4"></textarea>
+        <button type="submit">Submit Feedback</button>
+      </form>
+      <img src="product.png" alt="Product image">
+    </section>
+    <article id="faq">
+      <h2>Frequently Asked Questions</h2>
+      <p>Your feedback helps us improve our products.</p>
+    </article>
+  </main>
+  <footer>
+    <p>Feedback Portal &copy; 2024</p>
+  </footer>
+  <script src="script.js"></script>
+</body>
+</html>

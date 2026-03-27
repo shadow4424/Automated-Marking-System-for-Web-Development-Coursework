@@ -80,6 +80,59 @@ def _create_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("demo", help="Build and run a full demo assessment")
 
+    # ── Evaluation subcommand ──────────────────────────────────────────────
+    eval_parser = subparsers.add_parser(
+        "eval",
+        help="Run the evaluation framework (accuracy / consistency / robustness)",
+    )
+    eval_mode = eval_parser.add_mutually_exclusive_group(required=True)
+    eval_mode.add_argument(
+        "--accuracy",
+        type=Path,
+        metavar="DATASET_PATH",
+        help="Run accuracy evaluation against a labelled dataset directory",
+    )
+    eval_mode.add_argument(
+        "--consistency",
+        type=Path,
+        metavar="SUBMISSION_PATH",
+        help="Run consistency evaluation by re-running one submission N times",
+    )
+    eval_mode.add_argument(
+        "--robustness",
+        type=Path,
+        metavar="DATASET_PATH",
+        help="Run robustness evaluation against the edge-case/adversarial dataset",
+    )
+    eval_parser.add_argument(
+        "--runs",
+        type=int,
+        default=5,
+        help="Number of reruns for --consistency (default: 5)",
+    )
+    eval_parser.add_argument(
+        "--profile",
+        choices=profile_choices,
+        default="frontend",
+        help="Profile to use for pipeline runs (default: frontend)",
+    )
+    eval_parser.add_argument(
+        "--profile-config",
+        type=Path,
+        metavar="PROFILE_CONFIG",
+        help=(
+            "Path to a custom profile JSON to override the profile for all eval runs. "
+            "Useful to disable browser/behavioural checks for static-only evaluation. "
+            "Example: evaluation_dataset/eval_profile.json"
+        ),
+    )
+    eval_parser.add_argument(
+        "--out",
+        "-o",
+        type=Path,
+        help="Output directory for evaluation results (default: ams_eval_runs/<timestamp>)",
+    )
+
     return parser
 
 
@@ -154,6 +207,44 @@ def main(argv: list[str] | None = None) -> None:
 
         success = run_demo()
         raise SystemExit(0 if success else 1)
+    elif args.command == "eval":
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        out_dir = Path(args.out) if args.out else (Path.cwd() / "ams_eval_runs" / timestamp)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        profile_config = Path(args.profile_config) if getattr(args, "profile_config", None) else None
+
+        if args.accuracy:
+            from ams.evaluation.accuracy import run_accuracy_evaluation
+            result = run_accuracy_evaluation(
+                dataset_path=Path(args.accuracy),
+                out_dir=out_dir,
+                profile=args.profile,
+                profile_config_path=profile_config,
+            )
+            acc = result.get("overall_accuracy", 0)
+            print(f"\nAccuracy: {acc:.2%}  |  Results in: {out_dir}")
+        elif args.consistency:
+            from ams.evaluation.consistency import run_consistency_evaluation
+            result = run_consistency_evaluation(
+                submission_path=Path(args.consistency),
+                out_dir=out_dir,
+                runs=args.runs,
+                profile=args.profile,
+                profile_config_path=profile_config,
+            )
+            rate = result.get("score_consistency_rate", 0)
+            print(f"\nConsistency: {rate:.2%}  |  Results in: {out_dir}")
+        elif args.robustness:
+            from ams.evaluation.robustness import run_robustness_evaluation
+            result = run_robustness_evaluation(
+                dataset_path=Path(args.robustness),
+                out_dir=out_dir,
+                profile=args.profile,
+                profile_config_path=profile_config,
+            )
+            recoverable = result.get("recoverable_rate", 0)
+            print(f"\nRobustness recoverable rate: {recoverable:.2%}  |  Results in: {out_dir}")
     else:
         raise SystemExit(1)
 
