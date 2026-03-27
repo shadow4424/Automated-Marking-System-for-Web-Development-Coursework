@@ -12,7 +12,6 @@ Key Features:
 from __future__ import annotations
 
 import base64
-import io
 import logging
 import mimetypes
 import time
@@ -29,65 +28,9 @@ except ImportError:
     HAS_PIL = False
 
 from ams.core.config import VISION_MAX_IMAGE_SIZE
+from ams.llm.utils import encode_image_safely
 
 logger = logging.getLogger(__name__)
-
-
-# =============================================================================
-# Safe Image Encoding (OOM Prevention)
-# =============================================================================
-
-
-def encode_image_safely(image_path: str, max_size: int = 768) -> str:
-    """Resize an image and compress to JPEG before base64-encoding.
-
-    This prevents Vision-LLM Out-of-Memory crashes that occur when
-    full-resolution, uncompressed screenshots are sent to 7B models
-    running in limited VRAM.
-
-    Args:
-        image_path: Path to the source image file.
-        max_size:   Maximum width/height in pixels (default 768).
-                    Images larger than this are down-scaled with
-                    Lanczos resampling while preserving aspect ratio.
-
-    Returns:
-        A base64-encoded string of the compressed JPEG image.
-    """
-    if not HAS_PIL:
-        raise ImportError(
-            "Pillow is required for safe image encoding. "
-            "Install with: pip install pillow"
-        )
-
-    jpeg_quality = 85
-
-    with Image.open(image_path) as img:
-        original_dims = img.size
-
-        # Convert to RGB (handles RGBA PNGs, palette images, etc.)
-        if img.mode != "RGB":
-            img = img.convert("RGB")
-
-        # Resize if the image exceeds max_size, maintaining aspect ratio
-        if max(img.width, img.height) > max_size:
-            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
-
-        # Save to an in-memory buffer as compressed JPEG
-        buffer = io.BytesIO()
-        img.save(buffer, format="JPEG", quality=jpeg_quality)
-
-        jpeg_bytes = buffer.tell()
-        encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
-
-        logger.info(
-            "encode_image_safely: %s orig=%s final=%dx%d "
-            "format=JPEG quality=%d payload=%d bytes",
-            image_path, original_dims,
-            img.width, img.height,
-            jpeg_quality, jpeg_bytes,
-        )
-        return encoded
 
 
 # =============================================================================

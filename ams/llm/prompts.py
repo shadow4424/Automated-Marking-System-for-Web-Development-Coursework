@@ -201,6 +201,23 @@ If design meets ALL pass criteria → PASS with specific praise AND 1-2 refineme
 Return ONLY the JSON object with ALL THREE keys (status, feedback, improvement_recommendation):
 {{"status": "PASS" or "NEEDS_IMPROVEMENT", "feedback": "...", "improvement_recommendation": "One specific actionable step to enhance the design."}}"""
 
+
+def build_detect_layout_issues_prompt(requirement_context: str) -> str:
+    """Build the user prompt for layout issue detection."""
+    return f"""Requirement to verify:
+{requirement_context}
+
+Look at the screenshot carefully. Is this specific requirement visibly met?
+- If YES and you can see clear evidence of it → {{"result": "PASS", "reason": "..."}}
+- If NO, missing, broken, or unstyled → {{"result": "FAIL", "reason": "..."}}
+
+Respond with JSON only."""
+
+
+def build_review_ux_prompt(page_name: str) -> str:
+    """Build the user prompt for a UX screenshot review."""
+    return UX_REVIEW_USER_PROMPT_TEMPLATE.format(page_name=page_name)
+
 # ============================================================================
 # Threat Analysis (Security Warning Generation)
 # ============================================================================
@@ -251,6 +268,8 @@ __all__ = [
     "VISION_SYSTEM_PROMPT",
     "UX_REVIEW_SYSTEM_PROMPT",
     "UX_REVIEW_USER_PROMPT_TEMPLATE",
+    "build_detect_layout_issues_prompt",
+    "build_review_ux_prompt",
     "THREAT_ANALYSIS_SYSTEM_PROMPT",
     "THREAT_ANALYSIS_USER_PROMPT_TEMPLATE",
 ]

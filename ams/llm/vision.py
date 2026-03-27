@@ -29,7 +29,13 @@ from ams.llm.schemas import (
     create_pass,
     create_fail,
 )
-from ams.llm.prompts import VISION_SYSTEM_PROMPT, UX_REVIEW_SYSTEM_PROMPT, UX_REVIEW_USER_PROMPT_TEMPLATE
+from ams.llm.prompts import (
+    VISION_SYSTEM_PROMPT,
+    UX_REVIEW_SYSTEM_PROMPT,
+    build_detect_layout_issues_prompt,
+    build_review_ux_prompt,
+)
+from ams.llm.utils import parse_detect_layout_issues_response, parse_review_ux_response
 
 logger = logging.getLogger(__name__)
 
@@ -196,14 +202,7 @@ class VisionAnalyst:
                 except ValueError:
                     pass  # Cache corrupted, proceed with LLM call
         
-        user_prompt = f"""Requirement to verify:
-{requirement_context}
-
-Look at the screenshot carefully. Is this specific requirement visibly met?
-- If YES and you can see clear evidence of it → {{"result": "PASS", "reason": "..."}}
-- If NO, missing, broken, or unstyled → {{"result": "FAIL", "reason": "..."}}
-
-Respond with JSON only."""
+        user_prompt = build_detect_layout_issues_prompt(requirement_context)
 
         logger.info(f"Analyzing screenshot: {path.name}")
         logger.debug(f"Requirement: {requirement_context}")
@@ -235,7 +234,12 @@ Respond with JSON only."""
         
         # Parse the JSON response
         try:
-            result = self._parse_response(response.content, str(path))
+            result = parse_detect_layout_issues_response(
+                response.content,
+                str(path),
+                type(self.provider).__name__,
+                contradiction_checker=self._reason_contradicts_pass,
+            )
             logger.info(f"Vision result: {result.status} - {result.reason}")
             return result
         except ValueError as e:
@@ -355,7 +359,7 @@ Respond with JSON only."""
         # batch runs (the global cache.db is content-addressed so identical
         # screenshots from different students would collide).
 
-        user_prompt = UX_REVIEW_USER_PROMPT_TEMPLATE.format(page_name=page_name)
+        user_prompt = build_review_ux_prompt(page_name)
 
         # ── Phase E: inject static-analysis context into the system prompt ──
         # The system prompt has a {context_note} placeholder that gets filled
@@ -383,7 +387,12 @@ Respond with JSON only."""
             )
 
         try:
-            return self._parse_ux_response(response.content, page_name, str(path))
+            return parse_review_ux_response(
+                response.content,
+                page_name,
+                str(path),
+                type(self.provider).__name__,
+            )
         except ValueError as e:
             logger.error("Failed to parse UX review response for %s: %s", page_name, e)
             return UXReviewResult(
