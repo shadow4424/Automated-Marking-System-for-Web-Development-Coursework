@@ -1,0 +1,267 @@
+{
+  "version": "1.0",
+  "created_at": "2026-03-27",
+  "description": "AMS evaluation dataset with labelled synthetic submissions. Used for accuracy, consistency, robustness, and LLM marking evaluation.",
+  "submissions": [
+    {
+      "id": "correct_001",
+      "path": "correct/correct_001",
+      "category": "correct",
+      "profile": "frontend",
+      "expected_overall": 1.0,
+      "expected_components": {
+        "html": 1.0,
+        "css": 1.0,
+        "js": 1.0
+      },
+      "notes": "Complete contact form with validation"
+    },
+    {
+      "id": "correct_002",
+      "path": "correct/correct_002",
+      "category": "correct",
+      "profile": "frontend",
+      "expected_overall": 1.0,
+      "expected_components": {
+        "html": 1.0,
+        "css": 1.0,
+        "js": 1.0
+      },
+      "notes": "Registration form with password validation"
+    },
+    {
+      "id": "correct_003",
+      "path": "correct/correct_003",
+      "category": "correct",
+      "profile": "frontend",
+      "expected_overall": 1.0,
+      "expected_components": {
+        "html": 1.0,
+        "css": 1.0,
+        "js": 1.0
+      },
+      "notes": "Product feedback form with rating validation"
+    },
+    {
+      "id": "partial_001",
+      "path": "partial/partial_001",
+      "category": "partial",
+      "profile": "frontend",
+      "expected_overall": 0.5,
+      "expected_components": {
+        "html": 1.0,
+        "css": 1.0,
+        "js": 0.0
+      },
+      "notes": "Full HTML+CSS, empty JS file"
+    },
+    {
+      "id": "partial_002",
+      "path": "partial/partial_002",
+      "category": "partial",
+      "profile": "frontend",
+      "expected_overall": 0.5,
+      "expected_components": {
+        "html": 1.0,
+        "css": 1.0,
+        "js": 0.0
+      },
+      "notes": "Registration HTML+CSS, no JS"
+    },
+    {
+      "id": "partial_003",
+      "path": "partial/partial_003",
+      "category": "partial",
+      "profile": "frontend",
+      "expected_overall": 0.5,
+      "expected_components": {
+        "html": 1.0,
+        "css": 1.0,
+        "js": 0.0
+      },
+      "notes": "Minimal HTML+CSS, no JS"
+    },
+    {
+      "id": "incorrect_001",
+      "path": "incorrect/incorrect_001",
+      "category": "incorrect",
+      "profile": "frontend",
+      "expected_overall": 0.0,
+      "expected_components": {
+        "html": 0.0,
+        "css": 0.0,
+        "js": 0.0
+      },
+      "notes": "All files completely empty"
+    },
+    {
+      "id": "incorrect_002",
+      "path": "incorrect/incorrect_002",
+      "category": "incorrect",
+      "profile": "frontend",
+      "expected_overall": 0.0,
+      "expected_components": {
+        "html": 0.0,
+        "css": 0.0,
+        "js": 0.0
+      },
+      "notes": "Minimal HTML structure, no required elements, no JS"
+    },
+    {
+      "id": "incorrect_003",
+      "path": "incorrect/incorrect_003",
+      "category": "incorrect",
+      "profile": "frontend",
+      "expected_overall": 0.0,
+      "expected_components": {
+        "html": 0.0,
+        "css": 0.0,
+        "js": 0.0
+      },
+      "notes": "All files present but zero bytes"
+    },
+    {
+      "id": "frontend_only_001",
+      "path": "frontend_only/frontend_only_001",
+      "category": "frontend_only",
+      "profile": "frontend",
+      "expected_overall": 1.0,
+      "expected_components": {
+        "html": 1.0,
+        "css": 1.0,
+        "js": 1.0
+      },
+      "notes": "Complete frontend form, frontend profile"
+    },
+    {
+      "id": "frontend_only_002",
+      "path": "frontend_only/frontend_only_002",
+      "category": "frontend_only",
+      "profile": "frontend",
+      "expected_overall": 1.0,
+      "expected_components": {
+        "html": 1.0,
+        "css": 1.0,
+        "js": 1.0
+      },
+      "notes": "Feedback form, frontend profile"
+    },
+    {
+      "id": "attempt_001",
+      "path": "llm_attempts/attempt_001",
+      "category": "llm_attempt",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "Full HTML+CSS, JS uses var/onclick/setAttribute. Fails js.has_event_listener and js.has_dom_manipulation static checks. LLM should detect student intent and award partial credit."
+    },
+    {
+      "id": "attempt_002",
+      "path": "llm_attempts/attempt_002",
+      "category": "llm_attempt",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "HTML+CSS correct, JS uses onsubmit= and document.write. Fails js.has_event_listener and js.has_dom_manipulation. Has const/let and DOM queries. LLM should award partial credit."
+    },
+    {
+      "id": "attempt_003",
+      "path": "llm_attempts/attempt_003",
+      "category": "llm_attempt",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "Full HTML+JS, CSS has flexbox on one element only and no @media queries (commented out). Fails css.has_media_queries and css.has_flexbox fully. LLM should detect the attempt and award partial credit."
+    },
+    {
+      "id": "rob_missing_empty",
+      "path": "robustness/missing_files/empty_submission",
+      "category": "robustness/missing_files",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "Empty directory \u2014 no files at all"
+    },
+    {
+      "id": "rob_missing_no_html",
+      "path": "robustness/missing_files/no_html",
+      "category": "robustness/missing_files",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "Has CSS and JS but no HTML file"
+    },
+    {
+      "id": "rob_missing_no_css",
+      "path": "robustness/missing_files/no_css",
+      "category": "robustness/missing_files",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "Has HTML and JS but no CSS file"
+    },
+    {
+      "id": "rob_syntax_broken_html",
+      "path": "robustness/broken_syntax/broken_html",
+      "category": "robustness/broken_syntax",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "Malformed HTML with unclosed tags and missing quotes"
+    },
+    {
+      "id": "rob_syntax_broken_css",
+      "path": "robustness/broken_syntax/broken_css",
+      "category": "robustness/broken_syntax",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "CSS file with syntax errors (missing semicolons, unclosed blocks)"
+    },
+    {
+      "id": "rob_syntax_broken_js",
+      "path": "robustness/broken_syntax/broken_js",
+      "category": "robustness/broken_syntax",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "JS file with syntax errors (unclosed function, invalid expressions)"
+    },
+    {
+      "id": "rob_traversal_001",
+      "path": "robustness/path_traversal/traversal_001",
+      "category": "robustness/path_traversal",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "HTML references ../../../etc/passwd in href/src attributes"
+    },
+    {
+      "id": "rob_traversal_002",
+      "path": "robustness/path_traversal/traversal_002",
+      "category": "robustness/path_traversal",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "HTML links to ../style.css and ../script.js (relative path escape)"
+    },
+    {
+      "id": "rob_adversarial_deep_nesting",
+      "path": "robustness/adversarial/deep_nesting",
+      "category": "robustness/adversarial",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "Files buried 5 directories deep (a/b/c/d/index.html)"
+    },
+    {
+      "id": "rob_adversarial_junk_files",
+      "path": "robustness/adversarial/with_junk_files",
+      "category": "robustness/adversarial",
+      "profile": "frontend",
+      "expected_overall": null,
+      "expected_components": {},
+      "notes": "Valid submission with binary junk files (.bin, .DS_Store, Thumbs.db)"
+    }
+  ]
+}

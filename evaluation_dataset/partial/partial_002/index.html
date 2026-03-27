@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registration Page</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="#">Home</a>
+      <a href="#register">Register</a>
+    </nav>
+  </header>
+  <main>
+    <section id="register">
+      <h1>Create Account</h1>
+      <h2>Fill in your details</h2>
+      <ul>
+        <li>All fields are required</li>
+        <li>Password must be 8+ characters</li>
+      </ul>
+      <form id="registerForm" method="post" action="#">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required>
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required>
+        <label for="confirm">Confirm Password:</label>
+        <input type="password" id="confirm" name="confirm" required>
+        <button type="submit">Register</button>
+      </form>
+      <img src="banner.png" alt="Registration banner">
+    </section>
+    <aside>
+      <p>Already have an account? <a href="#">Log in</a></p>
+    </aside>
+  </main>
+  <footer>
+    <p>Student Registration System &mdash; 2024</p>
+  </footer>
+  <script src="script.js"></script>
+</body>
+</html>

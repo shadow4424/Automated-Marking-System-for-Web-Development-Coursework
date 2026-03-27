@@ -1,0 +1,7 @@
+{
+  "base_profile": "frontend_interactive",
+  "enabled_browser_checks": [],
+  "enabled_behavioural_checks": [],
+  "scoring_mode": "static_plus_llm",
+  "description": "LLM evaluation profile: static + LLM partial credit, no browser or behavioural checks. Use for evaluating AI-assisted partial marking without Docker or Playwright."
+}

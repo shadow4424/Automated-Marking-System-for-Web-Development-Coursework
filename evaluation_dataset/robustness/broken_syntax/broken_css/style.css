@@ -1,0 +1,15 @@
+/* Broken CSS */
+body {
+  font-family: sans-serif
+  color: red    /* missing semicolons */
+  background: blue
+}
+
+.missing-brace {
+  display: flex
+  /* brace never closed
+
+h1 {
+  color: green;
+  /* unclosed comment
+}
