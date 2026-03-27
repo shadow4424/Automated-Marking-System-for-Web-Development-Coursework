@@ -90,7 +90,7 @@ def runs():
         )
     ]
     return render_template(
-        "runs.html",
+        "marking/runs.html",
         runs=filtered,
         mode_filter=mode_filter,
         profile_filter=profile_filter,
@@ -263,7 +263,7 @@ def run_detail(run_id: str):
                 context["report"].get("findings", []), run_dir
             )
         context["detail_view"] = _build_submission_detail_view(context["run"], context.get("report"))
-        return render_template("run_detail.html", **context)
+        return render_template("marking/run_detail.html", **context)
 
     assignment_id = run_info.get("assignment_id", "")
     if assignment_id:

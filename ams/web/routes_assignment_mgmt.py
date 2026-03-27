@@ -52,7 +52,7 @@ def create_assignment_route():
     if request.method == "GET":
         students = list_users(role="student")
         teachers = list_users(role="teacher")
-        return render_template("teacher_create_assignment.html", students=students, teachers=teachers)
+        return render_template("teacher/create_assignment.html", students=students, teachers=teachers)
 
     user = get_current_user()
     assignment_id = request.form.get("assignment_id", "").strip()
@@ -160,7 +160,7 @@ def assignment_detail(assignment_id: str):
     llm_error_rows = _build_llm_error_resolution_rows(assignment_runs)
 
     return render_template(
-        "assignment_detail.html",
+        "teacher/assignment_detail.html",
         assignment=assignment,
         student_details=student_details,
         teacher_details=teacher_details,
@@ -254,7 +254,7 @@ def view_analytics(assignment_id: str):
     teaching_summary_source = "deterministic"
 
     return render_template(
-        "assignment_analytics.html",
+        "teacher/assignment_analytics.html",
         assignment=assignment,
         analytics=analytics,
         teaching_insights=teaching_insights,

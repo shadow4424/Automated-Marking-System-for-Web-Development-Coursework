@@ -172,7 +172,7 @@ def batch():
         github_connected = bool(session.get("github_token"))
         github_user = session.get("github_user", "")
         return render_template(
-            "batch.html",
+            "marking/batch.html",
             assignments=assignment_options,
             selected_assignment_id=selected_assignment_id,
             github_connected=github_connected,
@@ -191,7 +191,7 @@ def batch():
             "error",
         )
         return render_template(
-            "batch.html",
+            "marking/batch.html",
             assignments=assignment_options,
             selected_assignment_id=selected_assignment_id,
             github_connected=bool(session.get("github_token")),
@@ -223,7 +223,7 @@ def batch():
         if not github_token:
             flash("Please link your GitHub account first.", "error")
             return render_template(
-                "batch.html",
+                "marking/batch.html",
                 assignments=assignment_options,
                 selected_assignment_id=selected_assignment_id,
                 github_connected=False,
@@ -234,7 +234,7 @@ def batch():
         if "/" not in github_repo or github_repo.count("/") != 1:
             flash("Invalid GitHub repository format. Use owner/repo.", "error")
             return render_template(
-                "batch.html",
+                "marking/batch.html",
                 assignments=assignment_options,
                 selected_assignment_id=selected_assignment_id,
                 github_connected=github_connected,
@@ -261,7 +261,7 @@ def batch():
             logger.warning("GitHub zipball download failed for %s: %s", github_repo, exc)
             flash(f"Failed to download repository from GitHub: {exc}", "error")
             return render_template(
-                "batch.html",
+                "marking/batch.html",
                 assignments=assignment_options,
                 selected_assignment_id=selected_assignment_id,
                 github_connected=github_connected,
@@ -282,7 +282,7 @@ def batch():
         if not file or not file.filename:
             flash("Please upload a .zip file or select a GitHub repository.", "error")
             return render_template(
-                "batch.html",
+                "marking/batch.html",
                 assignments=assignment_options,
                 selected_assignment_id=selected_assignment_id,
                 github_connected=github_connected,
@@ -292,7 +292,7 @@ def batch():
         if not validate_file_type(file.filename):
             flash("Invalid file type. Please upload a .zip file.", "error")
             return render_template(
-                "batch.html",
+                "marking/batch.html",
                 assignments=assignment_options,
                 selected_assignment_id=selected_assignment_id,
                 github_connected=github_connected,
@@ -316,7 +316,7 @@ def batch():
                 pass
         flash(f"Invalid Assignment ID: {assignment_error}", "error")
         return render_template(
-            "batch.html",
+            "marking/batch.html",
             assignments=assignment_options,
             selected_assignment_id=selected_assignment_id,
             github_connected=github_connected,
@@ -334,7 +334,7 @@ def batch():
                 pass
         flash("Select a valid assignment from the list.", "error")
         return render_template(
-            "batch.html",
+            "marking/batch.html",
             assignments=assignment_options,
             selected_assignment_id=selected_assignment_id,
             github_connected=github_connected,
@@ -348,7 +348,7 @@ def batch():
                 pass
         flash(_submission_lock_message(), "error")
         return render_template(
-            "batch.html",
+            "marking/batch.html",
             assignments=assignment_options,
             selected_assignment_id=selected_assignment_id,
             github_connected=github_connected,
@@ -366,7 +366,7 @@ def batch():
             pass
         flash("The uploaded file is not a valid ZIP archive.", "error")
         return render_template(
-            "batch.html",
+            "marking/batch.html",
             assignments=assignment_options,
             selected_assignment_id=selected_assignment_id,
             github_connected=github_connected,
@@ -379,7 +379,7 @@ def batch():
         if not valid_size:
             flash(size_error or "File size exceeds maximum limit.", "error")
             return render_template(
-                "batch.html",
+                "marking/batch.html",
                 assignments=assignment_options,
                 selected_assignment_id=selected_assignment_id,
                 github_connected=github_connected,
@@ -915,7 +915,7 @@ def batch_submission_view(run_id: str, submission_id: str):
     detail_run_info = submission_run_info
     detail_report = report
     return render_template(
-        "run_detail.html",
+        "marking/run_detail.html",
         run=detail_run_info,
         run_id=run_id,
         report=detail_report,

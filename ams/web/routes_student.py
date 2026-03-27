@@ -494,7 +494,7 @@ def dashboard():
     todo, completed = _split_assignments(assignments, submitted_aids, latest_runs_by_assignment)
 
     return render_template(
-        "student_dashboard.html",
+        "student/dashboard.html",
         assignments=assignments,
         todo=todo,
         completed=completed,
@@ -535,7 +535,7 @@ def coursework():
     todo, completed = _split_assignments(assignments, submitted_aids, latest_runs_by_assignment)
 
     return render_template(
-        "student_coursework.html",
+        "student/coursework.html",
         assignments=assignments,
         todo=todo,
         completed=completed,
@@ -574,7 +574,7 @@ def assignment_analytics(assignment_id: str):
         return redirect(url_for("student.coursework"))
 
     return render_template(
-        "student_assignment_analytics.html",
+        "student/assignment_analytics.html",
         assignment=assignment,
         analytics=analytics,
         deterministic_feedback=_deterministic_student_feedback(analytics),

@@ -610,7 +610,7 @@ def mark():
         teacher_assignments = assignment_options if effective_role != "student" else []
         return (
             render_template(
-                "mark.html",
+                "marking/mark.html",
                 profiles=PROFILE_CHOICES,
                 github_connected=github_connected,
                 github_user=github_user,
@@ -1127,7 +1127,7 @@ def _render_mark_page(status_code: int = 200, selected_assignment_id: str = ""):
     teacher_assignments = assignment_options if effective_role != "student" else []
     return (
         render_template(
-            "mark.html",
+                "marking/mark.html",
             profiles=PROFILE_CHOICES,
             github_connected=github_connected,
             github_user=github_user,

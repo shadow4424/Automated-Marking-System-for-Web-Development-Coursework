@@ -19,7 +19,7 @@ def dashboard():
         assignments = list_assignments(teacher_id=user["userID"])
     students = list_users(role="student")
     return render_template(
-        "teacher_dashboard.html",
+        "teacher/dashboard.html",
         assignments=assignments,
         students=students,
     )

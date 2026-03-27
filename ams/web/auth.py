@@ -149,19 +149,19 @@ def login():
         return redirect(url_for("dashboard.home"))
 
     if request.method == "GET":
-        return render_template("login.html")
+        return render_template("auth/login.html")
 
     user_id = request.form.get("user_id", "").strip()
     password = request.form.get("password", "").strip()
 
     if not user_id or not password:
         flash("Please enter both User ID and Password.", "error")
-        return render_template("login.html"), 400
+        return render_template("auth/login.html"), 400
 
     user = authenticate_user(user_id, password)
     if user is None:
         flash("Invalid credentials. Please try again.", "error")
-        return render_template("login.html"), 401
+        return render_template("auth/login.html"), 401
 
     # Stage 1 passed — generate 2FA code
     code = _generate_2fa_code()
@@ -181,14 +181,14 @@ def verify_2fa():
         return redirect(url_for("auth.login"))
 
     if request.method == "GET":
-        return render_template("2fa.html")
+        return render_template("auth/2fa.html")
 
     entered_code = request.form.get("code", "").strip()
     expected_code = session.get("pending_2fa_code", "")
 
     if entered_code != expected_code:
         flash("Incorrect verification code. Please try again.", "error")
-        return render_template("2fa.html"), 401
+        return render_template("auth/2fa.html"), 401
 
     # 2FA passed — create authenticated session
     user_id = session.pop("pending_user_id")

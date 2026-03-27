@@ -26,7 +26,7 @@ def dashboard():
     admins = [u for u in users if u["role"] == "admin"]
     assignments = list_assignments()
     return render_template(
-        "admin_dashboard.html",
+        "admin/dashboard.html",
         users=users,
         teachers=teachers,
         students=students,
@@ -38,14 +38,14 @@ def dashboard():
 @admin_bp.route("/create-account")
 @admin_required
 def create_account_page():
-    return render_template("admin_create_account.html")
+    return render_template("admin/create_account.html")
 
 
 @admin_bp.route("/users")
 @admin_required
 def users_page():
     users = list_users()
-    return render_template("admin_users.html", users=users)
+    return render_template("admin/users.html", users=users)
 
 
 @admin_bp.route("/assignments")
@@ -58,7 +58,7 @@ def assignments_page():
             if teacher_id:
                 teaching_team_ids.add(teacher_id)
     teacher_count = len(teaching_team_ids)
-    return render_template("admin_assignments.html", assignments=assignments, teacher_count=teacher_count)
+    return render_template("admin/assignments.html", assignments=assignments, teacher_count=teacher_count)
 
 
 @admin_bp.route("/create-teacher", methods=["POST"])
