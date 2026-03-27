@@ -42,6 +42,7 @@ ams/core/scoring.py
 ams/core/submission_evidence.py
 ams/ingestion/submission_processor.py
 ams/io/export_report.py
+ams/io/fs_utils.py
 ams/io/html_reporter.py
 ams/io/metadata.py
 ams/io/reporting.py

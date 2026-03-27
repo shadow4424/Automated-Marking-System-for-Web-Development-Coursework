@@ -9,6 +9,7 @@ from typing import Any, Iterable, Mapping, Optional, Tuple, List
 from zipfile import ZipFile
 
 from ams.core.attempts import attempt_maps, sync_attempts_from_storage
+from ams.io.fs_utils import _prune_empty_parents, _remove_path_within
 from ams.io.metadata import MetadataValidator, SubmissionMetadata
 
 
@@ -205,31 +206,38 @@ def _normalize_status(value: object) -> str:
     return status
 
 
-def _append_unique_review_message(messages: list[str], value: object, *, prefix: str = "") -> None:
+def _build_review_message(value: object, *, prefix: str = "") -> str | None:
     text = str(value or "").strip()
     if not text:
-        return
+        return None
     if prefix and not text.lower().startswith(prefix.lower()):
         text = f"{prefix}{text}"
-    if text not in messages:
-        messages.append(text)
+    return text
 
 
-def extract_review_flags_from_report(report: Mapping[str, Any]) -> dict[str, object]:
+def _get_run_status(meta: Mapping[str, Any]) -> object:
+    return meta.get("status", "unknown")
+
+
+def _parse_review_flag_data(report: Mapping[str, Any]) -> tuple[int, bool, list[str]]:
     metadata = report.get("metadata", {}) or {}
     findings = list(report.get("findings", []) or [])
 
     threat_override = bool(metadata.get("threat_override"))
     threat_count = sum(1 for finding in findings if finding.get("severity") == "THREAT")
 
-    llm_messages: list[str] = []
+    raw_messages: list[str] = []
     explicit_messages = metadata.get("llm_error_messages")
     if isinstance(explicit_messages, list):
         for item in explicit_messages:
-            _append_unique_review_message(llm_messages, item)
-    _append_unique_review_message(llm_messages, metadata.get("llm_error_message"))
-    if metadata.get("llm_error_detected") and not llm_messages:
-        llm_messages.append("LLM-assisted marking failed and requires review.")
+            message = _build_review_message(item)
+            if message:
+                raw_messages.append(message)
+    message = _build_review_message(metadata.get("llm_error_message"))
+    if message:
+        raw_messages.append(message)
+    if metadata.get("llm_error_detected") and not raw_messages:
+        raw_messages.append("LLM-assisted marking failed and requires review.")
 
     for finding in findings:
         finding_id = str(finding.get("id") or "LLM")
@@ -239,8 +247,12 @@ def extract_review_flags_from_report(report: Mapping[str, Any]) -> dict[str, obj
 
         if finding_id == "LLM.ERROR.REQUIRES_REVIEW":
             for item in list(evidence.get("llm_error_messages") or []):
-                _append_unique_review_message(llm_messages, item)
-            _append_unique_review_message(llm_messages, evidence.get("llm_error_message"))
+                message = _build_review_message(item)
+                if message:
+                    raw_messages.append(message)
+            message = _build_review_message(evidence.get("llm_error_message"))
+            if message:
+                raw_messages.append(message)
 
         llm_feedback = evidence.get("llm_feedback")
         if isinstance(llm_feedback, Mapping):
@@ -249,57 +261,78 @@ def extract_review_flags_from_report(report: Mapping[str, Any]) -> dict[str, obj
                 reason = str(meta.get("reason") or "").strip().lower()
                 error = str(meta.get("error") or "").strip()
                 if reason == "llm_error" or error:
-                    _append_unique_review_message(
-                        llm_messages,
+                    message = _build_review_message(
                         error or "LLM feedback generation failed.",
                         prefix=f"{finding_id}: ",
                     )
+                    if message:
+                        raw_messages.append(message)
 
         hybrid_score = evidence.get("hybrid_score")
         if isinstance(hybrid_score, Mapping):
             reasoning = str(hybrid_score.get("reasoning") or "").strip()
             raw_response = hybrid_score.get("raw_response")
             if isinstance(raw_response, Mapping) and raw_response.get("error"):
-                _append_unique_review_message(
-                    llm_messages,
+                message = _build_review_message(
                     raw_response.get("error"),
                     prefix=f"{finding_id}: ",
                 )
+                if message:
+                    raw_messages.append(message)
             elif "llm error" in reasoning.lower() or "llm parse error" in reasoning.lower():
-                _append_unique_review_message(
-                    llm_messages,
+                message = _build_review_message(
                     reasoning,
                     prefix=f"{finding_id}: ",
                 )
+                if message:
+                    raw_messages.append(message)
 
         ux_review = evidence.get("ux_review")
         if isinstance(ux_review, Mapping):
-            status = str(ux_review.get("status") or "").strip().upper()
+            status = str(_get_run_status(ux_review) or "").strip().upper()
             feedback = str(ux_review.get("feedback") or "").strip()
             if status == "NOT_EVALUATED" and (
                 feedback.lower().startswith("llm error:")
                 or feedback.lower() == "could not parse model response."
             ):
                 page_name = str(ux_review.get("page") or evidence.get("page") or finding_id).strip()
-                _append_unique_review_message(
-                    llm_messages,
+                message = _build_review_message(
                     feedback,
                     prefix=f"{page_name}: ",
                 )
+                if message:
+                    raw_messages.append(message)
 
         vision_analysis = evidence.get("vision_analysis")
         if isinstance(vision_analysis, Mapping):
-            status = str(vision_analysis.get("status") or "").strip().upper()
+            status = str(_get_run_status(vision_analysis) or "").strip().upper()
             meta = vision_analysis.get("meta", {}) or {}
             if status == "NOT_EVALUATED" and isinstance(meta, Mapping):
                 reason = str(meta.get("reason") or "").strip().lower()
                 error = str(meta.get("error") or "").strip()
                 if reason in {"llm_error", "parse_error"} or error:
-                    _append_unique_review_message(
-                        llm_messages,
+                    message = _build_review_message(
                         error or reason or "Vision analysis could not be completed.",
                         prefix=f"{finding_id}: ",
                     )
+                    if message:
+                        raw_messages.append(message)
+
+    return threat_count, threat_override, raw_messages
+
+
+def _deduplicate_review_flags(flags: list[str]) -> list[str]:
+    deduplicated: list[str] = []
+    for flag in flags:
+        message = _build_review_message(flag)
+        if message and message not in deduplicated:
+            deduplicated.append(message)
+    return deduplicated
+
+
+def extract_review_flags_from_report(report: Mapping[str, Any]) -> dict[str, object]:
+    threat_count, threat_override, raw_messages = _parse_review_flag_data(report)
+    llm_messages = _deduplicate_review_flags(raw_messages)
 
     return {
         "threat_count": threat_count,
@@ -374,14 +407,7 @@ def _filter_latest_submissions(
     only_active: bool,
 ) -> list[dict]:
     if not only_active:
-        runs.sort(
-            key=lambda r: (
-                str(r.get("created_at") or ""),
-                str(r.get("id") or ""),
-            ),
-            reverse=True,
-        )
-        return runs
+        return list(runs)
 
     latest_by_identity: dict[tuple[str, str], tuple[tuple[str, str, str], tuple[str, str | None]]] = {}
 
@@ -452,19 +478,14 @@ def _filter_latest_submissions(
         if latest and latest[1] == _submission_ref(run, submissions[0] if submissions else None):
             filtered_runs.append(run)
 
-    filtered_runs.sort(key=lambda r: r.get("id", ""), reverse=True)
     return filtered_runs
 
 
-def list_runs(runs_root: Path, only_active: bool = True) -> list[dict]:
-    """List all runs, searching recursively through the nested directory structure."""
+def _traverse_run_directories(runs_root: Path, *, only_active: bool) -> list[dict]:
     runs: list[dict] = []
-    if not runs_root.exists():
-        return runs
     sync_attempts_from_storage(runs_root)
     mark_attempt_map, batch_attempt_map = attempt_maps(runs_root)
 
-    # Search recursively for run_info.json files (marker for a run directory)
     for run_info_path in runs_root.rglob("run_info.json"):
         run_dir = run_info_path.parent
         info = load_run_info(run_dir)
@@ -472,18 +493,16 @@ def list_runs(runs_root: Path, only_active: bool = True) -> list[dict]:
             if only_active and info.get("active") is False:
                 continue
             info["id"] = str(info.get("id") or run_dir.name)
-            info["_run_dir"] = str(run_dir)  # Store full path for lookups
+            info["_run_dir"] = str(run_dir)
             batch_summary_data: dict | None = None
-            
-            # Try to load score from report.json (single runs)
+
             report_path = run_dir / "report.json"
-            run_status = str(info.get("status") or "").strip().lower()
+            run_status = str(_get_run_status(info) or "").strip().lower()
             if report_path.exists() and run_status not in {"pending", "failed", "error"}:
                 try:
                     report = json.loads(report_path.read_text(encoding="utf-8"))
                     scores = report.get("scores", {})
                     if scores and "overall" in scores:
-                        # Store score as percentage (0-100) for dashboard display
                         info["score"] = scores["overall"] * 100
                     review_flags = extract_review_flags_from_report(report)
                     info["threat_flagged"] = bool(review_flags.get("threat_flagged"))
@@ -501,8 +520,7 @@ def list_runs(runs_root: Path, only_active: bool = True) -> list[dict]:
                         info.pop("llm_error_message", None)
                 except Exception:
                     pass
-            
-            # For batch runs, load batch record metadata if present.
+
             if info.get("mode") == "batch":
                 batch_summary_path = run_dir / "batch_summary.json"
                 if batch_summary_path.exists():
@@ -510,8 +528,7 @@ def list_runs(runs_root: Path, only_active: bool = True) -> list[dict]:
                         batch_summary_data = json.loads(batch_summary_path.read_text(encoding="utf-8"))
                     except Exception:
                         batch_summary_data = None
-            
-            # Load submissions list — prefer run_index.json, fall back to batch_summary.json
+
             index_path = run_dir / "run_index.json"
             if index_path.exists():
                 try:
@@ -520,7 +537,6 @@ def list_runs(runs_root: Path, only_active: bool = True) -> list[dict]:
                 except Exception:
                     info["submissions"] = []
             elif info.get("mode") == "batch":
-                # Fallback: build submissions from batch_summary.json records
                 if batch_summary_data is not None:
                     try:
                         info["submissions"] = []
@@ -573,8 +589,7 @@ def list_runs(runs_root: Path, only_active: bool = True) -> list[dict]:
                     for submission in list(info.get("submissions", []) or [])
                     if not str((submission or {}).get("materialized_run_id") or "").strip()
                 ]
-            
-            # Ensure every submission entry has usable student_name and student_id
+
             for sub in info.get("submissions", []):
                 if not sub.get("student_name"):
                     sub["student_name"] = sub.get("student_id") or "Unknown"
@@ -637,9 +652,36 @@ def list_runs(runs_root: Path, only_active: bool = True) -> list[dict]:
                     if submissions:
                         _apply_attempt_metadata(submissions[0], attempt)
             runs.append(info)
-    
-    # Sort by run id (timestamp-based) descending
+
+    return runs
+
+
+def _filter_runs(runs: list[dict], *, only_active: bool) -> list[dict]:
     return _filter_latest_submissions(runs, only_active=only_active)
+
+
+def _sort_and_paginate_runs(runs: list[dict], *, only_active: bool) -> list[dict]:
+    if not only_active:
+        runs.sort(
+            key=lambda r: (
+                str(r.get("created_at") or ""),
+                str(r.get("id") or ""),
+            ),
+            reverse=True,
+        )
+        return runs
+
+    runs.sort(key=lambda r: r.get("id", ""), reverse=True)
+    return runs
+
+
+def list_runs(runs_root: Path, only_active: bool = True) -> list[dict]:
+    """List all runs, searching recursively through the nested directory structure."""
+    if not runs_root.exists():
+        return []
+    runs = _traverse_run_directories(runs_root, only_active=only_active)
+    runs = _filter_runs(runs, only_active=only_active)
+    return _sort_and_paginate_runs(runs, only_active=only_active)
 
 
 def find_run_by_id(runs_root: Path, run_id: str) -> Optional[Path]:
@@ -763,43 +805,6 @@ _TRANSIENT_SUBMISSION_DIRS = (
     "rerun_source",
     "source_files",
 )
-
-
-def _remove_path_within(root_dir: Path, candidate: Path) -> bool:
-    root = root_dir.resolve()
-    path = candidate.resolve()
-    try:
-        path.relative_to(root)
-    except Exception:
-        return False
-
-    if path.is_dir():
-        shutil.rmtree(path, ignore_errors=True)
-        return True
-    if path.exists():
-        try:
-            path.unlink()
-            return True
-        except FileNotFoundError:
-            return False
-    return False
-
-
-def _prune_empty_parents(path: Path, *, stop_at: Path) -> None:
-    stop = stop_at.resolve()
-    current = path.resolve()
-    while current != stop:
-        if not current.exists() or not current.is_dir():
-            current = current.parent
-            continue
-        try:
-            next(current.iterdir())
-            break
-        except StopIteration:
-            current.rmdir()
-            current = current.parent
-        except OSError:
-            break
 
 
 def cleanup_batch_run_storage(run_dir: Path, run_info: Mapping[str, object] | None = None) -> None:
