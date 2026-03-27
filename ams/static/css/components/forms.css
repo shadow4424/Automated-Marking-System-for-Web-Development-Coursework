@@ -1,0 +1,102 @@
+/* AMS Components - Forms + File Input */
+
+   3. Forms
+   ---------------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------------
+   3. Forms
+   ---------------------------------------------------------------------------- */
+.form-group {
+    margin-bottom: var(--space-lg);
+}
+
+.form-label {
+    display: block;
+    margin-bottom: var(--space-sm);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--color-text);
+}
+
+.form-label .required {
+    color: var(--color-danger);
+}
+
+.form-input,
+.form-select,
+.form-textarea {
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    color: var(--color-text);
+    background: #ffffff;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-glow);
+}
+
+.form-input::placeholder,
+.form-select::placeholder,
+.form-textarea::placeholder {
+    color: var(--color-text-muted);
+}
+
+.form-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right var(--space-md) center;
+    padding-right: var(--space-2xl);
+}
+
+.form-textarea {
+    min-height: 120px;
+    resize: vertical;
+}
+
+.form-hint {
+    margin-top: var(--space-xs);
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+}
+
+.form-error {
+    margin-top: var(--space-xs);
+    font-size: var(--text-sm);
+    color: var(--color-danger);
+}
+
+/* File Input */
+.form-file {
+    position: relative;
+}
+
+.form-file-input {
+    width: 100%;
+    padding: var(--space-xl);
+    background: #f8fafc;
+    border: 2px dashed var(--color-border);
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-fast);
+    cursor: pointer;
+}
+
+.form-file-input:hover {
+    border-color: var(--color-primary);
+    background: hsla(230, 80%, 65%, 0.05);
+}
+
+.form-file-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+/* ----------------------------------------------------------------------------
