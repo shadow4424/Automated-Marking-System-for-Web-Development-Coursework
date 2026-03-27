@@ -158,6 +158,158 @@ def attempt_maps(runs_root: Path | None = None) -> tuple[dict[str, dict[str, Any
     return mark_map, batch_map
 
 
+def _validate_attempt_identity(assignment_id: str, student_id: str) -> tuple[str, str]:
+    assignment_value = str(assignment_id or "").strip()
+    student_value = str(student_id or "").strip()
+    if not assignment_value or not student_value:
+        raise ValueError("assignment_id and student_id are required for attempts")
+    return assignment_value, student_value
+
+
+def _build_attempt_metadata(
+    *,
+    assignment_id: str,
+    student_id: str,
+    source_type: str,
+    source_actor_user_id: str = "",
+    original_filename: str = "",
+    source_ref: str = "",
+    submitted_at: str | None = None,
+    created_at: str | None = None,
+    ingestion_status: str = "pending",
+    pipeline_status: str = "pending",
+    validity_status: str = "pending",
+    run_id: str | None = None,
+    run_dir: str | None = None,
+    report_path: str = "",
+    batch_run_id: str = "",
+    batch_submission_id: str = "",
+) -> dict[str, Any]:
+    assignment_value, student_value = _validate_attempt_identity(assignment_id, student_id)
+    attempt_id = str(run_id or generate_attempt_id("attempt"))
+    created_value = str(created_at or utc_now_iso())
+    submitted_value = str(submitted_at or created_value)
+    batch_submission_value = str(batch_submission_id or "")
+    return {
+        "id": attempt_id,
+        "assignment_id": assignment_value,
+        "student_id": student_value,
+        "source_type": str(source_type or ""),
+        "source_actor_user_id": str(source_actor_user_id or ""),
+        "created_at": created_value,
+        "submitted_at": submitted_value,
+        "original_filename": str(original_filename or ""),
+        "source_ref": str(source_ref or ""),
+        "ingestion_status": str(ingestion_status or "pending"),
+        "pipeline_status": str(pipeline_status or "pending"),
+        "validity_status": str(validity_status or "pending"),
+        "run_id": attempt_id,
+        "run_dir": str(run_dir or ""),
+        "report_path": str(report_path or ""),
+        "batch_run_id": str(batch_run_id or ""),
+        "batch_submission_id": batch_submission_value,
+        "overall_score": None,
+        "confidence": "",
+        "manual_review_required": 0,
+        "error_message": "",
+    }
+
+
+def _find_existing_attempt_id(conn: Any, metadata: Mapping[str, Any]) -> str | None:
+    row = conn.execute(
+        """
+        SELECT id FROM submission_attempts
+        WHERE run_id = ? AND batch_submission_id = ?
+        """,
+        (
+            str(metadata.get("run_id") or ""),
+            str(metadata.get("batch_submission_id") or ""),
+        ),
+    ).fetchone()
+    if row is None:
+        return None
+    return str(row["id"] or "")
+
+
+def _next_attempt_number(conn: Any, metadata: Mapping[str, Any]) -> int:
+    return (
+        int(
+            conn.execute(
+                """
+                SELECT COALESCE(MAX(attempt_number), 0)
+                FROM submission_attempts
+                WHERE assignment_id = ? AND student_id = ?
+                """,
+                (
+                    str(metadata.get("assignment_id") or ""),
+                    str(metadata.get("student_id") or ""),
+                ),
+            ).fetchone()[0]
+            or 0
+        )
+        + 1
+    )
+
+
+def _insert_attempt_record(conn: Any, metadata: Mapping[str, Any]) -> None:
+    conn.execute(
+        """
+        INSERT INTO submission_attempts (
+            id,
+            assignment_id,
+            student_id,
+            attempt_number,
+            source_type,
+            source_actor_user_id,
+            created_at,
+            submitted_at,
+            original_filename,
+            source_ref,
+            ingestion_status,
+            pipeline_status,
+            validity_status,
+            run_id,
+            run_dir,
+            report_path,
+            batch_run_id,
+            batch_submission_id,
+            overall_score,
+            confidence,
+            manual_review_required,
+            error_message,
+            is_active,
+            selection_reason,
+            updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
+        """,
+        (
+            str(metadata.get("id") or ""),
+            str(metadata.get("assignment_id") or ""),
+            str(metadata.get("student_id") or ""),
+            int(metadata.get("attempt_number") or 0),
+            str(metadata.get("source_type") or ""),
+            str(metadata.get("source_actor_user_id") or ""),
+            str(metadata.get("created_at") or utc_now_iso()),
+            str(metadata.get("submitted_at") or metadata.get("created_at") or utc_now_iso()),
+            str(metadata.get("original_filename") or ""),
+            str(metadata.get("source_ref") or ""),
+            str(metadata.get("ingestion_status") or "pending"),
+            str(metadata.get("pipeline_status") or "pending"),
+            str(metadata.get("validity_status") or "pending"),
+            str(metadata.get("run_id") or ""),
+            str(metadata.get("run_dir") or ""),
+            str(metadata.get("report_path") or ""),
+            str(metadata.get("batch_run_id") or ""),
+            str(metadata.get("batch_submission_id") or ""),
+            metadata.get("overall_score"),
+            str(metadata.get("confidence") or ""),
+            1 if metadata.get("manual_review_required") else 0,
+            str(metadata.get("error_message") or ""),
+            utc_now_iso(),
+        ),
+    )
+
+
 def create_attempt(
     *,
     assignment_id: str,
@@ -177,101 +329,38 @@ def create_attempt(
     batch_run_id: str = "",
     batch_submission_id: str = "",
 ) -> dict[str, Any]:
-    assignment_value = str(assignment_id or "").strip()
-    student_value = str(student_id or "").strip()
-    if not assignment_value or not student_value:
-        raise ValueError("assignment_id and student_id are required for attempts")
-
-    attempt_id = str(run_id or generate_attempt_id("attempt"))
-    created_value = str(created_at or utc_now_iso())
-    submitted_value = str(submitted_at or created_value)
-    batch_submission_value = str(batch_submission_id or "")
+    metadata = _build_attempt_metadata(
+        assignment_id=assignment_id,
+        student_id=student_id,
+        source_type=source_type,
+        source_actor_user_id=source_actor_user_id,
+        original_filename=original_filename,
+        source_ref=source_ref,
+        submitted_at=submitted_at,
+        created_at=created_at,
+        ingestion_status=ingestion_status,
+        pipeline_status=pipeline_status,
+        validity_status=validity_status,
+        run_id=run_id,
+        run_dir=run_dir,
+        report_path=report_path,
+        batch_run_id=batch_run_id,
+        batch_submission_id=batch_submission_id,
+    )
 
     conn = get_db()
     try:
-        row = conn.execute(
-            """
-            SELECT id FROM submission_attempts
-            WHERE run_id = ? AND batch_submission_id = ?
-            """,
-            (attempt_id, batch_submission_value),
-        ).fetchone()
-        if row is not None:
-            return get_attempt(str(row["id"])) or {}
+        existing_attempt_id = _find_existing_attempt_id(conn, metadata)
+        if existing_attempt_id:
+            return get_attempt(existing_attempt_id) or {}
 
-        next_attempt_number = int(
-            conn.execute(
-                """
-                SELECT COALESCE(MAX(attempt_number), 0)
-                FROM submission_attempts
-                WHERE assignment_id = ? AND student_id = ?
-                """,
-                (assignment_value, student_value),
-            ).fetchone()[0]
-            or 0
-        ) + 1
-
-        conn.execute(
-            """
-            INSERT INTO submission_attempts (
-                id,
-                assignment_id,
-                student_id,
-                attempt_number,
-                source_type,
-                source_actor_user_id,
-                created_at,
-                submitted_at,
-                original_filename,
-                source_ref,
-                ingestion_status,
-                pipeline_status,
-                validity_status,
-                run_id,
-                run_dir,
-                report_path,
-                batch_run_id,
-                batch_submission_id,
-                overall_score,
-                confidence,
-                manual_review_required,
-                error_message,
-                is_active,
-                selection_reason,
-                updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
-            """,
-            (
-                attempt_id,
-                assignment_value,
-                student_value,
-                next_attempt_number,
-                str(source_type or ""),
-                str(source_actor_user_id or ""),
-                created_value,
-                submitted_value,
-                str(original_filename or ""),
-                str(source_ref or ""),
-                str(ingestion_status or "pending"),
-                str(pipeline_status or "pending"),
-                str(validity_status or "pending"),
-                attempt_id,
-                str(run_dir or ""),
-                str(report_path or ""),
-                str(batch_run_id or ""),
-                batch_submission_value,
-                None,
-                "",
-                0,
-                "",
-                utc_now_iso(),
-            ),
-        )
+        metadata["attempt_number"] = _next_attempt_number(conn, metadata)
+        _insert_attempt_record(conn, metadata)
         conn.commit()
     finally:
         conn.close()
 
-    return get_attempt(attempt_id) or {}
+    return get_attempt(str(metadata.get("id") or "")) or {}
 
 
 def update_attempt(attempt_id: str, **fields: Any) -> dict[str, Any] | None:
@@ -514,13 +603,16 @@ def _merge_attempt_metadata(existing: dict[str, Any] | None, payload: dict[str, 
     return merged
 
 
-def _sync_attempt_files(
+def _select_files_for_sync(
     attempts_desc: list[dict[str, Any]],
     *,
     latest_attempt_id: str,
     active_attempt_id: str,
     selection_reason: str,
-) -> None:
+) -> list[dict[str, Any]]:
+    file_updates: list[dict[str, Any]] = []
+    selected_ids = {latest_attempt_id, active_attempt_id}
+
     for attempt in attempts_desc:
         run_dir_value = str(attempt.get("run_dir") or "").strip()
         if not run_dir_value:
@@ -529,6 +621,7 @@ def _sync_attempt_files(
         if not run_dir.exists():
             continue
 
+        attempt_selection_reason = selection_reason if attempt.get("id") in selected_ids else ""
         metadata_path = run_dir / "metadata.json"
         existing_metadata = _load_json(metadata_path) if metadata_path.exists() else None
         metadata_payload = _merge_attempt_metadata(
@@ -555,15 +648,15 @@ def _sync_attempt_files(
                 "is_active": bool(attempt.get("is_active")),
                 "latest_attempt_id": latest_attempt_id or None,
                 "active_attempt_id": active_attempt_id or None,
-                "selection_reason": selection_reason if attempt.get("id") in {latest_attempt_id, active_attempt_id} else "",
+                "selection_reason": attempt_selection_reason,
             },
         )
-        metadata_path.write_text(json.dumps(metadata_payload, indent=2, sort_keys=True), encoding="utf-8")
 
         run_info_path = run_dir / "run_info.json"
+        run_info_payload: dict[str, Any] | None = None
         if run_info_path.exists():
-            run_info = _load_json(run_info_path) or {}
-            run_info.update(
+            run_info_payload = _load_json(run_info_path) or {}
+            run_info_payload.update(
                 {
                     "attempt_id": attempt.get("id"),
                     "attempt_number": attempt.get("attempt_number"),
@@ -579,47 +672,96 @@ def _sync_attempt_files(
                     "is_active": bool(attempt.get("is_active")),
                     "latest_attempt_id": latest_attempt_id or "",
                     "active_attempt_id": active_attempt_id or "",
-                    "selection_reason": selection_reason if attempt.get("id") in {latest_attempt_id, active_attempt_id} else "",
+                    "selection_reason": attempt_selection_reason,
                 }
             )
-            run_info_path.write_text(json.dumps(run_info, indent=2, sort_keys=True), encoding="utf-8")
 
+        report_payload: dict[str, Any] | None = None
         report_path_value = str(attempt.get("report_path") or "").strip()
-        if not report_path_value:
-            continue
-        report_path = Path(report_path_value)
-        if not report_path.exists():
-            continue
-        report = _load_json(report_path)
-        if report is None:
-            continue
-        metadata_root = report.setdefault("metadata", {})
-        if not isinstance(metadata_root, dict):
-            metadata_root = {}
-            report["metadata"] = metadata_root
-        submission_metadata = metadata_root.setdefault("submission_metadata", {})
-        if not isinstance(submission_metadata, dict):
-            submission_metadata = {}
-            metadata_root["submission_metadata"] = submission_metadata
-        submission_metadata.update(
+        if report_path_value:
+            report_path = Path(report_path_value)
+            if report_path.exists():
+                report = _load_json(report_path)
+                if report is not None:
+                    metadata_root = report.setdefault("metadata", {})
+                    if not isinstance(metadata_root, dict):
+                        metadata_root = {}
+                        report["metadata"] = metadata_root
+                    submission_metadata = metadata_root.setdefault("submission_metadata", {})
+                    if not isinstance(submission_metadata, dict):
+                        submission_metadata = {}
+                        metadata_root["submission_metadata"] = submission_metadata
+                    submission_metadata.update(
+                        {
+                            "attempt_id": attempt.get("id"),
+                            "attempt_number": attempt.get("attempt_number"),
+                            "source_type": attempt.get("source_type"),
+                            "source_actor_user_id": attempt.get("source_actor_user_id"),
+                            "submitted_at": attempt.get("submitted_at"),
+                            "created_at": attempt.get("created_at"),
+                            "validity_status": attempt.get("validity_status"),
+                            "overall_score": attempt.get("overall_score"),
+                            "confidence": attempt.get("confidence"),
+                            "manual_review_required": bool(attempt.get("manual_review_required")),
+                            "is_active": bool(attempt.get("is_active")),
+                            "latest_attempt_id": latest_attempt_id or None,
+                            "active_attempt_id": active_attempt_id or None,
+                            "selection_reason": attempt_selection_reason,
+                        }
+                    )
+                    report_payload = report
+                else:
+                    report_path = None
+            else:
+                report_path = None
+        else:
+            report_path = None
+
+        file_updates.append(
             {
-                "attempt_id": attempt.get("id"),
-                "attempt_number": attempt.get("attempt_number"),
-                "source_type": attempt.get("source_type"),
-                "source_actor_user_id": attempt.get("source_actor_user_id"),
-                "submitted_at": attempt.get("submitted_at"),
-                "created_at": attempt.get("created_at"),
-                "validity_status": attempt.get("validity_status"),
-                "overall_score": attempt.get("overall_score"),
-                "confidence": attempt.get("confidence"),
-                "manual_review_required": bool(attempt.get("manual_review_required")),
-                "is_active": bool(attempt.get("is_active")),
-                "latest_attempt_id": latest_attempt_id or None,
-                "active_attempt_id": active_attempt_id or None,
-                "selection_reason": selection_reason if attempt.get("id") in {latest_attempt_id, active_attempt_id} else "",
+                "metadata_path": metadata_path,
+                "metadata_payload": metadata_payload,
+                "report_path": report_path,
+                "report_payload": report_payload,
+                "run_info_path": run_info_path if run_info_path.exists() else None,
+                "run_info_payload": run_info_payload,
             }
         )
-        report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+    return file_updates
+
+
+def _copy_attempt_files(file_updates: list[dict[str, Any]]) -> None:
+    for update in file_updates:
+        metadata_path = update["metadata_path"]
+        metadata_payload = update["metadata_payload"]
+        metadata_path.write_text(json.dumps(metadata_payload, indent=2, sort_keys=True), encoding="utf-8")
+
+        run_info_path = update.get("run_info_path")
+        run_info_payload = update.get("run_info_payload")
+        if run_info_path is not None and run_info_payload is not None:
+            run_info_path.write_text(json.dumps(run_info_payload, indent=2, sort_keys=True), encoding="utf-8")
+
+        report_path = update.get("report_path")
+        report_payload = update.get("report_payload")
+        if report_path is not None and report_payload is not None:
+            report_path.write_text(json.dumps(report_payload, indent=2), encoding="utf-8")
+
+
+def _sync_attempt_files(
+    attempts_desc: list[dict[str, Any]],
+    *,
+    latest_attempt_id: str,
+    active_attempt_id: str,
+    selection_reason: str,
+) -> None:
+    file_updates = _select_files_for_sync(
+        attempts_desc,
+        latest_attempt_id=latest_attempt_id,
+        active_attempt_id=active_attempt_id,
+        selection_reason=selection_reason,
+    )
+    _copy_attempt_files(file_updates)
 
 
 def _write_student_summary_files(
@@ -970,7 +1112,186 @@ def _build_batch_attempt_descriptors(
     return descriptors
 
 
+def _scan_storage_for_descriptors(runs_root: Path) -> list[dict[str, Any]]:
+    if not runs_root.exists():
+        return []
+
+    descriptors: list[dict[str, Any]] = []
+    for run_info_path in runs_root.rglob("run_info.json"):
+        run_dir = run_info_path.parent
+        run_info = _load_json(run_info_path)
+        if run_info is None:
+            continue
+
+        mode = str(run_info.get("mode") or "")
+        if mode == "mark":
+            descriptor = _mark_descriptor(run_dir, run_info)
+            if descriptor is not None:
+                descriptors.append(descriptor)
+            continue
+        if mode == "batch":
+            descriptors.extend(_build_batch_attempt_descriptors(run_dir, run_info))
+    return descriptors
+
+
+def _reconcile_attempts_with_descriptors(
+    conn: Any,
+    descriptors: list[dict[str, Any]],
+    runs_root: Path,
+) -> set[tuple[str, str]]:
+    touched: set[tuple[str, str]] = set()
+    descriptors_by_identity: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for descriptor in descriptors:
+        identity = (
+            str(descriptor.get("assignment_id") or ""),
+            str(descriptor.get("student_id") or ""),
+        )
+        if identity[0] and identity[1]:
+            descriptors_by_identity[identity].append(descriptor)
+
+    for identity, identity_descriptors in descriptors_by_identity.items():
+        assignment_id, student_id = identity
+        existing_rows = conn.execute(
+            """
+            SELECT * FROM submission_attempts
+            WHERE assignment_id = ? AND student_id = ?
+            ORDER BY attempt_number ASC, created_at ASC, id ASC
+            """,
+            (assignment_id, student_id),
+        ).fetchall()
+        all_db_rows = [_row_to_dict(row) for row in existing_rows]
+        existing_identity = filter_attempts_for_root(all_db_rows, runs_root)
+        existing_refs = {
+            (str(row.get("run_id") or ""), str(row.get("batch_submission_id") or "")): row
+            for row in existing_identity
+        }
+        used_attempt_numbers = {
+            int(row.get("attempt_number") or 0)
+            for row in all_db_rows
+            if int(row.get("attempt_number") or 0) > 0
+        }
+        next_attempt_number = max(used_attempt_numbers, default=0) + 1
+
+        descriptors_by_ref: dict[tuple[str, str], dict[str, Any]] = {}
+        for descriptor in sorted(identity_descriptors, key=_descriptor_sort_key):
+            descriptors_by_ref[_descriptor_ref(descriptor)] = descriptor
+
+        for ref, descriptor in descriptors_by_ref.items():
+            existing_attempt = existing_refs.get(ref)
+            if existing_attempt is not None:
+                _update_attempt_from_descriptor(conn, str(existing_attempt.get("id") or ""), descriptor)
+                touched.add(identity)
+                continue
+
+            proposed_attempt_id = str(descriptor.get("id") or generate_attempt_id("attempt"))
+            candidate_attempt_id = proposed_attempt_id
+            existing_id_row = conn.execute(
+                "SELECT * FROM submission_attempts WHERE id = ?",
+                (candidate_attempt_id,),
+            ).fetchone()
+            if existing_id_row is not None:
+                existing_id_attempt = _row_to_dict(existing_id_row)
+                if (
+                    _descriptor_ref(existing_id_attempt) != ref
+                    or not _attempt_belongs_to_root(existing_id_attempt, runs_root)
+                ):
+                    candidate_attempt_id = generate_attempt_id("attempt")
+
+            requested_attempt_number = descriptor.get("attempt_number")
+            if (
+                isinstance(requested_attempt_number, int)
+                and requested_attempt_number > 0
+                and requested_attempt_number not in used_attempt_numbers
+            ):
+                chosen_attempt_number = requested_attempt_number
+            else:
+                while next_attempt_number in used_attempt_numbers:
+                    next_attempt_number += 1
+                chosen_attempt_number = next_attempt_number
+                next_attempt_number += 1
+
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO submission_attempts (
+                    id,
+                    assignment_id,
+                    student_id,
+                    attempt_number,
+                    source_type,
+                    source_actor_user_id,
+                    created_at,
+                    submitted_at,
+                    original_filename,
+                    source_ref,
+                    ingestion_status,
+                    pipeline_status,
+                    validity_status,
+                    run_id,
+                    run_dir,
+                    report_path,
+                    batch_run_id,
+                    batch_submission_id,
+                    overall_score,
+                    confidence,
+                    manual_review_required,
+                    error_message,
+                    is_active,
+                    selection_reason,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
+                """,
+                (
+                    candidate_attempt_id,
+                    assignment_id,
+                    student_id,
+                    chosen_attempt_number,
+                    descriptor.get("source_type") or "",
+                    descriptor.get("source_actor_user_id") or "",
+                    descriptor.get("created_at") or utc_now_iso(),
+                    descriptor.get("submitted_at") or descriptor.get("created_at") or utc_now_iso(),
+                    descriptor.get("original_filename") or "",
+                    descriptor.get("source_ref") or "",
+                    descriptor.get("ingestion_status") or "pending",
+                    descriptor.get("pipeline_status") or "pending",
+                    descriptor.get("validity_status") or "pending",
+                    descriptor.get("run_id") or "",
+                    descriptor.get("run_dir") or "",
+                    descriptor.get("report_path") or "",
+                    descriptor.get("batch_run_id") or "",
+                    descriptor.get("batch_submission_id") or "",
+                    descriptor.get("overall_score"),
+                    descriptor.get("confidence") or "",
+                    1 if descriptor.get("manual_review_required") else 0,
+                    descriptor.get("error_message") or "",
+                    utc_now_iso(),
+                ),
+            )
+            existing_refs[ref] = {
+                "id": candidate_attempt_id,
+                "attempt_number": chosen_attempt_number,
+            }
+            used_attempt_numbers.add(chosen_attempt_number)
+            touched.add(identity)
+
+    conn.commit()
+    return touched
+
+
 def sync_attempts_from_storage(runs_root: Path) -> None:
+    descriptors = _scan_storage_for_descriptors(runs_root)
+    if not descriptors:
+        return
+    with get_db() as conn:
+        touched = _reconcile_attempts_with_descriptors(conn, descriptors, runs_root)
+    summaries = {
+        (str(descriptor.get("assignment_id") or ""), str(descriptor.get("student_id") or ""))
+        for descriptor in descriptors
+        if descriptor.get("assignment_id") and descriptor.get("student_id")
+    }
+    for assignment_id, student_id in summaries.union(touched):
+        recompute_active_attempt(runs_root, assignment_id, student_id)
+    return
+
     if not runs_root.exists():
         return
 
