@@ -16,7 +16,7 @@
             </div>
             {% endif %}
             <div class="page-action-row">
-                <a href="{{ url_for('teacher.create_assignment_route') }}" class="btn btn-primary">Create assignment</a>
+                <a href="{{ url_for('assignment_mgmt.create_assignment_route') }}" class="btn btn-primary">Create assignment</a>
                 <a href="{{ url_for('marking.mark') }}" class="btn btn-secondary">Mark one submission</a>
                 <a href="{{ url_for('batch.batch') }}" class="btn btn-ghost">Batch upload</a>
                 <a href="{{ url_for('runs.runs') }}" class="btn btn-ghost">View runs</a>
@@ -69,7 +69,7 @@
                     {% for a in assignments %}
                     <tr>
                         <td>
-                            <strong><a href="{{ url_for('teacher.assignment_detail', assignment_id=a.assignmentID) }}" class="table-title-link">{{ a.title }}</a></strong>
+                            <strong><a href="{{ url_for('assignment_mgmt.assignment_detail', assignment_id=a.assignmentID) }}" class="table-title-link">{{ a.title }}</a></strong>
                             <span class="table-meta"><code>{{ a.assignmentID }}</code></span>
                         </td>
                         <td><span class="badge badge-secondary">{{ a.profile }}</span></td>
@@ -84,8 +84,8 @@
                         </td>
                         <td>
                             <div class="page-inline-tools">
-                                <a href="{{ url_for('teacher.assignment_detail', assignment_id=a.assignmentID) }}" class="btn btn-secondary btn-sm">Open</a>
-                                <a href="{{ url_for('teacher.view_analytics', assignment_id=a.assignmentID) }}" class="btn btn-ghost btn-sm">Analytics</a>
+                                <a href="{{ url_for('assignment_mgmt.assignment_detail', assignment_id=a.assignmentID) }}" class="btn btn-secondary btn-sm">Open</a>
+                                <a href="{{ url_for('assignment_mgmt.view_analytics', assignment_id=a.assignmentID) }}" class="btn btn-ghost btn-sm">Analytics</a>
                             </div>
                         </td>
                     </tr>
@@ -97,7 +97,7 @@
         <div class="empty-state">
             <p class="empty-state-title">No assignments yet</p>
             <p class="empty-state-text">Create your first assignment to start allocating students and reviewing submissions.</p>
-            <a href="{{ url_for('teacher.create_assignment_route') }}" class="btn btn-primary">Create assignment</a>
+            <a href="{{ url_for('assignment_mgmt.create_assignment_route') }}" class="btn btn-primary">Create assignment</a>
         </div>
         {% endif %}
     </section>

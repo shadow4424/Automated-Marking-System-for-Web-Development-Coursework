@@ -16,6 +16,8 @@ from ams.web.routes_export import export_bp
 from ams.web.routes_github import github_bp
 from ams.web.routes_marking import marking_bp
 from ams.web.routes_runs import runs_bp
+from ams.web.routes_assignment_mgmt import assignment_mgmt_bp
+from ams.web.routes_teacher_dashboard import teacher_dashboard_bp
 from ams.web.view_helpers import _clean_path, _format_submission_datetime, _render_evidence_value
 
 logger = logging.getLogger(__name__)
@@ -61,6 +63,8 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(teacher_bp)
+    app.register_blueprint(teacher_dashboard_bp)
+    app.register_blueprint(assignment_mgmt_bp)
     app.register_blueprint(student_bp)
     app.register_blueprint(account_bp)
     app.register_blueprint(dashboard_bp)

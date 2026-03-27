@@ -60,7 +60,7 @@ def home():
             if user["role"] == "admin":
                 return redirect(url_for("admin.dashboard"))
             if user["role"] == "teacher":
-                return redirect(url_for("teacher.dashboard"))
+                return redirect(url_for("teacher_dashboard.dashboard"))
             return redirect(url_for("student.dashboard"))
     return redirect(url_for("auth.login"))
 
@@ -127,4 +127,3 @@ def _flash_assignment_review_state(assignment_id: str, resolved_message: str) ->
         )
     else:
         flash("No flagged submissions remain. Grades can now be released.", "success")
-

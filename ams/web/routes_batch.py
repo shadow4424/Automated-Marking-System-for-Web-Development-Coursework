@@ -732,7 +732,7 @@ def assignment_submission_rerun(assignment_id: str):
         if _is_async_job_request():
             return jsonify({"error": "You do not have access to this assignment."}), 403
         flash("You do not have access to this assignment.", "error")
-        return redirect(url_for("teacher.dashboard"))
+        return redirect(url_for("teacher_dashboard.dashboard"))
 
     run_id = str(request.form.get("run_id") or "").strip()
     submission_id = str(request.form.get("submission_id") or "").strip()
@@ -740,7 +740,7 @@ def assignment_submission_rerun(assignment_id: str):
         if _is_async_job_request():
             return jsonify({"error": "Rerun failed: missing run ID."}), 400
         flash("Rerun failed: missing run ID.", "error")
-        return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+        return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
 
     runs_root = get_runs_root(current_app)
     run_dir = find_run_by_id(runs_root, run_id)
@@ -748,7 +748,7 @@ def assignment_submission_rerun(assignment_id: str):
         if _is_async_job_request():
             return jsonify({"error": "Rerun failed: submission not found."}), 404
         flash("Rerun failed: submission not found.", "error")
-        return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+        return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
 
     run_info = load_run_info(run_dir) or {}
     try:
@@ -757,25 +757,25 @@ def assignment_submission_rerun(assignment_id: str):
                 if _is_async_job_request():
                     return jsonify({"error": "Rerun failed: missing batch submission ID."}), 400
                 flash("Rerun failed: missing batch submission ID.", "error")
-                return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+                return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
             return _queue_batch_submission_rerun(
                 run_dir,
                 run_info,
                 submission_id,
                 view_url=url_for("batch.batch_submission_view", run_id=run_id, submission_id=submission_id),
-                refresh_url=url_for("teacher.assignment_detail", assignment_id=assignment_id),
+                refresh_url=url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id),
             )
         return _queue_mark_submission_rerun(
             run_dir,
             run_info,
             view_url=url_for("runs.run_detail", run_id=run_id),
-            refresh_url=url_for("teacher.assignment_detail", assignment_id=assignment_id),
+            refresh_url=url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id),
         )
     except Exception as exc:
         if _is_async_job_request():
             return jsonify({"error": str(exc)}), 400
         flash(f"Rerun failed: {exc}", "error")
-        return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+        return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
 
 @batch_bp.route("/batch/<run_id>/submissions/<submission_id>/view")
 @login_required
@@ -877,7 +877,7 @@ def batch_submission_view(run_id: str, submission_id: str):
         url_for("student.coursework")
         if user and user["role"] == "student"
         else (
-            url_for("teacher.assignment_detail", assignment_id=run_info.get("assignment_id", ""))
+            url_for("assignment_mgmt.assignment_detail", assignment_id=run_info.get("assignment_id", ""))
             if run_info.get("assignment_id")
             else url_for("runs.runs")
         )

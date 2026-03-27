@@ -209,7 +209,7 @@ def verify_2fa():
     if user["role"] == "admin":
         return redirect(url_for("admin.dashboard"))
     elif user["role"] == "teacher":
-        return redirect(url_for("teacher.dashboard"))
+        return redirect(url_for("teacher_dashboard.dashboard"))
     else:
         return redirect(url_for("student.dashboard"))
 

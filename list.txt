@@ -107,6 +107,9 @@ ams/web/routes_account.py
 ams/web/routes_admin.py
 ams/web/routes_student.py
 ams/web/routes_teacher.py
+ams/web/routes_teacher_dashboard.py
+ams/web/routes_assignment_mgmt.py
+ams/web/routes_teacher_helpers.py
 docker/build.sh
 docker/Dockerfile.sandbox
 docker/seccomp-profile.json

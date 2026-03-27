@@ -3,7 +3,7 @@
 {% block title %}{{ assignment.title }} - AMS{% endblock %}
 
 {% block content %}
-{% set assignment_back_url = url_for('admin.assignments_page') if user_role == 'admin' else url_for('teacher.dashboard') %}
+{% set assignment_back_url = url_for('admin.assignments_page') if user_role == 'admin' else url_for('teacher_dashboard.dashboard') %}
 {% set assignment_back_label = 'Back to assignment oversight' if user_role == 'admin' else 'Back to assignments' %}
 <div class="page-shell">
     <section class="page-hero page-hero--split">
@@ -22,17 +22,17 @@
                 <span class="badge badge-secondary"><code>{{ assignment.assignmentID }}</code></span>
             </div>
             <div class="page-action-row">
-                <a href="{{ url_for('teacher.view_analytics', assignment_id=assignment.assignmentID) }}" class="btn btn-primary">Analytics</a>
+                <a href="{{ url_for('assignment_mgmt.view_analytics', assignment_id=assignment.assignmentID) }}" class="btn btn-primary">Analytics</a>
                 {% if assignment.marks_released %}
-                <form method="POST" action="{{ url_for('teacher.withhold', assignment_id=assignment.assignmentID) }}">
+                <form method="POST" action="{{ url_for('assignment_mgmt.withhold', assignment_id=assignment.assignmentID) }}">
                     <button type="submit" class="btn btn-secondary">Withhold marks</button>
                 </form>
                 {% else %}
-                <form method="POST" action="{{ url_for('teacher.release', assignment_id=assignment.assignmentID) }}">
+                <form method="POST" action="{{ url_for('assignment_mgmt.release', assignment_id=assignment.assignmentID) }}">
                     <button type="submit" class="btn btn-success" {% if has_release_blockers %}disabled title="Resolve all flagged submissions before releasing grades." aria-disabled="true"{% endif %}>Release marks</button>
                 </form>
                 {% endif %}
-                <form method="POST" action="{{ url_for('teacher.delete_assignment_route', assignment_id=assignment.assignmentID) }}" onsubmit="return confirm('Delete assignment {{ assignment.assignmentID }}? This cannot be undone.');">
+                <form method="POST" action="{{ url_for('assignment_mgmt.delete_assignment_route', assignment_id=assignment.assignmentID) }}" onsubmit="return confirm('Delete assignment {{ assignment.assignmentID }}? This cannot be undone.');">
                     <button type="submit" class="btn btn-ghost">Delete assignment</button>
                 </form>
             </div>
@@ -178,7 +178,7 @@
                 </div>
             </summary>
             <div class="disclosure-body">
-                <form method="POST" action="{{ url_for('teacher.update_teachers', assignment_id=assignment.assignmentID) }}">
+                <form method="POST" action="{{ url_for('assignment_mgmt.update_teachers', assignment_id=assignment.assignmentID) }}">
                     {% if all_teachers %}
                     <div class="student-select-list">
                         {% for teacher in all_teachers %}
@@ -240,7 +240,7 @@
                 </div>
             </summary>
             <div class="disclosure-body">
-                <form method="POST" action="{{ url_for('teacher.update_students', assignment_id=assignment.assignmentID) }}">
+                <form method="POST" action="{{ url_for('assignment_mgmt.update_students', assignment_id=assignment.assignmentID) }}">
                     {% if all_students %}
                     <div class="student-select-list">
                         {% for s in all_students %}

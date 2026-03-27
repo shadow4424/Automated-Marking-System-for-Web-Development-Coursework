@@ -116,36 +116,36 @@ def delete_run(run_id: str):
 def assignment_threat_delete(assignment_id: str):
     if not _user_can_access_assignment(assignment_id):
         flash("You do not have access to this assignment.", "error")
-        return redirect(url_for("teacher.dashboard"))
+        return redirect(url_for("teacher_dashboard.dashboard"))
 
     run_id = str(request.form.get("run_id") or "").strip()
     submission_id = str(request.form.get("submission_id") or "").strip()
     if not run_id:
         flash("Threat resolution failed: missing run ID.", "error")
-        return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+        return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
 
     runs_root = get_runs_root(current_app)
     run_dir = find_run_by_id(runs_root, run_id)
     if run_dir is None:
         flash("Threat resolution failed: submission not found.", "error")
-        return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+        return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
 
     run_info = load_run_info(run_dir) or {}
     if run_info.get("mode") == "batch":
         if not submission_id:
             flash("Threat resolution failed: missing batch submission ID.", "error")
-            return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+            return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
 
         batch_summary = _load_batch_summary_records(run_dir)
         if batch_summary is None:
             flash("Threat resolution failed: batch summary could not be loaded.", "error")
-            return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+            return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
 
         records = list(batch_summary.get("records", []) or [])
         target = next((record for record in records if str(record.get("id") or "") == submission_id), None)
         if target is None:
             flash("Threat resolution failed: flagged submission record not found.", "error")
-            return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+            return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
 
         _safe_delete_within_run(run_dir, run_dir / "runs" / submission_id)
         _safe_delete_within_run(run_dir, target.get("path"))
@@ -155,14 +155,14 @@ def assignment_threat_delete(assignment_id: str):
             assignment_id,
             f"Flagged submission for '{target.get('student_id') or submission_id}' deleted.",
         )
-        return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+        return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
 
     shutil.rmtree(run_dir, ignore_errors=True)
     _flash_assignment_review_state(
         assignment_id,
         f"Flagged submission for '{run_info.get('student_id') or run_id}' deleted.",
     )
-    return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+    return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
 
 
 @runs_bp.route("/runs/<run_id>")
@@ -267,7 +267,7 @@ def run_detail(run_id: str):
 
     assignment_id = run_info.get("assignment_id", "")
     if assignment_id:
-        return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+        return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
     return redirect(url_for("runs.runs"))
 
 
@@ -289,7 +289,7 @@ def run_submission_rerun(run_id: str):
             return jsonify({"error": "Use the assignment submission rerun action for batch submissions."}), 400
         flash("Rerun failed: use the assignment submission rerun action for batch submissions.", "error")
         if assignment_id:
-            return redirect(url_for("teacher.assignment_detail", assignment_id=assignment_id))
+            return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
         return redirect(url_for("runs.runs"))
 
     try:

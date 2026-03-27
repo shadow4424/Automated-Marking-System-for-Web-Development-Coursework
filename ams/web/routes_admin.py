@@ -141,5 +141,5 @@ def view_as(role: str):
 
     session["view_as_role"] = role
     if role == "teacher":
-        return redirect(url_for("teacher.dashboard"))
+        return redirect(url_for("teacher_dashboard.dashboard"))
     return redirect(url_for("student.dashboard"))

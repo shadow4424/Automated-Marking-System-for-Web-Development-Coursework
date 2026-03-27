@@ -990,8 +990,8 @@ def test_assignment_analytics_route_refreshes_on_open_and_reflects_release_state
             "teaching_insights": ["HTML requirements are currently the strongest area."],
         }
 
-    monkeypatch.setattr("ams.web.routes_teacher.get_assignment", fake_assignment)
-    monkeypatch.setattr("ams.web.routes_teacher.generate_assignment_analytics", fake_generate)
+    monkeypatch.setattr("ams.web.routes_assignment_mgmt.get_assignment", fake_assignment)
+    monkeypatch.setattr("ams.web.routes_assignment_mgmt.generate_assignment_analytics", fake_generate)
 
     first = client.get("/teacher/assignment/assignment1/analytics")
     second = client.get("/teacher/assignment/assignment1/analytics")
@@ -1014,7 +1014,7 @@ def test_assignment_analytics_export_uses_fresh_assignment_scoped_data(tmp_path:
     authenticate_client(client)
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Coursework 1",
@@ -1024,7 +1024,7 @@ def test_assignment_analytics_export_uses_fresh_assignment_scoped_data(tmp_path:
         },
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.generate_assignment_analytics",
+        "ams.web.routes_assignment_mgmt.generate_assignment_analytics",
         lambda *_args, **_kwargs: {
             "generated_at": "2026-03-20T01:14:00Z",
             "needs_attention": [
@@ -1076,7 +1076,7 @@ def test_assignment_detail_has_single_analytics_entry_point(tmp_path: Path, monk
     authenticate_client(client)
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Coursework 1",
@@ -1088,10 +1088,10 @@ def test_assignment_detail_has_single_analytics_entry_point(tmp_path: Path, monk
         },
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_user",
+        "ams.web.routes_assignment_mgmt.get_user",
         lambda student_id: {"userID": student_id, "firstName": "Test", "lastName": "Student", "email": "s@example.com"},
     )
-    monkeypatch.setattr("ams.web.routes_teacher.list_users", lambda role=None: [])
+    monkeypatch.setattr("ams.web.routes_assignment_mgmt.list_users", lambda role=None: [])
     monkeypatch.setattr("ams.web.routes_teacher.get_runs_root", lambda app: tmp_path)
     monkeypatch.setattr("ams.web.routes_teacher.list_runs", lambda runs_root, only_active=True: [])
 
@@ -1137,7 +1137,7 @@ def test_assignment_detail_keeps_valid_submissions_visible_when_invalid_batch_ex
     authenticate_client(client)
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Coursework 1",
@@ -1150,7 +1150,7 @@ def test_assignment_detail_keeps_valid_submissions_visible_when_invalid_batch_ex
         },
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_user",
+        "ams.web.routes_assignment_mgmt.get_user",
         lambda student_id: {
             "userID": student_id,
             "firstName": student_id,
@@ -1158,7 +1158,7 @@ def test_assignment_detail_keeps_valid_submissions_visible_when_invalid_batch_ex
             "email": f"{student_id}@example.com",
         },
     )
-    monkeypatch.setattr("ams.web.routes_teacher.list_users", lambda role=None: [])
+    monkeypatch.setattr("ams.web.routes_assignment_mgmt.list_users", lambda role=None: [])
 
     response = client.get("/teacher/assignment/assignment1")
 
@@ -1184,7 +1184,7 @@ def test_teaching_insights_json_falls_back_to_deterministic_copy_when_llm_output
     authenticate_client(client)
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Coursework 1",
@@ -1194,7 +1194,7 @@ def test_teaching_insights_json_falls_back_to_deterministic_copy_when_llm_output
         },
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.generate_assignment_analytics",
+        "ams.web.routes_assignment_mgmt.generate_assignment_analytics",
         lambda *_args, **_kwargs: {
             "teaching_insights": [
                 {
@@ -1232,7 +1232,7 @@ def test_teaching_insights_json_falls_back_to_deterministic_copy_when_llm_output
                 error=None,
             )
 
-    monkeypatch.setattr("ams.web.routes_teacher.get_llm_provider", lambda: FakeProvider())
+    monkeypatch.setattr("ams.web.routes_teacher_helpers.get_llm_provider", lambda: FakeProvider())
 
     response = client.get("/teacher/assignment/assignment1/analytics/teaching-insights.json")
 
@@ -1262,7 +1262,7 @@ def test_teaching_insights_json_uses_llm_wording_by_default_when_provider_succee
     authenticate_client(client)
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Coursework 1",
@@ -1274,7 +1274,7 @@ def test_teaching_insights_json_uses_llm_wording_by_default_when_provider_succee
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.generate_assignment_analytics",
+        "ams.web.routes_assignment_mgmt.generate_assignment_analytics",
         lambda *_args, **_kwargs: {
             "teaching_insights": [
                 {
@@ -1342,7 +1342,7 @@ def test_teaching_insights_json_uses_llm_wording_by_default_when_provider_succee
                 error=None,
             )
 
-    monkeypatch.setattr("ams.web.routes_teacher.get_llm_provider", lambda: FakeProvider())
+    monkeypatch.setattr("ams.web.routes_teacher_helpers.get_llm_provider", lambda: FakeProvider())
 
     response = client.get("/teacher/assignment/assignment1/analytics/teaching-insights.json")
 
@@ -1378,7 +1378,7 @@ def test_teaching_insights_json_accepts_valid_llm_summary_with_rounded_percentag
     context["average_score"] = 31.25
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Coursework 1",
@@ -1388,7 +1388,7 @@ def test_teaching_insights_json_accepts_valid_llm_summary_with_rounded_percentag
         },
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.generate_assignment_analytics",
+        "ams.web.routes_assignment_mgmt.generate_assignment_analytics",
         lambda *_args, **_kwargs: {
             "teaching_insights": [
                 {
@@ -1412,7 +1412,7 @@ def test_teaching_insights_json_accepts_valid_llm_summary_with_rounded_percentag
         def complete(self, *args, **kwargs):
             return SimpleNamespace(content=json.dumps(valid_payload), success=True, error=None)
 
-    monkeypatch.setattr("ams.web.routes_teacher.get_llm_provider", lambda: FakeProvider())
+    monkeypatch.setattr("ams.web.routes_teacher_helpers.get_llm_provider", lambda: FakeProvider())
 
     response = client.get("/teacher/assignment/assignment1/analytics/teaching-insights.json")
 
@@ -1437,7 +1437,7 @@ def test_teaching_insights_json_accepts_integer_percentage_wording_with_exact_co
     authenticate_client(client)
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Coursework 1",
@@ -1447,7 +1447,7 @@ def test_teaching_insights_json_accepts_integer_percentage_wording_with_exact_co
         },
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.generate_assignment_analytics",
+        "ams.web.routes_assignment_mgmt.generate_assignment_analytics",
         lambda *_args, **_kwargs: {
             "teaching_insights": [
                 {
@@ -1471,7 +1471,7 @@ def test_teaching_insights_json_accepts_integer_percentage_wording_with_exact_co
         def complete(self, *args, **kwargs):
             return SimpleNamespace(content=json.dumps(valid_payload), success=True, error=None)
 
-    monkeypatch.setattr("ams.web.routes_teacher.get_llm_provider", lambda: FakeProvider())
+    monkeypatch.setattr("ams.web.routes_teacher_helpers.get_llm_provider", lambda: FakeProvider())
 
     response = client.get("/teacher/assignment/assignment1/analytics/teaching-insights.json")
 
@@ -1497,7 +1497,7 @@ def test_teaching_insights_json_rejects_fabricated_percentage_and_logs_reason(
     authenticate_client(client)
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Coursework 1",
@@ -1507,7 +1507,7 @@ def test_teaching_insights_json_rejects_fabricated_percentage_and_logs_reason(
         },
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.generate_assignment_analytics",
+        "ams.web.routes_assignment_mgmt.generate_assignment_analytics",
         lambda *_args, **_kwargs: {
             "teaching_insights": [
                 {
@@ -1530,7 +1530,7 @@ def test_teaching_insights_json_rejects_fabricated_percentage_and_logs_reason(
         def complete(self, *args, **kwargs):
             return SimpleNamespace(content=json.dumps(invalid_payload), success=True, error=None)
 
-    monkeypatch.setattr("ams.web.routes_teacher.get_llm_provider", lambda: FakeProvider())
+    monkeypatch.setattr("ams.web.routes_teacher_helpers.get_llm_provider", lambda: FakeProvider())
 
     with caplog.at_level(logging.INFO):
         response = client.get("/teacher/assignment/assignment1/analytics/teaching-insights.json")
@@ -1560,7 +1560,7 @@ def test_teaching_insights_json_rejects_unsupported_most_students_claim(
     authenticate_client(client)
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Coursework 1",
@@ -1570,7 +1570,7 @@ def test_teaching_insights_json_rejects_unsupported_most_students_claim(
         },
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.generate_assignment_analytics",
+        "ams.web.routes_assignment_mgmt.generate_assignment_analytics",
         lambda *_args, **_kwargs: {
             "teaching_insights": [
                 {
@@ -1594,7 +1594,7 @@ def test_teaching_insights_json_rejects_unsupported_most_students_claim(
         def complete(self, *args, **kwargs):
             return SimpleNamespace(content=json.dumps(invalid_payload), success=True, error=None)
 
-    monkeypatch.setattr("ams.web.routes_teacher.get_llm_provider", lambda: FakeProvider())
+    monkeypatch.setattr("ams.web.routes_teacher_helpers.get_llm_provider", lambda: FakeProvider())
 
     response = client.get("/teacher/assignment/assignment1/analytics/teaching-insights.json")
 
@@ -1621,7 +1621,7 @@ def test_assignment_analytics_page_renders_deterministic_summary_and_manual_llm_
     authenticate_client(client)
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Coursework 1",
@@ -1631,7 +1631,7 @@ def test_assignment_analytics_page_renders_deterministic_summary_and_manual_llm_
         },
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.generate_assignment_analytics",
+        "ams.web.routes_assignment_mgmt.generate_assignment_analytics",
         lambda *_args, **_kwargs: {
             "generated_at": "2026-03-20T01:14:00Z",
             "submission_count": 1,
@@ -1717,7 +1717,7 @@ def test_assignment_analytics_page_renders_deterministic_summary_and_manual_llm_
                 error=None,
             )
 
-    monkeypatch.setattr("ams.web.routes_teacher.get_llm_provider", lambda: FakeProvider())
+    monkeypatch.setattr("ams.web.routes_teacher_helpers.get_llm_provider", lambda: FakeProvider())
 
     response = client.get("/teacher/assignment/assignment1/analytics")
 
@@ -1735,7 +1735,7 @@ def test_assignment_analytics_page_renders_interactive_graph_sections(tmp_path: 
     authenticate_client(client)
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Coursework 1",
@@ -1745,7 +1745,7 @@ def test_assignment_analytics_page_renders_interactive_graph_sections(tmp_path: 
         },
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.generate_assignment_analytics",
+        "ams.web.routes_assignment_mgmt.generate_assignment_analytics",
         lambda *_args, **_kwargs: {
             "generated_at": "2026-03-20T01:14:00Z",
             "submission_count": 2,
@@ -2014,7 +2014,7 @@ def test_assignment_analytics_rule_export_respects_rule_filters(tmp_path: Path, 
     authenticate_client(client)
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Coursework 1",
@@ -2024,7 +2024,7 @@ def test_assignment_analytics_rule_export_respects_rule_filters(tmp_path: Path, 
         },
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.generate_assignment_analytics",
+        "ams.web.routes_assignment_mgmt.generate_assignment_analytics",
         lambda *_args, **_kwargs: {
             "top_failing_rules": [
                 {
@@ -2077,7 +2077,7 @@ def test_assignment_analytics_pdf_export_downloads_attachment(tmp_path: Path, mo
     authenticate_client(client)
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Coursework 1",
@@ -2087,7 +2087,7 @@ def test_assignment_analytics_pdf_export_downloads_attachment(tmp_path: Path, mo
         },
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.generate_assignment_analytics",
+        "ams.web.routes_assignment_mgmt.generate_assignment_analytics",
         lambda *_args, **_kwargs: {
             "needs_attention": [
                 {

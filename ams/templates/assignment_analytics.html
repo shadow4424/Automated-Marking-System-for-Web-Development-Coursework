@@ -1211,7 +1211,7 @@
 <div class="analytics-shell">
     <section id="analytics-overview" class="card analytics-hero analytics-nav-target">
             <div>
-                <a href="{{ url_for('teacher.assignment_detail', assignment_id=assignment.assignmentID) }}" class="page-back-link">Back to assignment</a>
+                <a href="{{ url_for('assignment_mgmt.assignment_detail', assignment_id=assignment.assignmentID) }}" class="page-back-link">Back to assignment</a>
                 <div class="analytics-kicker">Marker dashboard</div>
                 <h1 class="mt-md mb-sm">{{ assignment.title }}</h1>
                 <p class="text-secondary mb-0">Cohort analytics for {{ assignment.assignmentID }}.</p>
@@ -1234,19 +1234,19 @@
                             <span class="dropdown-caret"></span>
                         </button>
                         <div class="export-dropdown-menu" role="menu">
-                            <a id="needs-attention-export-csv" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='needs-attention', format='csv') }}" class="export-dropdown-item" role="menuitem">
+                            <a id="needs-attention-export-csv" href="{{ url_for('assignment_mgmt.export_analytics', assignment_id=assignment.assignmentID, export_kind='needs-attention', format='csv') }}" class="export-dropdown-item" role="menuitem">
                                 <span class="format-icon csv">CSV</span>
                                 CSV Format
                             </a>
-                            <a id="needs-attention-export-json" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='needs-attention', format='json') }}" class="export-dropdown-item" role="menuitem">
+                            <a id="needs-attention-export-json" href="{{ url_for('assignment_mgmt.export_analytics', assignment_id=assignment.assignmentID, export_kind='needs-attention', format='json') }}" class="export-dropdown-item" role="menuitem">
                                 <span class="format-icon json">JSON</span>
                                 JSON Format
                             </a>
-                            <a id="needs-attention-export-txt" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='needs-attention', format='txt') }}" class="export-dropdown-item" role="menuitem">
+                            <a id="needs-attention-export-txt" href="{{ url_for('assignment_mgmt.export_analytics', assignment_id=assignment.assignmentID, export_kind='needs-attention', format='txt') }}" class="export-dropdown-item" role="menuitem">
                                 <span class="format-icon txt">TXT</span>
                                 Plain Text
                             </a>
-                            <a id="needs-attention-export-pdf" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='needs-attention', format='pdf') }}" class="export-dropdown-item" role="menuitem">
+                            <a id="needs-attention-export-pdf" href="{{ url_for('assignment_mgmt.export_analytics', assignment_id=assignment.assignmentID, export_kind='needs-attention', format='pdf') }}" class="export-dropdown-item" role="menuitem">
                                 <span class="format-icon pdf">PDF</span>
                                 PDF Document
                             </a>
@@ -1258,19 +1258,19 @@
                             <span class="dropdown-caret"></span>
                         </button>
                         <div class="export-dropdown-menu align-right" role="menu">
-                            <a id="rules-export-csv" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='rules', format='csv') }}" class="export-dropdown-item" role="menuitem">
+                            <a id="rules-export-csv" href="{{ url_for('assignment_mgmt.export_analytics', assignment_id=assignment.assignmentID, export_kind='rules', format='csv') }}" class="export-dropdown-item" role="menuitem">
                                 <span class="format-icon csv">CSV</span>
                                 CSV Format
                             </a>
-                            <a id="rules-export-json" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='rules', format='json') }}" class="export-dropdown-item" role="menuitem">
+                            <a id="rules-export-json" href="{{ url_for('assignment_mgmt.export_analytics', assignment_id=assignment.assignmentID, export_kind='rules', format='json') }}" class="export-dropdown-item" role="menuitem">
                                 <span class="format-icon json">JSON</span>
                                 JSON Format
                             </a>
-                            <a id="rules-export-txt" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='rules', format='txt') }}" class="export-dropdown-item" role="menuitem">
+                            <a id="rules-export-txt" href="{{ url_for('assignment_mgmt.export_analytics', assignment_id=assignment.assignmentID, export_kind='rules', format='txt') }}" class="export-dropdown-item" role="menuitem">
                                 <span class="format-icon txt">TXT</span>
                                 Plain Text
                             </a>
-                            <a id="rules-export-pdf" href="{{ url_for('teacher.export_analytics', assignment_id=assignment.assignmentID, export_kind='rules', format='pdf') }}" class="export-dropdown-item" role="menuitem">
+                            <a id="rules-export-pdf" href="{{ url_for('assignment_mgmt.export_analytics', assignment_id=assignment.assignmentID, export_kind='rules', format='pdf') }}" class="export-dropdown-item" role="menuitem">
                                 <span class="format-icon pdf">PDF</span>
                                 PDF Document
                             </a>
@@ -1371,7 +1371,7 @@
                         type="button"
                         id="generate-teaching-summary"
                         class="btn btn-secondary btn-sm"
-                        data-endpoint="{{ url_for('teacher.teaching_insights_json', assignment_id=assignment.assignmentID) }}"
+                        data-endpoint="{{ url_for('assignment_mgmt.teaching_insights_json', assignment_id=assignment.assignmentID) }}"
                     >
                         Generate LLM summary
                     </button>
@@ -1494,7 +1494,7 @@
                 <div class="empty-state-icon"></div>
                 <p class="empty-state-title">No submissions are currently in scope for this assignment</p>
                 <p class="empty-state-text">The dashboard will populate automatically once active submissions exist for {{ assignment.assignmentID }}.</p>
-                <a href="{{ url_for('teacher.assignment_detail', assignment_id=assignment.assignmentID) }}" class="btn btn-primary">Back to assignment</a>
+                <a href="{{ url_for('assignment_mgmt.assignment_detail', assignment_id=assignment.assignmentID) }}" class="btn btn-primary">Back to assignment</a>
             </div>
         </section>
     </section>

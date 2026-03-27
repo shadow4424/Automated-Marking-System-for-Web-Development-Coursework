@@ -42,7 +42,7 @@ def _stub_assignment(monkeypatch, assignment_id: str, assigned_students: list[st
         "teacherID": "admin123",
     }
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda current_assignment_id: dict(assignment, assignmentID=current_assignment_id),
     )
     monkeypatch.setattr(
@@ -58,10 +58,10 @@ def _stub_assignment(monkeypatch, assignment_id: str, assigned_students: list[st
         lambda current_assignment_id: dict(assignment, assignmentID=current_assignment_id),
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_user",
+        "ams.web.routes_assignment_mgmt.get_user",
         lambda student_id: {"userID": student_id, "firstName": student_id, "lastName": "", "email": f"{student_id}@example.com"},
     )
-    monkeypatch.setattr("ams.web.routes_teacher.list_users", lambda role=None: [])
+    monkeypatch.setattr("ams.web.routes_assignment_mgmt.list_users", lambda role=None: [])
 
 
 def _stub_assignment_options(monkeypatch, assignments: list[dict]) -> None:
@@ -960,8 +960,8 @@ def test_create_assignment_route_passes_selected_teachers(tmp_path: Path, monkey
             ]
         return []
 
-    monkeypatch.setattr("ams.web.routes_teacher.create_assignment", _create_assignment_stub)
-    monkeypatch.setattr("ams.web.routes_teacher.list_users", _list_users_stub)
+    monkeypatch.setattr("ams.web.routes_assignment_mgmt.create_assignment", _create_assignment_stub)
+    monkeypatch.setattr("ams.web.routes_assignment_mgmt.list_users", _list_users_stub)
 
     response = client.post(
         "/teacher/create-assignment",
@@ -985,7 +985,7 @@ def test_assignment_detail_uses_per_submission_scores_for_batch_rows(tmp_path: P
     authenticate_client(client)
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Assignment 1",
@@ -997,10 +997,10 @@ def test_assignment_detail_uses_per_submission_scores_for_batch_rows(tmp_path: P
         },
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_user",
+        "ams.web.routes_assignment_mgmt.get_user",
         lambda student_id: {"userID": student_id, "firstName": student_id, "lastName": "", "email": f"{student_id}@example.com"},
     )
-    monkeypatch.setattr("ams.web.routes_teacher.list_users", lambda role=None: [])
+    monkeypatch.setattr("ams.web.routes_assignment_mgmt.list_users", lambda role=None: [])
     monkeypatch.setattr("ams.web.routes_teacher.get_runs_root", lambda app: tmp_path)
     monkeypatch.setattr(
         "ams.web.routes_teacher.list_runs",
@@ -1134,7 +1134,7 @@ def test_assignment_detail_marks_threat_batch_submission_as_threat(tmp_path: Pat
     )
 
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_assignment",
+        "ams.web.routes_assignment_mgmt.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Assignment 1",
@@ -1146,10 +1146,10 @@ def test_assignment_detail_marks_threat_batch_submission_as_threat(tmp_path: Pat
         },
     )
     monkeypatch.setattr(
-        "ams.web.routes_teacher.get_user",
+        "ams.web.routes_assignment_mgmt.get_user",
         lambda student_id: {"userID": student_id, "firstName": student_id, "lastName": "", "email": f"{student_id}@example.com"},
     )
-    monkeypatch.setattr("ams.web.routes_teacher.list_users", lambda role=None: [])
+    monkeypatch.setattr("ams.web.routes_assignment_mgmt.list_users", lambda role=None: [])
 
     response = client.get("/teacher/assignment/assignment1")
 
@@ -1167,7 +1167,7 @@ def test_assignment_detail_blocks_grade_release_when_threat_submission_exists(tm
     _stub_assignment(monkeypatch, "assignment1", ["student5"])
 
     released: list[str] = []
-    monkeypatch.setattr("ams.web.routes_teacher.release_marks", lambda assignment_id: released.append(assignment_id))
+    monkeypatch.setattr("ams.web.routes_assignment_mgmt.release_marks", lambda assignment_id: released.append(assignment_id))
 
     page = client.get("/teacher/assignment/assignment1")
     assert page.status_code == 200
@@ -1191,7 +1191,7 @@ def test_assignment_detail_blocks_grade_release_when_llm_error_submission_exists
     _stub_assignment(monkeypatch, "assignment1", ["student2"])
 
     released: list[str] = []
-    monkeypatch.setattr("ams.web.routes_teacher.release_marks", lambda assignment_id: released.append(assignment_id))
+    monkeypatch.setattr("ams.web.routes_assignment_mgmt.release_marks", lambda assignment_id: released.append(assignment_id))
 
     page = client.get("/teacher/assignment/assignment1")
     assert page.status_code == 200
@@ -1297,7 +1297,7 @@ def test_delete_assignment_route_purges_assignment_storage(tmp_path: Path, monke
         },
     )
 
-    monkeypatch.setattr("ams.web.routes_teacher.delete_assignment", lambda assignment_id: True)
+    monkeypatch.setattr("ams.web.routes_assignment_mgmt.delete_assignment", lambda assignment_id: True)
 
     response = client.post("/teacher/assignment/assignment1/delete")
 

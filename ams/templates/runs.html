@@ -24,7 +24,7 @@
         {% set stats.history = stats.history + 1 %}
     {% endif %}
 {% endfor %}
-{% set runs_back_url = url_for('admin.dashboard') if user_role == 'admin' else url_for('teacher.dashboard') %}
+{% set runs_back_url = url_for('admin.dashboard') if user_role == 'admin' else url_for('teacher_dashboard.dashboard') %}
 {% set runs_back_label = 'Back to admin dashboard' if user_role == 'admin' else 'Back to assignments' %}
 <div class="page-shell">
     <section class="page-hero page-hero--split">

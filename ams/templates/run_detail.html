@@ -324,7 +324,7 @@
 {%- endmacro %}
 
 {% set viewer_role = view_as_role or user_role %}
-{% set back_target = back_url if back_url is defined and back_url else (url_for('student.coursework') if viewer_role == 'student' else (url_for('teacher.assignment_detail', assignment_id=run.assignment_id) if run.assignment_id else url_for('runs.runs'))) %}
+{% set back_target = back_url if back_url is defined and back_url else (url_for('student.coursework') if viewer_role == 'student' else (url_for('assignment_mgmt.assignment_detail', assignment_id=run.assignment_id) if run.assignment_id else url_for('runs.runs'))) %}
 {% set back_label = 'Back to coursework' if viewer_role == 'student' else ('Back to assignment' if run.assignment_id else 'Back to runs') %}
 {% set run_status = run.status|default('completed')|lower %}
 {% set is_student = (user_role == 'student') %}
