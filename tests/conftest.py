@@ -15,6 +15,30 @@ from ams.core.pipeline import AssessmentPipeline
 
 
 # ---------------------------------------------------------------------------
+# Database isolation — use a per-test SQLite file so tests never share state
+# in the submission_attempts (or any other) table.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _isolate_database(tmp_path, monkeypatch):
+    """Redirect ams.core.db to a fresh per-test SQLite database.
+
+    This prevents cross-test contamination via the shared ``ams_users.db``
+    file, which stores users, assignments, and submission attempts.
+    Each test gets its own in-process database that is discarded after
+    the test completes.
+    """
+    import ams.core.db as _db_module
+
+    test_db = tmp_path / "test_ams.db"
+    monkeypatch.setattr(_db_module, "_DEFAULT_DB_PATH", test_db)
+
+    # Initialise schema so the fresh DB has all required tables.
+    _db_module.init_db()
+    yield
+
+
+# ---------------------------------------------------------------------------
 # Global sandbox fixture — force subprocess mode for all tests so that the
 # test suite does not require a running Docker daemon.  Individual sandbox
 # tests that need to test Docker behaviour mock the prerequisites instead.

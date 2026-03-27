@@ -141,8 +141,6 @@ class TestApiExecExecution:
             [
                 # php_smoke
                 RunResult(exit_code=0, stdout="ok", stderr="", duration_ms=5, timed_out=False),
-                # php_form_injection
-                RunResult(exit_code=0, stdout="ok", stderr="", duration_ms=5, timed_out=False),
                 # api_exec
                 RunResult(
                     exit_code=0,
@@ -157,7 +155,7 @@ class TestApiExecExecution:
             submission_path=submission,
             workspace_path=tmp_path,
             discovered_files={"php": [api_file], "html": [], "sql": []},
-            metadata={"profile": "fullstack"},
+            metadata={"profile": "api_backed_web"},
         )
         engine = DeterministicTestEngine(runner=runner)
         findings = engine.run(context)
@@ -185,8 +183,6 @@ class TestApiExecExecution:
             [
                 # php_smoke
                 RunResult(exit_code=0, stdout="ok", stderr="", duration_ms=5, timed_out=False),
-                # php_form_injection
-                RunResult(exit_code=0, stdout="ok", stderr="", duration_ms=5, timed_out=False),
                 # api_exec returning invalid JSON
                 RunResult(
                     exit_code=0,
@@ -201,7 +197,7 @@ class TestApiExecExecution:
             submission_path=submission,
             workspace_path=tmp_path,
             discovered_files={"php": [api_file], "html": [], "sql": []},
-            metadata={"profile": "fullstack"},
+            metadata={"profile": "api_backed_web"},
         )
         engine = DeterministicTestEngine(runner=runner)
         findings = engine.run(context)
@@ -220,13 +216,11 @@ class TestApiExecExecution:
             submission_path=submission,
             workspace_path=tmp_path,
             discovered_files={"php": [index_file], "html": [], "sql": []},
-            metadata={"profile": "fullstack"},
+            metadata={"profile": "api_backed_web"},
         )
         runner = FakeRunner(
             [
                 # php_smoke
-                RunResult(exit_code=0, stdout="ok", stderr="", duration_ms=5, timed_out=False),
-                # php_form_injection
                 RunResult(exit_code=0, stdout="ok", stderr="", duration_ms=5, timed_out=False),
             ]
         )
@@ -254,8 +248,6 @@ class TestApiExecExecution:
             [
                 # php_smoke
                 RunResult(exit_code=0, stdout="ok", stderr="", duration_ms=5, timed_out=False),
-                # php_form_injection
-                RunResult(exit_code=0, stdout="ok", stderr="", duration_ms=5, timed_out=False),
                 # api_exec times out
                 RunResult(
                     exit_code=None,
@@ -270,7 +262,7 @@ class TestApiExecExecution:
             submission_path=submission,
             workspace_path=tmp_path,
             discovered_files={"php": [api_file], "html": [], "sql": []},
-            metadata={"profile": "fullstack"},
+            metadata={"profile": "api_backed_web"},
         )
         engine = DeterministicTestEngine(runner=runner)
         findings = engine.run(context)
@@ -295,7 +287,6 @@ class TestApiExecExecution:
         runner = FakeRunner(
             [
                 RunResult(exit_code=0, stdout="ok", stderr="", duration_ms=5, timed_out=False),
-                RunResult(exit_code=0, stdout="ok", stderr="", duration_ms=5, timed_out=False),
                 RunResult(
                     exit_code=0,
                     stdout='{"data":1}',
@@ -309,7 +300,7 @@ class TestApiExecExecution:
             submission_path=submission,
             workspace_path=tmp_path,
             discovered_files={"php": [api_file], "html": [], "sql": []},
-            metadata={"profile": "fullstack"},
+            metadata={"profile": "api_backed_web"},
         )
         engine = DeterministicTestEngine(runner=runner)
         engine.run(context)

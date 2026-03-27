@@ -25,8 +25,8 @@ def clean_timestamps(data: Dict[str, Any]) -> Dict[str, Any]:
     """Recursively remove timestamp and path fields from a dictionary."""
     if isinstance(data, dict):
         return {
-            k: clean_timestamps(v) 
-            for k, v in data.items() 
+            k: clean_timestamps(v)
+            for k, v in data.items()
             if k not in {
                 "timestamp",
                 "generated_at",
@@ -38,6 +38,7 @@ def clean_timestamps(data: Dict[str, Any]) -> Dict[str, Any]:
                 "entry",
                 "matched_paths",
                 "contributing_paths",
+                "searched_dirs",
             }
         }
     elif isinstance(data, list):

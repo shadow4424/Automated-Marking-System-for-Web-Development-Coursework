@@ -1059,7 +1059,7 @@ def sync_attempts_from_storage(runs_root: Path) -> None:
 
                 conn.execute(
                     """
-                    INSERT INTO submission_attempts (
+                    INSERT OR IGNORE INTO submission_attempts (
                         id,
                         assignment_id,
                         student_id,
