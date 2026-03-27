@@ -5,186 +5,207 @@
 
 ## Overview
 
-AMS is a pipeline-based assessment system for undergraduate web development coursework.
-It supports heterogeneous, multi-file submissions (HTML, CSS, JavaScript, PHP, SQL, API code) and combines deterministic checks with controlled AI-assisted feedback.
+AMS is an assessment system for web development coursework. It evaluates multi-file submissions across HTML, CSS, JavaScript, PHP, SQL, and API-backed work using deterministic checks, sandboxed execution, browser evidence, and optional LLM-assisted scoring support.
 
-The goal is fair, scalable, and reproducible marking with actionable feedback for students.
+The current system exposes two primary workflows:
 
-## Key Features
+- `ams mark` for a single submission
+- `ams batch` for bulk marking and reporting
 
-- Secure sandboxed execution using Docker.
-- Static and behavioral assessment across multiple languages.
-- Browser-based interaction checks with Playwright.
-- Optional LLM-assisted arbitration and feedback generation.
-- Assignment-level analytics for moderation.
-- CLI and Web UI workflows.
+It also includes a Flask web interface for submission handling, assignment management, analytics, exports, and run history.
 
-## Pipeline
+## What The System Does
 
-1. Acquisition and normalization of student submissions.
-2. Sandbox setup.
-3. Static assessors.
-4. Behavioral assessors.
-5. Playwright assessors.
-6. Optional LLM arbitration.
-7. Structured reporting (including 1.0 / 0.5 / 0.0 scoring outputs).
+- Scores coursework against named profiles such as `frontend_interactive`, `frontend`, and `fullstack`
+- Runs static, behavioural, browser, and consistency-style checks through the assessment pipeline
+- Stores run artefacts and reports for later inspection in the web UI
+- Supports teacher/admin workflows for marking, batch uploads, analytics, exports, and moderation
+- Supports student-facing dashboards and assignment analytics views
+- Can optionally use LLM-backed scoring helpers when the relevant dependencies and configuration are present
 
-## Installation and Setup
+## Installation
 
 ### Prerequisites
 
 - Python 3.10+
-- Docker (required for secure sandboxing)
-- LM Studio or API credentials for LLM-backed workflows
+- Docker, if you want Docker sandbox mode
+- Playwright browser binaries, if you want browser-based checks
+- LLM credentials or a local provider, if you want LLM-backed features
 
-### Developer Setup
+### Install The Package
 
-1. Clone the repository:
-
-```bash
-git clone <repository_url>
-cd Automated-Marking-System-for-Web-Development-Coursework
-```
-
-2. Install package and dependencies:
+Base install:
 
 ```bash
-pip install -e .[demo,dev]
+pip install -e .
 ```
-This installs core dependencies and demo/dev extras (including pytest, playwright, matplotlib, and openai).
 
-LLM provider only:
+Development install:
+
+```bash
+pip install -e .[dev]
+```
+
+Development install with LLM extras:
+
+```bash
+pip install -e .[dev,llm]
+```
+
+LLM-only extras:
 
 ```bash
 pip install -e .[llm]
 ```
 
-3. Install Playwright browsers:
+### Install Playwright Browsers
 
 ```bash
 python -m playwright install
 ```
 
-### Build Sandbox Image
-
-From repository root:
+### Build The Sandbox Image
 
 ```bash
 ./docker/build.sh
 ```
 
-If the Docker image is missing, AMS will warn and provide guidance. You can also bypass Docker with `AMS_SANDBOX_MODE=subprocess` when appropriate.
-
-## Usage
-
-### Demo Run
+If Docker is unavailable, you can switch to subprocess sandbox mode:
 
 ```bash
-AMS_RUNS_ROOT=demo_out ams demo --profile fullstack
+export AMS_SANDBOX_MODE="subprocess"
 ```
 
-### Web UI
+PowerShell:
 
-```bash
-FLASK_ENV=development python -m ams.webui
+```powershell
+$env:AMS_SANDBOX_MODE = "subprocess"
 ```
 
-Open `http://localhost:5000` in your browser.
+## CLI Usage
 
-### CLI Examples
-
-Mark a single submission:
+Show top-level help:
 
 ```bash
-ams mark path/to/submission_dir -w path/to/workspace -o report.json --profile frontend
+ams -h
 ```
 
-Run batch assessment:
+### Mark A Single Submission
 
 ```bash
-ams batch path/to/input_folder --profile fullstack -o ams_batch_runs/run_name
+ams mark path/to/submission_dir --profile frontend_interactive
 ```
 
-## Evaluation Modes
-
-Accuracy evaluation - compare pipeline scores against ground-truth labels:
+Write the final report to a specific location:
 
 ```bash
-ams eval --accuracy evaluation_dataset/ \
+ams mark path/to/submission_dir \
   --profile frontend_interactive \
-  --profile-config evaluation_dataset/eval_profile.json \
-  --out results/accuracy/
+  --workspace ams_runs/manual-run \
+  --out reports/report.json
 ```
 
-Consistency evaluation - run one submission N times and measure determinism:
+Using a custom profile file:
 
 ```bash
-ams eval --consistency evaluation_dataset/correct/correct_001 \
-  --runs 5 \
-  --profile frontend_interactive \
-  --profile-config evaluation_dataset/eval_profile.json \
-  --out results/consistency/
+ams mark path/to/submission_dir \
+  --profile custom_profile \
+  --profile-config path/to/profile.json
 ```
 
-Robustness evaluation - test pipeline behaviour on malformed/adversarial inputs:
+### Run Batch Marking
 
 ```bash
-ams eval --robustness evaluation_dataset/ \
-  --profile frontend_interactive \
-  --profile-config evaluation_dataset/eval_profile.json \
-  --out results/robustness/
+ams batch path/to/submissions --profile fullstack
 ```
 
-LLM marking evaluation - compare STATIC_ONLY vs STATIC_PLUS_LLM on attempt submissions:
+With an explicit output directory:
 
 ```bash
-ams eval --llm-marking evaluation_dataset/ \
-  --profile frontend_interactive \
-  --profile-config evaluation_dataset/eval_profile.json \
-  --llm-profile-config evaluation_dataset/eval_profile_llm.json \
-  --out results/llm_marking/
+ams batch path/to/submissions \
+  --profile fullstack \
+  --out ams_batch_runs/coursework_01
 ```
 
-### Shared Flags
+With a custom profile file:
 
-| Flag | Default | Description |
-| --- | --- | --- |
-| --profile | frontend_interactive | AMS profile to use for marking |
-| --profile-config PATH | none | Custom profile JSON (disables browser/behavioral checks) |
-| --llm-profile-config PATH | none | Custom profile JSON for the LLM run in --llm-marking mode |
-| --runs N | 5 | Number of repeated runs for --consistency |
-| --out / -o PATH | ams_eval_runs/<timestamp> | Output directory for results |
+```bash
+ams batch path/to/submissions \
+  --profile custom_profile \
+  --profile-config path/to/profile.json
+```
 
-### Profile Config Files
+### Current CLI Commands
 
-| File | Purpose |
-| --- | --- |
-| evaluation_dataset/eval_profile.json | Static-only, no browser/behavioral checks; use for accuracy/consistency/robustness |
-| evaluation_dataset/eval_profile_llm.json | LLM + partial credit enabled, no browser/behavioral checks; use with --llm-marking |
+The live CLI currently supports:
+
+- `ams mark`
+- `ams batch`
+
+Older demo/evaluation commands are no longer part of the system.
+
+## Web UI
+
+Run the Flask application with the app factory:
+
+```bash
+flask --app ams.webui:create_app run --debug
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5000
+```
+
+Useful web-related environment variables:
+
+```bash
+export AMS_RUNS_ROOT="ams_web_runs"
+export AMS_GITHUB_CLIENT_ID="your-github-client-id"
+export AMS_GITHUB_CLIENT_SECRET="your-github-client-secret"
+export AMS_GITHUB_OAUTH_CALLBACK="http://localhost:5000/api/github/callback"
+```
+
+PowerShell:
+
+```powershell
+$env:AMS_RUNS_ROOT = "ams_web_runs"
+$env:AMS_GITHUB_CLIENT_ID = "your-github-client-id"
+$env:AMS_GITHUB_CLIENT_SECRET = "your-github-client-secret"
+$env:AMS_GITHUB_OAUTH_CALLBACK = "http://localhost:5000/api/github/callback"
+```
+
+## Output Locations
+
+By default, AMS writes artefacts to:
+
+- `ams_runs/` for CLI single-submission runs
+- `ams_batch_runs/` for CLI batch runs
+- `ams_web_runs/` or `AMS_RUNS_ROOT` for the web UI
 
 ## Testing
 
-Run all tests:
+Run the full suite:
 
 ```bash
-pytest
+python -m pytest tests/ -q
 ```
 
-Skip slow sandbox or LLM tests:
+Run focused suites:
 
 ```bash
-pytest -m "not slow"
+python -m pytest tests/webui/ -q
+python -m pytest tests/sandbox/ -q
+python -m pytest tests/output/ -q
 ```
 
-## Troubleshooting Commands
+## Troubleshooting
 
-Hard reset sandbox containers:
+Rebuild the sandbox image:
 
-```powershell
-docker stop $(docker ps -a -q --filter ancestor=ams-sandbox)
-docker rm -f $(docker ps -a -q --filter ancestor=ams-sandbox)
-# Also clear retained threat containers
-docker rm -f $(docker ps -a -q --filter name="ams-threat-")
+```bash
+./docker/build.sh --no-cache
 ```
 
 Clear web run history:
@@ -193,22 +214,20 @@ Clear web run history:
 Remove-Item -Recurse -Force ams_web_runs\*
 ```
 
-Clear LLM cache database:
+Clear batch runs:
 
 ```powershell
-Remove-Item -Force ams\cache.db
+Remove-Item -Recurse -Force ams_batch_runs\*
 ```
 
-Force rebuild sandbox image:
+If Docker mode is enabled but Docker is unavailable, AMS will stop at startup. Use subprocess mode if you need a local fallback:
 
-```bash
-./docker/build.sh --no-cache
+```powershell
+$env:AMS_SANDBOX_MODE = "subprocess"
 ```
 
-GitHub integration environment variables:
+## Notes
 
-```bash
-export AMS_GITHUB_CLIENT_ID="your-github-client-id"
-export AMS_GITHUB_CLIENT_SECRET="your-github-client-secret"
-export AMS_GITHUB_OAUTH_CALLBACK="http://localhost:5000/api/github/callback"
-```
+- The web app entrypoint is the `create_app()` factory in `ams.webui`
+- The CLI entrypoint is `ams`
+- The package metadata and console script are defined in `pyproject.toml`

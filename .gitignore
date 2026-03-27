@@ -40,4 +40,7 @@ ams/ams_analytics/test_assignment1_analytics.json
 
 # Planning artifacts
 .planning/
+
+# Local MCP/Copilot hook config
+.github/
 .claude/
