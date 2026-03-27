@@ -35,7 +35,7 @@ The goal is fair, scalable, and reproducible marking with actionable feedback fo
 
 - Python 3.10+
 - Docker (required for secure sandboxing)
-- Optional: LM Studio or API credentials for LLM-backed workflows
+- LM Studio or API credentials for LLM-backed workflows
 
 ### Developer Setup
 
@@ -51,10 +51,9 @@ cd Automated-Marking-System-for-Web-Development-Coursework
 ```bash
 pip install -e .[demo,dev]
 ```
-
 This installs core dependencies and demo/dev extras (including pytest, playwright, matplotlib, and openai).
 
-Optional (LLM provider only):
+LLM provider only:
 
 ```bash
 pip install -e .[llm]
