@@ -6,6 +6,8 @@ ams/cli.py
 ams/pdf_exports.py
 ams/webui.py
 ams/analytics/assignment_analytics.py
+ams/analytics/graphs.py
+ams/analytics/insights.py
 ams/assessors/consistency_assessor.py
 ams/assessors/html_parser.py
 ams/assessors/playwright_assessor.py
