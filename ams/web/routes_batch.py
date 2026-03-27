@@ -812,7 +812,7 @@ def batch_submission_view(run_id: str, submission_id: str):
     if record_status not in {"pending", "failed", "error"}:
         if not report_path.exists():
             return "Report not found", 404
-        report = _ensure_check_stats(
+        report = ensure_check_stats(
             json.loads(report_path.read_text(encoding="utf-8"))
         )
         review_flags = extract_review_flags_from_report(report)
@@ -921,7 +921,7 @@ def batch_submission_view(run_id: str, submission_id: str):
         report=detail_report,
         marks_released=marks_released,
         detail_view=_build_submission_detail_view(detail_run_info, detail_report),
-        threat_file_contents=_load_threat_file_contents(
+        threat_file_contents=load_threat_file_contents(
             (detail_report or {}).get("findings", []), submission_dir
         ),
         attempt=attempt,

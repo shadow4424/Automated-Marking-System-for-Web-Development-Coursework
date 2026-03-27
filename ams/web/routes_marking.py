@@ -93,12 +93,12 @@ def _build_submission_detail_view(
         if isinstance(item, Mapping)
     ]
     raw_findings = [
-        _normalize_raw_finding(finding)
+        normalize_raw_finding(finding)
         for finding in list(report_data.get("findings", []) or [])
         if isinstance(finding, Mapping)
     ]
     diagnostics = [
-        _normalize_raw_finding(finding)
+        normalize_raw_finding(finding)
         for finding in list(report_data.get("diagnostics", []) or [])
         if isinstance(finding, Mapping)
     ]
@@ -120,7 +120,7 @@ def _build_submission_detail_view(
 
     findings_by_key: dict[str, list[dict[str, Any]]] = {}
     for finding in raw_findings:
-        findings_by_key.setdefault(_finding_group_key(finding), []).append(finding)
+        findings_by_key.setdefault(finding_group_key(finding), []).append(finding)
     checks_by_id = {
         str(check.get("check_id") or "").strip(): check
         for check in checks
@@ -148,7 +148,7 @@ def _build_submission_detail_view(
             continue
         if browser_reliable:
             valid_ux_findings.append(finding)
-    hidden_ux_keys = {_finding_group_key(finding) for finding in raw_ux_findings} if not browser_reliable else set()
+    hidden_ux_keys = {finding_group_key(finding) for finding in raw_ux_findings} if not browser_reliable else set()
 
     evidence_items: list[dict[str, Any]] = []
     matched_keys: set[str] = set()
@@ -160,10 +160,10 @@ def _build_submission_detail_view(
         matched_keys.add(requirement_id)
         component = str(requirement.get("component") or "").strip().lower()
         stage = str(requirement.get("stage") or "").strip().lower()
-        status = _normalize_status(requirement.get("status"), fallback="UNKNOWN")
+        status = normalize_status(requirement.get("status"), fallback="UNKNOWN")
         check = checks_by_id.get(requirement_id)
         related_findings = list(findings_by_key.get(requirement_id, []))
-        detail = _first_non_empty(
+        detail = first_non_empty(
             list((check or {}).get("messages", []) or [])
             + [
                 requirement.get("skipped_reason"),
@@ -176,16 +176,16 @@ def _build_submission_detail_view(
             {
                 "kind": "requirement",
                 "type_label": "Requirement",
-                "title": _first_non_empty([requirement.get("description"), _humanize_identifier(requirement_id)]),
+                "title": first_non_empty([requirement.get("description"), humanize_identifier(requirement_id)]),
                 "secondary_id": requirement_id,
                 "status": status,
                 "badge_label": status,
-                "tone": _status_tone(status),
+                "tone": status_tone(status),
                 "component": component,
-                "component_label": _component_label(component),
-                "component_filter": _component_filter_value(component, stage=stage),
+                "component_label": component_label(component),
+                "component_filter": component_filter_value(component, stage=stage),
                 "stage": stage,
-                "stage_label": _stage_label(stage),
+                "stage_label": stage_label(stage),
                 "detail": detail,
                 "required": bool(requirement.get("required", True)),
                 "score_display": requirement.get("score"),
@@ -213,23 +213,23 @@ def _build_submission_detail_view(
         first_finding = related_findings[0] if related_findings else {}
         stage = str(first_finding.get("stage") or "").strip().lower()
         component = str(check.get("component") or first_finding.get("component") or "").strip().lower()
-        status = _normalize_status(check.get("status"), fallback="UNKNOWN")
-        detail = _first_non_empty(list(check.get("messages", []) or []) + [first_finding.get("message")])
+        status = normalize_status(check.get("status"), fallback="UNKNOWN")
+        detail = first_non_empty(list(check.get("messages", []) or []) + [first_finding.get("message")])
         evidence_items.append(
             {
                 "kind": "check",
                 "type_label": "Check",
-                "title": _humanize_identifier(check_id),
+                "title": humanize_identifier(check_id),
                 "secondary_id": check_id,
                 "status": status,
                 "badge_label": status,
-                "tone": _status_tone(status),
+                "tone": status_tone(status),
                 "component": component,
-                "component_label": _component_label(component),
-                "component_filter": _component_filter_value(component, stage=stage),
+                "component_label": component_label(component),
+                "component_filter": component_filter_value(component, stage=stage),
                 "stage": stage,
-                "stage_label": _stage_label(stage),
-                "detail": detail or _describe_identifier(check_id),
+                "stage_label": stage_label(stage),
+                "detail": detail or describe_identifier(check_id),
                 "required": False,
                 "score_display": None,
                 "requirement": None,
@@ -238,7 +238,7 @@ def _build_submission_detail_view(
                 "search_text": " ".join(
                     [
                         check_id,
-                        _humanize_identifier(check_id),
+                        humanize_identifier(check_id),
                         component,
                         stage,
                         status,
@@ -279,7 +279,7 @@ def _build_submission_detail_view(
         evidence = dict(finding.get("evidence", {}) or {})
         ux_review = dict(evidence.get("ux_review", {}) or {})
         page_name = str(evidence.get("page") or ux_review.get("page") or finding["title"]).strip()
-        feedback = _first_non_empty(
+        feedback = first_non_empty(
             [ux_review.get("feedback"), ux_review.get("improvement_recommendation"), finding.get("message")]
         )
         evidence_items.append(
@@ -330,11 +330,11 @@ def _build_submission_detail_view(
             {
                 "kind": "behavioural",
                 "type_label": "Behavioural",
-                "title": _humanize_identifier(test_id),
+                "title": humanize_identifier(test_id),
                 "secondary_id": test_id,
                 "status": status,
                 "badge_label": status,
-                "tone": _status_tone(status),
+                "tone": status_tone(status),
                 "component": str(bev.get("component") or "").strip().lower(),
                 "component_label": "Behavioural",
                 "component_filter": "behavioural",
@@ -349,7 +349,7 @@ def _build_submission_detail_view(
                 "search_text": " ".join(
                     [
                         test_id,
-                        _humanize_identifier(test_id),
+                        humanize_identifier(test_id),
                         str(bev.get("component") or ""),
                         bev_status,
                         detail,
@@ -361,11 +361,11 @@ def _build_submission_detail_view(
 
     evidence_items.sort(
         key=lambda item: (
-            _DETAIL_STATUS_PRIORITY.get(item["status"], 99),
+            DETAIL_STATUS_PRIORITY.get(item["status"], 99),
             0 if item["kind"] == "requirement" else (1 if item["kind"] == "threat" else 2),
-            _DETAIL_COMPONENT_ORDER.index(item["component_filter"])
-            if item["component_filter"] in _DETAIL_COMPONENT_ORDER
-            else len(_DETAIL_COMPONENT_ORDER),
+            DETAIL_COMPONENT_ORDER.index(item["component_filter"])
+            if item["component_filter"] in DETAIL_COMPONENT_ORDER
+            else len(DETAIL_COMPONENT_ORDER),
             str(item["title"]).lower(),
             str(item.get("_sort_index") or 0),
         )
@@ -377,7 +377,7 @@ def _build_submission_detail_view(
         score_value = data.get("score")
         if score_value == "SKIPPED" and int(summary.get("requirement_count", 0) or 0) == 0:
             continue
-        numeric_score = _coerce_float(score_value)
+        numeric_score = coerce_float(score_value)
         if numeric_score is not None:
             tone = "success" if numeric_score >= 0.7 else ("warning" if numeric_score > 0 else "danger")
             score_label = f"{int(round(numeric_score * 100))}%"
@@ -387,7 +387,7 @@ def _build_submission_detail_view(
         component_cards.append(
             {
                 "key": component,
-                "label": _component_label(component),
+                "label": component_label(component),
                 "score_label": score_label,
                 "tone": tone,
                 "summary": summary,
@@ -405,9 +405,9 @@ def _build_submission_detail_view(
             }
         )
     component_cards.sort(
-        key=lambda item: _DETAIL_COMPONENT_ORDER.index(item["key"])
-        if item["key"] in _DETAIL_COMPONENT_ORDER
-        else len(_DETAIL_COMPONENT_ORDER)
+        key=lambda item: DETAIL_COMPONENT_ORDER.index(item["key"])
+        if item["key"] in DETAIL_COMPONENT_ORDER
+        else len(DETAIL_COMPONENT_ORDER)
     )
 
     student_issues = [
@@ -488,7 +488,7 @@ def _build_submission_detail_view(
         )
 
     for flag in list(confidence.get("flags", []) or []):
-        text = _CONFIDENCE_FLAG_TEXT.get(str(flag))
+        text = CONFIDENCE_FLAG_TEXT.get(str(flag))
         if text:
             _push_limitation(text.rstrip("."), text, secondary_id=str(flag))
 
@@ -528,11 +528,11 @@ def _build_submission_detail_view(
             role_context.append(
                 {
                     "title": role.replace("_", " ").title(),
-                    "detail": ", ".join(_clean_path(path) for path in clean_paths[:4]),
+                    "detail": ", ".join(clean_path(path) for path in clean_paths[:4]),
                 }
             )
 
-    decision = _build_decision_summary(run, report_data, confidence, review, limitations, student_issues)
+    decision = build_decision_summary(run, report_data, confidence, review, limitations, student_issues)
 
     skipped_requirements = [
         item

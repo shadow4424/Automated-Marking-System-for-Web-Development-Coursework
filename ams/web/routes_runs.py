@@ -241,7 +241,7 @@ def run_detail(run_id: str):
         report_path = run_dir / run_info.get("report", "report.json")
         run_status = str(run_info.get("status") or "").strip().lower()
         if run_status not in {"pending", "failed", "error"} and report_path.exists():
-            context["report"] = _ensure_check_stats(
+            context["report"] = ensure_check_stats(
                 json.loads(report_path.read_text(encoding="utf-8"))
             )
             review_flags = extract_review_flags_from_report(context["report"])
@@ -259,7 +259,7 @@ def run_detail(run_id: str):
                     else run_info.get("status")
                 ),
             )
-            context["threat_file_contents"] = _load_threat_file_contents(
+            context["threat_file_contents"] = load_threat_file_contents(
                 context["report"].get("findings", []), run_dir
             )
         context["detail_view"] = _build_submission_detail_view(context["run"], context.get("report"))

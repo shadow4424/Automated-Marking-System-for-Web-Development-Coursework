@@ -11,8 +11,8 @@ from ams.core.aggregation import aggregate_findings_to_checks, compute_check_sta
 _PATH_RE = _re.compile(
     r"(?:[A-Za-z]:)?[\\/](?:[\w .~@#$%&()\-]+[\\/]){2,}[\w .~@#$%&()\-]+\.\w{1,10}$"
 )
-_DETAIL_COMPONENT_ORDER = ["html", "css", "js", "php", "sql", "api", "browser", "behavioural", "consistency", "other"]
-_DETAIL_COMPONENT_LABELS = {
+DETAIL_COMPONENT_ORDER = ["html", "css", "js", "php", "sql", "api", "browser", "behavioural", "consistency", "other"]
+DETAIL_COMPONENT_LABELS = {
     "html": "HTML",
     "css": "CSS",
     "js": "JavaScript",
@@ -26,7 +26,7 @@ _DETAIL_COMPONENT_LABELS = {
     "security": "Security",
     "other": "Other",
 }
-_DETAIL_STAGE_LABELS = {
+DETAIL_STAGE_LABELS = {
     "static": "Static",
     "runtime": "Runtime",
     "browser": "Browser",
@@ -34,7 +34,7 @@ _DETAIL_STAGE_LABELS = {
     "quality": "Quality",
     "manual": "Manual",
 }
-_DETAIL_STATUS_PRIORITY = {
+DETAIL_STATUS_PRIORITY = {
     "FAIL": 0,
     "THREAT": 0,
     "PARTIAL": 1,
@@ -44,7 +44,7 @@ _DETAIL_STATUS_PRIORITY = {
     "NOT_EVALUATED": 4,
     "UNKNOWN": 5,
 }
-_DETAIL_TONE_BY_STATUS = {
+DETAIL_TONE_BY_STATUS = {
     "FAIL": "danger",
     "THREAT": "danger",
     "PARTIAL": "warning",
@@ -54,7 +54,7 @@ _DETAIL_TONE_BY_STATUS = {
     "NOT_EVALUATED": "muted",
     "UNKNOWN": "muted",
 }
-_CONFIDENCE_FLAG_TEXT = {
+CONFIDENCE_FLAG_TEXT = {
     "runtime_failure": "Runtime checks failed or timed out in this run.",
     "browser_failure": "Browser checks failed or timed out in this run.",
     "browser_console_errors": "Browser console errors reduced trust in the automated result.",
@@ -62,10 +62,10 @@ _CONFIDENCE_FLAG_TEXT = {
     "browser_skipped": "Browser checks were skipped.",
     "layout_skipped": "Layout checks were skipped.",
 }
-_ARTIFACT_ROOTS = ("artifacts/", "runs/", "reports/", "evaluation/", "submission/")
+ARTIFACT_ROOTS = ("artifacts/", "runs/", "reports/", "evaluation/", "submission/")
 
 
-def _clean_path(value: object) -> str:
+def clean_path(value: object) -> str:
     """Jinja filter: shorten absolute file paths to ``submission/file.ext``."""
     s = str(value).replace("\\", "/")
     for marker in ("submission/", "artifacts/", "test_coursework/"):
@@ -78,7 +78,7 @@ def _clean_path(value: object) -> str:
     return s
 
 
-def _render_evidence_value(val: object) -> str:
+def render_evidence_value(val: object) -> str:
     """Return an HTML-safe string for a single evidence value."""
     from markupsafe import Markup, escape
 
@@ -89,15 +89,15 @@ def _render_evidence_value(val: object) -> str:
     if isinstance(val, list):
         if not val:
             return "?"
-        items = ", ".join(escape(_clean_path(v)) for v in val)
+        items = ", ".join(escape(clean_path(v)) for v in val)
         return Markup(items)
     s = str(val)
     if _PATH_RE.match(s.replace("\\", "/")):
-        return _clean_path(s)
+        return clean_path(s)
     return s
 
 
-def _ensure_check_stats(report: dict) -> dict:
+def ensure_check_stats(report: dict) -> dict:
     """Enrich a loaded report dict with aggregated check stats if missing."""
     if "checks" not in report or "check_stats" not in report or "diagnostics" not in report:
         findings = report.get("findings", [])
@@ -111,7 +111,7 @@ def _ensure_check_stats(report: dict) -> dict:
     return report
 
 
-def _to_rel(raw: str) -> str:
+def to_rel(raw: str) -> str:
     """Convert a file reference to a path relative to ``submission/``."""
     s = str(raw).replace("\\", "/")
     if "submission/" in s:
@@ -120,7 +120,7 @@ def _to_rel(raw: str) -> str:
     return Path(raw).name
 
 
-def _load_threat_file_contents(findings: list, run_dir: Path) -> dict:
+def load_threat_file_contents(findings: list, run_dir: Path) -> dict:
     """Load source file contents for threat-flagged findings."""
     max_file_bytes = 200 * 1024
     submission_dir = (run_dir / "submission").resolve()
@@ -136,7 +136,7 @@ def _load_threat_file_contents(findings: list, run_dir: Path) -> dict:
 
     file_data: dict[str, dict] = {}
     for finding in threat_findings:
-        file_rel = _to_rel(finding["evidence"]["file"])
+        file_rel = to_rel(finding["evidence"]["file"])
         if not file_rel or file_rel in file_data:
             continue
         candidate = (submission_dir / file_rel).resolve()
@@ -153,7 +153,7 @@ def _load_threat_file_contents(findings: list, run_dir: Path) -> dict:
             pass
 
     for finding in threat_findings:
-        file_rel = _to_rel(finding["evidence"]["file"])
+        file_rel = to_rel(finding["evidence"]["file"])
         if file_rel not in file_data:
             continue
         try:
@@ -168,7 +168,7 @@ def _load_threat_file_contents(findings: list, run_dir: Path) -> dict:
     return file_data
 
 
-def _coerce_float(value: object) -> float | None:
+def coerce_float(value: object) -> float | None:
     try:
         if value is None or value == "":
             return None
@@ -177,7 +177,7 @@ def _coerce_float(value: object) -> float | None:
         return None
 
 
-def _first_non_empty(values: Sequence[object]) -> str:
+def first_non_empty(values: Sequence[object]) -> str:
     for value in values:
         text = str(value or "").strip()
         if text:
@@ -185,7 +185,7 @@ def _first_non_empty(values: Sequence[object]) -> str:
     return ""
 
 
-def _format_submission_datetime(value: object) -> str:
+def format_submission_datetime(value: object) -> str:
     text = str(value or "").strip()
     if not text:
         return "Unknown"
@@ -196,30 +196,30 @@ def _format_submission_datetime(value: object) -> str:
         return text[:16].replace("T", " ")
 
 
-def _normalize_status(value: object, *, fallback: str = "UNKNOWN") -> str:
+def normalize_status(value: object, *, fallback: str = "UNKNOWN") -> str:
     text = str(value or "").strip().upper()
     return text or fallback
 
 
-def _status_tone(status: object) -> str:
-    return _DETAIL_TONE_BY_STATUS.get(_normalize_status(status), "muted")
+def status_tone(status: object) -> str:
+    return DETAIL_TONE_BY_STATUS.get(normalize_status(status), "muted")
 
 
-def _stage_label(stage: object) -> str:
+def stage_label(stage: object) -> str:
     key = str(stage or "").strip().lower()
     if not key:
         return "General"
-    return _DETAIL_STAGE_LABELS.get(key, key.replace("_", " ").title())
+    return DETAIL_STAGE_LABELS.get(key, key.replace("_", " ").title())
 
 
-def _component_label(component: object) -> str:
+def component_label(component: object) -> str:
     key = str(component or "").strip().lower()
     if not key:
         return "General"
-    return _DETAIL_COMPONENT_LABELS.get(key, key.replace("_", " ").title())
+    return DETAIL_COMPONENT_LABELS.get(key, key.replace("_", " ").title())
 
 
-def _component_filter_value(component: object, *, stage: object = None) -> str:
+def component_filter_value(component: object, *, stage: object = None) -> str:
     comp = str(component or "").strip().lower()
     stage_key = str(stage or "").strip().lower()
     if comp in {"html", "css", "js", "php", "sql", "api", "browser", "behavioral", "behavioural"}:
@@ -231,7 +231,7 @@ def _component_filter_value(component: object, *, stage: object = None) -> str:
     return comp or "other"
 
 
-def _humanize_identifier(identifier: object) -> str:
+def humanize_identifier(identifier: object) -> str:
     text = str(identifier or "").strip()
     if not text:
         return "Unnamed item"
@@ -242,7 +242,7 @@ def _humanize_identifier(identifier: object) -> str:
     return pretty.title() if pretty else text
 
 
-def _describe_identifier(identifier: object) -> str:
+def describe_identifier(identifier: object) -> str:
     text = str(identifier or "").strip()
     if not text:
         return ""
@@ -250,25 +250,25 @@ def _describe_identifier(identifier: object) -> str:
     return description
 
 
-def _to_relative_artifact_path(path: str) -> str:
+def to_relative_artifact_path(path: str) -> str:
     """Strip any absolute prefix from an artifact path."""
     normalised = path.replace("\\", "/")
-    for root in _ARTIFACT_ROOTS:
+    for root in ARTIFACT_ROOTS:
         idx = normalised.find(root)
         if idx >= 0:
             return normalised[idx:]
     return normalised
 
 
-def _add(screenshots: list[str], seen: set[str], raw: str) -> None:
+def add(screenshots: list[str], seen: set[str], raw: str) -> None:
     """Append one normalised screenshot path if it has not been seen yet."""
-    normalised = _to_relative_artifact_path(raw.strip())
+    normalised = to_relative_artifact_path(raw.strip())
     if normalised not in seen:
         seen.add(normalised)
         screenshots.append(normalised)
 
 
-def _gather_screenshots(evidence: object) -> list[str]:
+def gather_screenshots(evidence: object) -> list[str]:
     if not isinstance(evidence, Mapping):
         return []
     screenshots: list[str] = []
@@ -276,23 +276,23 @@ def _gather_screenshots(evidence: object) -> list[str]:
 
     direct = evidence.get("screenshot")
     if isinstance(direct, str) and direct.strip():
-        _add(screenshots, seen, direct)
+        add(screenshots, seen, direct)
     ux_review = evidence.get("ux_review")
     if isinstance(ux_review, Mapping):
         shot = ux_review.get("screenshot")
         if isinstance(shot, str) and shot.strip():
-            _add(screenshots, seen, shot)
+            add(screenshots, seen, shot)
     vision = evidence.get("vision_analysis")
     if isinstance(vision, Mapping):
         meta = vision.get("meta")
         if isinstance(meta, Mapping):
             shot = meta.get("screenshot")
             if isinstance(shot, str) and shot.strip():
-                _add(screenshots, seen, shot)
+                add(screenshots, seen, shot)
     return screenshots
 
 
-def _finding_stage(finding: Mapping[str, object]) -> str:
+def finding_stage(finding: Mapping[str, object]) -> str:
     evidence = dict(finding.get("evidence", {}) or {})
     explicit = str(evidence.get("stage") or "").strip().lower()
     if explicit:
@@ -306,7 +306,7 @@ def _finding_stage(finding: Mapping[str, object]) -> str:
     return ""
 
 
-def _finding_group_key(finding: Mapping[str, object]) -> str:
+def finding_group_key(finding: Mapping[str, object]) -> str:
     evidence = dict(finding.get("evidence", {}) or {})
     rule_id = str(evidence.get("rule_id") or "").strip()
     if rule_id:
@@ -314,19 +314,19 @@ def _finding_group_key(finding: Mapping[str, object]) -> str:
     return str(finding.get("id") or "").strip()
 
 
-def _normalize_raw_finding(finding: Mapping[str, object]) -> dict[str, Any]:
+def normalize_raw_finding(finding: Mapping[str, object]) -> dict[str, Any]:
     identifier = str(finding.get("id") or "").strip() or "unknown"
     evidence = dict(finding.get("evidence", {}) or {}) if isinstance(finding.get("evidence"), Mapping) else finding.get("evidence")
-    severity = _normalize_status(finding.get("severity"), fallback="INFO")
-    stage = _finding_stage(finding)
+    severity = normalize_status(finding.get("severity"), fallback="INFO")
+    stage = finding_stage(finding)
     component = str(finding.get("category") or "").strip().lower()
-    title = _humanize_identifier(identifier)
-    message = _first_non_empty([
+    title = humanize_identifier(identifier)
+    message = first_non_empty([
         finding.get("message"),
-        _describe_identifier(identifier),
+        describe_identifier(identifier),
         title,
     ])
-    screenshots = _gather_screenshots(evidence)
+    screenshots = gather_screenshots(evidence)
     search_terms = " ".join(
         str(part)
         for part in (
@@ -346,12 +346,12 @@ def _normalize_raw_finding(finding: Mapping[str, object]) -> dict[str, Any]:
         "message": message,
         "status": severity,
         "badge_label": severity if severity != "THREAT" else "THREAT",
-        "tone": _status_tone(severity),
+        "tone": status_tone(severity),
         "component": component,
-        "component_label": _component_label(component),
-        "component_filter": _component_filter_value(component, stage=stage),
+        "component_label": component_label(component),
+        "component_filter": component_filter_value(component, stage=stage),
         "stage": stage,
-        "stage_label": _stage_label(stage),
+        "stage_label": stage_label(stage),
         "source": str(finding.get("source") or "").strip(),
         "finding_category": str(finding.get("finding_category") or "").strip(),
         "evidence": evidence,
@@ -360,7 +360,7 @@ def _normalize_raw_finding(finding: Mapping[str, object]) -> dict[str, Any]:
     }
 
 
-def _build_decision_summary(
+def build_decision_summary(
     run: Mapping[str, object],
     report: Mapping[str, object] | None,
     confidence: Mapping[str, object],
@@ -369,7 +369,7 @@ def _build_decision_summary(
     student_issues: list[dict[str, Any]],
 ) -> dict[str, Any]:
     run_status = str(run.get("status") or "").strip().lower()
-    overall = _coerce_float(((report or {}).get("scores", {}) or {}).get("overall"))
+    overall = coerce_float(((report or {}).get("scores", {}) or {}).get("overall"))
     confidence_level = str(confidence.get("level") or "unknown").strip().lower() or "unknown"
     manual_review_required = bool(review.get("recommended"))
     manual_review_label = "Required" if manual_review_required else "Not required"
@@ -447,33 +447,33 @@ def _build_decision_summary(
 
 
 __all__ = [
-    "_ARTIFACT_ROOTS",
-    "_CONFIDENCE_FLAG_TEXT",
-    "_DETAIL_COMPONENT_LABELS",
-    "_DETAIL_COMPONENT_ORDER",
-    "_DETAIL_STAGE_LABELS",
-    "_DETAIL_STATUS_PRIORITY",
-    "_DETAIL_TONE_BY_STATUS",
-    "_add",
-    "_build_decision_summary",
-    "_clean_path",
-    "_coerce_float",
-    "_component_filter_value",
-    "_component_label",
-    "_describe_identifier",
-    "_ensure_check_stats",
-    "_finding_group_key",
-    "_finding_stage",
-    "_first_non_empty",
-    "_format_submission_datetime",
-    "_gather_screenshots",
-    "_humanize_identifier",
-    "_load_threat_file_contents",
-    "_normalize_raw_finding",
-    "_normalize_status",
-    "_render_evidence_value",
-    "_stage_label",
-    "_status_tone",
-    "_to_rel",
-    "_to_relative_artifact_path",
+    "ARTIFACT_ROOTS",
+    "CONFIDENCE_FLAG_TEXT",
+    "DETAIL_COMPONENT_LABELS",
+    "DETAIL_COMPONENT_ORDER",
+    "DETAIL_STAGE_LABELS",
+    "DETAIL_STATUS_PRIORITY",
+    "DETAIL_TONE_BY_STATUS",
+    "add",
+    "build_decision_summary",
+    "clean_path",
+    "coerce_float",
+    "component_filter_value",
+    "component_label",
+    "describe_identifier",
+    "ensure_check_stats",
+    "finding_group_key",
+    "finding_stage",
+    "first_non_empty",
+    "format_submission_datetime",
+    "gather_screenshots",
+    "humanize_identifier",
+    "load_threat_file_contents",
+    "normalize_raw_finding",
+    "normalize_status",
+    "render_evidence_value",
+    "stage_label",
+    "status_tone",
+    "to_rel",
+    "to_relative_artifact_path",
 ]

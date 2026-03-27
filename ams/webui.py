@@ -18,7 +18,7 @@ from ams.web.routes_marking import marking_bp
 from ams.web.routes_runs import runs_bp
 from ams.web.routes_assignment_mgmt import assignment_mgmt_bp
 from ams.web.routes_teacher_dashboard import teacher_dashboard_bp
-from ams.web.view_helpers import _clean_path, _format_submission_datetime, _render_evidence_value
+from ams.web.view_helpers import clean_path, format_submission_datetime, render_evidence_value
 
 logger = logging.getLogger(__name__)
 MAX_UPLOAD_MB = 25
@@ -44,9 +44,9 @@ def create_app(config: Mapping[str, object] | None = None) -> Flask:
         except Exception as exc:
             logger.warning("Workspace cleanup failed: %s", exc)
 
-    app.jinja_env.filters["clean_path"] = _clean_path
-    app.jinja_env.filters["format_submission_datetime"] = _format_submission_datetime
-    app.jinja_env.globals["render_evidence_value"] = _render_evidence_value
+    app.jinja_env.filters["clean_path"] = clean_path
+    app.jinja_env.filters["format_submission_datetime"] = format_submission_datetime
+    app.jinja_env.globals["render_evidence_value"] = render_evidence_value
 
     init_db()
     try:
