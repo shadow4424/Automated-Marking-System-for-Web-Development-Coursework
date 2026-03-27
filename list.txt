@@ -1,5 +1,4 @@
 .gitignore
-pack_submission.py
 pyproject.toml
 README.md
 ams/cli.py
@@ -158,6 +157,7 @@ tests/sandbox/test_sandbox_factory.py
 tests/sandbox/test_sandbox_integration.py
 tests/sandbox/test_scanner_module.py
 tests/sandbox/test_threat_patterns.py
+tests/sandbox/conftest.py
 tests/scoring/test_score_quantization.py
 tests/scoring/test_scoring_engine.py
 tests/scoring/test_scoring_with_runtime_evidence.py
