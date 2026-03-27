@@ -69,33 +69,8 @@
     }
 
     function _ensureStyles() {
-        if (document.getElementById('ams-widget-style')) return;
-        var style = document.createElement('style');
-        style.id = 'ams-widget-style';
-        style.textContent = [
-            '@keyframes ams-wspin{to{transform:rotate(360deg)}}',
-            '#ams-job-widget{position:fixed;bottom:1.25rem;right:1.25rem;z-index:9000;width:300px;background:#1e1e2e;color:#e2e8f0;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.4);font-family:inherit;font-size:.875rem;border:1px solid rgba(255,255,255,.08);overflow:hidden;}',
-            '#ams-job-widget .wg-header{display:flex;align-items:center;gap:.55rem;padding:.65rem 1rem;cursor:pointer;user-select:none;background:#2d2d44;}',
-            '#ams-job-widget .wg-header:hover{background:#363655;}',
-            '#ams-job-widget .wg-spinner{width:14px;height:14px;flex-shrink:0;border:2px solid rgba(255,255,255,.2);border-top-color:#6366f1;border-radius:50%;animation:ams-wspin .7s linear infinite;}',
-            '#ams-job-widget .wg-title{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
-            '#ams-job-widget .wg-badge{background:#6366f1;color:#fff;border-radius:9999px;font-size:.72rem;padding:.1em .45em;flex-shrink:0;}',
-            '#ams-job-widget .wg-chevron{flex-shrink:0;transition:transform .2s;}',
-            '#ams-job-widget.wg-open .wg-chevron{transform:rotate(180deg);}',
-            '#ams-job-widget .wg-body{display:none;}',
-            '#ams-job-widget.wg-open .wg-body{display:block;}',
-            '#ams-job-widget .wg-row{display:flex;align-items:center;gap:.5rem;padding:.6rem 1rem;border-top:1px solid rgba(255,255,255,.06);}',
-            '#ams-job-widget .wg-row-icon{flex-shrink:0;}',
-            '#ams-job-widget .wg-row-info{flex:1;min-width:0;}',
-            '#ams-job-widget .wg-row-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
-            '#ams-job-widget .wg-row-meta{opacity:.55;font-size:.78rem;margin-top:.1rem;}',
-            '#ams-job-widget .wg-view{color:#818cf8;text-decoration:none;font-size:.8rem;flex-shrink:0;}',
-            '#ams-job-widget .wg-view:hover{text-decoration:underline;}',
-            '#ams-job-widget .wg-dismiss{background:none;border:none;color:rgba(255,255,255,.35);cursor:pointer;padding:0 0 0 .35rem;font-size:1rem;line-height:1;flex-shrink:0;}',
-            '#ams-job-widget .wg-dismiss:hover{color:rgba(255,255,255,.7);}',
-            '.wg-done{color:#34d399;}.wg-fail{color:#f87171;}'
-        ].join('');
-        document.head.appendChild(style);
+        // Styles moved to static/css/pages/job-widget.css - loaded globally via base.html.
+        // This stub is kept so call sites below do not break.
     }
 
     function _esc(value) {
@@ -191,7 +166,7 @@
         if (!_widgetEl || !document.body.contains(_widgetEl)) {
             _widgetEl = document.createElement('div');
             _widgetEl.id = 'ams-job-widget';
-            document.body.appendChild(_widgetEl);
+            document.body.append(_widgetEl);
             _widgetEl.addEventListener('click', _handleClick);
         }
 
