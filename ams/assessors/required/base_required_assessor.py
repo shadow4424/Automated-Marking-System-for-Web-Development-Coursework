@@ -245,9 +245,18 @@ class BaseRequiredAssessor(Assessor):
                 snippet_lines = [f"{j + 1:>4} | {lines[j]}" for j in range(start, end)]
                 return "\n".join(snippet_lines)
         
-        # No match — show first 10 lines as context
-        preview_lines = [f"{j + 1:>4} | {lines[j]}" for j in range(min(10, len(lines)))]
-        return "\n".join(preview_lines)
+        # No direct match: show both start and end context so downstream
+        # feedback/partial-credit logic can still see late-file attempts.
+        if len(lines) <= 20:
+            preview_lines = [f"{j + 1:>4} | {lines[j]}" for j in range(len(lines))]
+            return "\n".join(preview_lines)
+
+        head_count = 10
+        tail_count = 10
+        head = [f"{j + 1:>4} | {lines[j]}" for j in range(head_count)]
+        tail_start = len(lines) - tail_count
+        tail = [f"{j + 1:>4} | {lines[j]}" for j in range(tail_start, len(lines))]
+        return "\n".join(head + ["  ... | ..."] + tail)
     
     def _is_html_like(self) -> bool:
         """Return True if this assessor deals with HTML-like content."""

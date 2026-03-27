@@ -182,15 +182,17 @@ class AssessmentPipeline:
 
             # =================================================================
             # Artifact Integrity Verification — ensure screenshots exist
+            # Only relevant when browser checks are enabled for this profile.
             # =================================================================
-            try:
-                from ams.sandbox.artifact_validator import validate_screenshot
-                _validated_shot, artifact_findings = validate_screenshot(workspace_path)
-                findings.extend(artifact_findings)
-                if artifact_findings:
-                    logger.warning("Artifact validation: screenshot missing or corrupt")
-            except Exception as exc:
-                logger.warning("Artifact validation failed: %s", exc)
+            if profile_spec.enabled_browser_checks:
+                try:
+                    from ams.sandbox.artifact_validator import validate_screenshot
+                    _validated_shot, artifact_findings = validate_screenshot(workspace_path)
+                    findings.extend(artifact_findings)
+                    if artifact_findings:
+                        logger.warning("Artifact validation: screenshot missing or corrupt")
+                except Exception as exc:
+                    logger.warning("Artifact validation failed: %s", exc)
 
             # =================================================================
             # LLM Integration Hook (Phase 1 & 2)
@@ -609,14 +611,16 @@ class AssessmentPipeline:
                 for item in chunk:
                     rm = item["rule_metadata"]
                     if should_evaluate_partial_credit(0.0, rm.get("partial_allowed", False)):
+                        # Use rule_id (not finding.id) so each failed rule is uniquely tracked.
+                        pc_key = item["rule_id"]
                         pc_items.append({
-                            "rule_name": item["finding"].id,
+                            "rule_name": pc_key,
                             "student_code": item["code_snippet"],
                             "error_context": item["finding"].message,
                             "category": rm.get("category", "unknown"),
                             "partial_range": rm.get("partial_range", (0.0, 0.5)),
                         })
-                        pc_finding_map[item["finding"].id] = item
+                        pc_finding_map[pc_key] = item
                 chunk_pc_items.append(pc_items)
                 chunk_pc_finding_maps.append(pc_finding_map)
 
@@ -720,7 +724,8 @@ class AssessmentPipeline:
                             f"{rule_name}: {raw_error or reasoning or 'LLM partial-credit evaluation failed.'}",
                         )
                     llm_evidence["partial_credit"].append({
-                        "finding_id": rule_name,
+                        "finding_id": pi["finding"].id,
+                        "rule_id": rule_name,
                         "hybrid_score": hybrid_score.to_dict(),
                     })
 

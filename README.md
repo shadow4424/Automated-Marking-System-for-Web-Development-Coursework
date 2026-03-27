@@ -5,119 +5,182 @@
 
 ## Overview
 
-The AMS (Automated Marking System) is a powerful, pipeline-based assessment tool designed specifically for undergraduate web development coursework. It addresses the unique challenges of marking heterogeneous, multi-file submissions containing HTML, CSS, JavaScript, PHP, SQL, and API components.
+AMS is a pipeline-based assessment system for undergraduate web development coursework.
+It supports heterogeneous, multi-file submissions (HTML, CSS, JavaScript, PHP, SQL, API code) and combines deterministic checks with controlled AI-assisted feedback.
 
-Unlike traditional automated markers that look for exact outputs, AMS combines **deterministic testing** (static analysis and behavioural tests) with **controlled, AI-assisted feedback**. This hybrid approach ensures fair, scalable, and reproducible marking while providing rich, explainable feedback that helps students understand their mistakes. 
+The goal is fair, scalable, and reproducible marking with actionable feedback for students.
 
-## Core Features
+## Key Features
 
-- **Secure Sandboxing**: Student code is executed safely in isolated Docker containers, protecting the host environment from malicious or runaway scripts.
-- **Browser Automation & Vision**: Uses Playwright to simulate user interactions and LLM Vision capabilities to test visual layout, responsiveness, and dynamic DOM updates.
-- **Multi-Language Static Analysis**: Robust AST-based static analysis to detect necessary structures (e.g., HTML semantics, CSS rules, JavaScript control flow, PHP database queries) without enforcing rigid one-size-fits-all solutions.
-- **AI-Assisted Feedback**: Leverages advanced LLMs (local or API-driven) to summarise deterministic findings into clear, pedagogical feedback—crucially, without letting the AI dictate the final mark.
-- **Assignment Analytics**: Open a single assignment analytics view that refreshes from all current submissions for that assignment and highlights cohort patterns for moderation.
-- **Web UI & CLI**: Instructors can use the intuitive `Flask`-based Web UI for quick, visual reviews, or rely on the powerful CLI for scriptable batch operations.
+- Secure sandboxed execution using Docker.
+- Static and behavioral assessment across multiple languages.
+- Browser-based interaction checks with Playwright.
+- Optional LLM-assisted arbitration and feedback generation.
+- Assignment-level analytics for moderation.
+- CLI and Web UI workflows.
 
-## Architecture Pipeline
+## Pipeline
 
-Submissions flow through a rigorous, rule-based pipeline:
-1. **Acquisition & Normalisation**: Extracts and normalises student ZIP structures.
-2. **Setup**: Configures a secure Docker sandbox environment.
-3. **Static Assessors**: Analyses raw code (HTML/CSS parsing, simple AST checks).
-4. **Behavioural Assessors**: Executes deterministic tests against the sandbox (API endpoints, DB checks).
-5. **Playwright Assessors**: Spins up a headless browser for UI and interactivity checks.
-6. **LLM Arbitration**: Optional step where the LLM resolves conflicting signals (e.g., code looks right but UI is broken) and generates final feedback.
-7. **Reporting**: Outputs structured findings and final scores (1.0, 0.5, 0.0) into actionable reports.
+1. Acquisition and normalization of student submissions.
+2. Sandbox setup.
+3. Static assessors.
+4. Behavioral assessors.
+5. Playwright assessors.
+6. Optional LLM arbitration.
+7. Structured reporting (including 1.0 / 0.5 / 0.0 scoring outputs).
 
-## Installation & Setup
+## Installation and Setup
 
 ### Prerequisites
-- Python 3.10 or higher
+
+- Python 3.10+
 - Docker (required for secure sandboxing)
-- (Optional but recommended) Locally running LLM via LM Studio, or valid API keys (e.g., OpenAI) configured.
+- Optional: LM Studio or API credentials for LLM-backed workflows
 
 ### Developer Setup
 
-1. **Clone the repository:**
-   ```bash
-   git clone <repository_url>
-   cd Automated-Marking-System-for-Web-Development-Coursework
-   ```
-2. **Install the package and dependencies:**
-   To install the CLI and all necessary extras (including the Web UI, demo tooling, and test suite):
-   ```bash
-   pip install -e .[demo,dev]
-   ```
-   This installs all core dependencies (`flask`, `requests`, `pydantic`, `numpy`) plus dev/demo extras (`pytest`, `playwright`, `matplotlib`, `openai`).
+1. Clone the repository:
 
-   **Optional — LLM provider only** (if you do not need the full dev suite):
-   ```bash
-   pip install -e .[llm]
-   ```
-   This adds `openai` for connecting to OpenAI-compatible endpoints (OpenAI API, LM Studio local models, etc.).
+```bash
+git clone <repository_url>
+cd Automated-Marking-System-for-Web-Development-Coursework
+```
 
-3. **Install Playwright Browsers:**
-   Required for UI testing.
-   ```bash
-   python -m playwright install
-   ```
+2. Install package and dependencies:
 
-### Running the Docker Sandbox
-For the sandboxed behavioural tests to operate securely, you must have Docker running and the local sandbox image built.
-To build the required sandbox environment, run the provided script from the repository root:
+```bash
+pip install -e .[demo,dev]
+```
+
+This installs core dependencies and demo/dev extras (including pytest, playwright, matplotlib, and openai).
+
+Optional (LLM provider only):
+
+```bash
+pip install -e .[llm]
+```
+
+3. Install Playwright browsers:
+
+```bash
+python -m playwright install
+```
+
+### Build Sandbox Image
+
+From repository root:
+
 ```bash
 ./docker/build.sh
 ```
-If you start the `ams` CLI without the Docker image available, it will display a warning and instructions to either build it or bypass using `AMS_SANDBOX_MODE=subprocess`.
 
-## Usage Guide
+If the Docker image is missing, AMS will warn and provide guidance. You can also bypass Docker with `AMS_SANDBOX_MODE=subprocess` when appropriate.
 
-### 1. The Examiner Quick Path (Demo)
-Run a full end-to-end demonstration. This command processes a sample submission, calculates scores, and produces a full report.
+## Usage
+
+### Demo Run
+
 ```bash
 AMS_RUNS_ROOT=demo_out ams demo --profile fullstack
 ```
 
-### 2. Using the Web UI
-Start the simple teacher-facing web application to upload and review individual submissions interactively:
+### Web UI
+
 ```bash
 FLASK_ENV=development python -m ams.webui
 ```
-Then, open your browser to `http://localhost:5000`.
-- *Note: In the UI, open an assignment and use the `Analytics` button to view fresh assignment-wide analytics.*
 
-### 3. Command Line Interface (CLI)
-The CLI allows integration with scripts and CI/CD systems.
+Open `http://localhost:5000` in your browser.
 
-**Mark a single submission:**
+### CLI Examples
+
+Mark a single submission:
+
 ```bash
 ams mark path/to/submission_dir -w path/to/workspace -o report.json --profile frontend
 ```
 
-**Run Batch Assessment:**
-Process a directory filled with student zip files or folders. Overrides global target paths.
+Run batch assessment:
+
 ```bash
 ams batch path/to/input_folder --profile fullstack -o ams_batch_runs/run_name
 ```
 
-## Contributing and Development
+## Evaluation Modes
 
-The test suite ensures the stability of parsing, sandboxing, and assessment logic.
-Run all tests using pytest:
+Accuracy evaluation - compare pipeline scores against ground-truth labels:
+
+```bash
+ams eval --accuracy evaluation_dataset/ \
+  --profile frontend_interactive \
+  --profile-config evaluation_dataset/eval_profile.json \
+  --out results/accuracy/
+```
+
+Consistency evaluation - run one submission N times and measure determinism:
+
+```bash
+ams eval --consistency evaluation_dataset/correct/correct_001 \
+  --runs 5 \
+  --profile frontend_interactive \
+  --profile-config evaluation_dataset/eval_profile.json \
+  --out results/consistency/
+```
+
+Robustness evaluation - test pipeline behaviour on malformed/adversarial inputs:
+
+```bash
+ams eval --robustness evaluation_dataset/ \
+  --profile frontend_interactive \
+  --profile-config evaluation_dataset/eval_profile.json \
+  --out results/robustness/
+```
+
+LLM marking evaluation - compare STATIC_ONLY vs STATIC_PLUS_LLM on attempt submissions:
+
+```bash
+ams eval --llm-marking evaluation_dataset/ \
+  --profile frontend_interactive \
+  --profile-config evaluation_dataset/eval_profile.json \
+  --llm-profile-config evaluation_dataset/eval_profile_llm.json \
+  --out results/llm_marking/
+```
+
+### Shared Flags
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| --profile | frontend_interactive | AMS profile to use for marking |
+| --profile-config PATH | none | Custom profile JSON (disables browser/behavioral checks) |
+| --llm-profile-config PATH | none | Custom profile JSON for the LLM run in --llm-marking mode |
+| --runs N | 5 | Number of repeated runs for --consistency |
+| --out / -o PATH | ams_eval_runs/<timestamp> | Output directory for results |
+
+### Profile Config Files
+
+| File | Purpose |
+| --- | --- |
+| evaluation_dataset/eval_profile.json | Static-only, no browser/behavioral checks; use for accuracy/consistency/robustness |
+| evaluation_dataset/eval_profile_llm.json | LLM + partial credit enabled, no browser/behavioral checks; use with --llm-marking |
+
+## Testing
+
+Run all tests:
+
 ```bash
 pytest
 ```
-To run tests while skipping slow sandbox or LLM logic:
+
+Skip slow sandbox or LLM tests:
+
 ```bash
 pytest -m "not slow"
 ```
 
-## Debug Commands
+## Troubleshooting Commands
 
-If you need to reset the system to default settings or troubleshoot issues, here are the most important debug commands:
+Hard reset sandbox containers:
 
-**1. Hard Reset All Docker Containers:**
-Useful if the system is hanging on Docker operations or failing to list containers.
 ```powershell
 docker stop $(docker ps -a -q --filter ancestor=ams-sandbox)
 docker rm -f $(docker ps -a -q --filter ancestor=ams-sandbox)
@@ -125,27 +188,28 @@ docker rm -f $(docker ps -a -q --filter ancestor=ams-sandbox)
 docker rm -f $(docker ps -a -q --filter name="ams-threat-")
 ```
 
-**2. Clear Run History (Hard Delete):**
-This deletes all run data and resets the dashboard to empty.
+Clear web run history:
+
 ```powershell
 Remove-Item -Recurse -Force ams_web_runs\*
 ```
 
-**3. Clear LLM Cache Database:**
-Forces the LLM layer to regenerate responses instead of using the local SQLite cache.
+Clear LLM cache database:
+
 ```powershell
 Remove-Item -Force ams\cache.db
 ```
 
-**4. Force Rebuild Docker Sandbox:**
-Useful if package dependencies have changed.
+Force rebuild sandbox image:
+
 ```bash
 ./docker/build.sh --no-cache
 ```
 
-**5. GitHub Integration Environment Variables:**
+GitHub integration environment variables:
+
 ```bash
 export AMS_GITHUB_CLIENT_ID="your-github-client-id"
 export AMS_GITHUB_CLIENT_SECRET="your-github-client-secret"
 export AMS_GITHUB_OAUTH_CALLBACK="http://localhost:5000/api/github/callback"
-```bash
+```

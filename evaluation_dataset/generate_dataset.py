@@ -731,7 +731,7 @@ _PARTIAL_JS_3 = ""  # Empty JS
 #   css.has_media_queries  (partial_allowed=True) — attempt commented-out or malformed @media
 # ---------------------------------------------------------------------------
 
-# Attempt 1: JS uses var + onclick assignment + setAttribute (shows intent, fails static patterns)
+# Attempt 1: JS uses var + onsubmit + document.write (clear intent, legacy patterns)
 _ATTEMPT_JS_1 = """\
 // Contact form handler - uses older JavaScript patterns
 // Student attempted event handling and DOM interaction
@@ -745,11 +745,8 @@ function validateEmail(email) {
 }
 
 function showMessage(msg) {
-  var div = document.createElement('div');
-  div.setAttribute('id', 'msg-box');
-  div.setAttribute('class', 'message');
-  document.body.appendChild(div);
-  document.getElementById('msg-box').setAttribute('data-msg', msg);
+  // Intent is clear, but implementation uses a legacy rendering approach.
+  document.write('<p class="legacy-msg">' + msg + '</p>');
 }
 
 function handleSubmit() {
@@ -763,72 +760,56 @@ function handleSubmit() {
   return false;
 }
 
-// Attempt at event handling using old-style assignment (not addEventListener)
+// Attempt at event handling using old-style assignment (legacy pattern)
 if (form) {
   form.onsubmit = handleSubmit;
 }
 
-// Attempt at interacting with inputs using old-style event assignment
 if (nameField) {
   nameField.onfocus = function() {
-    nameField.setAttribute('style', 'border-color: blue;');
-  };
-  nameField.onblur = function() {
-    nameField.setAttribute('style', 'border-color: \\'\\';');
+    // Legacy feedback path instead of modern classList / style updates.
+    document.write('<small>Editing name</small>');
   };
 }
 """
 
-# Attempt 2: JS uses arrow function + some DOM but avoids the exact static patterns
+# Attempt 2: JS keeps modern query APIs but uses var + onsubmit + document.write
 _ATTEMPT_JS_2 = """\
-// Registration form - student attempted modern JS but with non-standard DOM patterns
+// Registration form - student attempted validation with legacy event handling
 
-const registerForm = document.querySelector('#registerForm');
-const usernameInput = document.querySelector('[name="username"]');
-const passwordInput = document.querySelector('[name="password"]');
+var registerForm = document.querySelector('#registerForm');
+var usernameInput = document.querySelector('[name="username"]');
+var passwordInput = document.querySelector('[name="password"]');
 
-const validatePassword = (pw) => pw.length >= 8;
+function validatePassword(pw) {
+  return pw.length >= 8;
+}
 
-const markInvalid = (field, msg) => {
-  // Attempt DOM feedback using write-back to dataset attributes
-  field.setAttribute('data-error', msg);
-  field.setAttribute('aria-invalid', 'true');
-  // Student tried to show an error but used dataset API not innerHTML
-  var parent = field.parentElement;
-  if (parent) {
-    parent.setAttribute('data-has-error', 'true');
-  }
-};
-
-const clearInvalid = (field) => {
-  field.setAttribute('data-error', '');
-  field.setAttribute('aria-invalid', 'false');
-};
+function markInvalid(msg) {
+  // Legacy output path that still shows student intent.
+  document.write('<p class="warn">' + msg + '</p>');
+}
 
 // Student attempted validation logic — shows clear intent
-const validateForm = () => {
-  let isValid = true;
-  const uname = usernameInput.value.trim();
-  const pw = passwordInput.value;
+function validateForm() {
+  var isValid = true;
+  var uname = usernameInput.value.trim();
+  var pw = passwordInput.value;
 
   if (uname.length < 3) {
-    markInvalid(usernameInput, 'Username too short');
+    markInvalid('Username too short');
     isValid = false;
-  } else {
-    clearInvalid(usernameInput);
   }
 
   if (!validatePassword(pw)) {
-    markInvalid(passwordInput, 'Password must be 8+ chars');
+    markInvalid('Password must be 8+ chars');
     isValid = false;
-  } else {
-    clearInvalid(passwordInput);
   }
 
   return isValid;
-};
+}
 
-// Attempted event handling via form.onsubmit (not addEventListener)
+// Attempted event handling via form.onsubmit (legacy pattern)
 if (registerForm) {
   registerForm.onsubmit = function(e) {
     e.preventDefault();
@@ -867,11 +848,11 @@ h1 {
   padding: 1rem;
 }
 
-/* Student attempted flexbox but only on one element */
+/* Student intended flexible layout but implementation is incomplete */
 header {
   background-color: var(--blue);
   padding: 1rem;
-  display: flex;
+  display: block;
 }
 
 nav a {
@@ -1193,11 +1174,11 @@ def create_dataset() -> list[dict]:
         ),
     })
 
-    # Attempt 3: Full HTML+JS, CSS lacks media queries (commented out) and full flexbox
+    # Attempt 3: Full HTML+legacy JS, CSS lacks media queries (commented out) and full flexbox
     _make_submission(DATASET_ROOT / "llm_attempts" / "attempt_003", {
         "index.html": _FULL_HTML,
         "style.css":  _ATTEMPT_CSS_3,
-        "script.js":  _FULL_JS,
+      "script.js":  _ATTEMPT_JS_1,
     })
     entries.append({
         "id": "attempt_003",
@@ -1207,8 +1188,8 @@ def create_dataset() -> list[dict]:
         "expected_overall": None,
         "expected_components": {},
         "notes": (
-            "Full HTML+JS, CSS has flexbox on one element only and no @media queries "
-            "(commented out). Fails css.has_media_queries and css.has_flexbox fully. "
+          "Full HTML+legacy JS, CSS has flexbox on one element only and no @media queries "
+          "(commented out). Fails css.has_media_query and JS modern-event checks. "
             "LLM should detect the attempt and award partial credit."
         ),
     })

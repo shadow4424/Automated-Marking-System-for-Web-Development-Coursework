@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -42,10 +43,35 @@ def _extract_llm_partial_credit(report: dict[str, Any]) -> list[dict]:
 
 
 def _extract_llm_adjusted_rules(report: dict[str, Any]) -> list[dict]:
-    """Extract score_evidence rationale items where llm_adjusted=True."""
-    score_ev = report.get("score_evidence") or {}
-    rationale = score_ev.get("rationale") or []
-    return [r for r in rationale if isinstance(r, dict) and r.get("llm_adjusted")]
+    """Extract rules that received LLM hybrid-score adjustments.
+
+    The per-rule LLM hybrid score is attached to each finding's evidence.
+    We treat a finding as LLM-adjusted when evidence.hybrid_score.final_score
+    exists and is > 0.0.
+    """
+    adjusted: list[dict[str, Any]] = []
+    for finding in report.get("findings") or []:
+        evidence = finding.get("evidence") if isinstance(finding, dict) else None
+        if not isinstance(evidence, dict):
+            continue
+
+        hybrid = evidence.get("hybrid_score")
+        if not isinstance(hybrid, dict):
+            continue
+
+        final_score = hybrid.get("final_score")
+        if not isinstance(final_score, (int, float)):
+            continue
+        if float(final_score) <= 0.0:
+            continue
+
+        adjusted.append({
+            "rule_id": evidence.get("rule_id") or finding.get("id") or "",
+            "finding_id": finding.get("id") or "",
+            "final_score": float(final_score),
+        })
+
+    return adjusted
 
 
 def _detect_llm_error(report: dict[str, Any]) -> bool:
@@ -189,8 +215,24 @@ def run_llm_marking_evaluation(
     out_dir.mkdir(parents=True, exist_ok=True)
     workspaces = out_dir / "workspaces"
 
-    static_pipeline = AssessmentPipeline(scoring_mode=ScoringMode.STATIC_ONLY)
-    llm_pipeline = AssessmentPipeline(scoring_mode=ScoringMode.STATIC_PLUS_LLM)
+    # Resolve LLM scoring mode from llm_profile_config payload when provided.
+    # Custom profile resolution does not currently carry scoring_mode, so read
+    # and map this value directly from JSON.
+    llm_mode = ScoringMode.STATIC_PLUS_LLM
+    if llm_profile_config:
+        try:
+            payload = json.loads(llm_profile_config.read_text(encoding="utf-8"))
+            mode_raw = str(payload.get("scoring_mode") or "").strip().lower()
+            if mode_raw == ScoringMode.STATIC_ONLY.value:
+                llm_mode = ScoringMode.STATIC_ONLY
+            elif mode_raw == ScoringMode.STATIC_PLUS_LLM.value:
+                llm_mode = ScoringMode.STATIC_PLUS_LLM
+        except Exception as exc:
+            logger.warning(
+                "Failed to resolve scoring_mode from llm_profile_config %s: %s. Falling back to STATIC_PLUS_LLM.",
+                llm_profile_config,
+                exc,
+            )
 
     entries = get_llm_attempt_entries(dataset_path)
     if not entries:
@@ -203,11 +245,13 @@ def run_llm_marking_evaluation(
     records: list[dict] = []
     print(f"Running LLM marking evaluation: {len(entries)} attempt submissions")
 
+    missing_records: list[dict[str, Any]] = []
+    work_items: list[tuple[ManifestEntry, Path]] = []
     for entry in entries:
         submission_path = entry.abs_path(dataset_path)
         if not submission_path.exists():
             logger.warning("Submission path missing: %s", submission_path)
-            records.append({
+            missing_records.append({
                 "id": entry.id,
                 "category": entry.category,
                 "profile": profile,
@@ -223,9 +267,15 @@ def run_llm_marking_evaluation(
                 "llm_pipeline_error": f"Path not found: {submission_path}",
                 "notes": entry.notes,
             })
-            continue
+        else:
+            work_items.append((entry, submission_path))
 
-        record = _compare_submission(
+    def _run_one(item: tuple[ManifestEntry, Path]) -> dict[str, Any]:
+        entry, submission_path = item
+        # Pipelines are created per task to keep the threaded execution isolated.
+        static_pipeline = AssessmentPipeline(scoring_mode=ScoringMode.STATIC_ONLY)
+        llm_pipeline = AssessmentPipeline(scoring_mode=llm_mode)
+        return _compare_submission(
             entry=entry,
             submission_path=submission_path,
             workspaces=workspaces,
@@ -235,13 +285,48 @@ def run_llm_marking_evaluation(
             static_profile_config=static_profile_config,
             llm_profile_config=llm_profile_config,
         )
-        records.append(record)
-        delta_str = f"+{record['score_delta']:.4f}" if (record["score_delta"] or 0) > 0 else str(record["score_delta"])
+
+    # Parallelize per-submission evaluation with up to 4 workers.
+    threaded_records: dict[str, dict[str, Any]] = {}
+    max_workers = min(4, max(1, len(work_items)))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_run_one, item): item[0] for item in work_items}
+        for future in as_completed(futures):
+            entry = futures[future]
+            try:
+                threaded_records[entry.id] = future.result()
+            except Exception as exc:
+                logger.warning("LLM marking worker failed for %s: %s", entry.id, exc)
+                threaded_records[entry.id] = {
+                    "id": entry.id,
+                    "category": entry.category,
+                    "profile": profile,
+                    "static_overall": None,
+                    "llm_overall": None,
+                    "score_delta": None,
+                    "llm_upgraded": False,
+                    "llm_error_detected": True,
+                    "partial_credit_items": [],
+                    "adjusted_rules_count": 0,
+                    "adjusted_rules": [],
+                    "static_pipeline_error": "",
+                    "llm_pipeline_error": f"Worker failed: {exc}",
+                    "notes": entry.notes,
+                }
+
+    # Preserve manifest order in output rows/logging.
+    records.extend(missing_records)
+    for entry in entries:
+        rec = threaded_records.get(entry.id)
+        if rec is None:
+            continue
+        records.append(rec)
+        delta_str = f"+{rec['score_delta']:.4f}" if (rec["score_delta"] or 0) > 0 else str(rec["score_delta"])
         print(
             f"  [{entry.category}] {entry.id}: "
-            f"static={record['static_overall']}, llm={record['llm_overall']}, "
-            f"delta={delta_str}, upgraded={record['llm_upgraded']}, "
-            f"llm_error={record['llm_error_detected']}"
+            f"static={rec['static_overall']}, llm={rec['llm_overall']}, "
+            f"delta={delta_str}, upgraded={rec['llm_upgraded']}, "
+            f"llm_error={rec['llm_error_detected']}"
         )
 
     # ── Aggregate metrics ──────────────────────────────────────────────────

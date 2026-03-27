@@ -968,10 +968,19 @@ def _extract_snippet(component: str, content: str, pattern: str) -> str:
             start = max(0, index - 2)
             end = min(len(lines), index + 3)
             return "\n".join(f"{line_no + 1:>4} | {lines[line_no]}" for line_no in range(start, end))
-    return "\n".join(
-        f"{line_no + 1:>4} | {lines[line_no]}"
-        for line_no in range(min(10, len(lines)))
-    )
+
+    # No direct token match: provide both start and end context to avoid
+    # hiding late-file implementation attempts (for example legacy handlers).
+    if len(lines) <= 20:
+        return "\n".join(
+            f"{line_no + 1:>4} | {lines[line_no]}"
+            for line_no in range(len(lines))
+        )
+
+    head = [f"{line_no + 1:>4} | {lines[line_no]}" for line_no in range(10)]
+    tail_start = len(lines) - 10
+    tail = [f"{line_no + 1:>4} | {lines[line_no]}" for line_no in range(tail_start, len(lines))]
+    return "\n".join(head + ["  ... | ..."] + tail)
 
 
 def _evaluate_rule(component: str, rule: RequiredRule, content: str) -> tuple[int, bool]:

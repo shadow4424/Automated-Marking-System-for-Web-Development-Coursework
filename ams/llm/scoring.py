@@ -210,8 +210,46 @@ def evaluate_partial_credit(
             if "attempted" in lower_reasoning or "minor syntax" in lower_reasoning or "typo" in lower_reasoning:
                 logger.info(f"Overriding intent to YES based on reasoning keywords: {result.reasoning}")
                 result.intent_detected = True
+
+        heuristic_floor = 0.0
+
+        # Rule-specific deterministic fallbacks for common legacy patterns.
+        # These are intentionally conservative and only apply when the LLM
+        # returned intent=no, to avoid inflating scores.
+        if not result.intent_detected:
+            code_lower = sanitized_code.lower()
+            rule_lower = str(rule_name or "").lower()
+
+            if rule_lower == "js.has_event_listener":
+                legacy_handlers = [
+                    ".onsubmit", ".onclick", ".onchange", ".oninput", ".onblur", ".onfocus",
+                ]
+                if any(token in code_lower for token in legacy_handlers):
+                    result.intent_detected = True
+                    heuristic_floor = 0.25
+
+            elif rule_lower == "js.has_dom_manipulation":
+                legacy_dom_signals = [
+                    "document.write(", "setattribute(", "classname", "insertadjacenthtml(",
+                ]
+                if any(token in code_lower for token in legacy_dom_signals):
+                    result.intent_detected = True
+                    heuristic_floor = 0.2
+
+            elif rule_lower == "css.has_media_query":
+                if "@media" in code_lower:
+                    result.intent_detected = True
+                    heuristic_floor = 0.2
+
+            elif rule_lower == "css.has_flexbox":
+                flex_signals = ["display: flex", "display:flex", "flex-direction", "justify-content", "align-items"]
+                if any(token in code_lower for token in flex_signals):
+                    result.intent_detected = True
+                    heuristic_floor = 0.2
         
         suggested = float(parsed.get("suggested_score", 0.0))
+        if result.intent_detected and heuristic_floor > 0.0:
+            suggested = max(suggested, heuristic_floor)
         
         # Enforce partial_range constraints (Phase 2.2)
         min_partial, max_partial = partial_range
@@ -363,32 +401,29 @@ def evaluate_partial_credit_batch(
     if not items:
         return {}
 
-    # Single item — delegate to the standard function
-    if len(items) == 1:
-        it = items[0]
-        hs = evaluate_partial_credit(
-            rule_name=it["rule_name"],
-            student_code=it["student_code"],
-            error_context=it["error_context"],
-            category=it.get("category", "unknown"),
-            partial_range=it.get("partial_range", (0.0, 0.5)),
-        )
-        return {it["rule_name"]: hs}
-
-    rule_names = [it["rule_name"] for it in items]
-
-    try:
-        return _evaluate_batch_internal(items, rule_names)
-    except Exception as e:
-        logger.warning("Batch partial credit failed, using fallbacks: %s", e)
-        return {
-            rn: HybridScore(
+    # Reliability-first behavior: evaluate each rule independently so the
+    # same fallback heuristics are always applied (including legacy intent
+    # detection) regardless of batch size.
+    results: dict[str, HybridScore] = {}
+    for it in items:
+        rn = it["rule_name"]
+        try:
+            results[rn] = evaluate_partial_credit(
+                rule_name=rn,
+                student_code=it["student_code"],
+                error_context=it["error_context"],
+                category=it.get("category", "unknown"),
+                partial_range=it.get("partial_range", (0.0, 0.5)),
+            )
+        except Exception as e:
+            logger.warning("Partial credit fallback failed for %s: %s", rn, e)
+            results[rn] = HybridScore(
                 static_score=0.0,
                 reasoning=f"LLM error: {e}",
                 raw_response={"error": str(e)},
             )
-            for rn in rule_names
-        }
+
+    return results
 
 
 def _evaluate_batch_internal(

@@ -151,6 +151,7 @@ class ScoringEngine:
         browser_evidence: List[BrowserEvidence],
     ) -> Tuple[Mapping[str, object], ScoreEvidenceBundle]:
         requirement_results = list(context.requirement_results or [])
+        self._apply_llm_hybrid_to_requirement_results(requirement_results, findings)
         relevant_components = list(resolved_config.required_components)
         generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         findings_by_category: Dict[str, List[Finding]] = {c: [] for c in self.COMPONENTS}
@@ -282,6 +283,52 @@ class ScoringEngine:
             artefact_inventory=context.artefact_inventory.to_dict() if context.artefact_inventory else {},
         )
         return scores, evidence
+
+    def _apply_llm_hybrid_to_requirement_results(
+        self,
+        requirement_results: List[RequirementEvaluationResult],
+        findings: List[Finding],
+    ) -> None:
+        """Fold LLM hybrid partial credit into requirement results before weighted scoring."""
+        hybrid_scores_by_rule: Dict[str, float] = {}
+        for finding in findings:
+            if not finding.id.endswith(".REQ.FAIL"):
+                continue
+            evidence = finding.evidence if isinstance(finding.evidence, Mapping) else {}
+            rule_id = str(evidence.get("rule_id") or "").strip()
+            if not rule_id:
+                continue
+            hybrid = evidence.get("hybrid_score")
+            if not isinstance(hybrid, Mapping):
+                continue
+            final_score = hybrid.get("final_score")
+            if not isinstance(final_score, (int, float)):
+                continue
+            clamped = max(0.0, min(1.0, float(final_score)))
+            existing = hybrid_scores_by_rule.get(rule_id)
+            if existing is None or clamped > existing:
+                hybrid_scores_by_rule[rule_id] = clamped
+
+        if not hybrid_scores_by_rule:
+            return
+
+        for result in requirement_results:
+            if result.requirement_id not in hybrid_scores_by_rule:
+                continue
+            if result.aggregation_mode == "CAPPED_PENALTY":
+                continue
+            if not isinstance(result.score, (int, float)):
+                continue
+            if result.status not in {"FAIL", "PARTIAL"}:
+                continue
+
+            llm_score = round(hybrid_scores_by_rule[result.requirement_id], 2)
+            result.score = llm_score
+            result.status = "PASS" if llm_score >= 1.0 else "PARTIAL"
+            evidence = dict(result.evidence or {})
+            evidence["llm_adjusted"] = True
+            evidence["llm_score"] = llm_score
+            result.evidence = evidence
 
     def _score_component_from_requirements(
         self,
