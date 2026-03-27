@@ -21,6 +21,16 @@ from ams.core.models import (
 from ams.core.profiles import get_relevant_components
 
 
+def _extract_component_result(report: Mapping[str, object], component_name: str) -> Dict[str, object]:
+    component_result = report[component_name]
+    return {
+        "rationale": component_result.get("rationale", []),
+        "static_summary": component_result.get("static_summary"),
+        "behavioural_summary": component_result.get("behavioural_summary"),
+        "browser_summary": component_result.get("browser_summary"),
+    }
+
+
 class ScoringEngine:
     """Deterministic scoring engine producing explainable scores."""
 
@@ -117,10 +127,7 @@ class ScoringEngine:
                 "score": component_results[component]["score"],
                 "required": component in relevant_components,
                 "finding_ids": finding_ids,
-                "rationale": component_results[component].get("rationale", []),
-                "static_summary": component_results[component].get("static_summary"),
-                "behavioural_summary": component_results[component].get("behavioural_summary"),
-                "browser_summary": component_results[component].get("browser_summary"),
+                **_extract_component_result(component_results, component),
             }
 
         evidence = ScoreEvidenceBundle(
@@ -141,7 +148,7 @@ class ScoringEngine:
         )
         return scores, evidence
 
-    def _score_from_requirements(
+    def _run_static_evaluation(
         self,
         findings: List[Finding],
         *,
@@ -149,16 +156,39 @@ class ScoringEngine:
         resolved_config: ResolvedAssignmentConfig,
         behavioural_evidence: List[BehaviouralEvidence],
         browser_evidence: List[BrowserEvidence],
-    ) -> Tuple[Mapping[str, object], ScoreEvidenceBundle]:
+    ) -> Dict[str, object]:
         requirement_results = list(context.requirement_results or [])
-        self._apply_llm_hybrid_to_requirement_results(requirement_results, findings)
         relevant_components = list(resolved_config.required_components)
         generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         findings_by_category: Dict[str, List[Finding]] = {c: [] for c in self.COMPONENTS}
         for finding in findings:
             if finding.category in findings_by_category:
                 findings_by_category[finding.category].append(finding)
+        return {
+            "behavioural_evidence": behavioural_evidence,
+            "browser_evidence": browser_evidence,
+            "context": context,
+            "findings_by_category": findings_by_category,
+            "generated_at": generated_at,
+            "relevant_components": relevant_components,
+            "requirement_results": requirement_results,
+            "resolved_config": resolved_config,
+        }
 
+    def _enrich_with_llm_hybrid(
+        self,
+        static_results: Mapping[str, object],
+        findings: List[Finding],
+    ) -> Tuple[Mapping[str, object], ScoreEvidenceBundle]:
+        requirement_results = list(static_results["requirement_results"])
+        self._apply_llm_hybrid_to_requirement_results(requirement_results, findings)
+        relevant_components = list(static_results["relevant_components"])
+        generated_at = str(static_results["generated_at"])
+        findings_by_category = dict(static_results["findings_by_category"])
+        resolved_config = static_results["resolved_config"]
+        context = static_results["context"]
+        behavioural_evidence = list(static_results["behavioural_evidence"])
+        browser_evidence = list(static_results["browser_evidence"])
         component_results: Dict[str, dict] = {}
         component_summaries: Dict[str, ComponentScoreSummary] = {}
         for component in self.COMPONENTS:
@@ -250,10 +280,7 @@ class ScoringEngine:
                 "required": component in relevant_components,
                 "weight": float(resolved_config.component_weights.get(component, 0.0)),
                 "requirements": component_requirements,
-                "rationale": component_results[component].get("rationale", []),
-                "static_summary": component_results[component].get("static_summary"),
-                "behavioural_summary": component_results[component].get("behavioural_summary"),
-                "browser_summary": component_results[component].get("browser_summary"),
+                **_extract_component_result(component_results, component),
             }
 
         evidence = ScoreEvidenceBundle(
@@ -283,6 +310,24 @@ class ScoringEngine:
             artefact_inventory=context.artefact_inventory.to_dict() if context.artefact_inventory else {},
         )
         return scores, evidence
+
+    def _score_from_requirements(
+        self,
+        findings: List[Finding],
+        *,
+        context: SubmissionContext,
+        resolved_config: ResolvedAssignmentConfig,
+        behavioural_evidence: List[BehaviouralEvidence],
+        browser_evidence: List[BrowserEvidence],
+    ) -> Tuple[Mapping[str, object], ScoreEvidenceBundle]:
+        static_results = self._run_static_evaluation(
+            findings,
+            context=context,
+            resolved_config=resolved_config,
+            behavioural_evidence=behavioural_evidence,
+            browser_evidence=browser_evidence,
+        )
+        return self._enrich_with_llm_hybrid(static_results, findings)
 
     def _apply_llm_hybrid_to_requirement_results(
         self,
@@ -503,27 +548,36 @@ class ScoringEngine:
         score, rationale, summaries = scorer(findings)
         return score, rationale, summaries
 
-    def _calculate_weighted_rule_score(self, findings: List[Finding], component: str) -> Tuple[float, List[dict]]:
-        """Calculate weighted score from required rule findings (HTML.REQ.PASS/FAIL, etc.).
-        
-        LLM Integration:
-        - Reads `hybrid_score` from finding evidence for partial credit
-        - Reads `vision_analysis` for visual check overrides
-        """
+    def _build_rule_weight_map(
+        self,
+        findings: List[Finding],
+        component: str,
+    ) -> Dict[str, float]:
+        _ = component
+        return {
+            str(finding.evidence.get("rule_id", "unknown")): float(finding.evidence.get("weight", 1.0))
+            for finding in findings
+            if finding.id.endswith(".REQ.PASS") or finding.id.endswith(".REQ.FAIL")
+        }
+
+    def _apply_weights_to_findings(
+        self,
+        findings: List[Finding],
+        weight_map: Mapping[str, float],
+    ) -> Tuple[float, List[dict]]:
         req_pass_findings = [f for f in findings if f.id.endswith(".REQ.PASS")]
         req_fail_findings = [f for f in findings if f.id.endswith(".REQ.FAIL")]
-        
+
         if not req_pass_findings and not req_fail_findings:
-            return 0.0, []  # No required rule findings
-        
+            return 0.0, []
+
         total_weight = 0.0
         passed_weight = 0.0
         rule_details = []
-        
-        # Process pass findings
+
         for finding in req_pass_findings:
-            weight = float(finding.evidence.get("weight", 1.0))
-            rule_id = finding.evidence.get("rule_id", "unknown")
+            rule_id = str(finding.evidence.get("rule_id", "unknown"))
+            weight = float(weight_map.get(rule_id, finding.evidence.get("weight", 1.0)))
             total_weight += weight
             passed_weight += weight
             rule_details.append({
@@ -532,27 +586,22 @@ class ScoringEngine:
                 "weight": weight,
                 "finding_ids": [finding.id],
             })
-        
-        # Process fail findings with LLM enrichment support
+
         for finding in req_fail_findings:
-            weight = float(finding.evidence.get("weight", 1.0))
-            rule_id = finding.evidence.get("rule_id", "unknown")
+            rule_id = str(finding.evidence.get("rule_id", "unknown"))
+            weight = float(weight_map.get(rule_id, finding.evidence.get("weight", 1.0)))
             total_weight += weight
-            
-            # Default: failed rule gets 0 credit
+
             partial_credit = 0.0
             status = "fail"
             llm_adjusted = False
-            
-            # Check for vision analysis override (Phase 3)
+
             vision = finding.evidence.get("vision_analysis", {})
             if isinstance(vision, dict) and vision.get("status") == "PASS":
-                # Vision says it's fine, override static FAIL
                 partial_credit = weight
                 status = "pass_vision"
                 llm_adjusted = True
-            
-            # Check for LLM hybrid_score partial credit (Phase 2)
+
             elif isinstance(finding.evidence, dict):
                 hybrid = finding.evidence.get("hybrid_score", {})
                 if isinstance(hybrid, dict) and hybrid.get("final_score") is not None:
@@ -560,9 +609,9 @@ class ScoringEngine:
                     partial_credit = weight * partial_score
                     status = f"partial_{int(partial_score * 100)}%"
                     llm_adjusted = True
-            
+
             passed_weight += partial_credit
-            
+
             rule_details.append({
                 "rule": rule_id,
                 "status": status,
@@ -571,25 +620,69 @@ class ScoringEngine:
                 "llm_adjusted": llm_adjusted,
                 "finding_ids": [finding.id],
             })
-        
+
         if total_weight == 0:
             return 0.0, []
-        
+
         weighted_score = passed_weight / total_weight
         return weighted_score, rule_details
 
-    def _score_html(self, findings: List[Finding], browser_evidence: List[BrowserEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+    def _calculate_weighted_rule_score(self, findings: List[Finding], component: str) -> Tuple[float, List[dict]]:
+        """Calculate weighted score from required rule findings (HTML.REQ.PASS/FAIL, etc.).
+
+        LLM Integration:
+        - Reads `hybrid_score` from finding evidence for partial credit
+        - Reads `vision_analysis` for visual check overrides
+        """
+        weight_map = self._build_rule_weight_map(findings, component)
+        return self._apply_weights_to_findings(findings, weight_map)
+
+    def _extract_component_features(self, analysis: Mapping[str, object]) -> Dict[str, object]:
+        return {
+            "score": float(analysis["score"]),
+            "rationale": list(analysis["rationale"]),
+            "summaries": dict(analysis["summaries"]),
+        }
+
+    def _compute_component_score(
+        self,
+        features: Mapping[str, object],
+        component_name: str,
+    ) -> Tuple[float, List[dict], Dict[str, object]]:
+        _ = component_name
+        return (
+            float(features["score"]),
+            list(features["rationale"]),
+            dict(features["summaries"]),
+        )
+
+    def _score_language_component(
+        self,
+        component_name: str,
+        findings: List[Finding],
+        evidence,
+        analyser_fn,
+    ) -> Tuple[float, List[dict], Dict[str, object]]:
+        analysis = analyser_fn(findings, evidence)
+        features = self._extract_component_features(analysis)
+        return self._compute_component_score(features, component_name)
+
+    def _analyse_html(
+        self,
+        findings: List[Finding],
+        browser_evidence: List[BrowserEvidence],
+    ) -> Dict[str, object]:
         rationale: List[dict] = []
         summaries: Dict[str, object] = {}
         summaries["static_summary"] = self._static_summary("html", findings)
         ids = {f.id for f in findings}
         if "HTML.SKIPPED" in ids:
             rationale.append({"rule": "html_skipped", "finding_ids": ["HTML.SKIPPED"], "note": "HTML not required for this profile"})
-            return 0.0, rationale, summaries
+            return {"score": 0.0, "rationale": rationale, "summaries": summaries}
         if "HTML.MISSING_FILES" in ids or "HTML.REQ.MISSING_FILES" in ids:
             missing_ids = [fid for fid in ids if "MISSING_FILES" in fid]
             rationale.append({"rule": "html_missing", "finding_ids": missing_ids, "note": "HTML required but files missing"})
-            return 0.0, rationale, summaries
+            return {"score": 0.0, "rationale": rationale, "summaries": summaries}
 
         parse_ok = "HTML.PARSE_OK" in ids
         parse_suspect = "HTML.PARSE_SUSPECT" in ids
@@ -661,27 +754,30 @@ class ScoringEngine:
                     }
                 )
 
-        return base_score, rationale, summaries
+        return {"score": base_score, "rationale": rationale, "summaries": summaries}
 
-    def _score_css(self, findings: List[Finding]) -> Tuple[float, List[dict], Dict[str, object]]:
+    def _analyse_css(
+        self,
+        findings: List[Finding],
+        _evidence: object = None,
+    ) -> Dict[str, object]:
         rationale: List[dict] = []
         summaries: Dict[str, object] = {}
         summaries["static_summary"] = self._static_summary("css", findings)
         ids = {f.id for f in findings}
         if "CSS.SKIPPED" in ids:
             rationale.append({"rule": "css_skipped", "finding_ids": ["CSS.SKIPPED"], "note": "CSS not required for this profile"})
-            return 0.0, rationale, summaries  # SKIPPED components don't contribute to score
+            return {"score": 0.0, "rationale": rationale, "summaries": summaries}
         if "CSS.MISSING_FILES" in ids or "CSS.REQ.MISSING_FILES" in ids:
             missing_ids = [fid for fid in ids if "MISSING_FILES" in fid]
             rationale.append({"rule": "css_missing", "finding_ids": missing_ids, "note": "CSS required but files missing"})
-            return 0.0, rationale, summaries
+            return {"score": 0.0, "rationale": rationale, "summaries": summaries}
 
         balanced = "CSS.BRACES_BALANCED" in ids
         unbalanced = "CSS.BRACES_UNBALANCED" in ids
         no_rules = "CSS.NO_RULES" in ids
         selectors_approx = sum(int(f.evidence.get("selectors_approx", 0)) for f in findings if f.id == "CSS.EVIDENCE")
 
-        # Calculate weighted rule score
         weighted_rule_score, rule_details = self._calculate_weighted_rule_score(findings, "css")
         if rule_details:
             rationale.extend(rule_details)
@@ -710,11 +806,9 @@ class ScoringEngine:
             rationale.append({"rule": "css_default_partial", "finding_ids": [fid for fid in ids]})
             base_score = 0.5
 
-        # Use 100% required rules weight - rules now include structure checks
         if weighted_rule_score > 0:
             base_score = weighted_rule_score
 
-        # Apply code quality penalties
         quality_penalty = self._calculate_quality_penalty(findings, "css")
         if quality_penalty > 0:
             base_score = max(0.0, base_score - quality_penalty)
@@ -724,20 +818,24 @@ class ScoringEngine:
                 "note": f"Code quality issues reduced score by {quality_penalty:.2f}",
             })
 
-        return base_score, rationale, summaries
+        return {"score": base_score, "rationale": rationale, "summaries": summaries}
 
-    def _score_js(self, findings: List[Finding], browser_evidence: List[BrowserEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+    def _analyse_js(
+        self,
+        findings: List[Finding],
+        browser_evidence: List[BrowserEvidence],
+    ) -> Dict[str, object]:
         rationale: List[dict] = []
         summaries: Dict[str, object] = {}
         summaries["static_summary"] = self._static_summary("js", findings)
         ids = {f.id for f in findings}
         if "JS.SKIPPED" in ids:
             rationale.append({"rule": "js_skipped", "finding_ids": ["JS.SKIPPED"], "note": "JS not required for this profile"})
-            return 0.0, rationale, summaries  # SKIPPED components don't contribute to score
+            return {"score": 0.0, "rationale": rationale, "summaries": summaries}
         if "JS.MISSING_FILES" in ids or "JS.REQ.MISSING_FILES" in ids:
             missing_ids = [fid for fid in ids if "MISSING_FILES" in fid]
             rationale.append({"rule": "js_missing", "finding_ids": missing_ids, "note": "JS required but files missing"})
-            return 0.0, rationale, summaries
+            return {"score": 0.0, "rationale": rationale, "summaries": summaries}
 
         syntax_ok = "JS.SYNTAX_OK" in ids
         syntax_suspect = "JS.SYNTAX_SUSPECT" in ids or "JS.NO_CODE" in ids
@@ -756,13 +854,12 @@ class ScoringEngine:
         has_activity = any(value > 0 for value in evidence_totals.values())
         browser_view = self._browser_view(browser_evidence)
         summaries["browser_summary"] = browser_view
-        
-        # Calculate weighted rule score
+
         weighted_rule_score, rule_details = self._calculate_weighted_rule_score(findings, "js")
         if rule_details:
             rationale.extend(rule_details)
             summaries["required_rules_weighted_score"] = weighted_rule_score
-        
+
         base_score = 0.5
 
         if syntax_ok and has_activity:
@@ -787,11 +884,9 @@ class ScoringEngine:
             rationale.append({"rule": "js_default_partial", "finding_ids": [fid for fid in ids]})
             base_score = 0.5
 
-        # Use 100% required rules weight - rules now include structure checks
         if weighted_rule_score > 0:
             base_score = weighted_rule_score
 
-        # Apply code quality penalties
         quality_penalty = self._calculate_quality_penalty(findings, "js")
         if quality_penalty > 0:
             base_score = max(0.0, base_score - quality_penalty)
@@ -801,7 +896,6 @@ class ScoringEngine:
                 "note": f"Code quality issues reduced score by {quality_penalty:.2f}",
             })
 
-        # Browser adjustments
         if browser_view:
             console_errors = browser_view.get("console_errors", 0)
             page_status = browser_view.get("page_status")
@@ -838,22 +932,19 @@ class ScoringEngine:
                 )
             if interacted and page_status in {"fail", "timeout"}:
                 base_score = min(base_score, 0.5)
-        
-        # Functional test adjustments
+
         functional_test_score = self._calculate_functional_test_score(findings, browser_evidence)
         if functional_test_score is not None:
-            # Blend functional test results: 70% base score, 30% functional tests
             base_score = 0.7 * base_score + 0.3 * functional_test_score
             rationale.append({
                 "rule": "functional_tests_score",
                 "finding_ids": [f.id for f in findings if "BROWSER.FUNCTIONAL" in f.id],
                 "note": f"Functional tests contributed {functional_test_score:.2f} to score",
             })
-        
-        # Performance and error penalties
+
         performance_penalty = self._calculate_performance_penalty(findings)
         error_penalty = self._calculate_error_penalty(findings)
-        
+
         if performance_penalty > 0:
             base_score = max(0.0, base_score - performance_penalty)
             rationale.append({
@@ -861,7 +952,7 @@ class ScoringEngine:
                 "finding_ids": [f.id for f in findings if "BROWSER.PERFORMANCE" in f.id and f.severity == Severity.FAIL],
                 "note": f"Performance issues reduced score by {performance_penalty:.2f}",
             })
-        
+
         if error_penalty > 0:
             base_score = max(0.0, base_score - error_penalty)
             rationale.append({
@@ -869,31 +960,34 @@ class ScoringEngine:
                 "finding_ids": [f.id for f in findings if "BROWSER.ERROR" in f.id and f.severity == Severity.FAIL],
                 "note": f"Runtime errors reduced score by {error_penalty:.2f}",
             })
-        
-        # Missing required features penalty
+
         missing_features = [f for f in findings if "REQUIRED_FEATURES_MISSING" in f.id]
         if missing_features:
-            base_score = max(0.0, base_score - 0.3)  # 30% penalty for missing required features
+            base_score = max(0.0, base_score - 0.3)
             rationale.append({
                 "rule": "missing_required_features",
                 "finding_ids": [f.id for f in missing_features],
                 "note": "Missing required features reduced score by 0.30",
             })
 
-        return base_score, rationale, summaries
+        return {"score": base_score, "rationale": rationale, "summaries": summaries}
 
-    def _score_php(self, findings: List[Finding], behavioural_evidence: List[BehaviouralEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+    def _analyse_php(
+        self,
+        findings: List[Finding],
+        behavioural_evidence: List[BehaviouralEvidence],
+    ) -> Dict[str, object]:
         rationale: List[dict] = []
         summaries: Dict[str, object] = {}
         summaries["static_summary"] = self._static_summary("php", findings)
         ids = {f.id for f in findings}
         if "PHP.SKIPPED" in ids:
             rationale.append({"rule": "php_skipped", "finding_ids": ["PHP.SKIPPED"], "note": "PHP not required for this profile"})
-            return 0.0, rationale, summaries  # SKIPPED components don't contribute to score
+            return {"score": 0.0, "rationale": rationale, "summaries": summaries}
         if "PHP.MISSING_FILES" in ids or "PHP.REQ.MISSING_FILES" in ids:
             missing_ids = [fid for fid in ids if "MISSING_FILES" in fid]
             rationale.append({"rule": "php_missing", "finding_ids": missing_ids, "note": "PHP required but files missing"})
-            return 0.0, rationale, summaries
+            return {"score": 0.0, "rationale": rationale, "summaries": summaries}
 
         tag_ok = "PHP.TAG_OK" in ids
         tag_missing = "PHP.TAG_MISSING" in ids
@@ -906,13 +1000,12 @@ class ScoringEngine:
                 evidence_totals[key] += int(entry.evidence.get(key, 0))
 
         has_usage = any(value > 0 for value in evidence_totals.values())
-        
-        # Calculate weighted rule score
+
         weighted_rule_score, rule_details = self._calculate_weighted_rule_score(findings, "php")
         if rule_details:
             rationale.extend(rule_details)
             summaries["required_rules_weighted_score"] = weighted_rule_score
-        
+
         base_score = 0.5
 
         if tag_ok and (syntax_ok or has_usage):
@@ -937,11 +1030,9 @@ class ScoringEngine:
             rationale.append({"rule": "php_default_partial", "finding_ids": [fid for fid in ids]})
             base_score = 0.5
 
-        # Use 100% required rules weight - rules now include structure checks
         if weighted_rule_score > 0:
             base_score = weighted_rule_score
 
-        # Apply code quality and security penalties (security issues are critical for PHP)
         quality_penalty = self._calculate_quality_penalty(findings, "php")
         if quality_penalty > 0:
             base_score = max(0.0, base_score - quality_penalty)
@@ -982,20 +1073,24 @@ class ScoringEngine:
         if any_fail and not static_attempt:
             base_score = 0.0
 
-        return base_score, rationale, summaries
+        return {"score": base_score, "rationale": rationale, "summaries": summaries}
 
-    def _score_sql(self, findings: List[Finding], behavioural_evidence: List[BehaviouralEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+    def _analyse_sql(
+        self,
+        findings: List[Finding],
+        behavioural_evidence: List[BehaviouralEvidence],
+    ) -> Dict[str, object]:
         rationale: List[dict] = []
         summaries: Dict[str, object] = {}
         summaries["static_summary"] = self._static_summary("sql", findings)
         ids = {f.id for f in findings}
         if "SQL.SKIPPED" in ids:
             rationale.append({"rule": "sql_skipped", "finding_ids": ["SQL.SKIPPED"], "note": "SQL not required for this profile"})
-            return 0.0, rationale, summaries  # SKIPPED components don't contribute to score
+            return {"score": 0.0, "rationale": rationale, "summaries": summaries}
         if "SQL.MISSING_FILES" in ids or "SQL.REQ.MISSING_FILES" in ids:
             missing_ids = [fid for fid in ids if "MISSING_FILES" in fid]
             rationale.append({"rule": "sql_missing", "finding_ids": missing_ids, "note": "SQL required but files missing"})
-            return 0.0, rationale, summaries
+            return {"score": 0.0, "rationale": rationale, "summaries": summaries}
 
         structure_ok = "SQL.STRUCTURE_OK" in ids
         no_semicolons = "SQL.NO_SEMICOLONS" in ids
@@ -1007,13 +1102,12 @@ class ScoringEngine:
                 evidence_totals[key] += int(entry.evidence.get(key, 0))
 
         has_activity = any(value > 0 for value in evidence_totals.values())
-        
-        # Calculate weighted rule score
+
         weighted_rule_score, rule_details = self._calculate_weighted_rule_score(findings, "sql")
         if rule_details:
             rationale.extend(rule_details)
             summaries["required_rules_weighted_score"] = weighted_rule_score
-        
+
         base_score = 0.5
 
         if structure_ok and has_activity:
@@ -1038,11 +1132,9 @@ class ScoringEngine:
             rationale.append({"rule": "sql_default_partial", "finding_ids": [fid for fid in ids]})
             base_score = 0.5
 
-        # Use 100% required rules weight - rules now include structure checks
         if weighted_rule_score > 0:
             base_score = weighted_rule_score
 
-        # Apply code quality and security penalties
         quality_penalty = self._calculate_quality_penalty(findings, "sql")
         if quality_penalty > 0:
             base_score = max(0.0, base_score - quality_penalty)
@@ -1071,9 +1163,13 @@ class ScoringEngine:
             base_score = min(base_score, 0.5)
             rationale.append({"rule": "sql_behavioural_skipped", "finding_ids": ["BEHAVIOUR.SQL_EXEC_SKIPPED"], "note": "SQL behavioural checks skipped"})
 
-        return base_score, rationale, summaries
+        return {"score": base_score, "rationale": rationale, "summaries": summaries}
 
-    def _score_api(self, findings: List[Finding], behavioural_evidence: List[BehaviouralEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+    def _analyse_api(
+        self,
+        findings: List[Finding],
+        behavioural_evidence: List[BehaviouralEvidence],
+    ) -> Dict[str, object]:
         rationale: List[dict] = []
         summaries: Dict[str, object] = {}
         summaries["static_summary"] = self._static_summary("api", findings)
@@ -1081,14 +1177,13 @@ class ScoringEngine:
 
         if "API.SKIPPED" in ids:
             rationale.append({"rule": "api_skipped", "finding_ids": ["API.SKIPPED"], "note": "API not required for this profile"})
-            return 0.0, rationale, summaries
+            return {"score": 0.0, "rationale": rationale, "summaries": summaries}
 
         if "API.MISSING_FILES" in ids or "API.REQ.MISSING_FILES" in ids:
             missing_ids = [fid for fid in ids if "MISSING_FILES" in fid]
             rationale.append({"rule": "api_missing", "finding_ids": missing_ids, "note": "API required but no server-side or client-side files found"})
-            return 0.0, rationale, summaries
+            return {"score": 0.0, "rationale": rationale, "summaries": summaries}
 
-        # Static evidence: any API.EVIDENCE finding indicates detected patterns
         evidence_findings = [f for f in findings if f.id == "API.EVIDENCE"]
         php_api_evidence = [ev for ev in evidence_findings if ev.evidence.get("file_type") == "php" and ev.evidence.get("is_api_endpoint")]
         js_api_evidence = [ev for ev in evidence_findings if ev.evidence.get("file_type") == "js" and ev.evidence.get("has_api_patterns")]
@@ -1096,7 +1191,6 @@ class ScoringEngine:
         has_client_calls = len(js_api_evidence) > 0
         has_static_evidence = has_server_endpoint or has_client_calls
 
-        # Calculate weighted required rule score
         weighted_rule_score, rule_details = self._calculate_weighted_rule_score(findings, "api")
         if rule_details:
             rationale.extend(rule_details)
@@ -1119,7 +1213,6 @@ class ScoringEngine:
         if weighted_rule_score > 0:
             base_score = max(base_score, weighted_rule_score)
 
-        # Behavioural: API exec result
         behavioural_view = self._behavioural_view(behavioural_evidence)
         summaries["behavioural_summary"] = behavioural_view
         api_exec = behavioural_view.get("api_exec")
@@ -1139,7 +1232,27 @@ class ScoringEngine:
         if not rationale:
             rationale.append({"rule": "api_no_evidence", "finding_ids": [], "note": "No API evidence detected"})
 
-        return base_score, rationale, summaries
+        return {"score": base_score, "rationale": rationale, "summaries": summaries}
+
+    def _score_html(self, findings: List[Finding], browser_evidence: List[BrowserEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+        return self._score_language_component(
+            "html", findings, browser_evidence, self._analyse_html
+        )
+
+    def _score_css(self, findings: List[Finding]) -> Tuple[float, List[dict], Dict[str, object]]:
+        return self._score_language_component("css", findings, None, self._analyse_css)
+
+    def _score_js(self, findings: List[Finding], browser_evidence: List[BrowserEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+        return self._score_language_component("js", findings, browser_evidence, self._analyse_js)
+
+    def _score_php(self, findings: List[Finding], behavioural_evidence: List[BehaviouralEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+        return self._score_language_component("php", findings, behavioural_evidence, self._analyse_php)
+
+    def _score_sql(self, findings: List[Finding], behavioural_evidence: List[BehaviouralEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+        return self._score_language_component("sql", findings, behavioural_evidence, self._analyse_sql)
+
+    def _score_api(self, findings: List[Finding], behavioural_evidence: List[BehaviouralEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+        return self._score_language_component("api", findings, behavioural_evidence, self._analyse_api)
 
     def _static_summary(self, component: str, findings: List[Finding]) -> Dict[str, object]:
         ids = [f.id for f in findings]
