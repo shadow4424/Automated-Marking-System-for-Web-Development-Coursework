@@ -368,6 +368,22 @@ class RequirementEvaluationEngine:
                 confidence_flags=["browser_skipped"],
             )
 
+        if not context.files_for("js", relevant_only=True):
+            return RequirementEvaluationResult(
+                requirement_id=definition.id,
+                component=definition.component,
+                description=definition.description,
+                stage=definition.stage,
+                aggregation_mode=definition.aggregation_mode,
+                score="SKIPPED",
+                status="SKIPPED",
+                weight=definition.weight,
+                required=definition.required,
+                evidence={"reason": "no_js_files"},
+                skipped_reason="no_js_files",
+                confidence_flags=["js_files_missing"],
+            )
+
         browser = context.browser_evidence[0]
         actions = list(browser.actions or [])
         interacted = any(item.get("type") in {"form_submit", "click"} for item in actions)

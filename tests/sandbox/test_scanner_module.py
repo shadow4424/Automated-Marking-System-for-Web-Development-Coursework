@@ -6,7 +6,6 @@ to avoid triggering host antivirus heuristics on this file.
 from __future__ import annotations
 
 import base64
-import os
 from pathlib import Path
 
 import pytest
@@ -215,12 +214,14 @@ class TestScanner:
             + ", ".join(f"{t.pattern_name} at {t.file}:{t.line}" for t in result.threats)
         )
 
-    @pytest.mark.skipif(os.name == "nt", reason="Symlinks may require admin on Windows")
     def test_symlink_escape_detection(self, scanner, submission_dir, tmp_path):
         outside = tmp_path / "outside_secret"
         outside.write_text("secret data", encoding="utf-8")
         symlink = submission_dir / "link_to_secret"
-        symlink.symlink_to(outside)
+        try:
+            symlink.symlink_to(outside)
+        except OSError:
+            pytest.skip("Symlink creation requires elevated privileges on this system")
         result = scanner.scan(submission_dir)
         cats = [t.category for t in result.threats]
         assert ThreatCategory.SYMLINK_ATTACK in cats
