@@ -80,14 +80,13 @@ class AssessmentPipeline:
                 self._vision_enabled = False
         return self._vision_analyst
 
-    def run(
+    def _setup_run(
         self,
         submission_path: Path,
         workspace_path: Path,
-        profile: str = "frontend",
-        metadata: Mapping[str, object] | None = None,
-        skip_threat_scan: bool = False,
-    ) -> Path:
+        profile: str,
+        metadata: Mapping[str, object] | None,
+    ) -> tuple[SubmissionContext, ResolvedAssignmentConfig]:
         resolved_config = resolve_assignment_config(profile, metadata=metadata)
         context = self._prepare_context(
             submission_path,
@@ -103,10 +102,9 @@ class AssessmentPipeline:
         context.metadata["scoring_mode"] = self.scoring_mode.value
         context.metadata["llm_error_detected"] = False
         context.metadata["llm_error_messages"] = []
-
-        # ── Record sandbox status in run metadata ────────────────────
         try:
             from ams.sandbox.config import get_sandbox_status
+
             sandbox_status = get_sandbox_status()
             context.metadata["sandbox"] = sandbox_status
             if sandbox_status.get("enforced"):
@@ -119,23 +117,22 @@ class AssessmentPipeline:
         except Exception as exc:
             logger.warning("Unable to determine sandbox status: %s", exc)
             context.metadata["sandbox"] = {"enforced": False, "message": str(exc)}
-
-        # Add submission metadata to context
         if metadata:
             context.metadata["submission_metadata"] = metadata
-
-        # Derive run_id from workspace directory name for container naming
         context.metadata["run_id"] = workspace_path.name
+        return context, resolved_config
 
+    def _run_analysis(
+        self,
+        context: SubmissionContext,
+        config: ResolvedAssignmentConfig,
+        skip_threat_scan: bool,
+    ) -> dict[str, object]:
         findings: List[Finding] = []
-
-        # =================================================================
-        # Threat Scanning — pre-execution inspection of submission files
-        # =================================================================
         if skip_threat_scan:
             logger.warning(
-                "Threat scan BYPASSED for run %s — instructor override active.",
-                workspace_path.name,
+                "Threat scan BYPASSED for run %s - instructor override active.",
+                context.workspace_path.name,
             )
             context.metadata["threat_detected"] = False
             context.metadata["threat_override"] = True
@@ -148,7 +145,7 @@ class AssessmentPipeline:
                 context.metadata["container_retain"] = container_retain
                 logger.warning(
                     "Threat scanner flagged submission with %d finding(s). "
-                    "container_retain=%s  — skipping further assessment.",
+                    "container_retain=%s  - skipping further assessment.",
                     len(threat_findings),
                     container_retain,
                 )
@@ -156,127 +153,131 @@ class AssessmentPipeline:
                 context.metadata["threat_detected"] = False
                 context.metadata["container_retain"] = False
 
-        # When threats are detected, skip all further assessment stages
-        # (assessors, LLM enrichment, UX review) to avoid executing
-        # potentially malicious code.  Jump straight to scoring/reporting.
+        profile_spec = config.profile
+        llm_evidence: dict = {}
         if not context.metadata.get("threat_detected"):
-            profile_spec = resolved_config.profile
             assessors = self.assessors or _default_assessors(
                 profile_spec,
                 container_retain=context.metadata.get("container_retain", False),
                 run_id=context.metadata.get("run_id"),
             )
-
             for assessor in assessors:
                 findings.extend(assessor.run(context))
-
             _requirement_results, requirement_findings = self.requirement_engine.evaluate(
                 context,
                 findings,
             )
             findings.extend(requirement_findings)
-
-            # Add CONFIG warnings for required components with no required rules
             findings.extend(self._check_config_warnings(profile_spec, context))
-
-            # =================================================================
-            # Artifact Integrity Verification — ensure screenshots exist
-            # Only relevant when browser checks are enabled for this profile.
-            # =================================================================
             if profile_spec.enabled_browser_checks:
                 try:
                     from ams.sandbox.artifact_validator import validate_screenshot
-                    _validated_shot, artifact_findings = validate_screenshot(workspace_path)
+
+                    _validated_shot, artifact_findings = validate_screenshot(context.workspace_path)
                     findings.extend(artifact_findings)
                     if artifact_findings:
                         logger.warning("Artifact validation: screenshot missing or corrupt")
                 except Exception as exc:
                     logger.warning("Artifact validation failed: %s", exc)
-
-            # =================================================================
-            # LLM Integration Hook (Phase 1 & 2)
-            # =================================================================
-            llm_evidence: dict = {}
             if self._should_use_llm():
                 findings, llm_evidence = self._enrich_findings_with_llm(
                     findings, profile_spec, context,
                 )
-
-            # =================================================================
-            # Phase D: Conflict Resolution
-            # =================================================================
-            # Resolve conflicts between Static and Visual findings before scoring
             findings = resolve_conflicts(findings)
-        else:
-            profile_spec = resolved_config.profile
-            llm_evidence = {}
 
-        # When threats are detected the submission is unsafe — force score to 0.
+        return {
+            "findings": findings,
+            "llm_evidence": llm_evidence,
+            "profile_name": str(context.metadata.get("profile") or profile_spec.name),
+            "metadata": context.metadata.get("submission_metadata"),
+        }
+
+    def _generate_report(
+        self,
+        findings: dict[str, object],
+        context: SubmissionContext,
+        config: ResolvedAssignmentConfig,
+    ) -> Path:
+        profile = str(findings["profile_name"])
+        llm_evidence = findings["llm_evidence"]
+        finding_items = list(findings["findings"])
+        metadata = findings.get("metadata")
+
         if context.metadata.get("threat_detected"):
             scores = {"overall": 0.0, "by_component": {}}
             score_evidence = None
         else:
             scores, score_evidence = self.scoring_engine.score_with_evidence(
-                findings,
+                finding_items,
                 context=context,
-                resolved_config=resolved_config,
+                resolved_config=config,
                 behavioural_evidence=context.behavioural_evidence,
                 browser_evidence=context.browser_evidence,
             )
 
-        # =================================================================
-        # UX Review — qualitative, NON-SCORING feedback per page
-        # (skipped when threats are detected)
-        # =================================================================
         ux_reviews: list = []
-        if not context.metadata.get("threat_detected") and self._should_use_llm() and self._vision_enabled:
+        if (
+            not context.metadata.get("threat_detected")
+            and self._should_use_llm()
+            and self._vision_enabled
+        ):
             ux_findings, ux_reviews = self._run_ux_reviews(
-                context, profile, findings,
+                context, profile, finding_items,
             )
-            # Append UX findings *after* scoring so they are visible in the
-            # report but have zero impact on the student's grade.
-            findings.extend(ux_findings)
+            finding_items.extend(ux_findings)
             if "ux_reviews" not in llm_evidence:
                 llm_evidence["ux_reviews"] = []
             llm_evidence["ux_reviews"].extend(ux_reviews)
 
         if context.metadata.get("llm_error_detected"):
-            findings.append(self._build_llm_error_review_finding(context, profile))
-        
-        report_path = workspace_path / "report.json"
+            finding_items.append(self._build_llm_error_review_finding(context, profile))
+
+        report_path = context.workspace_path / "report.json"
         ReportWriter(report_path).write(
-            context, findings, scores, 
-            score_evidence=score_evidence, 
+            context,
+            finding_items,
+            scores,
+            score_evidence=score_evidence,
             metadata=metadata,
             llm_evidence=llm_evidence if llm_evidence else None,
         )
-        
-        # Generate HTML report
         try:
             from ams.io.html_reporter import HTMLReporter
             import json
-            
-            # Load the JSON report for HTML generation
+
             with open(report_path, "r", encoding="utf-8") as f:
                 report_data = json.load(f)
-            
-            # Find screenshot if available (pass context for Playwright captures)
-            screenshot_path = self._find_screenshot(workspace_path, context)
-            
+
+            screenshot_path = self._find_screenshot(context.workspace_path, context)
             html_reporter = HTMLReporter()
             html_path = html_reporter.generate(
                 report_data=report_data,
-                output_path=workspace_path,
+                output_path=context.workspace_path,
                 screenshot_path=screenshot_path,
             )
             logger.info(f"Generated HTML report: {html_path}")
         except Exception as e:
             logger.warning(f"Failed to generate HTML report: {e}")
 
-        # ── Cleanup: remove redundant uploaded_extract/ ──
-        self._cleanup_uploaded_extract(workspace_path)
-
+        self._cleanup_uploaded_extract(context.workspace_path)
         return report_path
+
+    def run(
+        self,
+        submission_path: Path,
+        workspace_path: Path,
+        profile: str = "frontend",
+        metadata: Mapping[str, object] | None = None,
+        skip_threat_scan: bool = False,
+    ) -> Path:
+        context, config = self._setup_run(
+            submission_path,
+            workspace_path,
+            profile,
+            metadata,
+        )
+        findings = self._run_analysis(context, config, skip_threat_scan)
+        return self._generate_report(findings, context, config)
 
     # ------------------------------------------------------------------
     # Post-run cleanup
@@ -474,37 +475,17 @@ class AssessmentPipeline:
         """Check if LLM should be used based on scoring mode."""
         return self.scoring_mode == ScoringMode.STATIC_PLUS_LLM
 
-    def _enrich_findings_with_llm(
+    def _prepare_llm_enrichment_batches(
         self,
         findings: List[Finding],
         profile_spec: ProfileSpec,
-        context: SubmissionContext,
-    ) -> tuple[List[Finding], dict]:
-        """Enrich findings with LLM feedback, partial credit, and vision analysis.
-        
-        Phase 1: Generate feedback for failed findings
-        Phase 2: Evaluate partial credit for rules that allow it
-        Phase 3: Run vision analysis for rules with visual_check=True
-        
-        Returns:
-            Tuple of (enriched_findings, llm_evidence_dict)
-        """
-        BATCH_SIZE = 5  # Max rules per consolidated LLM prompt
-
+    ) -> dict[str, object]:
+        batch_size = 5
         enriched: List[Finding] = []
         llm_evidence: dict = {"feedback": [], "partial_credit": []}
-        
-        # Locate screenshot for vision analysis — prefer real Playwright capture
-        screenshot_path = self._find_screenshot(context.workspace_path, context)
-
-        # =================================================================
-        # Pass 1: Triage — handle non-LLM findings immediately and collect
-        #         LLM-eligible findings for batched processing.
-        # =================================================================
-        llm_candidates: list[dict] = []  # items that need LLM calls
+        llm_candidates: list[dict] = []
 
         for finding in findings:
-            # Handle SKIPPED findings for required components (provide deterministic feedback)
             if finding.severity == Severity.SKIPPED:
                 if finding.required:
                     skip_reason = finding.evidence.get("skip_reason", "component was skipped")
@@ -518,46 +499,41 @@ class AssessmentPipeline:
                 enriched.append(finding)
                 continue
 
-            # --- THREAT findings: LLM security analysis ---
             if finding.severity == Severity.THREAT:
                 if self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
                     self._enrich_threat_finding(finding, llm_evidence)
                 enriched.append(finding)
                 continue
-            
-            # Only process actual failures (FAIL or WARN) for LLM processing
+
             if finding.severity not in (Severity.FAIL, Severity.WARN):
                 enriched.append(finding)
                 continue
-            
-            # Extract rule ID from finding - may be in evidence["rule_id"] for required checks
+
             rule_id = finding.id
             if isinstance(finding.evidence, dict) and finding.evidence.get("rule_id"):
                 rule_id = finding.evidence["rule_id"]
-            
-            # Extract rule metadata for LLM enrichment (used by Phase 2 and 3)
             rule_metadata = self._get_rule_metadata(rule_id, profile_spec, finding)
-            
-            # Extract code snippet from evidence if available
+
             code_snippet = ""
             if isinstance(finding.evidence, dict):
                 code_snippet = finding.evidence.get("snippet", "")
                 if not code_snippet:
                     code_snippet = finding.evidence.get("content", "")[:500]
-            
+
             is_required_assessor = any(
-                finding.id.upper().startswith(prefix) 
+                finding.id.upper().startswith(prefix)
                 for prefix in ["HTML.REQ", "CSS.REQ", "JS.REQ", "PHP.REQ", "SQL.REQ"]
             )
             if not code_snippet.strip() and is_required_assessor:
-                logger.warning(f"Finding {finding.id} has no code evidence for LLM enrichment (MISSING_FILES or read error)")
-            
-            # Skip LLM enrichment for non-required findings without code evidence
+                logger.warning(
+                    "Finding %s has no code evidence for LLM enrichment (MISSING_FILES or read error)",
+                    finding.id,
+                )
+
             if not code_snippet.strip() and not is_required_assessor:
                 enriched.append(finding)
                 continue
-            
-            # Handle empty code (MISSING_FILES) with deterministic message for required assessors
+
             if not code_snippet.strip() and is_required_assessor:
                 fallback_feedback = {
                     "summary": "No code was found for this check. Ensure you include the required files and format.",
@@ -568,8 +544,7 @@ class AssessmentPipeline:
                     finding.evidence["llm_feedback"] = fallback_feedback
                 enriched.append(finding)
                 continue
-            
-            # This finding qualifies for batched LLM processing
+
             llm_candidates.append({
                 "finding": finding,
                 "rule_id": rule_id,
@@ -577,233 +552,267 @@ class AssessmentPipeline:
                 "code_snippet": code_snippet,
             })
 
-        # =================================================================
-        # Pass 2: Parallel batched LLM calls — feedback and partial
-        #         credit are independent, so submit them as separate
-        #         tasks to maximise LLM slot utilisation.
-        # =================================================================
-        if llm_candidates and self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
-            chunks = [
-                llm_candidates[i:i + BATCH_SIZE]
-                for i in range(0, len(llm_candidates), BATCH_SIZE)
+        chunks = [
+            llm_candidates[i:i + batch_size]
+            for i in range(0, len(llm_candidates), batch_size)
+        ]
+        chunk_fb_evidence: list[list[dict]] = []
+        chunk_pc_items: list[list[dict]] = []
+        chunk_pc_finding_maps: list[dict[str, dict]] = []
+
+        for chunk in chunks:
+            fb_evidence = [
+                {
+                    "rule_id": item["finding"].id,
+                    "category": item["finding"].category,
+                    "code_snippet": item["code_snippet"],
+                    "error_context": item["finding"].message,
+                }
+                for item in chunk
             ]
+            chunk_fb_evidence.append(fb_evidence)
 
-            # Pre-build work items for every chunk (read-only, no LLM yet)
-            chunk_fb_evidence: list[list[dict]] = []
-            chunk_pc_items: list[list[dict]] = []
-            chunk_pc_finding_maps: list[dict[str, dict]] = []
-
-            for chunk in chunks:
-                fb_evidence = [
-                    {
-                        "rule_id": item["finding"].id,
-                        "category": item["finding"].category,
-                        "code_snippet": item["code_snippet"],
+            pc_items: list[dict] = []
+            pc_finding_map: dict[str, dict] = {}
+            for item in chunk:
+                rm = item["rule_metadata"]
+                if should_evaluate_partial_credit(0.0, rm.get("partial_allowed", False)):
+                    pc_key = item["rule_id"]
+                    pc_items.append({
+                        "rule_name": pc_key,
+                        "student_code": item["code_snippet"],
                         "error_context": item["finding"].message,
-                    }
-                    for item in chunk
-                ]
-                chunk_fb_evidence.append(fb_evidence)
+                        "category": rm.get("category", "unknown"),
+                        "partial_range": rm.get("partial_range", (0.0, 0.5)),
+                    })
+                    pc_finding_map[pc_key] = item
+            chunk_pc_items.append(pc_items)
+            chunk_pc_finding_maps.append(pc_finding_map)
 
-                pc_items: list[dict] = []
-                pc_finding_map: dict[str, dict] = {}
-                for item in chunk:
-                    rm = item["rule_metadata"]
-                    if should_evaluate_partial_credit(0.0, rm.get("partial_allowed", False)):
-                        # Use rule_id (not finding.id) so each failed rule is uniquely tracked.
-                        pc_key = item["rule_id"]
-                        pc_items.append({
-                            "rule_name": pc_key,
-                            "student_code": item["code_snippet"],
-                            "error_context": item["finding"].message,
-                            "category": rm.get("category", "unknown"),
-                            "partial_range": rm.get("partial_range", (0.0, 0.5)),
-                        })
-                        pc_finding_map[pc_key] = item
-                chunk_pc_items.append(pc_items)
-                chunk_pc_finding_maps.append(pc_finding_map)
+        return {
+            "enriched": enriched,
+            "llm_evidence": llm_evidence,
+            "llm_candidates": llm_candidates,
+            "chunks": chunks,
+            "chunk_fb_evidence": chunk_fb_evidence,
+            "chunk_pc_items": chunk_pc_items,
+            "chunk_pc_finding_maps": chunk_pc_finding_maps,
+        }
 
-            # Submit feedback and partial credit as independent futures
+    def _run_llm_batch(
+        self,
+        batch: Mapping[str, object],
+        context: SubmissionContext,
+    ) -> tuple[str, int, object | None, str | None]:
+        task_type = str(batch["task_type"])
+        idx = int(batch["idx"])
+        payload = batch["payload"]
+        try:
+            if task_type == "fb":
+                result = BatchFeedbackGenerator().generate_batch(payload)
+            else:
+                result = evaluate_partial_credit_batch(payload)
+            return task_type, idx, result, None
+        except Exception as exc:
+            logger.error("LLM %s chunk %d failed: %s", task_type, idx, exc)
+            return task_type, idx, None, str(exc)
+
+    def _merge_llm_results(
+        self,
+        findings: dict[str, object],
+        llm_results: Sequence[tuple[str, int, object | None, str | None]],
+    ) -> tuple[List[Finding], dict, list[str]]:
+        enriched = list(findings["enriched"])
+        llm_evidence = findings["llm_evidence"]
+        chunks = findings["chunks"]
+        chunk_pc_finding_maps = findings["chunk_pc_finding_maps"]
+        issue_messages: list[str] = []
+        fb_results: dict[int, dict] = {}
+        pc_results: dict[int, dict] = {}
+
+        for task_type, idx, result, error in llm_results:
+            if error:
+                label = "Feedback" if task_type == "fb" else "Partial-credit"
+                issue_messages.append(f"{label} LLM task failed: {error}")
+                continue
+            if task_type == "fb":
+                fb_results[idx] = result
+            else:
+                pc_results[idx] = result
+
+        for idx, chunk in enumerate(chunks):
+            fb_map = fb_results.get(idx, {})
+            for item in chunk:
+                fid = item["finding"].id
+                fb = fb_map.get(fid)
+                if fb is not None:
+                    fb_dict = fb.model_dump() if hasattr(fb, "model_dump") else fb
+                    if isinstance(item["finding"].evidence, dict):
+                        item["finding"].evidence["llm_feedback"] = fb_dict
+                    fb_meta = fb_dict.get("meta", {}) if isinstance(fb_dict, dict) else {}
+                    if isinstance(fb_meta, dict) and fb_meta.get("fallback"):
+                        reason = str(fb_meta.get("reason") or "").strip().lower()
+                        error = str(fb_meta.get("error") or "").strip()
+                        if reason == "llm_error" or error:
+                            issue_messages.append(
+                                f"{fid}: {error or 'LLM feedback generation failed.'}"
+                            )
+                    llm_evidence["feedback"].append({
+                        "finding_id": fid,
+                        "feedback": fb_dict,
+                    })
+                else:
+                    if isinstance(item["finding"].evidence, dict):
+                        item["finding"].evidence["llm_feedback"] = {
+                            "summary": f"This check failed: {item['finding'].message}",
+                            "items": [],
+                            "meta": {"fallback": True, "reason": "llm_error"},
+                        }
+                    issue_messages.append(f"{fid}: LLM feedback generation failed.")
+
+            score_map = pc_results.get(idx, {})
+            pc_finding_map = chunk_pc_finding_maps[idx]
+            for rule_name, hybrid_score in score_map.items():
+                pi = pc_finding_map.get(rule_name)
+                if pi is None:
+                    continue
+                if isinstance(pi["finding"].evidence, dict):
+                    pi["finding"].evidence["hybrid_score"] = hybrid_score.to_dict()
+                reasoning = str(hybrid_score.reasoning or "").strip()
+                raw_error = ""
+                if isinstance(hybrid_score.raw_response, dict):
+                    raw_error = str(hybrid_score.raw_response.get("error") or "").strip()
+                if raw_error or "llm error" in reasoning.lower() or "llm parse error" in reasoning.lower():
+                    issue_messages.append(
+                        f"{rule_name}: {raw_error or reasoning or 'LLM partial-credit evaluation failed.'}"
+                    )
+                llm_evidence["partial_credit"].append({
+                    "finding_id": pi["finding"].id,
+                    "rule_id": rule_name,
+                    "hybrid_score": hybrid_score.to_dict(),
+                })
+
+        for item in findings["llm_candidates"]:
+            enriched.append(item["finding"])
+        return enriched, llm_evidence, issue_messages
+
+    def _enrich_findings_with_llm(
+        self,
+        findings: List[Finding],
+        profile_spec: ProfileSpec,
+        context: SubmissionContext,
+    ) -> tuple[List[Finding], dict]:
+        prepared = self._prepare_llm_enrichment_batches(findings, profile_spec)
+        chunks = prepared["chunks"]
+        if chunks and self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
+            chunk_pc_items = prepared["chunk_pc_items"]
             total_tasks = len(chunks) + sum(1 for pc in chunk_pc_items if pc)
             llm_workers = min(4, total_tasks)
-
             logger.info(
-                "Parallel LLM enrichment: %d chunks → %d tasks across %d workers",
+                "Parallel LLM enrichment: %d chunks -> %d tasks across %d workers",
                 len(chunks), total_tasks, llm_workers,
             )
-
-            fb_results: dict[int, dict] = {}
-            pc_results: dict[int, dict] = {}
-
+            llm_results: list[tuple[str, int, object | None, str | None]] = []
             with ThreadPoolExecutor(max_workers=llm_workers) as executor:
-                fb_futures = {
-                    executor.submit(BatchFeedbackGenerator().generate_batch, fb_ev): ("fb", idx)
-                    for idx, fb_ev in enumerate(chunk_fb_evidence)
+                future_map = {
+                    executor.submit(
+                        self._run_llm_batch,
+                        {"task_type": "fb", "idx": idx, "payload": fb_ev},
+                        context,
+                    ): ("fb", idx)
+                    for idx, fb_ev in enumerate(prepared["chunk_fb_evidence"])
                 }
-                pc_futures = {
-                    executor.submit(evaluate_partial_credit_batch, pc_it): ("pc", idx)
+                future_map.update({
+                    executor.submit(
+                        self._run_llm_batch,
+                        {"task_type": "pc", "idx": idx, "payload": pc_it},
+                        context,
+                    ): ("pc", idx)
                     for idx, pc_it in enumerate(chunk_pc_items)
                     if pc_it
-                }
+                })
+                for future in as_completed(future_map):
+                    llm_results.append(future.result())
 
-                all_futures = {**fb_futures, **pc_futures}
-
-                for future in as_completed(all_futures):
-                    task_type, idx = all_futures[future]
-                    try:
-                        result = future.result()
-                        if task_type == "fb":
-                            fb_results[idx] = result
-                        else:
-                            pc_results[idx] = result
-                    except Exception as exc:
-                        logger.error("LLM %s chunk %d failed: %s", task_type, idx, exc)
-                        self._record_llm_issue(
-                            context,
-                            f"{'Feedback' if task_type == 'fb' else 'Partial-credit'} LLM task failed: {exc}",
-                        )
-
-            # Apply results back to findings (single-threaded, safe)
-            for idx, chunk in enumerate(chunks):
-                fb_map = fb_results.get(idx, {})
-                for item in chunk:
-                    fid = item["finding"].id
-                    fb = fb_map.get(fid)
-                    if fb is not None:
-                        fb_dict = fb.model_dump() if hasattr(fb, "model_dump") else fb
-                        if isinstance(item["finding"].evidence, dict):
-                            item["finding"].evidence["llm_feedback"] = fb_dict
-                        fb_meta = fb_dict.get("meta", {}) if isinstance(fb_dict, dict) else {}
-                        if isinstance(fb_meta, dict) and fb_meta.get("fallback"):
-                            reason = str(fb_meta.get("reason") or "").strip().lower()
-                            error = str(fb_meta.get("error") or "").strip()
-                            if reason == "llm_error" or error:
-                                self._record_llm_issue(
-                                    context,
-                                    f"{fid}: {error or 'LLM feedback generation failed.'}",
-                                )
-                        llm_evidence["feedback"].append({
-                            "finding_id": fid,
-                            "feedback": fb_dict,
-                        })
-                    else:
-                        if isinstance(item["finding"].evidence, dict):
-                            item["finding"].evidence["llm_feedback"] = {
-                                "summary": f"This check failed: {item['finding'].message}",
-                                "items": [],
-                                "meta": {"fallback": True, "reason": "llm_error"},
-                            }
-                        self._record_llm_issue(
-                            context,
-                            f"{fid}: LLM feedback generation failed.",
-                        )
-
-                score_map = pc_results.get(idx, {})
-                pc_finding_map = chunk_pc_finding_maps[idx]
-                for rule_name, hybrid_score in score_map.items():
-                    pi = pc_finding_map.get(rule_name)
-                    if pi is None:
-                        continue
-                    if isinstance(pi["finding"].evidence, dict):
-                        pi["finding"].evidence["hybrid_score"] = hybrid_score.to_dict()
-                    reasoning = str(hybrid_score.reasoning or "").strip()
-                    raw_error = ""
-                    if isinstance(hybrid_score.raw_response, dict):
-                        raw_error = str(hybrid_score.raw_response.get("error") or "").strip()
-                    if raw_error or "llm error" in reasoning.lower() or "llm parse error" in reasoning.lower():
-                        self._record_llm_issue(
-                            context,
-                            f"{rule_name}: {raw_error or reasoning or 'LLM partial-credit evaluation failed.'}",
-                        )
-                    llm_evidence["partial_credit"].append({
-                        "finding_id": pi["finding"].id,
-                        "rule_id": rule_name,
-                        "hybrid_score": hybrid_score.to_dict(),
-                    })
-
+            enriched, llm_evidence, issue_messages = self._merge_llm_results(prepared, llm_results)
+            for message in issue_messages:
+                self._record_llm_issue(context, message)
             logger.info(
                 "LLM enrichment complete: %d feedback, %d partial-credit across %d chunks",
                 len(llm_evidence["feedback"]),
                 len(llm_evidence["partial_credit"]),
                 len(chunks),
             )
+            return enriched, llm_evidence
 
-        # Append all LLM-candidate findings to enriched (preserving order)
-        for item in llm_candidates:
-            enriched.append(item["finding"])
-        
-        return enriched, llm_evidence
+        return prepared["enriched"] + [item["finding"] for item in prepared["llm_candidates"]], prepared["llm_evidence"]
 
     # -----------------------------------------------------------------
     # UX Review — multi-page qualitative feedback (zero scoring impact)
     # -----------------------------------------------------------------
 
-    def _run_ux_reviews(
+    def _capture_ux_screenshots(
         self,
         context: SubmissionContext,
         profile: str,
-        static_findings: List[Finding] | None = None,
-    ) -> tuple[List[Finding], list]:
-        """Capture screenshots of every HTML page and run a UX review.
-
-        Args:
-            context: The current submission context.
-            profile: Active marking profile name.
-            static_findings: Findings already produced by the static and
-                required assessors.  Used to build a *context note* for
-                the vision model so it has deterministic grounding (e.g.
-                "no CSS files found") **before** it looks at the image.
-
-        Returns:
-            (ux_findings, ux_evidence_list)
-
-        The findings use ``category='ux_review'`` which is **not** in
-        ``ScoringEngine.COMPONENTS``, so they are ignored by scoring.
-        """
+    ) -> dict[str, object]:
         from ams.assessors.playwright_assessor import PlaywrightAssessor as _PA
 
-        ux_findings: List[Finding] = []
-        ux_evidence: list = []
-
-        # Use the PlaywrightAssessor already in the pipeline, or create one
         pa = None
         if self.assessors:
-            for a in self.assessors:
-                if isinstance(a, _PA):
-                    pa = a
+            for assessor in self.assessors:
+                if isinstance(assessor, _PA):
+                    pa = assessor
                     break
         if pa is None:
             pa = _PA()
 
         page_shots = pa.capture_all_pages(context)
         if not page_shots:
-            logger.info("UX Review: no HTML pages found — skipping.")
-            return ux_findings, ux_evidence
+            logger.info("UX Review: no HTML pages found - skipping.")
+            return {
+                "context": context,
+                "profile": profile,
+                "page_shots": [],
+                "html_lookup": {},
+            }
+
+        html_lookup: dict[str, Path] = {}
+        for html_path in context.discovered_files.get("html", []):
+            html_lookup[html_path.name] = html_path
+        return {
+            "context": context,
+            "profile": profile,
+            "page_shots": page_shots,
+            "html_lookup": html_lookup,
+        }
+
+    def _evaluate_ux_screenshots(
+        self,
+        screenshots: Mapping[str, object],
+        static_findings: List[Finding] | None,
+    ) -> tuple[List[Finding], list]:
+        del static_findings
+        context = screenshots["context"]
+        profile = str(screenshots["profile"])
+        page_shots = screenshots["page_shots"]
+        html_lookup = screenshots["html_lookup"]
+        ux_findings: List[Finding] = []
+        ux_evidence: list = []
 
         analyst = self.vision_analyst
         if analyst is None:
-            logger.warning("UX Review: VisionAnalyst not available — skipping.")
+            logger.warning("UX Review: VisionAnalyst not available - skipping.")
             return ux_findings, ux_evidence
-
-        # Build a filename → Path lookup from the discovered HTML files so
-        # we can read each page's source to produce a per-page context note.
-        html_lookup: dict[str, Path] = {}
-        for hp in context.discovered_files.get("html", []):
-            html_lookup[hp.name] = hp
 
         for entry in page_shots:
             page_name: str = entry["page"]
-            shot_path = entry.get("screenshot")  # may be None
-
-            # ── Derive identifiers ───────────────────────────────────────────
+            shot_path = entry.get("screenshot")
             safe_id = page_name.upper().replace(".", "_")
             finding_id = f"UX_REVIEW.{safe_id}"
 
-            # ── Handle missing screenshot ────────────────────────────────────
             if shot_path is None or not Path(str(shot_path)).exists():
-                logger.warning(
-                    "UX: failed %s error=no screenshot available", page_name,
-                )
+                logger.warning("UX: failed %s error=no screenshot available", page_name)
                 ux_findings.append(
                     Finding(
                         id=finding_id,
@@ -814,7 +823,7 @@ class AssessmentPipeline:
                             "ux_review": {
                                 "page": page_name,
                                 "status": "NOT_EVALUATED",
-                                "feedback": "Screenshot capture failed — unable to perform visual review.",
+                                "feedback": "Screenshot capture failed - unable to perform visual review.",
                             },
                             "screenshot": None,
                             "page": page_name,
@@ -837,25 +846,19 @@ class AssessmentPipeline:
                 continue
 
             shot_path = Path(shot_path)
-
-            # ── Per-page context note ────────────────────────────────────────
             context_note = self._build_per_page_context(
                 page_name, html_lookup.get(page_name)
             )
-
             logger.debug(
                 "UX: evaluating %s screenshot=%s size=%d",
                 page_name, shot_path, shot_path.stat().st_size,
             )
-
             try:
                 review = analyst.review_ux(
                     str(shot_path), page_name, context_note=context_note,
                 )
             except Exception as exc:
-                logger.warning(
-                    "UX: failed %s error=%s", page_name, exc,
-                )
+                logger.warning("UX: failed %s error=%s", page_name, exc)
                 review = UXReviewResult(
                     page=page_name,
                     status="NOT_EVALUATED",
@@ -864,7 +867,6 @@ class AssessmentPipeline:
                     model="unknown",
                 )
 
-            # Build a workspace-relative screenshot path for the UI
             try:
                 rel_screenshot = shot_path.relative_to(context.workspace_path)
             except ValueError:
@@ -876,25 +878,20 @@ class AssessmentPipeline:
                 review_feedback.lower().startswith("llm error:")
                 or review_feedback.lower() == "could not parse model response."
             ):
-                self._record_llm_issue(
-                    context,
-                    f"{page_name}: {review_feedback}",
-                )
+                self._record_llm_issue(context, f"{page_name}: {review_feedback}")
 
-            # Build the finding message: feedback + improvement recommendation
             message_parts = [review.feedback or "No feedback generated."]
             if review.improvement_recommendation:
                 message_parts.append(
                     f"Recommendation: {review.improvement_recommendation}"
                 )
             finding_message = " ".join(message_parts)
-
             ux_findings.append(
                 Finding(
                     id=finding_id,
-                    category="ux_review",  # NOT a scoring component
+                    category="ux_review",
                     message=finding_message,
-                    severity=Severity.INFO,  # Always INFO — advisory only
+                    severity=Severity.INFO,
                     evidence={
                         "ux_review": review_dict,
                         "screenshot": str(rel_screenshot),
@@ -906,22 +903,13 @@ class AssessmentPipeline:
                     required=False,
                 )
             )
-
             ux_evidence.append({
                 "page": page_name,
                 "screenshot": str(rel_screenshot),
                 "review": review_dict,
             })
-
-            logger.info(
-                "UX: success %s status=%s", page_name, review.status,
-            )
-
-            # Optional cooldown between pages (default 0 = disabled)
-            if (
-                VISION_DELAY_BETWEEN_PAGES > 0
-                and entry is not page_shots[-1]
-            ):
+            logger.info("UX: success %s status=%s", page_name, review.status)
+            if VISION_DELAY_BETWEEN_PAGES > 0 and entry is not page_shots[-1]:
                 logger.debug(
                     "UX: sleeping %.1fs between pages",
                     VISION_DELAY_BETWEEN_PAGES,
@@ -929,6 +917,18 @@ class AssessmentPipeline:
                 time.sleep(VISION_DELAY_BETWEEN_PAGES)
 
         return ux_findings, ux_evidence
+
+    def _run_ux_reviews(
+        self,
+        context: SubmissionContext,
+        profile: str,
+        static_findings: List[Finding] | None = None,
+    ) -> tuple[List[Finding], list]:
+        screenshots = self._capture_ux_screenshots(context, profile)
+        page_shots = screenshots["page_shots"]
+        if not page_shots:
+            return [], []
+        return self._evaluate_ux_screenshots(screenshots, static_findings)
 
     # -----------------------------------------------------------------
     # Phase E: Static-grounding helper for UX reviews
@@ -1246,3 +1246,6 @@ def _default_assessors(
 
 
 __all__ = ["AssessmentPipeline"]
+
+
+
