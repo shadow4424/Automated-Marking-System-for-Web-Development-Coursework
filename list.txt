@@ -94,6 +94,13 @@ ams/tools/batch.py
 ams/tools/check_llm_health.py
 ams/web/auth.py
 ams/web/validators.py
+ams/web/routes_marking.py
+ams/web/routes_batch.py
+ams/web/routes_runs.py
+ams/web/routes_export.py
+ams/web/routes_dashboard.py
+ams/web/routes_github.py
+ams/web/view_helpers.py
 ams/web/routes_account.py
 ams/web/routes_admin.py
 ams/web/routes_student.py

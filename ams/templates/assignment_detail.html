@@ -79,12 +79,12 @@
                 <div class="surface-item-meta">{{ threat.mode|capitalize }} submission{% if threat.threat_count %} with {{ threat.threat_count }} threat finding{{ 's' if threat.threat_count != 1 else '' }}{% endif %}.</div>
                 <div class="page-inline-tools" style="margin-top: var(--space-sm);">
                     <a href="{{ threat.detail_url }}" class="btn btn-secondary btn-sm">Review submission</a>
-                    <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
+                    <form method="POST" action="{{ url_for('batch.assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
                         <input type="hidden" name="run_id" value="{{ threat.run_id }}">
                         {% if threat.submission_id %}<input type="hidden" name="submission_id" value="{{ threat.submission_id }}">{% endif %}
                         <button type="submit" class="btn btn-ghost btn-sm">Re-run submission</button>
                     </form>
-                    <form method="POST" action="{{ url_for('assignment_threat_delete', assignment_id=assignment.assignmentID) }}" onsubmit="return confirm('Delete the flagged submission for {{ threat.student_id }}?');">
+                    <form method="POST" action="{{ url_for('runs.assignment_threat_delete', assignment_id=assignment.assignmentID) }}" onsubmit="return confirm('Delete the flagged submission for {{ threat.student_id }}?');">
                         <input type="hidden" name="run_id" value="{{ threat.run_id }}">
                         {% if threat.submission_id %}<input type="hidden" name="submission_id" value="{{ threat.submission_id }}">{% endif %}
                         <button type="submit" class="btn btn-ghost btn-sm">Delete flagged submission</button>
@@ -115,12 +115,12 @@
                 <div class="surface-item-meta">{{ flagged.llm_error_message }}</div>
                 <div class="page-inline-tools" style="margin-top: var(--space-sm);">
                     <a href="{{ flagged.detail_url }}" class="btn btn-secondary btn-sm">Review submission</a>
-                    <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
+                    <form method="POST" action="{{ url_for('batch.assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
                         <input type="hidden" name="run_id" value="{{ flagged.run_id }}">
                         {% if flagged.submission_id %}<input type="hidden" name="submission_id" value="{{ flagged.submission_id }}">{% endif %}
                         <button type="submit" class="btn btn-ghost btn-sm">Re-run submission</button>
                     </form>
-                    <form method="POST" action="{{ url_for('assignment_threat_delete', assignment_id=assignment.assignmentID) }}" onsubmit="return confirm('Delete the flagged submission for {{ flagged.student_id }}?');">
+                    <form method="POST" action="{{ url_for('runs.assignment_threat_delete', assignment_id=assignment.assignmentID) }}" onsubmit="return confirm('Delete the flagged submission for {{ flagged.student_id }}?');">
                         <input type="hidden" name="run_id" value="{{ flagged.run_id }}">
                         {% if flagged.submission_id %}<input type="hidden" name="submission_id" value="{{ flagged.submission_id }}">{% endif %}
                         <button type="submit" class="btn btn-ghost btn-sm">Delete flagged submission</button>
@@ -365,7 +365,7 @@
                         <td>
                             <div class="page-inline-tools">
                                 <a href="{{ group.detail_url }}" class="btn btn-secondary btn-sm">Open</a>
-                                <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
+                                <form method="POST" action="{{ url_for('batch.assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
                                     <input type="hidden" name="run_id" value="{{ primary.id }}">
                                     {% if primary.mode == 'batch' and primary.get('_batch_submission_id') %}
                                     <input type="hidden" name="submission_id" value="{{ primary._batch_submission_id }}">
@@ -404,7 +404,7 @@
                                                 {% if attempt_score is none and submission and submission.get('overall') is not none %}
                                                     {% set attempt_score = submission.get('overall') * 100 %}
                                                 {% endif %}
-                                                {% set detail_url = url_for('batch_submission_view', run_id=attempt.id, submission_id=attempt._batch_submission_id) if attempt.mode == 'batch' and attempt.get('_batch_submission_id') else url_for('run_detail', run_id=attempt.id) %}
+                                                {% set detail_url = url_for('batch.batch_submission_view', run_id=attempt.id, submission_id=attempt._batch_submission_id) if attempt.mode == 'batch' and attempt.get('_batch_submission_id') else url_for('runs.run_detail', run_id=attempt.id) %}
                                                 <tr>
                                                     <td>
                                                         {% if attempt.get('attempt_number') %}
@@ -458,7 +458,7 @@
                                                     <td>
                                                         <div class="page-inline-tools">
                                                             <a href="{{ detail_url }}" class="btn btn-secondary btn-sm">Open</a>
-                                                            <form method="POST" action="{{ url_for('assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
+                                                            <form method="POST" action="{{ url_for('batch.assignment_submission_rerun', assignment_id=assignment.assignmentID) }}" data-job-form="rerun">
                                                                 <input type="hidden" name="run_id" value="{{ attempt.id }}">
                                                                 {% if attempt.mode == 'batch' and attempt.get('_batch_submission_id') %}
                                                                 <input type="hidden" name="submission_id" value="{{ attempt._batch_submission_id }}">

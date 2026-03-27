@@ -38,8 +38,8 @@
             <p class="page-context-line">Track active results and historical attempts in one place, with filters for active, history, invalid, and flagged submissions.</p>
             {% endif %}
             <div class="page-action-row">
-                <a href="{{ url_for('mark') }}" class="btn btn-primary">New mark</a>
-                <a href="{{ url_for('batch') }}" class="btn btn-secondary">New batch</a>
+                <a href="{{ url_for('marking.mark') }}" class="btn btn-primary">New mark</a>
+                <a href="{{ url_for('batch.batch') }}" class="btn btn-secondary">New batch</a>
             </div>
         </div>
         <aside class="page-side-panel">
@@ -110,7 +110,7 @@
             {% set status = r.get('status', 'completed') %}
             {% set attempt_state = 'active' if r.get('is_active') else 'history' if r.get('attempt_number') else 'current' %}
             {% set validity = r.get('validity_status') or '' %}
-            <a href="{{ url_for('run_detail', run_id=r.id) }}"
+            <a href="{{ url_for('runs.run_detail', run_id=r.id) }}"
                 class="run-card{% if r.threat_flagged %} run-card--threat{% endif %}" data-filterable
                 data-mode="{{ r.mode or 'mark' }}"
                 data-threat="{{ 'true' if r.threat_flagged else 'false' }}"
@@ -200,7 +200,7 @@
                 <div class="run-card-actions">
                     <span class="btn btn-ghost btn-sm">Open details</span>
                     {% if user_role in ('admin', 'teacher') %}
-                    <form method="POST" action="{{ url_for('delete_run', run_id=r.id) }}" class="run-delete-form">
+                    <form method="POST" action="{{ url_for('runs.delete_run', run_id=r.id) }}" class="run-delete-form">
                         <button type="button" class="btn btn-danger btn-sm"
                                 onclick="event.preventDefault(); event.stopPropagation(); if(confirm('Delete this run permanently?')) { this.form.submit(); }">
                             Delete
@@ -218,8 +218,8 @@
         <h3 class="empty-state-title">No runs yet</h3>
         <p class="empty-state-text">Start by uploading a submission to mark or by running a batch.</p>
         <div class="page-inline-tools">
-            <a href="{{ url_for('mark') }}" class="btn btn-primary">Mark submission</a>
-            <a href="{{ url_for('batch') }}" class="btn btn-secondary">Run batch</a>
+            <a href="{{ url_for('marking.mark') }}" class="btn btn-primary">Mark submission</a>
+            <a href="{{ url_for('batch.batch') }}" class="btn btn-secondary">Run batch</a>
         </div>
     </div>
     {% endif %}

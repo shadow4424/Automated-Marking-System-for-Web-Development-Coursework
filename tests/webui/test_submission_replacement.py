@@ -8,7 +8,8 @@ from flask import Flask
 from ams.core.db import init_db
 from ams.io.web_storage import list_runs, save_run_info
 from ams.web.routes_student import _gather_student_runs
-from ams.webui import _replace_existing_submissions, _write_run_index_batch
+from ams.web.routes_batch import _write_run_index_batch
+from ams.web.routes_marking import _replace_existing_submissions
 
 
 def _use_temp_db(monkeypatch, tmp_path: Path) -> None:

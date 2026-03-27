@@ -7,7 +7,9 @@ from pathlib import Path
 
 from ams.core.pipeline import AssessmentPipeline
 from ams.io.web_storage import create_run_dir, save_run_info
-from ams.webui import create_app, _write_batch_reports_zip, _write_run_index_batch, _write_run_index_mark
+from ams.web.routes_batch import _write_batch_reports_zip, _write_run_index_batch
+from ams.web.routes_runs import _write_run_index_mark
+from ams.webui import create_app
 from tests.webui.conftest import authenticate_client
 
 
@@ -44,7 +46,15 @@ def _stub_assignment(monkeypatch, assignment_id: str, assigned_students: list[st
         lambda current_assignment_id: dict(assignment, assignmentID=current_assignment_id),
     )
     monkeypatch.setattr(
-        "ams.webui.get_assignment",
+        "ams.web.routes_batch.get_assignment",
+        lambda current_assignment_id: dict(assignment, assignmentID=current_assignment_id),
+    )
+    monkeypatch.setattr(
+        "ams.web.routes_runs.get_assignment",
+        lambda current_assignment_id: dict(assignment, assignmentID=current_assignment_id),
+    )
+    monkeypatch.setattr(
+        "ams.web.routes_dashboard.get_assignment",
         lambda current_assignment_id: dict(assignment, assignmentID=current_assignment_id),
     )
     monkeypatch.setattr(
@@ -52,6 +62,16 @@ def _stub_assignment(monkeypatch, assignment_id: str, assigned_students: list[st
         lambda student_id: {"userID": student_id, "firstName": student_id, "lastName": "", "email": f"{student_id}@example.com"},
     )
     monkeypatch.setattr("ams.web.routes_teacher.list_users", lambda role=None: [])
+
+
+def _stub_assignment_options(monkeypatch, assignments: list[dict]) -> None:
+    monkeypatch.setattr("ams.web.routes_marking.list_assignments", lambda teacher_id=None: assignments)
+    monkeypatch.setattr("ams.web.routes_batch.list_assignments", lambda teacher_id=None: assignments)
+
+
+def _stub_student_assignment_options(monkeypatch, assignments: list[dict]) -> None:
+    monkeypatch.setattr("ams.web.routes_marking.list_assignments_for_student", lambda student_id: assignments)
+    monkeypatch.setattr("ams.web.routes_dashboard.list_assignments_for_student", lambda student_id: assignments)
 
 
 def _seed_batch_threat_run(tmp_path: Path, assignment_id: str = "assignment1", student_id: str = "student5") -> tuple[str, str, Path]:
@@ -381,7 +401,9 @@ def _capture_job_submission(monkeypatch):
         captured["func"] = lambda: func(*args, **kwargs)
         return "job-queued-1"
 
-    monkeypatch.setattr("ams.webui.job_manager.submit_job", _submit_job)
+    monkeypatch.setattr("ams.web.routes_marking.job_manager.submit_job", _submit_job)
+    monkeypatch.setattr("ams.web.routes_batch.job_manager.submit_job", _submit_job)
+    monkeypatch.setattr("ams.web.routes_runs.job_manager.submit_job", _submit_job)
     return captured
 
 
@@ -569,9 +591,9 @@ def test_webui_batch_run_redirects_to_assignment_and_keeps_batch_downloads(tmp_p
 
 def test_batch_form_shows_assignment_dropdown_and_hides_profile_selector(tmp_path: Path, monkeypatch) -> None:
     client, _ = _client(tmp_path)
-    monkeypatch.setattr(
-        "ams.webui.list_assignments",
-        lambda teacher_id=None: [
+    _stub_assignment_options(
+        monkeypatch,
+        [
             {"assignmentID": "assignment1", "title": "Assignment 1", "profile": "frontend_interactive"},
             {"assignmentID": "assignment2", "title": "Assignment 2", "profile": "fullstack_php_sql"},
         ],
@@ -590,9 +612,9 @@ def test_batch_form_shows_assignment_dropdown_and_hides_profile_selector(tmp_pat
 
 def test_mark_form_shows_assignment_dropdown_and_hides_profile_selector_for_teacher_view(tmp_path: Path, monkeypatch) -> None:
     client, _ = _client(tmp_path)
-    monkeypatch.setattr(
-        "ams.webui.list_assignments",
-        lambda teacher_id=None: [
+    _stub_assignment_options(
+        monkeypatch,
+        [
             {"assignmentID": "assignment1", "title": "Assignment 1", "profile": "frontend_interactive"},
             {"assignmentID": "assignment2", "title": "Assignment 2", "profile": "fullstack_php_sql"},
         ],
@@ -611,9 +633,9 @@ def test_mark_form_shows_assignment_dropdown_and_hides_profile_selector_for_teac
 
 def test_mark_and_batch_forms_hide_released_assignments(tmp_path: Path, monkeypatch) -> None:
     client, _ = _client(tmp_path)
-    monkeypatch.setattr(
-        "ams.webui.list_assignments",
-        lambda teacher_id=None: [
+    _stub_assignment_options(
+        monkeypatch,
+        [
             {"assignmentID": "assignment_open", "title": "Open Assignment", "profile": "frontend_interactive", "marks_released": False},
             {"assignmentID": "assignment_released", "title": "Released Assignment", "profile": "frontend_interactive", "marks_released": True},
         ],
@@ -649,9 +671,9 @@ def test_student_mark_form_hides_released_assignments(tmp_path: Path, monkeypatc
             "email": "student1@example.com",
         },
     )
-    monkeypatch.setattr(
-        "ams.webui.list_assignments_for_student",
-        lambda student_id: [
+    _stub_student_assignment_options(
+        monkeypatch,
+        [
             {
                 "assignmentID": "assignment_open",
                 "title": "Open Assignment",
@@ -683,18 +705,16 @@ def test_batch_route_resolves_profile_from_selected_assignment(tmp_path: Path, m
     queued = _capture_job_submission(monkeypatch)
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(
-        "ams.webui.list_assignments",
-        lambda teacher_id=None: [
-            {"assignmentID": "assignment1", "title": "Assignment 1", "profile": "fullstack_php_sql"},
-        ],
+    _stub_assignment_options(
+        monkeypatch,
+        [{"assignmentID": "assignment1", "title": "Assignment 1", "profile": "fullstack_php_sql"}],
     )
 
     def _run_batch_stub(**kwargs):
         captured.update(kwargs)
         return {"records": []}
 
-    monkeypatch.setattr("ams.webui.run_batch", _run_batch_stub)
+    monkeypatch.setattr("ams.web.routes_batch.run_batch", _run_batch_stub)
 
     inner_submission = _make_zip({"index.html": "<!doctype html><html><body>ok</body></html>"})
     batch_bundle = _make_zip({"student1_assignment1.zip": inner_submission})
@@ -719,11 +739,9 @@ def test_batch_route_resolves_profile_from_selected_assignment(tmp_path: Path, m
 def test_mark_route_resolves_profile_from_selected_assignment(tmp_path: Path, monkeypatch) -> None:
     client, _ = _client(tmp_path)
     _capture_job_submission(monkeypatch)
-    monkeypatch.setattr(
-        "ams.webui.list_assignments",
-        lambda teacher_id=None: [
-            {"assignmentID": "assignment1", "title": "Assignment 1", "profile": "fullstack_php_sql"},
-        ],
+    _stub_assignment_options(
+        monkeypatch,
+        [{"assignmentID": "assignment1", "title": "Assignment 1", "profile": "fullstack_php_sql"}],
     )
 
     bundle = _make_zip({"index.html": "<!doctype html><html><body>ok</body></html>"})
@@ -748,11 +766,9 @@ def test_mark_route_resolves_profile_from_selected_assignment(tmp_path: Path, mo
 
 def test_mark_route_rejects_new_submission_when_grades_released(tmp_path: Path, monkeypatch) -> None:
     client, _ = _client(tmp_path)
-    monkeypatch.setattr(
-        "ams.webui.list_assignments",
-        lambda teacher_id=None: [
-            {"assignmentID": "assignment1", "title": "Assignment 1", "profile": "fullstack_php_sql", "marks_released": True},
-        ],
+    _stub_assignment_options(
+        monkeypatch,
+        [{"assignmentID": "assignment1", "title": "Assignment 1", "profile": "fullstack_php_sql", "marks_released": True}],
     )
 
     bundle = _make_zip({"index.html": "<!doctype html><html><body>ok</body></html>"})
@@ -775,11 +791,9 @@ def test_mark_route_rejects_new_submission_when_grades_released(tmp_path: Path, 
 
 def test_batch_route_rejects_new_submission_when_grades_released(tmp_path: Path, monkeypatch) -> None:
     client, _ = _client(tmp_path)
-    monkeypatch.setattr(
-        "ams.webui.list_assignments",
-        lambda teacher_id=None: [
-            {"assignmentID": "assignment1", "title": "Assignment 1", "profile": "fullstack_php_sql", "marks_released": True},
-        ],
+    _stub_assignment_options(
+        monkeypatch,
+        [{"assignmentID": "assignment1", "title": "Assignment 1", "profile": "fullstack_php_sql", "marks_released": True}],
     )
 
     inner_submission = _make_zip({"index.html": "<!doctype html><html><body>ok</body></html>"})
@@ -913,7 +927,7 @@ def test_student_submission_report_shows_view_analytics_button_when_marks_releas
         },
     )
     monkeypatch.setattr(
-        "ams.webui.get_assignment",
+        "ams.web.routes_runs.get_assignment",
         lambda assignment_id: {
             "assignmentID": assignment_id,
             "title": "Assignment 1",
@@ -1335,7 +1349,7 @@ def test_reprocessing_flagged_batch_submission_unblocks_grade_release(tmp_path: 
             )
             return report_path
 
-    monkeypatch.setattr("ams.webui.AssessmentPipeline", _SafePipeline)
+    monkeypatch.setattr("ams.web.routes_marking.AssessmentPipeline", _SafePipeline)
 
     response = client.post(
         "/teacher/assignment/assignment1/threats/reprocess",
@@ -1404,7 +1418,7 @@ def test_reprocessing_llm_error_submission_unblocks_grade_release(tmp_path: Path
             (Path(workspace_path) / "summary.txt").write_text("rerun summary", encoding="utf-8")
             return report_path
 
-    monkeypatch.setattr("ams.webui.AssessmentPipeline", _RecoveredPipeline)
+    monkeypatch.setattr("ams.web.routes_marking.AssessmentPipeline", _RecoveredPipeline)
 
     response = client.post(
         "/teacher/assignment/assignment1/submissions/rerun",
@@ -1531,7 +1545,7 @@ def test_rerun_single_submission_updates_report_and_detail_view(tmp_path: Path, 
             (Path(workspace_path) / "summary.txt").write_text("new summary", encoding="utf-8")
             return report_path
 
-    monkeypatch.setattr("ams.webui.AssessmentPipeline", _RerunPipeline)
+    monkeypatch.setattr("ams.web.routes_marking.AssessmentPipeline", _RerunPipeline)
 
     response = client.post(f"/runs/{run_id}/rerun", headers={"X-AMS-Async": "1"})
     assert response.status_code == 202

@@ -21,7 +21,7 @@
     <nav class="navbar">
         <div class="container navbar-inner">
             <div class="navbar-brand">
-                <a href="{{ url_for('home') }}" class="navbar-logo">AMS</a>
+                <a href="{{ url_for('dashboard.home') }}" class="navbar-logo">AMS</a>
             </div>
             <div class="navbar-nav">
                 {% if is_authenticated %}
@@ -47,14 +47,14 @@
                     {% if effective_role == 'teacher' %}
                     <a href="{{ url_for('teacher.dashboard') }}"
                         class="nav-link {% if request.endpoint and request.endpoint in teacher_assignment_endpoints %}active{% endif %}">Assignments</a>
-                    <a href="{{ url_for('mark') }}"
+                    <a href="{{ url_for('marking.mark') }}"
                         class="nav-link {% if request.endpoint == 'mark' %}active{% endif %}">Mark</a>
-                    <a href="{{ url_for('batch') }}"
+                    <a href="{{ url_for('batch.batch') }}"
                         class="nav-link {% if request.endpoint == 'batch' %}active{% endif %}">Batch</a>
-                    <a href="{{ url_for('runs') }}"
+                    <a href="{{ url_for('runs.runs') }}"
                         class="nav-link {% if request.endpoint == 'runs' %}active{% endif %}">Runs</a>
                     {% if threat_containers is defined and threat_containers %}
-                    <a href="{{ url_for('threats') }}"
+                    <a href="{{ url_for('github.threats') }}"
                         class="nav-link {% if request.endpoint == 'threats' %}active{% endif %}" style="color:#dc2626;">Threats</a>
                     {% endif %}
                     {% endif %}
@@ -65,7 +65,7 @@
                         class="nav-link {% if request.endpoint == 'student.dashboard' %}active{% endif %}">Dashboard</a>
                     <a href="{{ url_for('student.coursework') }}"
                         class="nav-link {% if request.endpoint in ('student.coursework', 'student.assignment_analytics') %}active{% endif %}">Coursework</a>
-                    <a href="{{ url_for('mark') }}"
+                    <a href="{{ url_for('marking.mark') }}"
                         class="nav-link {% if request.endpoint == 'mark' %}active{% endif %}">Submit</a>
                     {% endif %}
                 {% else %}

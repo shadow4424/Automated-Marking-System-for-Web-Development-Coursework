@@ -168,9 +168,9 @@
 {% macro artifact_url(relpath) -%}
     {%- set normalized = relpath|replace('\\', '/') -%}
     {%- if batch_submission_id is defined and batch_submission_id -%}
-        {{- url_for('run_artifact', run_id=run_id, relpath='runs/' ~ batch_submission_id ~ '/' ~ normalized) -}}
+        {{- url_for('runs.run_artifact', run_id=run_id, relpath='runs/' ~ batch_submission_id ~ '/' ~ normalized) -}}
     {%- else -%}
-        {{- url_for('run_artifact', run_id=run_id, relpath=normalized) -}}
+        {{- url_for('runs.run_artifact', run_id=run_id, relpath=normalized) -}}
     {%- endif -%}
 {%- endmacro %}
 
@@ -324,7 +324,7 @@
 {%- endmacro %}
 
 {% set viewer_role = view_as_role or user_role %}
-{% set back_target = back_url if back_url is defined and back_url else (url_for('student.coursework') if viewer_role == 'student' else (url_for('teacher.assignment_detail', assignment_id=run.assignment_id) if run.assignment_id else url_for('runs'))) %}
+{% set back_target = back_url if back_url is defined and back_url else (url_for('student.coursework') if viewer_role == 'student' else (url_for('teacher.assignment_detail', assignment_id=run.assignment_id) if run.assignment_id else url_for('runs.runs'))) %}
 {% set back_label = 'Back to coursework' if viewer_role == 'student' else ('Back to assignment' if run.assignment_id else 'Back to runs') %}
 {% set run_status = run.status|default('completed')|lower %}
 {% set is_student = (user_role == 'student') %}
@@ -420,7 +420,7 @@
                 <div class="submission-card-title">Submission history</div>
                 <div class="submission-system-list">
                     {% for item in attempt_history_list[:6] %}
-                    {% set item_url = url_for('batch_submission_view', run_id=item.run_id, submission_id=item.batch_submission_id) if item.batch_submission_id else url_for('run_detail', run_id=item.run_id) %}
+                    {% set item_url = url_for('batch.batch_submission_view', run_id=item.run_id, submission_id=item.batch_submission_id) if item.batch_submission_id else url_for('runs.run_detail', run_id=item.run_id) %}
                     <article class="submission-system-item">
                         <div class="submission-card-head">
                             <div>
@@ -460,11 +460,11 @@
         <div class="detail-nav-actions">
             {% if can_rerun_submission %}
                 {% if batch_submission_id %}
-                <form method="POST" action="{{ url_for('batch_submission_rerun', run_id=run_id, submission_id=batch_submission_id) }}" data-job-form="rerun">
+                <form method="POST" action="{{ url_for('batch.batch_submission_rerun', run_id=run_id, submission_id=batch_submission_id) }}" data-job-form="rerun">
                     <button type="submit" class="btn btn-warning btn-sm">Rerun Submission</button>
                 </form>
                 {% elif run.mode != 'batch' %}
-                <form method="POST" action="{{ url_for('run_submission_rerun', run_id=run_id) }}" data-job-form="rerun">
+                <form method="POST" action="{{ url_for('runs.run_submission_rerun', run_id=run_id) }}" data-job-form="rerun">
                     <button type="submit" class="btn btn-warning btn-sm">Rerun Submission</button>
                 </form>
                 {% endif %}
@@ -477,19 +477,19 @@
                         <span class="dropdown-caret"></span>
                     </button>
                     <div class="export-dropdown-menu" role="menu">
-                        <a href="{{ url_for('batch_submission_report', run_id=run_id, submission_id=batch_submission_id) }}" class="export-dropdown-item" role="menuitem">
+                        <a href="{{ url_for('batch.batch_submission_report', run_id=run_id, submission_id=batch_submission_id) }}" class="export-dropdown-item" role="menuitem">
                             <span class="format-icon json">JSON</span>
                             JSON Format
                         </a>
-                        <a href="{{ url_for('batch_submission_export', run_id=run_id, submission_id=batch_submission_id, format='csv') }}" class="export-dropdown-item" role="menuitem">
+                        <a href="{{ url_for('batch.batch_submission_export', run_id=run_id, submission_id=batch_submission_id, format='csv') }}" class="export-dropdown-item" role="menuitem">
                             <span class="format-icon csv">CSV</span>
                             CSV Format
                         </a>
-                        <a href="{{ url_for('batch_submission_export', run_id=run_id, submission_id=batch_submission_id, format='txt') }}" class="export-dropdown-item" role="menuitem">
+                        <a href="{{ url_for('batch.batch_submission_export', run_id=run_id, submission_id=batch_submission_id, format='txt') }}" class="export-dropdown-item" role="menuitem">
                             <span class="format-icon txt">TXT</span>
                             Plain Text
                         </a>
-                        <a href="{{ url_for('batch_submission_export', run_id=run_id, submission_id=batch_submission_id, format='pdf') }}" class="export-dropdown-item" role="menuitem">
+                        <a href="{{ url_for('batch.batch_submission_export', run_id=run_id, submission_id=batch_submission_id, format='pdf') }}" class="export-dropdown-item" role="menuitem">
                             <span class="format-icon pdf">PDF</span>
                             PDF Document
                         </a>
@@ -502,19 +502,19 @@
                         <span class="dropdown-caret"></span>
                     </button>
                     <div class="export-dropdown-menu" role="menu">
-                        <a href="{{ url_for('download', run_id=run_id, filename='report.json') }}" class="export-dropdown-item" role="menuitem">
+                        <a href="{{ url_for('export.download', run_id=run_id, filename='report.json') }}" class="export-dropdown-item" role="menuitem">
                             <span class="format-icon json">JSON</span>
                             JSON Format
                         </a>
-                        <a href="{{ url_for('individual_submission_export', run_id=run_id, format='csv') }}" class="export-dropdown-item" role="menuitem">
+                        <a href="{{ url_for('export.individual_submission_export', run_id=run_id, format='csv') }}" class="export-dropdown-item" role="menuitem">
                             <span class="format-icon csv">CSV</span>
                             CSV Format
                         </a>
-                        <a href="{{ url_for('individual_submission_export', run_id=run_id, format='txt') }}" class="export-dropdown-item" role="menuitem">
+                        <a href="{{ url_for('export.individual_submission_export', run_id=run_id, format='txt') }}" class="export-dropdown-item" role="menuitem">
                             <span class="format-icon txt">TXT</span>
                             Plain Text
                         </a>
-                        <a href="{{ url_for('individual_submission_export', run_id=run_id, format='pdf') }}" class="export-dropdown-item" role="menuitem">
+                        <a href="{{ url_for('export.individual_submission_export', run_id=run_id, format='pdf') }}" class="export-dropdown-item" role="menuitem">
                             <span class="format-icon pdf">PDF</span>
                             PDF Document
                         </a>

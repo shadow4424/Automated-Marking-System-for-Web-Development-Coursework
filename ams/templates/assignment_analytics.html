@@ -1688,9 +1688,9 @@
                         <div>
                             {% if row.run_id %}
                                 {% if row.source_mode == 'batch' and row.submission_id %}
-                                <a href="{{ url_for('batch_submission_view', run_id=row.run_id, submission_id=row.submission_id) }}" class="btn btn-ghost btn-sm" onclick="event.stopPropagation();">Open report</a>
+                                <a href="{{ url_for('batch.batch_submission_view', run_id=row.run_id, submission_id=row.submission_id) }}" class="btn btn-ghost btn-sm" onclick="event.stopPropagation();">Open report</a>
                                 {% else %}
-                                <a href="{{ url_for('run_detail', run_id=row.run_id) }}" class="btn btn-ghost btn-sm" onclick="event.stopPropagation();">Open report</a>
+                                <a href="{{ url_for('runs.run_detail', run_id=row.run_id) }}" class="btn btn-ghost btn-sm" onclick="event.stopPropagation();">Open report</a>
                                 {% endif %}
                             {% else %}
                             <span class="analytics-helper">Report unavailable</span>
@@ -2143,8 +2143,8 @@
 <div
     id="analytics-js-config"
     hidden
-    data-run-detail-pattern="{{ url_for('run_detail', run_id='__RUN_ID__') }}"
-    data-batch-report-pattern="{{ url_for('batch_submission_view', run_id='__RUN_ID__', submission_id='__SUBMISSION_ID__') }}"
+    data-run-detail-pattern="{{ url_for('runs.run_detail', run_id='__RUN_ID__') }}"
+    data-batch-report-pattern="{{ url_for('batch.batch_submission_view', run_id='__RUN_ID__', submission_id='__SUBMISSION_ID__') }}"
 ></div>
 
 <aside id="analytics-student-drawer" class="analytics-drawer" aria-hidden="true">

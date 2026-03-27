@@ -146,7 +146,7 @@ def teacher_or_admin_required(f):
 def login():
     """Authenticate a user and begin the two-factor verification flow."""
     if "user_id" in session and session.get("2fa_verified"):
-        return redirect(url_for("home"))
+        return redirect(url_for("dashboard.home"))
 
     if request.method == "GET":
         return render_template("login.html")

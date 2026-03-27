@@ -5,7 +5,7 @@
 <div class="page-shell">
     <section class="page-hero page-hero--split">
         <div class="page-hero-main">
-            <a href="{{ url_for('runs') }}" class="page-back-link">Back to run history</a>
+            <a href="{{ url_for('runs.runs') }}" class="page-back-link">Back to run history</a>
             <div class="page-kicker">Security review</div>
             <h1>Security threats</h1>
             <p class="page-context-line">Review retained threat containers, inspect filesystem or log evidence, and remove containers once the investigation is complete.</p>
@@ -32,8 +32,8 @@
                 <h2 class="card-title">Container inspection</h2>
             </div>
             <div class="page-inline-tools">
-                <a href="{{ url_for('threats') }}" class="btn btn-secondary btn-sm">Back to threat list</a>
-                <form method="post" action="{{ url_for('threat_cleanup', container_name=inspected.name) }}" onsubmit="return confirm('Are you sure you want to remove this container?');">
+                <a href="{{ url_for('github.threats') }}" class="btn btn-secondary btn-sm">Back to threat list</a>
+                <form method="post" action="{{ url_for('github.threat_cleanup', container_name=inspected.name) }}" onsubmit="return confirm('Are you sure you want to remove this container?');">
                     <button type="submit" class="btn btn-danger btn-sm">Remove container</button>
                 </form>
             </div>
@@ -86,8 +86,8 @@
                         <div class="surface-item-meta">ID {{ c.container_id }} | Image {{ c.image }} | Status {{ c.status }} | Created {{ c.created }}</div>
                     </div>
                     <div class="surface-item-actions">
-                        <a href="{{ url_for('threat_inspect', container_name=c.name) }}" class="btn btn-secondary btn-sm">Inspect</a>
-                        <form method="post" action="{{ url_for('threat_cleanup', container_name=c.name) }}" onsubmit="return confirm('Remove container {{ c.name }}?');">
+                        <a href="{{ url_for('github.threat_inspect', container_name=c.name) }}" class="btn btn-secondary btn-sm">Inspect</a>
+                        <form method="post" action="{{ url_for('github.threat_cleanup', container_name=c.name) }}" onsubmit="return confirm('Remove container {{ c.name }}?');">
                             <button type="submit" class="btn btn-danger btn-sm">Remove</button>
                         </form>
                     </div>
@@ -101,7 +101,7 @@
         <div class="empty-state-icon"></div>
         <h3 class="empty-state-title">No retained containers</h3>
         <p class="empty-state-text">No submissions are currently holding threat containers for manual review or cleanup.</p>
-        <a href="{{ url_for('runs') }}" class="btn btn-primary">View runs</a>
+        <a href="{{ url_for('runs.runs') }}" class="btn btn-primary">View runs</a>
     </div>
     {% endif %}
 </div>

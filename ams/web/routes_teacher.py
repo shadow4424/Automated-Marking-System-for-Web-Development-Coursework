@@ -276,8 +276,8 @@ def _build_assignment_run_rows(assignment_id: str) -> list[dict]:
 
 def _assignment_submission_detail_url(row: Mapping[str, Any]) -> str:
     if row.get("mode") == "batch" and row.get("_batch_submission_id"):
-        return url_for("batch_submission_view", run_id=row.get("id"), submission_id=row.get("_batch_submission_id"))
-    return url_for("run_detail", run_id=row.get("id"))
+        return url_for("batch.batch_submission_view", run_id=row.get("id"), submission_id=row.get("_batch_submission_id"))
+    return url_for("runs.run_detail", run_id=row.get("id"))
 
 
 def _assignment_submission_row_key(row: Mapping[str, Any]) -> tuple[str, str]:
@@ -370,9 +370,9 @@ def _build_threat_resolution_rows(assignment_runs: Sequence[Mapping[str, Any]]) 
                 "mode": str(row.get("mode") or "mark"),
                 "submission_id": str(row.get("_batch_submission_id") or ""),
                 "detail_url": (
-                    url_for("batch_submission_view", run_id=row.get("id"), submission_id=row.get("_batch_submission_id"))
+                    url_for("batch.batch_submission_view", run_id=row.get("id"), submission_id=row.get("_batch_submission_id"))
                     if row.get("mode") == "batch" and row.get("_batch_submission_id")
-                    else url_for("run_detail", run_id=row.get("id"))
+                    else url_for("runs.run_detail", run_id=row.get("id"))
                 ),
                 "threat_count": int(
                     submission.get("threat_count") or 0
@@ -412,9 +412,9 @@ def _build_llm_error_resolution_rows(assignment_runs: Sequence[Mapping[str, Any]
                 "mode": str(row.get("mode") or "mark"),
                 "submission_id": str(row.get("_batch_submission_id") or ""),
                 "detail_url": (
-                    url_for("batch_submission_view", run_id=row.get("id"), submission_id=row.get("_batch_submission_id"))
+                    url_for("batch.batch_submission_view", run_id=row.get("id"), submission_id=row.get("_batch_submission_id"))
                     if row.get("mode") == "batch" and row.get("_batch_submission_id")
-                    else url_for("run_detail", run_id=row.get("id"))
+                    else url_for("runs.run_detail", run_id=row.get("id"))
                 ),
                 "llm_error_message": first_message or "LLM-assisted marking failed and requires review.",
                 "llm_error_messages": messages,

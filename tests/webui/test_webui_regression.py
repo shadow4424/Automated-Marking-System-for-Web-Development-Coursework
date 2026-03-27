@@ -7,7 +7,8 @@ from pathlib import Path
 
 from ams.core.config import ScoringMode
 from ams.tools.batch import run_batch
-from ams.webui import create_app, _write_run_index_mark
+from ams.web.routes_runs import _write_run_index_mark
+from ams.webui import create_app
 from ams.core.pipeline import AssessmentPipeline
 from ams.io.web_storage import create_run_dir, save_run_info
 from ams.io.web_storage import safe_extract_zip, find_submission_root

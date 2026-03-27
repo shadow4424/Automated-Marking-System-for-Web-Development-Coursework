@@ -16,7 +16,7 @@
             </div>
             {% endif %}
             <div class="page-action-row">
-                <a href="{{ url_for('mark') }}" class="btn btn-primary">Upload submission</a>
+                <a href="{{ url_for('marking.mark') }}" class="btn btn-primary">Upload submission</a>
                 <a href="{{ url_for('student.coursework') }}" class="btn btn-secondary">View coursework</a>
             </div>
         </div>
@@ -69,7 +69,7 @@
                     {% endif %}
                 </div>
                 <div class="run-card-content">
-                    {% set result_url = url_for('batch_submission_view', run_id=run.id, submission_id=run._batch_submission_id) if run.get('_batch_submission_id') else url_for('run_detail', run_id=run.id) %}
+                    {% set result_url = url_for('batch.batch_submission_view', run_id=run.id, submission_id=run._batch_submission_id) if run.get('_batch_submission_id') else url_for('runs.run_detail', run_id=run.id) %}
                     <div class="run-card-title">
                         {% if run.get('assignment_id') %}
                             {% if run._marks_released %}

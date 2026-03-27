@@ -4,7 +4,7 @@ import json
 import zipfile
 from pathlib import Path
 
-from ams.webui import _write_batch_reports_zip
+from ams.web.routes_batch import _write_batch_reports_zip
 
 
 def test_batch_reports_zip_includes_batch_outputs_without_legacy_analytics_folder(tmp_path: Path) -> None:

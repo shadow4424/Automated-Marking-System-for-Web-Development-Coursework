@@ -11,8 +11,8 @@
             Generate reports, analytics, and evidence bundles without the spreadsheet chaos.
         </p>
         <div class="hero-actions">
-            <a href="{{ url_for('mark') }}" class="btn btn-primary btn-lg">Start a Marking Run</a>
-            <a href="{{ url_for('runs') }}" class="btn btn-secondary btn-lg">View Recent Runs</a>
+            <a href="{{ url_for('marking.mark') }}" class="btn btn-primary btn-lg">Start a Marking Run</a>
+            <a href="{{ url_for('runs.runs') }}" class="btn btn-secondary btn-lg">View Recent Runs</a>
         </div>
         <p class="hero-trust">Built for lecturers, markers, and teaching teams.</p>
     </div>
@@ -45,25 +45,25 @@
             <span class="badge badge-primary">Mark</span>
             <h3 class="card-title mt-md">Mark Single</h3>
             <p class="card-body">Upload a student ZIP, choose a profile, and run automated checks.</p>
-            <a href="{{ url_for('mark') }}" class="btn btn-secondary mt-md">Start Single Mark</a>
+            <a href="{{ url_for('marking.mark') }}" class="btn btn-secondary mt-md">Start Single Mark</a>
         </div>
         <div class="card">
             <span class="badge badge-info">Batch</span>
             <h3 class="card-title mt-md">Batch Runs</h3>
             <p class="card-body">Process cohorts in one upload and export summaries for staff.</p>
-            <a href="{{ url_for('batch') }}" class="btn btn-secondary mt-md">Upload Batch</a>
+            <a href="{{ url_for('batch.batch') }}" class="btn btn-secondary mt-md">Upload Batch</a>
         </div>
         <div class="card">
             <span class="badge badge-success">Detail</span>
             <h3 class="card-title mt-md">Run Detail</h3>
             <p class="card-body">Inspect findings, evidence, AI feedback, and per-component scores.</p>
-            <a href="{{ url_for('runs') }}" class="btn btn-secondary mt-md">Open Runs</a>
+            <a href="{{ url_for('runs.runs') }}" class="btn btn-secondary mt-md">Open Runs</a>
         </div>
         <div class="card">
             <span class="badge badge-warning">Analytics</span>
             <h3 class="card-title mt-md">Cohort Analytics</h3>
             <p class="card-body">Review distribution, top findings, and areas to revisit in teaching.</p>
-            <a href="{{ url_for('runs') }}" class="btn btn-secondary mt-md">Explore Analytics</a>
+            <a href="{{ url_for('runs.runs') }}" class="btn btn-secondary mt-md">Explore Analytics</a>
         </div>
     </div>
 </section>
