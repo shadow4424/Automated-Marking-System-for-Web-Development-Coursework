@@ -248,7 +248,7 @@ class ProfileSpec:
         return definitions
 
 
-def _build_profile_specs() -> Dict[str, ProfileSpec]:
+def _build_html_profile_specs() -> Dict[str, object]:
     # HTML Rules - Expanded with comprehensive web development criteria
     # Weights are normalised so that the total = 1.0 for the HTML component.
     # Categories: Structure, Metadata, Semantic, Interactive/Forms, Accessibility
@@ -501,8 +501,10 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
             llm_guidance="Image usage is optional. Award if present.",
         ),
     ]
+    return {"html_rules": html_rules}
 
-    
+
+def _build_css_profile_specs() -> Dict[str, object]:
     # CSS Rules - Expanded with comprehensive web development criteria
     # Weights are normalised so that the total = 1.0 for the CSS component.
     # Categories: Structure, Selectors, Layout, Styling, Responsiveness, Maintainability
@@ -785,8 +787,10 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
             llm_guidance="Full credit for clear hover + normal state differentiation. Partial for hover only or very subtle change.",
         ),
     ]
+    return {"css_rules": css_rules, "css_lab_rules": css_lab_rules}
 
-    
+
+def _build_js_profile_specs() -> Dict[str, object]:
     # JavaScript Rules - Expanded with comprehensive web development criteria
     # Weights are normalised so that the total = 1.0 for the JS component.
     # Categories: Events, DOM, Functions, Control Flow, Validation, Async, Error Handling, Modern JS
@@ -1069,8 +1073,10 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
             llm_guidance="Award for one or more working extras. Partial for attempted but broken extras.",
         ),
     ]
+    return {"js_rules": js_rules, "js_calculator_rules": js_calculator_rules}
 
 
+def _build_php_profile_specs() -> Dict[str, object]:
     # PHP Rules - Expanded with comprehensive web development criteria
     # Weights are normalised so that the total = 1.0 for the PHP component.
     # Categories: Structure, Input, Output, Database, Sessions, Functions, Control Flow, Error Handling, Includes
@@ -1242,8 +1248,10 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
             llm_guidance="Full credit for input superglobal + conditional logic + output. Partial for partial path only.",
         ),
     ]
+    return {"php_rules_fullstack": php_rules_fullstack}
 
 
+def _build_sql_profile_specs() -> Dict[str, object]:
     # SQL Rules - Expanded with comprehensive database design criteria
     # Weights are normalised so that the total = 1.0 for the SQL component.
     # Categories: Schema, Constraints, CRUD, Queries, Advanced
@@ -1412,7 +1420,6 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
         ),
     ]
 
-
     # Behavioral Rules - Dynamic runtime testing criteria
     # Weights are normalised so that the total = 1.0 for the behavioral component.
     behavioral_rules_frontend = [
@@ -1501,6 +1508,15 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
         ),
     ]
 
+    return {
+        "sql_rules_fullstack": sql_rules_fullstack,
+        "behavioral_rules_frontend": behavioral_rules_frontend,
+        "behavioral_rules_fullstack": behavioral_rules_fullstack,
+        "behavioral_rules_api": behavioral_rules_api,
+    }
+
+
+def _build_api_profile_specs() -> Dict[str, object]:
     api_required_rules = [
         RequiredAPIRule(
             id="api.json_encode",
@@ -1590,6 +1606,33 @@ def _build_profile_specs() -> Dict[str, ProfileSpec]:
             weight=0.30,
         ),
     ]
+
+    return {
+        "api_required_rules": api_required_rules,
+        "behavioral_rules_calculator": behavioral_rules_calculator,
+    }
+
+
+def _build_profile_specs() -> Dict[str, ProfileSpec]:
+    spec_parts: Dict[str, object] = {}
+    spec_parts.update(_build_html_profile_specs())
+    html_rules = spec_parts["html_rules"]
+    spec_parts.update(_build_css_profile_specs())
+    css_rules = spec_parts["css_rules"]
+    css_lab_rules = spec_parts["css_lab_rules"]
+    spec_parts.update(_build_js_profile_specs())
+    js_rules = spec_parts["js_rules"]
+    js_calculator_rules = spec_parts["js_calculator_rules"]
+    spec_parts.update(_build_php_profile_specs())
+    php_rules_fullstack = spec_parts["php_rules_fullstack"]
+    spec_parts.update(_build_sql_profile_specs())
+    sql_rules_fullstack = spec_parts["sql_rules_fullstack"]
+    behavioral_rules_frontend = spec_parts["behavioral_rules_frontend"]
+    behavioral_rules_fullstack = spec_parts["behavioral_rules_fullstack"]
+    behavioral_rules_api = spec_parts["behavioral_rules_api"]
+    spec_parts.update(_build_api_profile_specs())
+    api_required_rules = spec_parts["api_required_rules"]
+    behavioral_rules_calculator = spec_parts["behavioral_rules_calculator"]
 
     frontend_basic = ProfileSpec(
         name="frontend_basic",
