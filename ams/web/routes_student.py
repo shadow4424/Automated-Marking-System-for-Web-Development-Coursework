@@ -35,6 +35,8 @@ student_bp = Blueprint("student", __name__, url_prefix="/student")
 #  Helpers
 # ---------------------------------------------------------------------------
 
+# --- Submission View Helpers ---
+
 def _resolve_student_id() -> tuple[str | None, dict | None]:
     """Return (student_id, preview_info) for the student dashboard.
 
@@ -183,6 +185,8 @@ def _split_assignments(
     return todo, completed
 
 
+# --- Grade Visibility Helpers ---
+
 def _student_can_access_assignment(assignment: dict | None, student_id: str | None) -> bool:
     if assignment is None or not student_id:
         return False
@@ -202,6 +206,8 @@ def _student_llm_feedback_enabled() -> bool:
         return value.strip().lower() not in {"0", "false", "no", "off"}
     return value is not False
 
+
+# --- Analytics Helpers ---
 
 def _deterministic_student_feedback(analytics: dict) -> dict:
     feedback: list[dict[str, object]] = []
@@ -253,6 +259,55 @@ def _student_feedback_validation_failure(category: str, message: str) -> dict[st
     return {"category": str(category or "schema_error"), "message": str(message or "Validation failed.")}
 
 
+def _validate_student_feedback_headline(
+    candidate: dict,
+    banned_markers: tuple[str, ...],
+) -> tuple[str | None, dict | None]:
+    headline = str(candidate.get("headline") or "").strip()
+    if not headline or len(headline) > 240:
+        return None, _student_feedback_validation_failure("schema_error", "Feedback headline is missing or too long.")
+    if any(marker in headline.lower() for marker in banned_markers):
+        return None, _student_feedback_validation_failure("unsupported_claim", "Feedback headline contains unsupported audience language.")
+    return headline, None
+
+
+def _validate_student_feedback_item(
+    item: object,
+    allowed_types: set[str],
+    banned_markers: tuple[str, ...],
+    allowed_evidence_keys: set[str],
+) -> tuple[dict | None, dict | None]:
+    if not isinstance(item, dict):
+        return None, _student_feedback_validation_failure("schema_error", "Each feedback item must be a JSON object.")
+
+    feedback_type = str(item.get("type") or "").strip().lower()
+    title = str(item.get("title") or "").strip()
+    text = str(item.get("text") or "").strip()
+    evidence_keys = [
+        str(key).strip()
+        for key in list(item.get("evidence_keys", []) or [])
+        if str(key).strip()
+    ]
+    if feedback_type not in allowed_types:
+        return None, _student_feedback_validation_failure("schema_error", "Feedback item type is unsupported.")
+    if not title or len(title) > 90:
+        return None, _student_feedback_validation_failure("schema_error", "Feedback item title is missing or too long.")
+    if not text or len(text) < 30 or len(text) > 320:
+        return None, _student_feedback_validation_failure("schema_error", "Feedback item text is missing or too long.")
+    if any(marker in text.lower() for marker in banned_markers):
+        return None, _student_feedback_validation_failure("unsupported_claim", "Feedback item contains teacher-only or peer-specific wording.")
+    if not evidence_keys:
+        return None, _student_feedback_validation_failure("schema_error", "Each feedback item must cite at least one evidence key.")
+    if any(key not in allowed_evidence_keys for key in evidence_keys):
+        return None, _student_feedback_validation_failure("unsupported_claim", "Feedback item references unsupported evidence keys.")
+    return {
+        "type": feedback_type,
+        "title": title,
+        "text": text,
+        "evidence_keys": evidence_keys,
+    }, None
+
+
 def _validate_student_feedback(candidate: object, context: dict) -> tuple[dict | None, dict | None]:
     allowed_types = {"strength", "weakness", "context", "action", "confidence"}
     banned_markers = (
@@ -271,11 +326,9 @@ def _validate_student_feedback(candidate: object, context: dict) -> tuple[dict |
     if str(candidate.get("summary_mode") or "").strip() != "llm_student_feedback":
         return None, _student_feedback_validation_failure("schema_error", "Feedback must include summary_mode='llm_student_feedback'.")
 
-    headline = str(candidate.get("headline") or "").strip()
-    if not headline or len(headline) > 240:
-        return None, _student_feedback_validation_failure("schema_error", "Feedback headline is missing or too long.")
-    if any(marker in headline.lower() for marker in banned_markers):
-        return None, _student_feedback_validation_failure("unsupported_claim", "Feedback headline contains unsupported audience language.")
+    headline, reason = _validate_student_feedback_headline(candidate, banned_markers)
+    if headline is None:
+        return None, reason
 
     raw_feedback = candidate.get("feedback")
     if not isinstance(raw_feedback, list) or len(raw_feedback) < 3 or len(raw_feedback) > 5:
@@ -284,36 +337,15 @@ def _validate_student_feedback(candidate: object, context: dict) -> tuple[dict |
     allowed_evidence_keys = {str(key).strip() for key in context.keys() if str(key).strip()}
     validated: list[dict] = []
     for item in raw_feedback:
-        if not isinstance(item, dict):
-            return None, _student_feedback_validation_failure("schema_error", "Each feedback item must be a JSON object.")
-        feedback_type = str(item.get("type") or "").strip().lower()
-        title = str(item.get("title") or "").strip()
-        text = str(item.get("text") or "").strip()
-        evidence_keys = [
-            str(key).strip()
-            for key in list(item.get("evidence_keys", []) or [])
-            if str(key).strip()
-        ]
-        if feedback_type not in allowed_types:
-            return None, _student_feedback_validation_failure("schema_error", "Feedback item type is unsupported.")
-        if not title or len(title) > 90:
-            return None, _student_feedback_validation_failure("schema_error", "Feedback item title is missing or too long.")
-        if not text or len(text) < 30 or len(text) > 320:
-            return None, _student_feedback_validation_failure("schema_error", "Feedback item text is missing or too long.")
-        if any(marker in text.lower() for marker in banned_markers):
-            return None, _student_feedback_validation_failure("unsupported_claim", "Feedback item contains teacher-only or peer-specific wording.")
-        if not evidence_keys:
-            return None, _student_feedback_validation_failure("schema_error", "Each feedback item must cite at least one evidence key.")
-        if any(key not in allowed_evidence_keys for key in evidence_keys):
-            return None, _student_feedback_validation_failure("unsupported_claim", "Feedback item references unsupported evidence keys.")
-        validated.append(
-            {
-                "type": feedback_type,
-                "title": title,
-                "text": text,
-                "evidence_keys": evidence_keys,
-            }
+        validated_item, reason = _validate_student_feedback_item(
+            item,
+            allowed_types,
+            banned_markers,
+            allowed_evidence_keys,
         )
+        if validated_item is None:
+            return None, reason
+        validated.append(validated_item)
 
     return {
         "summary_mode": "llm_student_feedback",
@@ -322,87 +354,113 @@ def _validate_student_feedback(candidate: object, context: dict) -> tuple[dict |
     }, None
 
 
+def _student_feedback_fallback(
+    deterministic: dict,
+    validation_status: str | None = None,
+    fallback_reason_code: str | None = None,
+    fallback_reason: str | None = None,
+) -> dict:
+    payload = {**deterministic, "source": "deterministic"}
+    if validation_status is not None:
+        payload["validation_status"] = validation_status
+    if fallback_reason_code is not None:
+        payload["fallback_reason_code"] = fallback_reason_code
+    if fallback_reason is not None:
+        payload["fallback_reason"] = fallback_reason
+    return payload
+
+
+def _build_student_feedback_request(context: dict) -> tuple[str, str]:
+    prompt_payload = {
+        "student_assignment_analytics": context,
+        "valid_evidence_keys": sorted(str(key) for key in context.keys()),
+    }
+    system_prompt = (
+        "You are generating student-facing personalised assignment feedback for an automated marking system.\n"
+        "Use only the structured analytics provided for this one student and anonymous cohort aggregates.\n"
+        "Do not mention or imply any other student's identity, result, submission, rank position, or record.\n"
+        "Do not mention teacher/admin workflows, moderation queues, run IDs, or technical diagnostics unless they are already translated into student-safe wording.\n"
+        "Write in supportive but honest academic language.\n"
+        "Be specific, practical, and grounded. No generic encouragement and no speculation.\n"
+        "Return JSON only in this exact structure:\n"
+        "{\n"
+        '  "summary_mode": "llm_student_feedback",\n'
+        '  "headline": "<one-sentence student-facing interpretation>",\n'
+        '  "feedback": [\n'
+        "    {\n"
+        '      "type": "strength|weakness|context|action|confidence",\n'
+        '      "title": "<short student-facing label>",\n'
+        '      "text": "<1-2 sentence grounded feedback>",\n'
+        '      "evidence_keys": ["<safe_context_key>"]\n'
+        "    }\n"
+        "  ]\n"
+        "}\n"
+        "Provide 3 to 5 feedback items."
+    )
+    return json.dumps(prompt_payload, indent=2, sort_keys=True), system_prompt
+
+
+def _parse_student_feedback_response(response: object, context: dict, deterministic: dict) -> dict:
+    if not getattr(response, "success", False):
+        return _student_feedback_fallback(
+            deterministic,
+            validation_status="unavailable",
+            fallback_reason_code="generation_unavailable",
+            fallback_reason="LLM feedback was unavailable, so deterministic feedback is shown.",
+        )
+
+    try:
+        payload = json.loads(clean_json_response(getattr(response, "content", "")))
+    except json.JSONDecodeError:
+        return _student_feedback_fallback(
+            deterministic,
+            validation_status="rejected",
+            fallback_reason_code="invalid_json",
+            fallback_reason="LLM feedback was rejected because the response format was invalid.",
+        )
+
+    validated, reason = _validate_student_feedback(payload, context)
+    if validated is None:
+        return _student_feedback_fallback(
+            deterministic,
+            validation_status="rejected",
+            fallback_reason_code=str((reason or {}).get("category") or "schema_error"),
+            fallback_reason="LLM feedback was rejected during validation, so deterministic feedback is shown.",
+        )
+
+    return {
+        **validated,
+        "source": "llm",
+    }
+
+
 def _student_feedback_payload(analytics: dict) -> dict:
     context = dict(analytics.get("feedback_context", {}) or {})
     deterministic = _deterministic_student_feedback(analytics)
     if not _student_llm_feedback_enabled():
-        return {**deterministic, "source": "deterministic"}
+        return _student_feedback_fallback(deterministic)
 
     try:
         provider = get_llm_provider()
-        prompt_payload = {
-            "student_assignment_analytics": context,
-            "valid_evidence_keys": sorted(str(key) for key in context.keys()),
-        }
-        system_prompt = (
-            "You are generating student-facing personalised assignment feedback for an automated marking system.\n"
-            "Use only the structured analytics provided for this one student and anonymous cohort aggregates.\n"
-            "Do not mention or imply any other student's identity, result, submission, rank position, or record.\n"
-            "Do not mention teacher/admin workflows, moderation queues, run IDs, or technical diagnostics unless they are already translated into student-safe wording.\n"
-            "Write in supportive but honest academic language.\n"
-            "Be specific, practical, and grounded. No generic encouragement and no speculation.\n"
-            "Return JSON only in this exact structure:\n"
-            "{\n"
-            '  "summary_mode": "llm_student_feedback",\n'
-            '  "headline": "<one-sentence student-facing interpretation>",\n'
-            '  "feedback": [\n'
-            "    {\n"
-            '      "type": "strength|weakness|context|action|confidence",\n'
-            '      "title": "<short student-facing label>",\n'
-            '      "text": "<1-2 sentence grounded feedback>",\n'
-            '      "evidence_keys": ["<safe_context_key>"]\n'
-            "    }\n"
-            "  ]\n"
-            "}\n"
-            "Provide 3 to 5 feedback items."
-        )
+        prompt_payload, system_prompt = _build_student_feedback_request(context)
         response = provider.complete(
-            json.dumps(prompt_payload, indent=2, sort_keys=True),
+            prompt_payload,
             system_prompt=system_prompt,
             temperature=0.2,
             max_tokens=900,
             json_mode=True,
         )
-        if not getattr(response, "success", False):
-            return {
-                **deterministic,
-                "source": "deterministic",
-                "validation_status": "unavailable",
-                "fallback_reason_code": "generation_unavailable",
-                "fallback_reason": "LLM feedback was unavailable, so deterministic feedback is shown.",
-            }
-        try:
-            payload = json.loads(clean_json_response(getattr(response, "content", "")))
-        except json.JSONDecodeError:
-            return {
-                **deterministic,
-                "source": "deterministic",
-                "validation_status": "rejected",
-                "fallback_reason_code": "invalid_json",
-                "fallback_reason": "LLM feedback was rejected because the response format was invalid.",
-            }
-        validated, reason = _validate_student_feedback(payload, context)
-        if validated is None:
-            return {
-                **deterministic,
-                "source": "deterministic",
-                "validation_status": "rejected",
-                "fallback_reason_code": str((reason or {}).get("category") or "schema_error"),
-                "fallback_reason": "LLM feedback was rejected during validation, so deterministic feedback is shown.",
-            }
-        return {
-            **validated,
-            "source": "llm",
-            "model": str(getattr(provider, "model_name", "") or ""),
-        }
+        payload = _parse_student_feedback_response(response, context, deterministic)
+        if payload.get("source") == "llm":
+            payload["model"] = str(getattr(provider, "model_name", "") or "")
+        return payload
     except Exception:
-        return {
-            **deterministic,
-            "source": "deterministic",
-            "validation_status": "unavailable",
-            "fallback_reason_code": "generation_unavailable",
-            "fallback_reason": "LLM feedback was unavailable, so deterministic feedback is shown.",
-        }
+        return _student_feedback_fallback(
+            deterministic,
+            validation_status="unavailable",
+            fallback_reason_code="generation_unavailable",
+            fallback_reason="LLM feedback was unavailable, so deterministic feedback is shown.",
+        )
 
 
 # ---------------------------------------------------------------------------

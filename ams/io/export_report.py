@@ -379,9 +379,9 @@ def validate_export_report(report: ExportReport) -> None:
         )
 
 
-# ---------------------------------------------------------------------------
-# Export: JSON
-# ---------------------------------------------------------------------------
+# =============================================================================
+# JSON Export
+# =============================================================================
 
 
 def export_json(report: ExportReport) -> str:
@@ -398,33 +398,36 @@ _SEP_MAJOR = "=" * 80
 _SEP_MINOR = "-" * 40
 
 
-def export_txt(report: ExportReport) -> str:
-    """Render an 80-char-wide human-readable text report."""
+def _append_txt_section(lines: list[str], title: str) -> None:
+    lines.append(_SEP_MAJOR)
+    lines.append(title)
+    lines.append(_SEP_MAJOR)
+
+
+def _append_txt_subsection(lines: list[str], title: str) -> None:
+    lines.append(_SEP_MINOR)
+    lines.append(title)
+    lines.append(_SEP_MINOR)
+
+
+def _wrap_txt(text: str) -> str:
+    return textwrap.fill(
+        text, width=76, initial_indent="    ", subsequent_indent="    "
+    )
+
+
+def _build_txt_header_section(report: ExportReport) -> list[str]:
     lines: list[str] = []
-
-    def _section(title: str) -> None:
-        lines.append(_SEP_MAJOR)
-        lines.append(title)
-        lines.append(_SEP_MAJOR)
-
-    def _subsection(title: str) -> None:
-        lines.append(_SEP_MINOR)
-        lines.append(title)
-        lines.append(_SEP_MINOR)
-
-    def _wrap(text: str) -> str:
-        return textwrap.fill(
-            text, width=76, initial_indent="    ", subsequent_indent="    "
-        )
-
-    # Section 1: Header
-    _section("SUBMISSION ASSESSMENT REPORT")
+    _append_txt_section(lines, "SUBMISSION ASSESSMENT REPORT")
     lines.append(f"  Run ID:    {report.run_id}")
     lines.append(f"  Generated: {report.generated_at}")
     lines.append("")
+    return lines
 
-    # Section 2: Submission details
-    _section("SUBMISSION DETAILS")
+
+def _build_txt_submission_details_section(report: ExportReport) -> list[str]:
+    lines: list[str] = []
+    _append_txt_section(lines, "SUBMISSION DETAILS")
     lines.append(f"  Student ID:       {report.student_id}")
     lines.append(f"  Assignment ID:    {report.assignment_id}")
     lines.append(f"  Original File:    {report.original_filename}")
@@ -433,84 +436,106 @@ def export_txt(report: ExportReport) -> str:
     lines.append(f"  Scoring Mode:     {report.scoring_mode}")
     lines.append(f"  Pipeline Version: {report.pipeline_version}")
     lines.append("")
+    return lines
 
-    # Section 3: Overall result
-    _section("OVERALL RESULT")
+
+def _build_txt_overall_result_section(report: ExportReport) -> list[str]:
+    lines: list[str] = []
+    _append_txt_section(lines, "OVERALL RESULT")
     lines.append(f"  Score:                      {report.overall_pct}  [{report.overall_label}]")
     lines.append(f"  Confidence:                 {report.confidence_level}")
     lines.append(f"  Manual Review Recommended:  {'Yes' if report.manual_review else 'No'}")
     if report.confidence_reasons:
         lines.append("  Confidence Reasons:")
-        for r in report.confidence_reasons:
-            lines.append(f"  - {r}")
+        for reason in report.confidence_reasons:
+            lines.append(f"  - {reason}")
     if report.manual_review and report.manual_review_reasons:
         lines.append("  Manual Review Reasons:")
-        for r in report.manual_review_reasons:
-            lines.append(f"  - {r}")
+        for reason in report.manual_review_reasons:
+            lines.append(f"  - {reason}")
     lines.append("")
+    return lines
 
-    # Section 4: Component scores
-    _section("COMPONENT SCORES")
+
+def _build_txt_component_scores_section(report: ExportReport) -> list[str]:
+    lines: list[str] = []
+    _append_txt_section(lines, "COMPONENT SCORES")
     if report.components:
-        for comp in report.components:
-            req_label = "required" if comp.required else "not required for profile"
-            lines.append(f"  {comp.name.upper()}: {comp.score_pct}  ({req_label})")
+        for component in report.components:
+            req_label = "required" if component.required else "not required for profile"
+            lines.append(f"  {component.name.upper()}: {component.score_pct}  ({req_label})")
             lines.append(
-                f"    Met: {comp.met}  Partial: {comp.partial}  "
-                f"Failed: {comp.failed}  Skipped: {comp.skipped}  (weight: {comp.weight})"
+                f"    Met: {component.met}  Partial: {component.partial}  "
+                f"Failed: {component.failed}  Skipped: {component.skipped}  (weight: {component.weight})"
             )
     else:
         lines.append("  No component data available.")
     lines.append("")
+    return lines
 
-    # Section 5: Findings (skip if empty)
-    if report.findings:
-        _section("FINDINGS")
-        severity_order = ["THREAT", "FAIL", "WARN", "INFO", "SKIPPED"]
-        by_severity: dict[str, list] = {s: [] for s in severity_order}
-        other: list = []
-        for f in report.findings:
-            sev = f.severity.upper()
-            if sev in by_severity:
-                by_severity[sev].append(f)
-            else:
-                other.append(f)
-        ordered = []
-        for sev in severity_order:
-            ordered.extend(by_severity[sev])
-        ordered.extend(other)
 
-        for f in ordered:
-            lines.append(
-                f"  [{f.severity}] {f.finding_id}  ({f.component} / {f.finding_category})"
+def _build_txt_findings_section(report: ExportReport) -> list[str]:
+    if not report.findings:
+        return []
+
+    lines: list[str] = []
+    _append_txt_section(lines, "FINDINGS")
+    severity_order = ["THREAT", "FAIL", "WARN", "INFO", "SKIPPED"]
+    by_severity: dict[str, list[ExportFinding]] = {severity: [] for severity in severity_order}
+    other: list[ExportFinding] = []
+    for finding in report.findings:
+        severity = finding.severity.upper()
+        if severity in by_severity:
+            by_severity[severity].append(finding)
+        else:
+            other.append(finding)
+
+    ordered: list[ExportFinding] = []
+    for severity in severity_order:
+        ordered.extend(by_severity[severity])
+    ordered.extend(other)
+
+    for finding in ordered:
+        lines.append(
+            f"  [{finding.severity}] {finding.finding_id}  ({finding.component} / {finding.finding_category})"
+        )
+        lines.append(_wrap_txt(finding.message))
+    lines.append("")
+    return lines
+
+
+def _build_txt_rule_outcomes_section(report: ExportReport) -> list[str]:
+    if not report.rule_outcomes:
+        return []
+
+    lines: list[str] = []
+    _append_txt_section(lines, "RULE OUTCOMES")
+    comp_map: dict[str, list[RuleOutcome]] = {}
+    for outcome in report.rule_outcomes:
+        comp_map.setdefault(outcome.component, []).append(outcome)
+
+    for component_name, outcomes in comp_map.items():
+        _append_txt_subsection(lines, component_name.upper())
+        for outcome in outcomes:
+            score_display = (
+                _score_pct(outcome.score)
+                if isinstance(outcome.score, (int, float))
+                else str(outcome.score)
             )
-            lines.append(_wrap(f.message))
-        lines.append("")
+            lines.append(
+                f"  {outcome.requirement_id}  [{outcome.status}]  Score: {score_display}"
+            )
+            lines.append(f"    Stage: {outcome.stage}  |  Weight: {outcome.weight}")
+            lines.append(_wrap_txt(outcome.description))
+            if outcome.score_label:
+                lines.append(_wrap_txt(f"Score rationale: {outcome.score_label}"))
+    lines.append("")
+    return lines
 
-    # Section 6: Rule outcomes (skip if empty)
-    if report.rule_outcomes:
-        _section("RULE OUTCOMES")
-        # Group by component
-        comp_map: dict[str, list] = {}
-        for ro in report.rule_outcomes:
-            comp_map.setdefault(ro.component, []).append(ro)
 
-        for comp_name, outcomes in comp_map.items():
-            _subsection(comp_name.upper())
-            for ro in outcomes:
-                score_display = (
-                    _score_pct(ro.score) if isinstance(ro.score, (int, float))
-                    else str(ro.score)
-                )
-                lines.append(f"  {ro.requirement_id}  [{ro.status}]  Score: {score_display}")
-                lines.append(f"    Stage: {ro.stage}  |  Weight: {ro.weight}")
-                lines.append(_wrap(ro.description))
-                if ro.score_label:
-                    lines.append(_wrap(f"Score rationale: {ro.score_label}"))
-        lines.append("")
-
-    # Section 7: Execution summary
-    _section("EXECUTION SUMMARY")
+def _build_txt_execution_section(report: ExportReport) -> list[str]:
+    lines: list[str] = []
+    _append_txt_section(lines, "EXECUTION SUMMARY")
     php_str = "available" if report.execution.php_available else "unavailable"
     brow_str = "available" if report.execution.browser_available else "unavailable"
     lines.append(f"  PHP Runtime:         {php_str}")
@@ -529,37 +554,49 @@ def export_txt(report: ExportReport) -> str:
 
     if report.execution.behavioural_results:
         lines.append("  Behavioural Test Results:")
-        for e in report.execution.behavioural_results:
-            diag = f" - {e['diagnostic']}" if e["diagnostic"] else ""
-            lines.append(f"    {e['test_id']}: {e['status']}{diag}")
+        for result in report.execution.behavioural_results:
+            diag = f" - {result['diagnostic']}" if result["diagnostic"] else ""
+            lines.append(f"    {result['test_id']}: {result['status']}{diag}")
 
     if report.execution.browser_results:
         lines.append("  Browser Test Results:")
-        for e in report.execution.browser_results:
-            diag = f" - {e['diagnostic']}" if e["diagnostic"] else ""
-            lines.append(f"    {e['test_id']}: {e['status']}{diag}")
+        for result in report.execution.browser_results:
+            diag = f" - {result['diagnostic']}" if result["diagnostic"] else ""
+            lines.append(f"    {result['test_id']}: {result['status']}{diag}")
     lines.append("")
+    return lines
 
-    # Section 8: Policy notes
-    _section("MARKING POLICY NOTES")
+
+def _build_txt_policy_notes_section(report: ExportReport) -> list[str]:
+    lines: list[str] = []
+    _append_txt_section(lines, "MARKING POLICY NOTES")
     for note in report.policy_notes:
         lines.append(f"  - {note}")
     lines.append("")
+    return lines
 
+
+def export_txt(report: ExportReport) -> str:
+    """Render an 80-char-wide human-readable text report."""
+    lines: list[str] = []
+    lines.extend(_build_txt_header_section(report))
+    lines.extend(_build_txt_submission_details_section(report))
+    lines.extend(_build_txt_overall_result_section(report))
+    lines.extend(_build_txt_component_scores_section(report))
+    lines.extend(_build_txt_findings_section(report))
+    lines.extend(_build_txt_rule_outcomes_section(report))
+    lines.extend(_build_txt_execution_section(report))
+    lines.extend(_build_txt_policy_notes_section(report))
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# Export: CSV helpers
-# ---------------------------------------------------------------------------
+# =============================================================================
+# CSV Export
+# =============================================================================
 
 
-def export_csv_summary(report: ExportReport) -> str:
-    """One-row CSV with overall scores and component breakdown."""
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-
-    headers = [
+def _build_csv_summary_headers() -> list[str]:
+    return [
         "run_id", "student_id", "assignment_id", "profile", "scoring_mode", "generated_at",
         "overall_score", "overall_pct", "overall_label", "confidence_level",
         "manual_review_recommended",
@@ -567,29 +604,31 @@ def export_csv_summary(report: ExportReport) -> str:
         "total_findings", "fail_findings", "warn_findings", "threat_findings",
         "total_rules", "met_rules", "partial_rules", "failed_rules", "skipped_rules",
     ]
-    writer.writerow(headers)
 
-    # Component score lookup
-    comp_by_name = {c.name.lower(): c for c in report.components}
+
+def _build_csv_summary_row(report: ExportReport) -> list[Any]:
+    comp_by_name = {component.name.lower(): component for component in report.components}
 
     def _comp_score(name: str) -> str:
-        c = comp_by_name.get(name)
-        return c.score_pct if c is not None else ""
+        component = comp_by_name.get(name)
+        return component.score_pct if component is not None else ""
 
-    # Finding counts
-    fail_findings = sum(1 for f in report.findings if f.severity.upper() == "FAIL")
-    warn_findings = sum(1 for f in report.findings if f.severity.upper() == "WARN")
-    threat_findings = sum(1 for f in report.findings if f.severity.upper() == "THREAT")
+    fail_findings = sum(1 for finding in report.findings if finding.severity.upper() == "FAIL")
+    warn_findings = sum(1 for finding in report.findings if finding.severity.upper() == "WARN")
+    threat_findings = sum(1 for finding in report.findings if finding.severity.upper() == "THREAT")
 
-    # Rule counts
-    _fail_statuses = {STATUS_FAIL, STATUS_NO_RELEVANT_FILES, STATUS_MISSING_REQUIRED}
-    _skipped_statuses = {STATUS_SKIPPED_BY_PROFILE, STATUS_NOT_RUN, STATUS_ENVIRONMENT_UNAVAILABLE}
-    met_rules = sum(1 for r in report.rule_outcomes if r.status == STATUS_PASS)
-    partial_rules = sum(1 for r in report.rule_outcomes if r.status == STATUS_PARTIAL)
-    failed_rules = sum(1 for r in report.rule_outcomes if r.status in _fail_statuses)
-    skipped_rules = sum(1 for r in report.rule_outcomes if r.status in _skipped_statuses)
+    fail_statuses = {STATUS_FAIL, STATUS_NO_RELEVANT_FILES, STATUS_MISSING_REQUIRED}
+    skipped_statuses = {
+        STATUS_SKIPPED_BY_PROFILE,
+        STATUS_NOT_RUN,
+        STATUS_ENVIRONMENT_UNAVAILABLE,
+    }
+    met_rules = sum(1 for outcome in report.rule_outcomes if outcome.status == STATUS_PASS)
+    partial_rules = sum(1 for outcome in report.rule_outcomes if outcome.status == STATUS_PARTIAL)
+    failed_rules = sum(1 for outcome in report.rule_outcomes if outcome.status in fail_statuses)
+    skipped_rules = sum(1 for outcome in report.rule_outcomes if outcome.status in skipped_statuses)
 
-    row = [
+    return [
         report.run_id,
         report.student_id,
         report.assignment_id,
@@ -617,7 +656,14 @@ def export_csv_summary(report: ExportReport) -> str:
         failed_rules,
         skipped_rules,
     ]
-    writer.writerow(row)
+
+
+def export_csv_summary(report: ExportReport) -> str:
+    """One-row CSV with overall scores and component breakdown."""
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(_build_csv_summary_headers())
+    writer.writerow(_build_csv_summary_row(report))
     return buf.getvalue()
 
 
@@ -673,6 +719,11 @@ def export_csv_rules(report: ExportReport) -> str:
     return buf.getvalue()
 
 
+# =============================================================================
+# ZIP / Bundle Export
+# =============================================================================
+
+
 def export_csv_zip(report: ExportReport) -> bytes:
     """Create an in-memory ZIP containing three CSVs: summary, findings, rules."""
     buf = io.BytesIO()
@@ -692,9 +743,9 @@ def export_csv_zip(report: ExportReport) -> bytes:
     return buf.read()
 
 
-# ---------------------------------------------------------------------------
-# Export: PDF
-# ---------------------------------------------------------------------------
+# =============================================================================
+# PDF Export
+# =============================================================================
 
 
 def export_pdf(report: ExportReport) -> bytes:
