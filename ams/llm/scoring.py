@@ -47,6 +47,7 @@ class HybridScore:
     raw_response: dict = field(default_factory=dict)
     
     def to_dict(self) -> dict[str, Any]:
+        """Serialize the hybrid score for reports and tests."""
         return {
             "static_score": self.static_score,
             "llm_score": self.llm_score,

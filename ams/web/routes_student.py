@@ -16,7 +16,7 @@ from flask import (
 )
 
 from ams.analytics.assignment_analytics import generate_student_assignment_analytics
-from ams.core.factory import get_llm_provider
+from ams.core.llm_factory import get_llm_provider
 from ams.core.db import (
     get_assignment,
     get_preview_student,

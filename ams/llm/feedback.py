@@ -6,7 +6,7 @@ This module implements Phase 1 of the LLM integration roadmap:
 - 1.3: PII scrubbing before sending to LLM
 - 1.4: Safety rails (LLM provides feedback only, no scores)
 
-Refactored to use the LLMProvider abstraction from ams.core.factory.
+Refactored to use the LLMProvider abstraction from ams.core.llm_factory.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import logging
 import re
 from typing import Any
 
-from ams.core.factory import get_llm_provider
+from ams.core.llm_factory import get_llm_provider
 from ams.llm.providers import LLMResponse
 from ams.llm.prompts import SYSTEM_PROMPT
 

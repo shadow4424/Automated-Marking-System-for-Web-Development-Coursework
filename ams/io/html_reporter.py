@@ -90,7 +90,6 @@ class HTMLReporter:
         # Format timestamp
         timestamp = metadata.get("timestamp", datetime.now().isoformat())
         
-        # Fill template
         html_content = self.template.format(
             profile=html.escape(str(metadata.get("profile", "N/A"))),
             scoring_mode=html.escape(str(metadata.get("scoring_mode", "N/A"))),

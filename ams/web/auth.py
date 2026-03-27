@@ -144,6 +144,7 @@ def teacher_or_admin_required(f):
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
+    """Authenticate a user and begin the two-factor verification flow."""
     if "user_id" in session and session.get("2fa_verified"):
         return redirect(url_for("home"))
 
@@ -175,6 +176,7 @@ def login():
 
 @auth_bp.route("/2fa", methods=["GET", "POST"])
 def verify_2fa():
+    """Validate the 2FA code and establish the authenticated session."""
     if "pending_user_id" not in session:
         return redirect(url_for("auth.login"))
 
@@ -214,6 +216,7 @@ def verify_2fa():
 
 @auth_bp.route("/logout", methods=["GET", "POST"])
 def logout():
+    """Clear the current session and return the user to the login page."""
     session.clear()
     flash("You have been signed out.", "info")
     return redirect(url_for("auth.login"))

@@ -30,8 +30,7 @@ from ams.io.reporting import ReportWriter
 from ams.io.submission import SubmissionProcessor
 
 # LLM Integration (Phase 1 & 2)
-from ams.llm.feedback import generate_feedback
-from ams.llm.scoring import evaluate_partial_credit, evaluate_partial_credit_batch, should_evaluate_partial_credit
+from ams.llm.scoring import evaluate_partial_credit_batch, should_evaluate_partial_credit
 from ams.llm.generators import BatchFeedbackGenerator
 
 # Vision / UX Review
@@ -624,13 +623,6 @@ class AssessmentPipeline:
                 chunk_pc_items.append(pc_items)
                 chunk_pc_finding_maps.append(pc_finding_map)
 
-            # Thread-safe callables (each creates its own provider)
-            def _run_feedback(fb_evidence):
-                return BatchFeedbackGenerator().generate_batch(fb_evidence)
-
-            def _run_partial_credit(pc_items_list):
-                return evaluate_partial_credit_batch(pc_items_list) if pc_items_list else {}
-
             # Submit feedback and partial credit as independent futures
             total_tasks = len(chunks) + sum(1 for pc in chunk_pc_items if pc)
             llm_workers = min(4, total_tasks)
@@ -645,11 +637,11 @@ class AssessmentPipeline:
 
             with ThreadPoolExecutor(max_workers=llm_workers) as executor:
                 fb_futures = {
-                    executor.submit(_run_feedback, fb_ev): ("fb", idx)
+                    executor.submit(BatchFeedbackGenerator().generate_batch, fb_ev): ("fb", idx)
                     for idx, fb_ev in enumerate(chunk_fb_evidence)
                 }
                 pc_futures = {
-                    executor.submit(_run_partial_credit, pc_it): ("pc", idx)
+                    executor.submit(evaluate_partial_credit_batch, pc_it): ("pc", idx)
                     for idx, pc_it in enumerate(chunk_pc_items)
                     if pc_it
                 }

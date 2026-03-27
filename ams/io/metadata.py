@@ -114,7 +114,6 @@ class MetadataValidator:
         if not identifier:
             return ""
         
-        # Remove any path traversal attempts
         identifier = identifier.replace("..", "").replace("/", "").replace("\\", "")
         
         # Remove dangerous characters

@@ -19,6 +19,7 @@ from ams.core.profiles import get_profile_spec
 
 @dataclass
 class RunResult:
+    """Captured result of one subprocess-style behavioural test run."""
     exit_code: int | None
     stdout: str
     stderr: str
@@ -30,6 +31,7 @@ class CommandRunner:
     """Abstraction over subprocess for dependency injection in tests."""
 
     def run(self, args: Sequence[str], timeout: float, cwd: Path | None = None) -> RunResult:  # pragma: no cover - interface
+        """Execute a command and return its captured run result."""
         raise NotImplementedError
 
 
@@ -44,6 +46,7 @@ class SubprocessRunner(CommandRunner):
     """
 
     def run(self, args: Sequence[str], timeout: float, cwd: Path | None = None) -> RunResult:
+        """Execute a command on the host and capture its outputs."""
         start = time.time()
         try:
             completed = subprocess.run(
@@ -84,6 +87,7 @@ class FormDetector(HTMLParser):
         self.field_names: List[str] = []
 
     def handle_starttag(self, tag: str, attrs: List[tuple[str, str | None]]) -> None:
+        """Collect form actions and field names while parsing HTML."""
         attrs_dict = {k.lower(): (v or "") for k, v in attrs}
         if tag.lower() == "form":
             action = attrs_dict.get("action")
@@ -133,6 +137,7 @@ class DeterministicTestEngine(Assessor):
         return bool(shutil.which("php"))
 
     def run(self, context: SubmissionContext) -> List[Finding]:
+        """Run the enabled deterministic behavioural checks for a submission."""
         profile = context.metadata.get("profile", "unknown")
         profile_spec = getattr(getattr(context, "resolved_config", None), "profile", None)
         if profile_spec is None:

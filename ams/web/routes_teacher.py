@@ -37,7 +37,7 @@ from ams.core.db import (
     withhold_marks,
 )
 from ams.io.web_storage import get_runs_root, list_runs, purge_assignment_storage
-from ams.core.factory import get_llm_provider
+from ams.core.llm_factory import get_llm_provider
 from ams.llm.utils import clean_json_response
 from ams.pdf_exports import build_records_pdf
 from ams.web.auth import get_current_user, teacher_or_admin_required

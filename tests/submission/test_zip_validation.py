@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from ams.web.helpers import validate_is_zipfile
+from ams.web.validators import validate_is_zipfile
 from ams.ingestion.submission_processor import (
     InvalidSubmissionError,
     validate_submission_archive,

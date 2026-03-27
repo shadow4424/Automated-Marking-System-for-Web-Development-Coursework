@@ -12,7 +12,7 @@ from typing import Any, Dict
 
 from pydantic import ValidationError
 
-from ams.core.factory import get_llm_provider
+from ams.core.llm_factory import get_llm_provider
 from ams.llm.providers import LLMResponse
 from ams.llm.schemas import FeedbackItem, LLMFeedback, create_fallback_feedback
 from ams.llm.utils import clean_json_response

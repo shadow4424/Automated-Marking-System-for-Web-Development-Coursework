@@ -486,7 +486,10 @@ def _attempt_is_pending(attempt: dict[str, Any]) -> bool:
     return str(attempt.get("validity_status") or "").strip().lower() == "pending"
 
 
-def _selection_reason(attempts_desc: list[dict[str, Any]], active_attempt: dict[str, Any] | None) -> str:
+def _explain_attempt_selection(
+    attempts_desc: list[dict[str, Any]],
+    active_attempt: dict[str, Any] | None,
+) -> str:
     if not attempts_desc:
         return "No submission attempt is currently recorded."
 
@@ -698,7 +701,7 @@ def recompute_active_attempt(
     active_attempt = next((attempt for attempt in attempts_desc if _attempt_is_valid(attempt)), None)
     latest_attempt_id = str((latest_attempt or {}).get("id") or "")
     active_attempt_id = str((active_attempt or {}).get("id") or "")
-    selection_reason = _selection_reason(attempts_desc, active_attempt)
+    selection_reason = _explain_attempt_selection(attempts_desc, active_attempt)
 
     conn = get_db()
     try:
@@ -904,7 +907,7 @@ def _update_attempt_from_descriptor(
     )
 
 
-def _batch_descriptors(
+def _build_batch_attempt_descriptors(
     run_dir: Path,
     run_info: dict[str, Any],
 ) -> list[dict[str, Any]]:
@@ -985,7 +988,7 @@ def sync_attempts_from_storage(runs_root: Path) -> None:
                 descriptors_by_identity[(descriptor["assignment_id"], descriptor["student_id"])].append(descriptor)
             continue
         if mode == "batch":
-            for descriptor in _batch_descriptors(run_dir, run_info):
+            for descriptor in _build_batch_attempt_descriptors(run_dir, run_info):
                 descriptors_by_identity[(descriptor["assignment_id"], descriptor["student_id"])].append(descriptor)
 
     touched: set[tuple[str, str]] = set()

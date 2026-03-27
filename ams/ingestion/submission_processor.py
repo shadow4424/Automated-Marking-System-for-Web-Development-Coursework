@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from ams.web.helpers import validate_is_zipfile
+from ams.web.validators import validate_is_zipfile
 
 logger = logging.getLogger(__name__)
 

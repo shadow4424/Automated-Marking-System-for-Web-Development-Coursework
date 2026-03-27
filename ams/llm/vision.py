@@ -19,7 +19,7 @@ from typing import Optional
 import numpy as np
 
 from ams.core.config import LLM_CACHE_ENABLED, VISION_MAX_TOKENS
-from ams.core.factory import get_llm_provider
+from ams.core.llm_factory import get_llm_provider
 from ams.llm.cache import RequestCache
 from ams.llm.schemas import (
     VisionResult,

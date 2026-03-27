@@ -5,7 +5,7 @@ import platform
 import sys
 from typing import Dict, Iterable, List, Mapping, Tuple
 
-from ams.core.assignment_config import ResolvedAssignmentConfig, resolve_assignment_config
+from ams.core.assignment_config import ResolvedAssignmentConfig
 from ams.core.models import (
     BrowserEvidence,
     BehaviouralEvidence,

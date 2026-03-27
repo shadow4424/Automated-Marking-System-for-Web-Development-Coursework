@@ -8,6 +8,7 @@ from typing import Dict, List, Mapping, MutableMapping, Optional
 
 
 class Severity(str, Enum):
+    """Severity levels for findings emitted by the marking pipeline."""
     INFO = "INFO"
     WARN = "WARN"
     FAIL = "FAIL"
@@ -30,6 +31,7 @@ class FindingCategory(str, Enum):
 
 @dataclass
 class SubmissionContext:
+    """Runtime context shared across assessors during one submission run."""
     submission_path: Path
     workspace_path: Path
     discovered_files: MutableMapping[str, List[Path]] = field(default_factory=dict)
@@ -46,6 +48,7 @@ class SubmissionContext:
     review_recommendation: Optional["ReviewRecommendation"] = None
 
     def files_for(self, component: str, *, relevant_only: bool = True) -> List[Path]:
+        """Return discovered files for one component, preferring scoring files."""
         if relevant_only and self.scoring_files.get(component):
             return list(self.scoring_files.get(component, []))
         return list(self.discovered_files.get(component, []))
@@ -53,6 +56,7 @@ class SubmissionContext:
 
 @dataclass
 class SubmissionManifestEntry:
+    """One discovered file entry in the submission manifest."""
     path: str
     absolute_path: str
     component: str
@@ -63,6 +67,7 @@ class SubmissionManifestEntry:
     backup: bool = False
 
     def to_dict(self) -> Dict[str, object]:
+        """Serialize the manifest entry to a plain dictionary."""
         return {
             "path": self.path,
             "absolute_path": self.absolute_path,
@@ -77,11 +82,13 @@ class SubmissionManifestEntry:
 
 @dataclass
 class SubmissionManifest:
+    """Collected manifest metadata for a submission."""
     entries: List[SubmissionManifestEntry] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, object]:
+        """Serialize the submission manifest to a plain dictionary."""
         return {
             "entries": [entry.to_dict() for entry in self.entries],
             "warnings": list(self.warnings),
@@ -91,11 +98,13 @@ class SubmissionManifest:
 
 @dataclass
 class ArtefactRelation:
+    """A relationship between two discovered submission artefacts."""
     source: str
     target: str
     relation: str
 
     def to_dict(self) -> Dict[str, object]:
+        """Serialize the artefact relation to a plain dictionary."""
         return {
             "source": self.source,
             "target": self.target,
@@ -105,6 +114,7 @@ class ArtefactRelation:
 
 @dataclass
 class ArtefactInventory:
+    """Grouped artefact discovery results for a submission."""
     artefacts: Dict[str, List[str]] = field(default_factory=dict)
     relations: List[ArtefactRelation] = field(default_factory=list)
     orphan_files: List[str] = field(default_factory=list)
@@ -113,6 +123,7 @@ class ArtefactInventory:
     candidate_execution_map: Dict[str, List[str]] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, object]:
+        """Serialize the artefact inventory to a plain dictionary."""
         return {
             "artefacts": {key: list(value) for key, value in self.artefacts.items()},
             "relations": [relation.to_dict() for relation in self.relations],
@@ -127,11 +138,13 @@ class ArtefactInventory:
 
 @dataclass
 class RoleMappedSubmission:
+    """Role-based selection of relevant files from a submission."""
     roles: Dict[str, List[str]] = field(default_factory=dict)
     relevant_files: Dict[str, List[str]] = field(default_factory=dict)
     selection_trace: List[Dict[str, object]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, object]:
+        """Serialize the role-mapped submission to a plain dictionary."""
         return {
             "roles": {key: list(value) for key, value in self.roles.items()},
             "relevant_files": {key: list(value) for key, value in self.relevant_files.items()},
@@ -141,6 +154,7 @@ class RoleMappedSubmission:
 
 @dataclass
 class RequirementEvaluationResult:
+    """Result of evaluating one requirement rule against submission evidence."""
     requirement_id: str
     component: str
     description: str
@@ -156,6 +170,7 @@ class RequirementEvaluationResult:
     confidence_flags: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, object]:
+        """Serialize the requirement result to a plain dictionary."""
         return {
             "requirement_id": self.requirement_id,
             "component": self.component,
@@ -175,6 +190,7 @@ class RequirementEvaluationResult:
 
 @dataclass
 class ComponentScoreSummary:
+    """Aggregate scoring summary for one assessed component."""
     component: str
     score: float | str
     weight: float
@@ -185,6 +201,7 @@ class ComponentScoreSummary:
     skipped: int
 
     def to_dict(self) -> Dict[str, object]:
+        """Serialize the component summary to a plain dictionary."""
         return {
             "component": self.component,
             "score": self.score,
@@ -199,12 +216,14 @@ class ComponentScoreSummary:
 
 @dataclass
 class ConfidenceSummary:
+    """Confidence and review signals attached to a marking result."""
     level: str
     reasons: List[str] = field(default_factory=list)
     flags: List[str] = field(default_factory=list)
     skipped_checks: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, object]:
+        """Serialize the confidence summary to a plain dictionary."""
         return {
             "level": self.level,
             "reasons": list(self.reasons),
@@ -215,10 +234,12 @@ class ConfidenceSummary:
 
 @dataclass
 class ReviewRecommendation:
+    """Manual review recommendation generated for a submission."""
     recommended: bool
     reasons: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, object]:
+        """Serialize the review recommendation to a plain dictionary."""
         return {
             "recommended": self.recommended,
             "reasons": list(self.reasons),
@@ -248,6 +269,7 @@ class Finding:
 
 @dataclass
 class ScoreEvidenceBundle:
+    """Serializable bundle of scoring evidence used in reports."""
     profile: str
     generated_at: str
     environment: Mapping[str, str]
@@ -262,6 +284,7 @@ class ScoreEvidenceBundle:
     artefact_inventory: Mapping[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, object]:
+        """Serialize the scoring evidence bundle to a report-friendly dictionary."""
         component_scores = {
             name: {
                 "score": data.get("score"),
@@ -306,6 +329,7 @@ class BehaviouralEvidence:
     artifacts: Mapping[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, object]:
+        """Serialize behavioural evidence to a plain dictionary."""
         return {
             "test_id": self.test_id,
             "stage": self.stage,
@@ -339,6 +363,7 @@ class BrowserEvidence:
     notes: str = ""
 
     def to_dict(self) -> Dict[str, object]:
+        """Serialize browser evidence to a plain dictionary."""
         return {
             "test_id": self.test_id,
             "stage": self.stage,
@@ -367,6 +392,7 @@ class ReportMetadata:
     submission_metadata: Optional[Mapping[str, object]] = None
 
     def to_dict(self) -> Dict[str, object]:
+        """Serialize report metadata to a plain dictionary."""
         return {
             "timestamp": self.timestamp,
             "pipeline_version": self.pipeline_version,
@@ -395,6 +421,7 @@ class Report:
     report_version: str = "1.0"
     
     def to_dict(self) -> Dict[str, object]:
+        """Serialize the full report to a plain dictionary."""
         from ams.core.aggregation import aggregate_findings_to_checks, compute_check_stats
 
         serialized_findings = [

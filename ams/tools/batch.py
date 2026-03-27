@@ -64,7 +64,7 @@ def discover_batch_items(submissions_dir: Path) -> List[BatchItem]:
     return items
 
 
-def _empty_components() -> Dict[str, Optional[float]]:
+def _build_empty_component_scores() -> Dict[str, Optional[float]]:
     return {"html": None, "css": None, "js": None, "php": None, "sql": None, "api": None}
 
 
@@ -196,7 +196,7 @@ def _process_one_submission(
         "path": str(item.path),
         "kind": item.kind,
         "overall": None,
-        "components": _empty_components(),
+        "components": _build_empty_component_scores(),
         "report_path": None,
         "original_filename": item.path.name,
         "student_id": item.id,
@@ -326,7 +326,10 @@ def _process_one_submission(
         scores = report_data.get("scores", {})
         record["overall"] = scores.get("overall")
         comps = scores.get("by_component", {}) or {}
-        record["components"] = {k: comps.get(k, {}).get("score") for k in _empty_components().keys()}
+        record["components"] = {
+            k: comps.get(k, {}).get("score")
+            for k in _build_empty_component_scores().keys()
+        }
         review_flags = extract_review_flags_from_report(report_data)
         llm_error_flagged = bool(review_flags.get("llm_error_flagged"))
         record["status"] = "llm_error" if llm_error_flagged else "ok"

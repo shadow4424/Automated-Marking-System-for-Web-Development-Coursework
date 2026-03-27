@@ -92,7 +92,7 @@ from ams.io.web_storage import (
     validate_file_size,
     validate_file_type,
 )
-from ams.web.helpers import validate_is_zipfile
+from ams.web.validators import validate_is_zipfile
 from ams.tools.batch import discover_batch_items, run_batch, validate_submission_filename, write_outputs
 from ams.core.job_manager import job_manager
 
@@ -1332,7 +1332,6 @@ def _register_routes(app: Flask) -> None:
         github_connected = bool(session.get("github_token"))
         github_user = session.get("github_user", "")
 
-        # Get form data
         file = request.files.get("submission")
         github_repo = request.form.get("github_repo", "").strip()
         github_branch = request.form.get("github_branch", "").strip()
@@ -1412,7 +1411,6 @@ def _register_routes(app: Flask) -> None:
         profile = str(assignment.get("profile") or "frontend_interactive").strip()
         original_filename = MetadataValidator.sanitize_filename(original_filename)
         
-        # Create metadata
         uploader_extra: dict = {
             "ip_address": request.remote_addr or "unknown",
             "user_agent": request.headers.get("User-Agent", "unknown")[:200],
@@ -1816,7 +1814,6 @@ def _register_routes(app: Flask) -> None:
                 github_user=session.get("github_user", ""),
             ), 503
 
-        # Get form data
         file = request.files.get("submission")
         assignment_id = request.form.get("assignment_id", "").strip()
         scoring_mode = ScoringMode("static_plus_llm")  # Always use static + LLM
@@ -2013,7 +2010,6 @@ def _register_routes(app: Flask) -> None:
                 uploader_extra["source"] = "github"
                 uploader_extra["github_repo"] = github_repo
 
-            # Create batch metadata (assignment-level)
             batch_metadata = SubmissionMetadata(
                 student_id="batch",  # Special identifier for batch runs
                 assignment_id=assignment_id,
@@ -3102,7 +3098,6 @@ def _register_routes(app: Flask) -> None:
             )
         )
 
-        # Create a pseudo run_info for this submission
         submission_run_info = {
             "mode": "mark",
             "profile": run_info.get("profile", "frontend"),
@@ -3347,7 +3342,6 @@ def _register_routes(app: Flask) -> None:
             {".png", ".jpg", ".jpeg", ".gif", ".webp"}
         )
 
-        # Create ZIP in memory
         zip_buffer = BytesIO()
 
         try:
