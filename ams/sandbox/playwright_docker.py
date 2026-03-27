@@ -80,77 +80,12 @@ class DockerPlaywrightRunner(BrowserRunner):
         script_path = workdir / "_ams_pw_script.py"
         script_path.write_text(script_content, encoding="utf-8")
 
-        cmd = self._build_docker_cmd(workdir, script_path)
+        cmd = self._build_docker_run_command(workdir, script_path)
         logger.debug("Docker Playwright command: %s", " ".join(cmd))
 
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout_ms / 1000 + 5,  # script timeout + grace
-            )
-
-            # The script prints a single JSON line on stdout
-            if result.returncode == 0 and result.stdout.strip():
-                try:
-                    data = json.loads(result.stdout.strip().split("\n")[-1])
-                    duration_ms = int((time.time() - start) * 1000)
-
-                    # Translate container screenshot path to host path
-                    host_screenshots: list[str] = []
-                    container_shot = data.get("screenshot_path", "")
-                    if container_shot:
-                        # /output/<name>.png → workdir/artifacts/browser/<name>.png
-                        shot_name = container_shot.rsplit("/", 1)[-1]
-                        host_shot = workdir / "artifacts" / "browser" / shot_name
-                        if host_shot.exists() and host_shot.stat().st_size > 500:
-                            host_screenshots.append(str(host_shot))
-                            logger.info(
-                                "Docker Playwright screenshot saved: %s (%d bytes)",
-                                host_shot, host_shot.stat().st_size,
-                            )
-                        else:
-                            logger.warning(
-                                "Screenshot path reported by container (%s) "
-                                "but host file missing or too small: %s (exists=%s)",
-                                container_shot, host_shot, host_shot.exists(),
-                            )
-
-                    # Fallback: scan output dir for any .png the container wrote
-                    if not host_screenshots:
-                        output_dir = workdir / "artifacts" / "browser"
-                        if output_dir.is_dir():
-                            for png in sorted(output_dir.glob("*.png")):
-                                if png.stat().st_size > 500:
-                                    host_screenshots.append(str(png))
-                                    logger.info(
-                                        "Docker Playwright screenshot found via scan: %s (%d bytes)",
-                                        png, png.stat().st_size,
-                                    )
-                                    break  # take the first valid one
-
-                    return BrowserRunResult(
-                        status=data.get("status", "error"),
-                        url=data.get("url", ""),
-                        duration_ms=duration_ms,
-                        dom_before=data.get("dom_before", "")[:self.output_cap],
-                        dom_after=data.get("dom_after", "")[:self.output_cap],
-                        console_errors=data.get("console_errors", [])[:20],
-                        network_errors=data.get("network_errors", [])[:20],
-                        actions=data.get("actions", []),
-                        screenshot_paths=host_screenshots,
-                        notes=data.get("notes", ""),
-                    )
-                except (json.JSONDecodeError, KeyError) as exc:
-                    logger.warning("Failed to parse Playwright container output: %s", exc)
-
-            duration_ms = int((time.time() - start) * 1000)
-            return BrowserRunResult(
-                status="error",
-                duration_ms=duration_ms,
-                notes=f"Container exited {result.returncode}: {result.stderr[:500]}",
-            )
+            result = self._start_docker_container(cmd)
+            return self._collect_playwright_output(result, workdir, start)
 
         except subprocess.TimeoutExpired:
             duration_ms = int((time.time() - start) * 1000)
@@ -184,6 +119,82 @@ class DockerPlaywrightRunner(BrowserRunner):
             script_path.unlink(missing_ok=True)
 
     # ------------------------------------------------------------------
+
+    def _build_docker_run_command(self, workdir: Path, script_path: Path) -> list[str]:
+        """Build the Docker command for a single Playwright run."""
+        return self._build_docker_cmd(workdir, script_path)
+
+    def _start_docker_container(self, command: list[str]):
+        """Execute the Docker command and return the completed subprocess result."""
+        return subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=self.timeout_ms / 1000 + 5,
+        )
+
+    def _collect_playwright_output(
+        self,
+        process,
+        workdir: Path,
+        started_at: float,
+    ) -> BrowserRunResult:
+        """Parse Docker stdout/stderr into a BrowserRunResult."""
+        if process.returncode == 0 and process.stdout.strip():
+            try:
+                data = json.loads(process.stdout.strip().split("\n")[-1])
+                duration_ms = int((time.time() - started_at) * 1000)
+
+                host_screenshots: list[str] = []
+                container_shot = data.get("screenshot_path", "")
+                if container_shot:
+                    shot_name = container_shot.rsplit("/", 1)[-1]
+                    host_shot = workdir / "artifacts" / "browser" / shot_name
+                    if host_shot.exists() and host_shot.stat().st_size > 500:
+                        host_screenshots.append(str(host_shot))
+                        logger.info(
+                            "Docker Playwright screenshot saved: %s (%d bytes)",
+                            host_shot, host_shot.stat().st_size,
+                        )
+                    else:
+                        logger.warning(
+                            "Screenshot path reported by container (%s) but host file missing or too small: %s (exists=%s)",
+                            container_shot, host_shot, host_shot.exists(),
+                        )
+
+                if not host_screenshots:
+                    output_dir = workdir / "artifacts" / "browser"
+                    if output_dir.is_dir():
+                        for png in sorted(output_dir.glob("*.png")):
+                            if png.stat().st_size > 500:
+                                host_screenshots.append(str(png))
+                                logger.info(
+                                    "Docker Playwright screenshot found via scan: %s (%d bytes)",
+                                    png, png.stat().st_size,
+                                )
+                                break
+
+                return BrowserRunResult(
+                    status=data.get("status", "error"),
+                    url=data.get("url", ""),
+                    duration_ms=duration_ms,
+                    dom_before=data.get("dom_before", "")[:self.output_cap],
+                    dom_after=data.get("dom_after", "")[:self.output_cap],
+                    console_errors=data.get("console_errors", [])[:20],
+                    network_errors=data.get("network_errors", [])[:20],
+                    actions=data.get("actions", []),
+                    screenshot_paths=host_screenshots,
+                    notes=data.get("notes", ""),
+                )
+            except (json.JSONDecodeError, KeyError) as exc:
+                logger.warning("Failed to parse Playwright container output: %s", exc)
+
+        duration_ms = int((time.time() - started_at) * 1000)
+        return BrowserRunResult(
+            status="error",
+            duration_ms=duration_ms,
+            notes=f"Container exited {process.returncode}: {process.stderr[:500]}",
+        )
 
     def _build_docker_cmd(self, workdir: Path, script_path: Path) -> list[str]:
         cfg = self.config

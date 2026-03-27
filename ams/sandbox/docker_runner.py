@@ -168,6 +168,12 @@ class DockerCommandRunner(CommandRunner):
         else:
             cmd.append("--rm")
 
+        security_flags = self._build_docker_security_flags()
+        volume_mounts = self._build_docker_volume_mounts(
+            submission_root=submission_root,
+            inner_cwd=inner_cwd,
+        )
+
         cmd.extend([
             # Resource limits
             "--cpus", str(cfg.cpu_limit),
@@ -175,31 +181,44 @@ class DockerCommandRunner(CommandRunner):
             "--pids-limit", str(cfg.pids_limit),
             # Network
             "--network", cfg.network_mode,
-            # Filesystem
-            "-v", f"{submission_root.resolve()}:/submission:ro",
-            "--tmpfs", f"/tmp:rw,noexec,size={cfg.tmpfs_size}",
-            # Working directory inside container
-            "-w", inner_cwd,
-            # User
-            "--user", cfg.user,
         ])
-
-        if cfg.read_only_root:
-            cmd.append("--read-only")
-
-        # Security hardening
-        if cfg.drop_all_caps:
-            cmd.extend(["--cap-drop", "ALL"])
-        if cfg.no_new_privileges:
-            cmd.extend(["--security-opt", "no-new-privileges"])
-        if cfg.seccomp_profile:
-            cmd.extend(["--security-opt", f"seccomp={cfg.seccomp_profile}"])
+        cmd.extend(security_flags)
+        cmd.extend(volume_mounts)
 
         # Image + command
         cmd.append(cfg.image)
         cmd.extend(args)
 
         return cmd
+
+    def _build_docker_security_flags(self) -> list[str]:
+        """Build Docker security-hardening flags."""
+        cfg = self.config
+        flags: list[str] = []
+        if cfg.read_only_root:
+            flags.append("--read-only")
+        if cfg.drop_all_caps:
+            flags.extend(["--cap-drop", "ALL"])
+        if cfg.no_new_privileges:
+            flags.extend(["--security-opt", "no-new-privileges"])
+        if cfg.seccomp_profile:
+            flags.extend(["--security-opt", f"seccomp={cfg.seccomp_profile}"])
+        return flags
+
+    def _build_docker_volume_mounts(
+        self,
+        *,
+        submission_root: Path,
+        inner_cwd: str,
+    ) -> list[str]:
+        """Build Docker mount and working-directory flags."""
+        cfg = self.config
+        return [
+            "-v", f"{submission_root.resolve()}:/submission:ro",
+            "--tmpfs", f"/tmp:rw,noexec,size={cfg.tmpfs_size}",
+            "-w", inner_cwd,
+            "--user", cfg.user,
+        ]
 
     @staticmethod
     def _resolve_mount(cwd: Path) -> tuple[Path, str]:
