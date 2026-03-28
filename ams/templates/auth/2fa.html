@@ -14,8 +14,8 @@
         <form method="POST" action="{{ url_for('auth.verify_2fa') }}" class="auth-form">
             <div class="form-group">
                 <label class="form-label" for="code">Verification Code <span class="required">*</span></label>
-                <input type="text" id="code" name="code" class="form-input" style="text-align:center; font-family:var(--font-mono); font-size:var(--text-xl); letter-spacing:0.3em;"
-                    placeholder="000000" maxlength="6" pattern="[0-9]{6}" required autofocus autocomplete="one-time-code"> {# layout-specific, intentional #}
+                <input type="text" id="code" name="code" class="form-input auth-code-input"
+                    placeholder="000000" maxlength="6" pattern="[0-9]{6}" required autofocus autocomplete="one-time-code">
                 <p class="form-hint">Check your email inbox (or the server console) for the code.</p>
             </div>
 

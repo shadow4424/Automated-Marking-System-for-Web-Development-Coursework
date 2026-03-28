@@ -1,19 +1,22 @@
-/* AMS Components - Auth Pages, Navbar User + Student Select List */
-
+/* AMS Components - Auth Pages, Navbar User + Student Select List
+   ============================================================================
    Auth Pages
    ============================================================================ */
 .auth-wrapper {
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 60vh;
-    padding: var(--space-xl) 0;
+    min-height: calc(100vh - var(--space-3xl) - var(--space-3xl));
+    padding: var(--space-2xl) 0;
 }
 
 .auth-card {
-    width: 100%;
-    max-width: 420px;
-    padding: var(--space-2xl);
+    width: min(100%, calc(var(--space-3xl) * 7));
+    margin: 0 auto;
+    padding: var(--space-3xl);
+    background: var(--gradient-glass);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-lg);
 }
 
 .auth-card:hover {
@@ -29,32 +32,72 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 56px;
-    height: 56px;
-    border-radius: var(--radius-lg);
-    background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
+    width: calc(var(--space-3xl) + var(--space-lg));
+    height: calc(var(--space-3xl) + var(--space-lg));
+    border-radius: var(--radius-xl);
+    background: var(--gradient-primary);
     color: white;
-    font-size: var(--text-xl);
+    font-size: var(--text-2xl);
     font-weight: 700;
     font-family: var(--font-display);
     margin-bottom: var(--space-md);
-    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.25);
+    box-shadow: var(--shadow-glow);
 }
 
 .auth-title {
-    font-size: var(--text-2xl);
+    font-size: var(--text-3xl);
     font-weight: 700;
     margin: 0 0 var(--space-xs);
 }
 
 .auth-subtitle {
     color: var(--color-text-muted);
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
     margin: 0;
 }
 
 .auth-form .form-group:last-of-type {
     margin-bottom: var(--space-xl);
+}
+
+.auth-form .form-input {
+    min-height: calc(var(--space-xl) + var(--space-md));
+    padding: var(--space-sm) var(--space-lg);
+    font-size: var(--text-base);
+    border-radius: var(--radius-md);
+}
+
+.auth-form .btn {
+    min-height: calc(var(--space-xl) + var(--space-md));
+    font-size: var(--text-base);
+    font-weight: 700;
+}
+
+.auth-form .btn-primary {
+    width: 100%;
+}
+
+.auth-code-input {
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: var(--text-xl);
+    letter-spacing: 0.3em;
+}
+
+@media (max-width: 48rem) {
+    .auth-wrapper {
+        min-height: auto;
+        padding: var(--space-xl) 0;
+    }
+
+    .auth-card {
+        width: 100%;
+        padding: var(--space-2xl);
+    }
+
+    .auth-title {
+        font-size: var(--text-2xl);
+    }
 }
 
 /* ============================================================================
