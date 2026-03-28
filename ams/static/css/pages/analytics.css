@@ -136,9 +136,10 @@
             radial-gradient(circle at top right, rgba(37, 99, 235, 0.1), transparent 34%),
             linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%);
     }
-    .analytics-kicker {
+.analytics-kicker {
         display: inline-flex;
         align-items: center;
+        width: fit-content;
         gap: 0.5rem;
         padding: 0.45rem 0.75rem;
         border-radius: 999px;
@@ -1236,6 +1237,7 @@
 
         display: inline-flex;
         align-items: center;
+        width: fit-content;
         padding: 0.42rem 0.75rem;
         border-radius: 999px;
         background: rgba(37, 99, 235, 0.08);

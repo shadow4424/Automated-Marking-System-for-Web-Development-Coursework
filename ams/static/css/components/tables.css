@@ -6,11 +6,14 @@
     overflow-x: auto;
     border-radius: var(--radius-lg);
     border: 1px solid var(--color-border);
+    background: var(--gradient-surface);
+    box-shadow: var(--shadow-sm);
 }
 
 .table {
     width: 100%;
     border-collapse: collapse;
+    background: transparent;
 }
 
 .table th,
@@ -21,7 +24,7 @@
 }
 
 .table th {
-    background: #f8fafc;
+    background: var(--color-surface-elevated);
     font-weight: 600;
     font-size: var(--text-sm);
     color: var(--color-text-secondary);
@@ -30,11 +33,16 @@
 }
 
 .table tbody tr {
+    background: var(--color-surface);
     transition: background var(--transition-fast);
 }
 
+.table tbody tr:nth-child(even) {
+    background: var(--color-surface-elevated);
+}
+
 .table tbody tr:hover {
-    background: var(--color-surface);
+    background: var(--color-surface-hover);
 }
 
 .table tbody tr:last-child td {

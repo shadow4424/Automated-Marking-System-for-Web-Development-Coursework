@@ -3,12 +3,13 @@
 .account-settings-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: var(--space-xl);
+    gap: var(--space-2xl);
     align-items: start;
 }
 
 .account-settings-card {
     height: 100%;
+    padding: calc(var(--space-xl) + var(--space-xs));
 }
 
 .account-settings-form {
@@ -21,6 +22,10 @@
 
 .account-settings-role {
     margin-top: var(--space-sm);
+}
+
+.account-settings-card .section-heading-row {
+    margin-bottom: var(--space-xl);
 }
 
 @media (max-width: 64rem) {

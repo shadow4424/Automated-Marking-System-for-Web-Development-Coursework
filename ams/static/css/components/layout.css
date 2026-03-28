@@ -28,6 +28,14 @@
 
 .toolbar-count {
     margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: calc(var(--space-lg) + var(--space-xs));
+    padding: 0.2em 0.65em;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
     font-size: var(--text-sm);
     color: var(--color-text-muted);
 }
@@ -546,6 +554,12 @@
     flex-wrap: wrap;
     gap: var(--space-md);
     margin-bottom: var(--space-lg);
+}
+
+.section-heading-row > .badge,
+.section-heading-row > .role-badge {
+    margin-right: var(--space-xs);
+    min-width: calc(var(--space-lg) + var(--space-xs));
 }
 
 .section-copy {
