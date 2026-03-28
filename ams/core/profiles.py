@@ -40,16 +40,19 @@ class RequiredRule:
     # ------------------------------------------------------------------
     @property
     def selector(self) -> str:  # used by HTML assessors
+        """Return the selector."""
         return self.pattern
 
     @property
     def needle(self) -> str:  # used by CSS / JS / PHP / SQL assessors
+        """Return the search needle."""
         return self.pattern
 
 
 def _make_rule_factory(legacy_kwarg: str):
     """Return a factory that accepts *legacy_kwarg* and maps it to ``pattern``."""
     def _factory(*args, **kwargs):
+        """Return the factory."""
         if legacy_kwarg in kwargs:
             kwargs["pattern"] = kwargs.pop(legacy_kwarg)
         return RequiredRule(*args, **kwargs)
@@ -109,6 +112,7 @@ class RequirementDefinition:
     skip_reason: str | None = None
 
     def to_dict(self) -> Dict[str, object]:
+        """Return this requirement definition as a dictionary."""
         return {
             "id": self.id,
             "component": self.component,
@@ -166,6 +170,7 @@ class ProfileSpec:
         return len(rules) > 0
 
     def component_rule_map(self) -> Dict[str, List[RequiredRule]]:
+        """Return the rule map."""
         return {
             "html": list(self.required_html),
             "css": list(self.required_css),
@@ -176,6 +181,7 @@ class ProfileSpec:
         }
 
     def enabled_components(self) -> List[str]:
+        """Return the components."""
         ordered = list(self.relevant_artefacts)
         for component in self.optional_components:
             if component not in ordered:
@@ -183,12 +189,14 @@ class ProfileSpec:
         return ordered
 
     def get_component_weight(self, component: str) -> float:
+        """Return the component weight."""
         if self.component_weights:
             return float(self.component_weights.get(component, 0.0))
         required = list(self.relevant_artefacts)
         return 1.0 / len(required) if required and component in required else 0.0
 
     def to_dict(self) -> Dict[str, object]:
+        """Return this profile spec as a dictionary."""
         return {
             "name": self.name,
             "required_components": list(self.relevant_artefacts),
@@ -208,6 +216,7 @@ class ProfileSpec:
         }
 
     def build_requirement_definitions(self) -> List[RequirementDefinition]:
+        """Build the requirement definitions."""
         definitions: List[RequirementDefinition] = []
         for component, rules in self.component_rule_map().items():
             required = self.is_component_required(component)
@@ -252,6 +261,7 @@ def _build_html_profile_specs() -> Dict[str, object]:
     # HTML Rules - Expanded with comprehensive web development criteria
     # Weights are normalised so that the total = 1.0 for the HTML component.
     # Categories: Structure, Metadata, Semantic, Interactive/Forms, Accessibility
+    """Build the html profile specs."""
     html_rules = [
         # === STRUCTURE (0.26 total) ===
         RequiredHTMLRule(
@@ -507,7 +517,8 @@ def _build_html_profile_specs() -> Dict[str, object]:
 def _build_css_profile_specs() -> Dict[str, object]:
     # CSS Rules - Expanded with comprehensive web development criteria
     # Weights are normalised so that the total = 1.0 for the CSS component.
-    # Categories: Structure, Selectors, Layout, Styling, Responsiveness, Maintainability
+    # Categories: Structure, selectors, layout, styling, responsiveness.
+    """Build the css profile specs."""
     css_rules = [
         # === STRUCTURE (0.14 total) ===
         RequiredCSSRule(
@@ -699,7 +710,7 @@ def _build_css_profile_specs() -> Dict[str, object]:
         ),
     ]
 
-    # CSS Lab Rules — extends css_rules with visual/design-intent checks for CSS-specific labs
+    # CSS lab rules for visual and design-intent checks.
     # These rules are only required by the frontend_css_lab profile.
     css_lab_rules = list(css_rules) + [
         RequiredCSSRule(
@@ -793,7 +804,8 @@ def _build_css_profile_specs() -> Dict[str, object]:
 def _build_js_profile_specs() -> Dict[str, object]:
     # JavaScript Rules - Expanded with comprehensive web development criteria
     # Weights are normalised so that the total = 1.0 for the JS component.
-    # Categories: Events, DOM, Functions, Control Flow, Validation, Async, Error Handling, Modern JS
+    # Categories: Events, DOM, functions, control flow, validation, async, errors.
+    """Build the js profile specs."""
     js_rules = [
         # === EVENTS (0.12 total) ===
         RequiredJSRule(
@@ -949,7 +961,7 @@ def _build_js_profile_specs() -> Dict[str, object]:
         ),
     ]
 
-    # JavaScript Calculator Rules — extends js_rules with calculator-specific DOM and logic checks.
+    # JavaScript calculator rules for DOM and logic checks.
     # Only required by the frontend_calculator profile.
     js_calculator_rules = list(js_rules) + [
         RequiredJSRule(
@@ -1079,7 +1091,8 @@ def _build_js_profile_specs() -> Dict[str, object]:
 def _build_php_profile_specs() -> Dict[str, object]:
     # PHP Rules - Expanded with comprehensive web development criteria
     # Weights are normalised so that the total = 1.0 for the PHP component.
-    # Categories: Structure, Input, Output, Database, Sessions, Functions, Control Flow, Error Handling, Includes
+    # Categories: Structure, input, output, database, sessions, functions, errors.
+    """Build the php profile specs."""
     php_rules_fullstack = [
         # === STRUCTURE (0.06 total) ===
         RequiredPHPRule(
@@ -1255,6 +1268,7 @@ def _build_sql_profile_specs() -> Dict[str, object]:
     # SQL Rules - Expanded with comprehensive database design criteria
     # Weights are normalised so that the total = 1.0 for the SQL component.
     # Categories: Schema, Constraints, CRUD, Queries, Advanced
+    """Build the sql profile specs."""
     sql_rules_fullstack = [
         # === SCHEMA (0.30 total) ===
         RequiredSQLRule(
@@ -1421,7 +1435,7 @@ def _build_sql_profile_specs() -> Dict[str, object]:
     ]
 
     # Behavioral Rules - Dynamic runtime testing criteria
-    # Weights are normalised so that the total = 1.0 for the behavioral component.
+    # Weights are normalised so that the total = 1.0 for the behavioural component.
     behavioral_rules_frontend = [
         BehavioralRule(
             id="behavior.page_loads",
@@ -1517,6 +1531,7 @@ def _build_sql_profile_specs() -> Dict[str, object]:
 
 
 def _build_api_profile_specs() -> Dict[str, object]:
+    """Build the api profile specs."""
     api_required_rules = [
         RequiredAPIRule(
             id="api.json_encode",
@@ -1614,6 +1629,7 @@ def _build_api_profile_specs() -> Dict[str, object]:
 
 
 def _build_profile_specs() -> Dict[str, ProfileSpec]:
+    """Build the profile specs."""
     spec_parts: Dict[str, object] = {}
     spec_parts.update(_build_html_profile_specs())
     html_rules = spec_parts["html_rules"]
@@ -1885,6 +1901,7 @@ VISIBLE_PROFILE_SPECS = {
 
 
 def get_profile_spec(name: str) -> ProfileSpec:
+    """Return the profile spec."""
     canonical_name = PROFILE_ALIASES.get(name, name)
     try:
         return PROFILE_SPECS[canonical_name]
@@ -1893,14 +1910,17 @@ def get_profile_spec(name: str) -> ProfileSpec:
 
 
 def get_relevant_components(name: str) -> List[str]:
+    """Return the relevant components."""
     return get_profile_spec(name).relevant_artefacts
 
 
 def get_visible_profile_specs() -> Dict[str, ProfileSpec]:
+    """Return the visible profile specs."""
     return dict(VISIBLE_PROFILE_SPECS)
 
 
 def list_profile_names(*, include_aliases: bool = False, visible_only: bool = False) -> List[str]:
+    """Return the available profile names."""
     if visible_only:
         names = list(VISIBLE_PROFILE_SPECS.keys())
     else:
@@ -1911,6 +1931,7 @@ def list_profile_names(*, include_aliases: bool = False, visible_only: bool = Fa
 
 
 def resolve_profile_spec(name: str, *, config_path: str | Path | None = None) -> ProfileSpec:
+    """Resolve the profile spec."""
     if name != "custom_profile":
         return get_profile_spec(name)
     if not config_path:
@@ -1926,6 +1947,7 @@ PROFILES = {
 
 
 def _build_custom_profile(config_path: Path) -> ProfileSpec:
+    """Build the custom profile."""
     payload = json.loads(config_path.read_text(encoding="utf-8"))
     base_name = str(payload.get("base_profile") or "frontend_interactive")
     base = get_profile_spec(base_name)
@@ -1964,6 +1986,7 @@ def _build_custom_profile(config_path: Path) -> ProfileSpec:
 
 
 def _normalize_string_list(value: object, default: Sequence[str]) -> List[str]:
+    """Normalise the string list."""
     if value is None:
         return list(default)
     if not isinstance(value, list):
@@ -1972,10 +1995,12 @@ def _normalize_string_list(value: object, default: Sequence[str]) -> List[str]:
 
 
 def _normalize_component_list(value: object, default: Sequence[str]) -> List[str]:
+    """Normalise the component list."""
     return _normalize_string_list(value, default)
 
 
 def _normalize_mapping(value: object, default: Mapping[str, str]) -> Dict[str, str]:
+    """Normalise the mapping."""
     if value is None:
         return dict(default)
     if not isinstance(value, dict):
@@ -1988,6 +2013,7 @@ def _normalize_weight_map(
     default: Mapping[str, float],
     required_components: Sequence[str],
 ) -> Dict[str, float]:
+    """Normalise the weight map."""
     if value is None:
         return dict(default)
     if not isinstance(value, dict):
@@ -2000,6 +2026,7 @@ def _normalize_weight_map(
 
 
 def _static_aggregation_mode(component: str, rule: RequiredRule) -> str:
+    """Return the aggregation mode."""
     strict_ids = {
         "html.has_doctype",
         "html.has_html_tag",
@@ -2023,6 +2050,7 @@ def _static_aggregation_mode(component: str, rule: RequiredRule) -> str:
 
 
 def _behavioural_aggregation_mode(rule: BehavioralRule) -> str:
+    """Return the aggregation mode."""
     if rule.test_type in {"form_submit", "db_persist", "api_exec",
                           "calculator_sequence", "calculator_display", "calculator_operator"}:
         return AggregationMode.EXPECTED_SET.value
@@ -2030,6 +2058,7 @@ def _behavioural_aggregation_mode(rule: BehavioralRule) -> str:
 
 
 def _expected_roles_for_component(component: str) -> tuple[str, ...]:
+    """Return the roles for component."""
     mapping = {
         "html": ("primary_page", "secondary_page"),
         "css": ("stylesheet_set",),
@@ -2042,6 +2071,7 @@ def _expected_roles_for_component(component: str) -> tuple[str, ...]:
 
 
 def _default_profile_level_requirements(profile: ProfileSpec) -> List[RequirementDefinition]:
+    """Return the profile level requirements."""
     definitions: List[RequirementDefinition] = []
     if profile.is_component_required("api"):
         definitions.append(

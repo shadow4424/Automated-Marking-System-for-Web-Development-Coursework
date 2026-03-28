@@ -48,6 +48,7 @@ class _HTMLDiscovery:
 
 class _HTMLDiscoveryParser(HTMLParser):
     def __init__(self) -> None:
+        """Return the ."""
         super().__init__()
         self.css_links: List[str] = []
         self.js_links: List[str] = []
@@ -55,6 +56,7 @@ class _HTMLDiscoveryParser(HTMLParser):
         self.form_actions: List[str] = []
 
     def handle_starttag(self, tag: str, attrs: List[tuple[str, str | None]]) -> None:
+        """Handle the start tag."""
         attrs_dict = {key.lower(): (value or "").strip() for key, value in attrs}
         lowered_tag = tag.lower()
         if lowered_tag == "link" and attrs_dict.get("rel", "").lower() == "stylesheet":
@@ -76,6 +78,7 @@ class _HTMLDiscoveryParser(HTMLParser):
 
 
 def build_submission_evidence(context: SubmissionContext) -> None:
+    """Build submission evidence."""
     root = Path(
         context.metadata.get("resolved_root", context.workspace_path / "submission")
     ).resolve()
@@ -178,6 +181,7 @@ def _apply_manifest_flags(
     orphan_files: set[str],
     duplicate_files: set[str],
 ) -> List[SubmissionManifestEntry]:
+    """Apply the manifest flags."""
     updated: List[SubmissionManifestEntry] = []
     for entry in entries:
         updated.append(
@@ -196,6 +200,7 @@ def _apply_manifest_flags(
 
 
 def _materialize_scoring_files(root: Path, relevant_files: Mapping[str, Sequence[str]]) -> Dict[str, List[Path]]:
+    """Return the scoring files."""
     result: Dict[str, List[Path]] = {}
     for component, files in relevant_files.items():
         materialized: List[Path] = []
@@ -208,6 +213,7 @@ def _materialize_scoring_files(root: Path, relevant_files: Mapping[str, Sequence
 
 
 def _build_relation_map(root: Path, artefacts: Mapping[str, Sequence[str]]) -> Dict[str, object]:
+    """Build the relation map."""
     relations: List[ArtefactRelation] = []
     candidate_execution_map: Dict[str, List[str]] = defaultdict(list)
     seed_paths: List[str] = []
@@ -307,6 +313,7 @@ def _build_relation_map(root: Path, artefacts: Mapping[str, Sequence[str]]) -> D
 
 
 def _discover_html_links(path: Path) -> _HTMLDiscovery:
+    """Discover the html links."""
     try:
         content = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -325,6 +332,7 @@ def _discover_html_links(path: Path) -> _HTMLDiscovery:
 
 
 def _resolve_internal_reference(root: Path, base_dir: Path, reference: str) -> str | None:
+    """Resolve the internal reference."""
     raw = (reference or "").strip()
     if not raw:
         return None
@@ -349,6 +357,7 @@ def _compute_reachable(
     relations: Sequence[ArtefactRelation],
     seeds: Sequence[str],
 ) -> set[str]:
+    """Compute the reachable."""
     adjacency: Dict[str, List[str]] = defaultdict(list)
     for relation in relations:
         adjacency[relation.source].append(relation.target)
@@ -382,6 +391,7 @@ def _map_roles(
     reachable: set[str],
     candidate_execution_map: Mapping[str, Sequence[str]],
 ) -> RoleMappedSubmission:
+    """Return the roles."""
     relation_lookup: Dict[str, List[ArtefactRelation]] = defaultdict(list)
     for relation in relations:
         relation_lookup[relation.source].append(relation)
@@ -553,6 +563,7 @@ def _targets_for_sources(
     relation_lookup: Mapping[str, Sequence[ArtefactRelation]],
     relation_name: str,
 ) -> List[str]:
+    """Return the for sources."""
     targets: List[str] = []
     for source in sources:
         for relation in relation_lookup.get(source, []):
@@ -567,6 +578,7 @@ def _expand_connected_targets(
     relation_lookup: Mapping[str, Sequence[ArtefactRelation]],
     relation_names: set[str],
 ) -> List[str]:
+    """Return the connected targets."""
     queue = deque([source])
     visited: set[str] = set()
     discovered: List[str] = []
@@ -590,6 +602,7 @@ def _select_best_path(
     reachable: set[str],
     preferred_names: Sequence[str],
 ) -> str | None:
+    """Select the best path."""
     candidates = [path for path in paths if path and not _is_backup_file(Path(path))]
     if not candidates:
         return None
@@ -610,6 +623,7 @@ def _select_relevant_group(
     reachable: set[str],
     preferred_names: Sequence[str],
 ) -> List[str]:
+    """Select the relevant group."""
     preferred_group = [
         path
         for path in linked
@@ -631,15 +645,18 @@ def _select_relevant_group(
 
 
 def _is_backup_file(path: Path) -> bool:
+    """Return the backup file."""
     return bool(_BACKUP_NAME_RE.search(path.stem) or _BACKUP_NAME_RE.search(path.name))
 
 
 def _looks_like_api_reference(value: str) -> bool:
+    """Return the like api reference."""
     lowered = (value or "").lower()
     return lowered.startswith("/api") or "/api/" in lowered or lowered.startswith("http")
 
 
 def _looks_like_php_api_endpoint(content: str, filename: str) -> bool:
+    """Return the like php api endpoint."""
     lowered = content.lower()
     return (
         "json_encode(" in lowered

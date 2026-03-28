@@ -132,7 +132,7 @@ class CSSRequiredRulesAssessor(BaseRequiredAssessor):
 
         # === RESET ===
         if needle == "universal_reset" or rule.id == "css.has_universal_reset":
-            # Accept * selector block or box-sizing reset strategy or normalize-style resets
+            # Accept * selector blocks, box-sizing reset strategies, or reset-library styles
             has_star_block = "* {" in content_lower or "*{" in content_lower
             has_box_sizing = "box-sizing" in content_lower
             has_margin_reset = ("margin: 0" in content_lower or "margin:0" in content_lower)

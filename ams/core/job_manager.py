@@ -34,6 +34,7 @@ class JobManager:
     """
 
     def __init__(self, max_workers: int = _MAX_WORKERS) -> None:
+        """Return the ."""
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="ams-job",
@@ -124,6 +125,7 @@ class JobManager:
         result: Any = None,
         error: Optional[str] = None,
     ) -> None:
+        """Return the finish."""
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         with self._lock:
             job = self._jobs.get(job_id)

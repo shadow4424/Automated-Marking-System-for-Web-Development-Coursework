@@ -12,15 +12,18 @@ from ams.io.metadata import MetadataValidator
 
 
 def utc_now_iso() -> str:
+    """Return the current UTC timestamp in ISO format."""
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def generate_attempt_id(prefix: str = "attempt") -> str:
+    """Generate a new attempt identifier."""
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     return f"{timestamp}_{prefix}_{secrets.token_hex(4)}"
 
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
+    """Convert a database row into an attempt dictionary."""
     if row is None:
         return {}
     data = dict(row)
@@ -31,6 +34,7 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
 
 
 def _attempt_belongs_to_root(attempt: dict[str, Any], runs_root: Path | None) -> bool:
+    """Check whether an attempt belongs to the current runs root."""
     if runs_root is None:
         return True
     run_dir_value = str(attempt.get("run_dir") or "").strip()
@@ -44,6 +48,7 @@ def _attempt_belongs_to_root(attempt: dict[str, Any], runs_root: Path | None) ->
 
 
 def filter_attempts_for_root(attempts: list[dict[str, Any]], runs_root: Path | None) -> list[dict[str, Any]]:
+    """Filter attempts to those under the current runs root."""
     return [attempt for attempt in attempts if _attempt_belongs_to_root(attempt, runs_root)]
 
 
@@ -54,6 +59,7 @@ def create_attempt_storage_dir(
     attempt_number: int,
     attempt_id: str,
 ) -> Path:
+    """Create the storage directory for an attempt."""
     assignment_safe = MetadataValidator.sanitize_identifier(assignment_id)
     student_safe = MetadataValidator.sanitize_identifier(student_id)
     student_root = runs_root / assignment_safe / student_safe
@@ -63,6 +69,7 @@ def create_attempt_storage_dir(
 
 
 def get_attempt(attempt_id: str) -> dict[str, Any] | None:
+    """Fetch an attempt by its identifier."""
     conn = get_db()
     try:
         row = conn.execute(
@@ -79,6 +86,7 @@ def get_attempt_by_run_reference(
     batch_submission_id: str | None = None,
     runs_root: Path | None = None,
 ) -> dict[str, Any] | None:
+    """Fetch an attempt by its run and submission reference."""
     conn = get_db()
     try:
         rows = conn.execute(
@@ -114,6 +122,7 @@ def list_attempts(
     active_only: bool = False,
     newest_first: bool = True,
 ) -> list[dict[str, Any]]:
+    """List stored attempts with optional filters."""
     clauses: list[str] = []
     params: list[str | int] = []
     if assignment_id:
@@ -143,6 +152,7 @@ def list_attempts(
 
 
 def attempt_maps(runs_root: Path | None = None) -> tuple[dict[str, dict[str, Any]], dict[tuple[str, str], dict[str, Any]]]:
+    """Build lookup maps for mark and batch attempts."""
     attempts = filter_attempts_for_root(list_attempts(newest_first=True), runs_root)
     mark_map: dict[str, dict[str, Any]] = {}
     batch_map: dict[tuple[str, str], dict[str, Any]] = {}
@@ -159,6 +169,7 @@ def attempt_maps(runs_root: Path | None = None) -> tuple[dict[str, dict[str, Any
 
 
 def _validate_attempt_identity(assignment_id: str, student_id: str) -> tuple[str, str]:
+    """Validate the attempt identity."""
     assignment_value = str(assignment_id or "").strip()
     student_value = str(student_id or "").strip()
     if not assignment_value or not student_value:
@@ -185,6 +196,7 @@ def _build_attempt_metadata(
     batch_run_id: str = "",
     batch_submission_id: str = "",
 ) -> dict[str, Any]:
+    """Build the metadata payload for an attempt record."""
     assignment_value, student_value = _validate_attempt_identity(assignment_id, student_id)
     attempt_id = str(run_id or generate_attempt_id("attempt"))
     created_value = str(created_at or utc_now_iso())
@@ -216,6 +228,7 @@ def _build_attempt_metadata(
 
 
 def _find_existing_attempt_id(conn: Any, metadata: Mapping[str, Any]) -> str | None:
+    """Look up an existing attempt identifier for the metadata payload."""
     row = conn.execute(
         """
         SELECT id FROM submission_attempts
@@ -232,6 +245,7 @@ def _find_existing_attempt_id(conn: Any, metadata: Mapping[str, Any]) -> str | N
 
 
 def _next_attempt_number(conn: Any, metadata: Mapping[str, Any]) -> int:
+    """Compute the next attempt number for a student assignment."""
     return (
         int(
             conn.execute(
@@ -252,6 +266,7 @@ def _next_attempt_number(conn: Any, metadata: Mapping[str, Any]) -> int:
 
 
 def _insert_attempt_record(conn: Any, metadata: Mapping[str, Any]) -> None:
+    """Insert a submission attempt record."""
     conn.execute(
         """
         INSERT INTO submission_attempts (
@@ -329,6 +344,7 @@ def create_attempt(
     batch_run_id: str = "",
     batch_submission_id: str = "",
 ) -> dict[str, Any]:
+    """Create and persist a new submission attempt."""
     metadata = _build_attempt_metadata(
         assignment_id=assignment_id,
         student_id=student_id,
@@ -364,6 +380,7 @@ def create_attempt(
 
 
 def update_attempt(attempt_id: str, **fields: Any) -> dict[str, Any] | None:
+    """Update an existing attempt record."""
     if not fields:
         return get_attempt(attempt_id)
 
@@ -426,6 +443,7 @@ def update_attempt(attempt_id: str, **fields: Any) -> dict[str, Any] | None:
 
 
 def _load_json(path: Path) -> dict[str, Any] | None:
+    """Load JSON data from disk."""
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
@@ -433,6 +451,7 @@ def _load_json(path: Path) -> dict[str, Any] | None:
 
 
 def _extract_confidence(report: dict[str, Any]) -> str:
+    """Extract the confidence level from a report."""
     summary = report.get("summary", {}) or {}
     if isinstance(summary, dict) and summary.get("confidence"):
         return str(summary.get("confidence") or "")
@@ -445,6 +464,7 @@ def _extract_confidence(report: dict[str, Any]) -> str:
 
 
 def _extract_manual_review_required(report: dict[str, Any], context: dict[str, Any] | None = None) -> bool:
+    """Determine whether manual review is required."""
     score_evidence = report.get("score_evidence", {}) or {}
     if isinstance(score_evidence, dict):
         review = score_evidence.get("review", {}) or {}
@@ -544,6 +564,7 @@ def _derive_statuses(
     report: dict[str, Any] | None,
     invalid: bool = False,
 ) -> tuple[str, str, str]:
+    """Derive the run and validity statuses for an attempt."""
     status = str(run_info.get("status") or "").strip().lower()
     threat_flagged = bool(run_info.get("threat_flagged"))
     system_failure_flagged = (
@@ -568,10 +589,12 @@ def _derive_statuses(
 
 
 def _attempt_is_valid(attempt: dict[str, Any]) -> bool:
+    """Check whether an attempt is valid."""
     return str(attempt.get("validity_status") or "").strip().lower() == "valid"
 
 
 def _attempt_is_pending(attempt: dict[str, Any]) -> bool:
+    """Check whether an attempt is pending."""
     return str(attempt.get("validity_status") or "").strip().lower() == "pending"
 
 
@@ -579,6 +602,7 @@ def _explain_attempt_selection(
     attempts_desc: list[dict[str, Any]],
     active_attempt: dict[str, Any] | None,
 ) -> str:
+    """Explain why a particular attempt was selected."""
     if not attempts_desc:
         return "No submission attempt is currently recorded."
 
@@ -598,6 +622,7 @@ def _explain_attempt_selection(
 
 
 def _merge_attempt_metadata(existing: dict[str, Any] | None, payload: dict[str, Any]) -> dict[str, Any]:
+    """Merge stored and newly generated attempt metadata."""
     merged = dict(existing or {})
     merged.update(payload)
     return merged
@@ -610,6 +635,7 @@ def _select_files_for_sync(
     active_attempt_id: str,
     selection_reason: str,
 ) -> list[dict[str, Any]]:
+    """Select which attempt files should be synchronised."""
     file_updates: list[dict[str, Any]] = []
     selected_ids = {latest_attempt_id, active_attempt_id}
 
@@ -732,6 +758,7 @@ def _select_files_for_sync(
 
 
 def _copy_attempt_files(file_updates: list[dict[str, Any]]) -> None:
+    """Copy selected files into attempt storage."""
     for update in file_updates:
         metadata_path = update["metadata_path"]
         metadata_payload = update["metadata_payload"]
@@ -755,6 +782,7 @@ def _sync_attempt_files(
     active_attempt_id: str,
     selection_reason: str,
 ) -> None:
+    """Synchronise attempt file metadata and copies on disk."""
     file_updates = _select_files_for_sync(
         attempts_desc,
         latest_attempt_id=latest_attempt_id,
@@ -773,6 +801,7 @@ def _write_student_summary_files(
     active_attempt_id: str,
     selection_reason: str,
 ) -> None:
+    """Write the active-attempt summary files for a student."""
     summary_root = runs_root / MetadataValidator.sanitize_identifier(assignment_id) / MetadataValidator.sanitize_identifier(student_id)
     summary_root.mkdir(parents=True, exist_ok=True)
 
@@ -831,6 +860,7 @@ def recompute_active_attempt(
     assignment_id: str,
     student_id: str,
 ) -> dict[str, Any]:
+    """Recompute and persist the active attempt for a student assignment."""
     attempts_desc = filter_attempts_for_root(
         list_attempts(
             assignment_id=str(assignment_id or ""),
@@ -923,6 +953,7 @@ def recompute_active_attempt(
 
 
 def get_student_assignment_summary(assignment_id: str, student_id: str) -> dict[str, Any] | None:
+    """Fetch the attempt summary for a student assignment."""
     conn = get_db()
     try:
         row = conn.execute(
@@ -941,6 +972,7 @@ def _mark_descriptor(
     run_dir: Path,
     run_info: dict[str, Any],
 ) -> dict[str, Any] | None:
+    """Build a descriptor for matching mark attempts."""
     assignment_id = str(run_info.get("assignment_id") or "").strip()
     student_id = str(run_info.get("student_id") or "").strip()
     if not assignment_id or not student_id:
@@ -981,6 +1013,7 @@ def _mark_descriptor(
 
 
 def _descriptor_ref(descriptor: Mapping[str, Any]) -> tuple[str, str]:
+    """Return the stable reference for an attempt descriptor."""
     return (
         str(descriptor.get("run_id") or ""),
         str(descriptor.get("batch_submission_id") or ""),
@@ -988,6 +1021,7 @@ def _descriptor_ref(descriptor: Mapping[str, Any]) -> tuple[str, str]:
 
 
 def _descriptor_sort_key(descriptor: Mapping[str, Any]) -> tuple[str, str, str]:
+    """Return the sort key for ordering attempt descriptors."""
     return (
         str(descriptor.get("created_at") or ""),
         str(descriptor.get("run_id") or ""),
@@ -1000,6 +1034,7 @@ def _update_attempt_from_descriptor(
     attempt_id: str,
     descriptor: Mapping[str, Any],
 ) -> None:
+    """Update an attempt row from a storage descriptor."""
     conn.execute(
         """
         UPDATE submission_attempts
@@ -1053,6 +1088,7 @@ def _build_batch_attempt_descriptors(
     run_dir: Path,
     run_info: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    """Build storage descriptors for attempts found in a batch run."""
     summary_path = run_dir / "batch_summary.json"
     summary = _load_json(summary_path)
     if summary is None:
@@ -1113,6 +1149,7 @@ def _build_batch_attempt_descriptors(
 
 
 def _scan_storage_for_descriptors(runs_root: Path) -> list[dict[str, Any]]:
+    """Scan attempt storage and build descriptors for discovered runs."""
     if not runs_root.exists():
         return []
 
@@ -1139,6 +1176,7 @@ def _reconcile_attempts_with_descriptors(
     descriptors: list[dict[str, Any]],
     runs_root: Path,
 ) -> set[tuple[str, str]]:
+    """Reconcile database attempts against descriptors found on disk."""
     touched: set[tuple[str, str]] = set()
     descriptors_by_identity: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for descriptor in descriptors:
@@ -1278,6 +1316,7 @@ def _reconcile_attempts_with_descriptors(
 
 
 def sync_attempts_from_storage(runs_root: Path) -> None:
+    """Synchronise the attempts from storage."""
     descriptors = _scan_storage_for_descriptors(runs_root)
     if not descriptors:
         return

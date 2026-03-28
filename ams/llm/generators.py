@@ -134,7 +134,7 @@ Respond with JSON only: {{"summary": "...", "items": [{{"severity": "FAIL|WARN|I
         if "error" in raw_data and "summary" not in raw_data:
             raise ValueError(f"LLM returned error: {raw_data.get('error')}")
         
-        # Normalise items if LLM used different key names
+        # Normalise items if the LLM used different key names.
         items_raw = raw_data.get("items", [])
         if not isinstance(items_raw, list):
             items_raw = [items_raw] if items_raw else []
@@ -145,7 +145,7 @@ Respond with JSON only: {{"summary": "...", "items": [{{"severity": "FAIL|WARN|I
             if not isinstance(item, dict):
                 continue
             try:
-                # Normalise severity to uppercase
+                # Normalise severity to uppercase.
                 if "severity" in item:
                     item["severity"] = str(item["severity"]).upper()
                     # Map common variations

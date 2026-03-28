@@ -169,6 +169,7 @@ def load_threat_file_contents(findings: list, run_dir: Path) -> dict:
 
 
 def coerce_float(value: object) -> float | None:
+    """Coerce the value to a float."""
     try:
         if value is None or value == "":
             return None
@@ -178,6 +179,7 @@ def coerce_float(value: object) -> float | None:
 
 
 def first_non_empty(values: Sequence[object]) -> str:
+    """Return the first non-empty value as text."""
     for value in values:
         text = str(value or "").strip()
         if text:
@@ -186,6 +188,7 @@ def first_non_empty(values: Sequence[object]) -> str:
 
 
 def format_submission_datetime(value: object) -> str:
+    """Format the submission datetime."""
     text = str(value or "").strip()
     if not text:
         return "Unknown"
@@ -197,15 +200,18 @@ def format_submission_datetime(value: object) -> str:
 
 
 def normalize_status(value: object, *, fallback: str = "UNKNOWN") -> str:
+    """Normalise the status."""
     text = str(value or "").strip().upper()
     return text or fallback
 
 
 def status_tone(status: object) -> str:
+    """Return the badge tone for a status value."""
     return DETAIL_TONE_BY_STATUS.get(normalize_status(status), "muted")
 
 
 def stage_label(stage: object) -> str:
+    """Return the display label for a stage value."""
     key = str(stage or "").strip().lower()
     if not key:
         return "General"
@@ -213,6 +219,7 @@ def stage_label(stage: object) -> str:
 
 
 def component_label(component: object) -> str:
+    """Return the display label for a component value."""
     key = str(component or "").strip().lower()
     if not key:
         return "General"
@@ -220,6 +227,7 @@ def component_label(component: object) -> str:
 
 
 def component_filter_value(component: object, *, stage: object = None) -> str:
+    """Return the filter value for a component and stage."""
     comp = str(component or "").strip().lower()
     stage_key = str(stage or "").strip().lower()
     if comp in {"html", "css", "js", "php", "sql", "api", "browser", "behavioral", "behavioural"}:
@@ -232,6 +240,7 @@ def component_filter_value(component: object, *, stage: object = None) -> str:
 
 
 def humanize_identifier(identifier: object) -> str:
+    """Humanise the identifier."""
     text = str(identifier or "").strip()
     if not text:
         return "Unnamed item"
@@ -243,6 +252,7 @@ def humanize_identifier(identifier: object) -> str:
 
 
 def describe_identifier(identifier: object) -> str:
+    """Describe the identifier."""
     text = str(identifier or "").strip()
     if not text:
         return ""
@@ -269,6 +279,7 @@ def add(screenshots: list[str], seen: set[str], raw: str) -> None:
 
 
 def gather_screenshots(evidence: object) -> list[str]:
+    """Gather screenshot paths from an evidence mapping."""
     if not isinstance(evidence, Mapping):
         return []
     screenshots: list[str] = []
@@ -293,6 +304,7 @@ def gather_screenshots(evidence: object) -> list[str]:
 
 
 def finding_stage(finding: Mapping[str, object]) -> str:
+    """Return the inferred stage for a finding."""
     evidence = dict(finding.get("evidence", {}) or {})
     explicit = str(evidence.get("stage") or "").strip().lower()
     if explicit:
@@ -307,6 +319,7 @@ def finding_stage(finding: Mapping[str, object]) -> str:
 
 
 def finding_group_key(finding: Mapping[str, object]) -> str:
+    """Return the grouping key for a finding."""
     evidence = dict(finding.get("evidence", {}) or {})
     rule_id = str(evidence.get("rule_id") or "").strip()
     if rule_id:
@@ -315,6 +328,7 @@ def finding_group_key(finding: Mapping[str, object]) -> str:
 
 
 def normalize_raw_finding(finding: Mapping[str, object]) -> dict[str, Any]:
+    """Normalise the raw finding."""
     identifier = str(finding.get("id") or "").strip() or "unknown"
     evidence = dict(finding.get("evidence", {}) or {}) if isinstance(finding.get("evidence"), Mapping) else finding.get("evidence")
     severity = normalize_status(finding.get("severity"), fallback="INFO")
@@ -368,6 +382,7 @@ def build_decision_summary(
     limitations: list[dict[str, Any]],
     student_issues: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    """Build the decision summary."""
     run_status = str(run.get("status") or "").strip().lower()
     overall = coerce_float(((report or {}).get("scores", {}) or {}).get("overall"))
     confidence_level = str(confidence.get("level") or "unknown").strip().lower() or "unknown"

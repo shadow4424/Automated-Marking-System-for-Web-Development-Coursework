@@ -27,6 +27,7 @@ class ResolvedAssignmentConfig:
     config_source: str
 
     def to_dict(self) -> Dict[str, object]:
+        """Return this assignment config as a dictionary."""
         return {
             "requested_profile": self.requested_profile,
             "profile_name": self.profile_name,
@@ -52,6 +53,7 @@ def resolve_assignment_config(
     *,
     metadata: Mapping[str, object] | None = None,
 ) -> ResolvedAssignmentConfig:
+    """Resolve the effective assignment config for a profile."""
     metadata = metadata or {}
     config_path = metadata.get("profile_config_path") or metadata.get("assignment_profile_config")
     profile = resolve_profile_spec(profile_name, config_path=config_path)
@@ -78,6 +80,7 @@ def resolve_assignment_config(
 
 
 def _normalize_weights(profile: ProfileSpec) -> Dict[str, float]:
+    """Normalise the weights."""
     if profile.component_weights:
         total = sum(
             weight

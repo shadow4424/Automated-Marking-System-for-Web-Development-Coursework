@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS student_assignment_summary (
 
 
 def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    """Return the columns."""
     return {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
 
 
@@ -108,6 +109,7 @@ def _ensure_column(
     column_name: str,
     column_sql: str,
 ) -> None:
+    """Ensure the column."""
     if column_name in _table_columns(conn, table_name):
         return
     conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
@@ -118,6 +120,7 @@ def _ensure_column(
 # ---------------------------------------------------------------------------
 
 def _db_path() -> Path:
+    """Return the path."""
     return _DEFAULT_DB_PATH
 
 
@@ -376,6 +379,7 @@ def update_user_password(user_id: str, password: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _decode_identifier_list(value: Any) -> list[str]:
+    """Return the identifier list."""
     if isinstance(value, list):
         raw_items = value
     else:
@@ -393,6 +397,7 @@ def _decode_identifier_list(value: Any) -> list[str]:
 
 
 def assignment_teacher_ids(assignment: dict[str, Any] | None) -> list[str]:
+    """Return the teacher ids."""
     if not assignment:
         return []
 
@@ -413,6 +418,7 @@ def assignment_allows_teacher(
     user_id: str,
     role: str | None = None,
 ) -> bool:
+    """Return the allows teacher."""
     if not assignment or not user_id:
         return False
     if role == "admin":
@@ -421,6 +427,7 @@ def assignment_allows_teacher(
 
 
 def _normalize_assignment_record(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+    """Normalise the assignment record."""
     assignment = dict(row)
     assignment["assigned_students"] = _decode_identifier_list(assignment.get("assigned_students", "[]"))
     assignment["assigned_teachers"] = [
@@ -505,6 +512,7 @@ def list_assignments(teacher_id: str | None = None) -> list[dict]:
         now = datetime.now().strftime("%Y-%m-%dT%H:%M")
 
         def sort_key(a: dict) -> tuple:
+            """Return a sort key."""
             due = a.get("due_date", "")
             is_past_due = 1 if (due and due < now) else 0
             return (is_past_due, a.get("assignmentID", ""))

@@ -91,6 +91,7 @@ class CheckResult:
     sources: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
+        """Return this check result as a dictionary."""
         return {
             "check_id": self.check_id,
             "component": self.component,

@@ -22,6 +22,7 @@ from ams.core.profiles import get_relevant_components
 
 
 def _extract_component_result(report: Mapping[str, object], component_name: str) -> Dict[str, object]:
+    """Extract the component result."""
     component_result = report[component_name]
     return {
         "rationale": component_result.get("rationale", []),
@@ -45,6 +46,7 @@ class ScoringEngine:
         behavioural_evidence: Iterable[BehaviouralEvidence] | None = None,
         browser_evidence: Iterable[BrowserEvidence] | None = None,
     ) -> Mapping[str, object]:
+        """Score the submission."""
         scores, _ = self.score_with_evidence(
             findings,
             profile=profile,
@@ -64,6 +66,7 @@ class ScoringEngine:
         behavioural_evidence: Iterable[BehaviouralEvidence] | None = None,
         browser_evidence: Iterable[BrowserEvidence] | None = None,
     ) -> Tuple[Mapping[str, object], ScoreEvidenceBundle]:
+        """Score the submission and retain evidence."""
         findings_list = list(findings)
         behavioural_evidence_list = list(behavioural_evidence or [])
         browser_evidence_list = list(browser_evidence or [])
@@ -157,6 +160,7 @@ class ScoringEngine:
         behavioural_evidence: List[BehaviouralEvidence],
         browser_evidence: List[BrowserEvidence],
     ) -> Dict[str, object]:
+        """Run the static evaluation."""
         requirement_results = list(context.requirement_results or [])
         relevant_components = list(resolved_config.required_components)
         generated_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -180,6 +184,7 @@ class ScoringEngine:
         static_results: Mapping[str, object],
         findings: List[Finding],
     ) -> Tuple[Mapping[str, object], ScoreEvidenceBundle]:
+        """Return the with llm hybrid."""
         requirement_results = list(static_results["requirement_results"])
         self._apply_llm_hybrid_to_requirement_results(requirement_results, findings)
         relevant_components = list(static_results["relevant_components"])
@@ -320,6 +325,7 @@ class ScoringEngine:
         behavioural_evidence: List[BehaviouralEvidence],
         browser_evidence: List[BrowserEvidence],
     ) -> Tuple[Mapping[str, object], ScoreEvidenceBundle]:
+        """Score the from requirements."""
         static_results = self._run_static_evaluation(
             findings,
             context=context,
@@ -379,6 +385,7 @@ class ScoringEngine:
         self,
         requirement_results: List[RequirementEvaluationResult],
     ) -> tuple[float, float, ComponentScoreSummary]:
+        """Score the component from requirements."""
         numeric_requirements = [
             result
             for result in requirement_results
@@ -427,6 +434,7 @@ class ScoringEngine:
         relevant_components: List[str],
         component_weights: Mapping[str, float],
     ) -> float:
+        """Return the overall."""
         total_weight = 0.0
         total_score = 0.0
         for component in relevant_components:
@@ -444,6 +452,7 @@ class ScoringEngine:
         self,
         requirement_results: List[RequirementEvaluationResult],
     ) -> ConfidenceSummary:
+        """Build the confidence summary."""
         flags: List[str] = []
         reasons: List[str] = []
         skipped_checks: List[str] = []
@@ -475,6 +484,7 @@ class ScoringEngine:
         confidence: ConfidenceSummary,
         component_summaries: Mapping[str, ComponentScoreSummary],
     ) -> ReviewRecommendation:
+        """Build the review recommendation."""
         reasons: List[str] = []
         if confidence.level != "high":
             reasons.append("Confidence was reduced by skipped or failing runtime/browser checks.")
@@ -488,6 +498,7 @@ class ScoringEngine:
         )
 
     def _determine_relevant_components(self, profile: str | None) -> List[str]:
+        """Return the relevant components."""
         if profile is None:
             return self.COMPONENTS
         return get_relevant_components(profile)
@@ -498,6 +509,7 @@ class ScoringEngine:
         relevant_components: List[str],
         overall_raw: float,
     ) -> Tuple[float, List[str]]:
+        """Return the overall."""
         numeric_scores: List[float] = []
         for comp in relevant_components:
             score = component_results.get(comp, {}).get("score")
@@ -534,6 +546,7 @@ class ScoringEngine:
         behavioural_evidence: List[BehaviouralEvidence],
         browser_evidence: List[BrowserEvidence],
     ) -> Tuple[float, List[dict], Dict[str, object]]:
+        """Score the component."""
         dispatcher = {
             "html": lambda f: self._score_html(f, browser_evidence),
             "css": lambda f: self._score_css(f),
@@ -553,6 +566,7 @@ class ScoringEngine:
         findings: List[Finding],
         component: str,
     ) -> Dict[str, float]:
+        """Build the rule weight map."""
         _ = component
         return {
             str(finding.evidence.get("rule_id", "unknown")): float(finding.evidence.get("weight", 1.0))
@@ -565,6 +579,7 @@ class ScoringEngine:
         findings: List[Finding],
         weight_map: Mapping[str, float],
     ) -> Tuple[float, List[dict]]:
+        """Apply the weights to findings."""
         req_pass_findings = [f for f in findings if f.id.endswith(".REQ.PASS")]
         req_fail_findings = [f for f in findings if f.id.endswith(".REQ.FAIL")]
 
@@ -638,6 +653,7 @@ class ScoringEngine:
         return self._apply_weights_to_findings(findings, weight_map)
 
     def _extract_component_features(self, analysis: Mapping[str, object]) -> Dict[str, object]:
+        """Extract the component features."""
         return {
             "score": float(analysis["score"]),
             "rationale": list(analysis["rationale"]),
@@ -649,6 +665,7 @@ class ScoringEngine:
         features: Mapping[str, object],
         component_name: str,
     ) -> Tuple[float, List[dict], Dict[str, object]]:
+        """Compute the component score."""
         _ = component_name
         return (
             float(features["score"]),
@@ -663,6 +680,7 @@ class ScoringEngine:
         evidence,
         analyser_fn,
     ) -> Tuple[float, List[dict], Dict[str, object]]:
+        """Score the language component."""
         analysis = analyser_fn(findings, evidence)
         features = self._extract_component_features(analysis)
         return self._compute_component_score(features, component_name)
@@ -672,6 +690,7 @@ class ScoringEngine:
         findings: List[Finding],
         browser_evidence: List[BrowserEvidence],
     ) -> Dict[str, object]:
+        """Analyse the html."""
         rationale: List[dict] = []
         summaries: Dict[str, object] = {}
         summaries["static_summary"] = self._static_summary("html", findings)
@@ -761,6 +780,7 @@ class ScoringEngine:
         findings: List[Finding],
         _evidence: object = None,
     ) -> Dict[str, object]:
+        """Analyse the css."""
         rationale: List[dict] = []
         summaries: Dict[str, object] = {}
         summaries["static_summary"] = self._static_summary("css", findings)
@@ -825,6 +845,7 @@ class ScoringEngine:
         findings: List[Finding],
         browser_evidence: List[BrowserEvidence],
     ) -> Dict[str, object]:
+        """Analyse the js."""
         rationale: List[dict] = []
         summaries: Dict[str, object] = {}
         summaries["static_summary"] = self._static_summary("js", findings)
@@ -977,6 +998,7 @@ class ScoringEngine:
         findings: List[Finding],
         behavioural_evidence: List[BehaviouralEvidence],
     ) -> Dict[str, object]:
+        """Analyse the php."""
         rationale: List[dict] = []
         summaries: Dict[str, object] = {}
         summaries["static_summary"] = self._static_summary("php", findings)
@@ -1080,6 +1102,7 @@ class ScoringEngine:
         findings: List[Finding],
         behavioural_evidence: List[BehaviouralEvidence],
     ) -> Dict[str, object]:
+        """Analyse the sql."""
         rationale: List[dict] = []
         summaries: Dict[str, object] = {}
         summaries["static_summary"] = self._static_summary("sql", findings)
@@ -1170,6 +1193,7 @@ class ScoringEngine:
         findings: List[Finding],
         behavioural_evidence: List[BehaviouralEvidence],
     ) -> Dict[str, object]:
+        """Analyse the api."""
         rationale: List[dict] = []
         summaries: Dict[str, object] = {}
         summaries["static_summary"] = self._static_summary("api", findings)
@@ -1235,26 +1259,33 @@ class ScoringEngine:
         return {"score": base_score, "rationale": rationale, "summaries": summaries}
 
     def _score_html(self, findings: List[Finding], browser_evidence: List[BrowserEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+        """Score the html."""
         return self._score_language_component(
             "html", findings, browser_evidence, self._analyse_html
         )
 
     def _score_css(self, findings: List[Finding]) -> Tuple[float, List[dict], Dict[str, object]]:
+        """Score the css."""
         return self._score_language_component("css", findings, None, self._analyse_css)
 
     def _score_js(self, findings: List[Finding], browser_evidence: List[BrowserEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+        """Score the js."""
         return self._score_language_component("js", findings, browser_evidence, self._analyse_js)
 
     def _score_php(self, findings: List[Finding], behavioural_evidence: List[BehaviouralEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+        """Score the php."""
         return self._score_language_component("php", findings, behavioural_evidence, self._analyse_php)
 
     def _score_sql(self, findings: List[Finding], behavioural_evidence: List[BehaviouralEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+        """Score the sql."""
         return self._score_language_component("sql", findings, behavioural_evidence, self._analyse_sql)
 
     def _score_api(self, findings: List[Finding], behavioural_evidence: List[BehaviouralEvidence]) -> Tuple[float, List[dict], Dict[str, object]]:
+        """Score the api."""
         return self._score_language_component("api", findings, behavioural_evidence, self._analyse_api)
 
     def _static_summary(self, component: str, findings: List[Finding]) -> Dict[str, object]:
+        """Return the summary."""
         ids = [f.id for f in findings]
         return {
             "component": component,
@@ -1264,6 +1295,7 @@ class ScoringEngine:
         }
 
     def _behavioural_view(self, evidence: List[BehaviouralEvidence]) -> Dict[str, object]:
+        """Return the view."""
         view: Dict[str, object] = {}
         for ev in evidence:
             test_id = (getattr(ev, "test_id", "") or "").upper()
@@ -1281,6 +1313,7 @@ class ScoringEngine:
         return view
 
     def _browser_view(self, evidence: List[BrowserEvidence]) -> Dict[str, object]:
+        """Return the view."""
         if not evidence:
             return {}
         ev = evidence[0]

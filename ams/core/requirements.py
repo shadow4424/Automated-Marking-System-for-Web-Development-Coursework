@@ -34,6 +34,7 @@ def _build_evaluation_result(
     skipped_reason: str | None = None,
     confidence_flags: Sequence[str] | None = None,
 ) -> RequirementEvaluationResult:
+    """Build the evaluation result."""
     return RequirementEvaluationResult(
         requirement_id=requirement_id,
         component=component,
@@ -57,6 +58,7 @@ class RequirementEvaluationEngine:
         context: SubmissionContext,
         findings: Iterable[Finding],
     ) -> tuple[List[RequirementEvaluationResult], List[Finding]]:
+        """Return the evaluate."""
         resolved = context.resolved_config
         if resolved is None:
             raise ValueError("SubmissionContext.resolved_config must be populated before evaluating requirements")
@@ -126,6 +128,7 @@ class RequirementEvaluationEngine:
         findings: Sequence[Finding],
         profile: ProfileSpec,
     ) -> RequirementEvaluationResult:
+        """Evaluate the definition."""
         evaluator = definition.evaluator
         if evaluator == "required_rule" and isinstance(definition.rule, RequiredRule):
             return self._evaluate_static_rule(definition, context, profile)
@@ -162,6 +165,7 @@ class RequirementEvaluationEngine:
         definition: RequirementDefinition,
         context: SubmissionContext,
     ) -> tuple[List[Path], int, int]:
+        """Load the files for rule."""
         component = definition.component
         files = context.files_for(component, relevant_only=True)
         discovered_count = len(context.discovered_files.get(component, []))
@@ -175,6 +179,7 @@ class RequirementEvaluationEngine:
         discovered_count: int,
         relevant_count: int,
     ) -> RequirementEvaluationResult:
+        """Analyse the static rule."""
         component = definition.component
         if (
             component == "html"
@@ -236,6 +241,7 @@ class RequirementEvaluationEngine:
         context: SubmissionContext,
         profile: ProfileSpec,
     ) -> RequirementEvaluationResult:
+        """Evaluate the static rule."""
         component = definition.component
         required = profile.is_component_required(component)
         files, discovered_count, relevant_count = self._load_files_for_rule(definition, context)
@@ -284,6 +290,7 @@ class RequirementEvaluationEngine:
         rule: BehavioralRule,
         context: SubmissionContext,
     ) -> tuple[List[str], List[Mapping[str, object]]]:
+        """Prepare the behavioral context."""
         statuses = []
         evidence_rows: List[Mapping[str, object]] = []
         for item in context.behavioural_evidence:
@@ -314,6 +321,7 @@ class RequirementEvaluationEngine:
         statuses: Sequence[str],
         evidence_rows: Sequence[Mapping[str, object]],
     ) -> RequirementEvaluationResult:
+        """Run the behavioral check."""
         if not statuses:
             return _build_evaluation_result(
                 requirement_id=definition.id,
@@ -368,6 +376,7 @@ class RequirementEvaluationEngine:
         definition: RequirementDefinition,
         context: SubmissionContext,
     ) -> RequirementEvaluationResult:
+        """Evaluate the behavioral rule."""
         rule = definition.rule
         assert isinstance(rule, BehavioralRule)
         if rule.test_type == "page_load":
@@ -382,6 +391,7 @@ class RequirementEvaluationEngine:
         definition: RequirementDefinition,
         context: SubmissionContext,
     ) -> RequirementEvaluationResult:
+        """Evaluate the browser page load."""
         if not context.browser_evidence:
             return _build_evaluation_result(
                 requirement_id=definition.id,
@@ -438,6 +448,7 @@ class RequirementEvaluationEngine:
         definition: RequirementDefinition,
         context: SubmissionContext,
     ) -> RequirementEvaluationResult:
+        """Evaluate the browser interaction."""
         if not context.browser_evidence:
             return _build_evaluation_result(
                 requirement_id=definition.id,
@@ -516,6 +527,7 @@ class RequirementEvaluationEngine:
         context: SubmissionContext,
         findings: Sequence[Finding],
     ) -> RequirementEvaluationResult:
+        """Evaluate the layout requirement."""
         relevant_files = context.files_for(definition.component, relevant_only=True)
         if definition.required and not relevant_files:
             return _build_evaluation_result(
@@ -578,6 +590,7 @@ class RequirementEvaluationEngine:
         definition: RequirementDefinition,
         findings: Sequence[Finding],
     ) -> RequirementEvaluationResult:
+        """Evaluate the quality penalty."""
         relevant = [
             finding
             for finding in findings
@@ -629,6 +642,7 @@ class RequirementEvaluationEngine:
         context: SubmissionContext,
         findings: Sequence[Finding],
     ) -> RequirementEvaluationResult:
+        """Evaluate the api usage."""
         api_paths = list(context.role_mapping.relevant_files.get("api", [])) if context.role_mapping else []
         api_findings = [
             finding
@@ -895,6 +909,7 @@ class RequirementEvaluationEngine:
         rule: RequiredRule,
         path: Path,
     ) -> _RuleFileResult:
+        """Evaluate the rule on file."""
         try:
             content = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -914,6 +929,7 @@ class RequirementEvaluationEngine:
         *,
         profile_name: str,
     ) -> Finding:
+        """Return the from requirement."""
         component = result.component
         mapping = {
             "html": (HID.REQ_PASS, HID.REQ_FAIL, HID.REQ_SKIPPED, HID.REQ_MISSING_FILES),
@@ -962,6 +978,7 @@ class RequirementEvaluationEngine:
         )
 
     def _has_complete_html_shell(self, context: SubmissionContext) -> bool:
+        """Return the complete html shell."""
         html_files = context.files_for("html", relevant_only=True)
         if not html_files:
             return False
@@ -973,6 +990,7 @@ class RequirementEvaluationEngine:
         return all(token in content for token in required_tokens)
 
     def _html_files_have_images(self, files: Sequence[Path]) -> bool:
+        """Return the files have images."""
         for path in files:
             try:
                 content = path.read_text(encoding="utf-8", errors="replace").lower()
@@ -984,6 +1002,7 @@ class RequirementEvaluationEngine:
 
 
 def _aggregate_file_results(aggregation_mode: str, file_results: Sequence[_RuleFileResult]) -> tuple[float, str]:
+    """Return the file results."""
     if not file_results:
         return 0.0, "FAIL"
 
@@ -1009,6 +1028,7 @@ def _aggregate_file_results(aggregation_mode: str, file_results: Sequence[_RuleF
 
 
 def _build_requirement_message(result: RequirementEvaluationResult) -> str:
+    """Build the requirement message."""
     if result.status == "PASS":
         return f"Requirement {result.requirement_id} satisfied."
     if result.status == "SKIPPED":
@@ -1019,6 +1039,7 @@ def _build_requirement_message(result: RequirementEvaluationResult) -> str:
 
 
 def _extract_snippet(component: str, content: str, pattern: str) -> str:
+    """Extract the snippet."""
     if not content.strip():
         return "(file is empty)"
     lines = content.splitlines()
@@ -1047,6 +1068,7 @@ def _extract_snippet(component: str, content: str, pattern: str) -> str:
 
 
 def _evaluate_html_rule(component: str, rule: RequiredRule, content: str) -> tuple[int, bool]:
+    """Evaluate the html rule."""
     parser = TagCountingParser()
     parser.feed(content)
     selector = rule.selector.lower()
@@ -1093,6 +1115,7 @@ def _evaluate_html_rule(component: str, rule: RequiredRule, content: str) -> tup
 
 
 def _evaluate_css_rule(component: str, rule: RequiredRule, content: str) -> tuple[int, bool]:
+    """Evaluate the css rule."""
     lowered = content.lower()
     brace_count = content.count("{")
     needle = rule.needle.lower()
@@ -1185,6 +1208,7 @@ def _evaluate_css_rule(component: str, rule: RequiredRule, content: str) -> tupl
 
 
 def _evaluate_js_rule(component: str, rule: RequiredRule, content: str) -> tuple[int, bool]:
+    """Evaluate the js rule."""
     lowered = content.lower()
     needle = rule.needle.lower()
     if needle == "dom_query" or rule.id == "js.has_dom_query":
@@ -1287,6 +1311,7 @@ def _evaluate_js_rule(component: str, rule: RequiredRule, content: str) -> tuple
 
 
 def _evaluate_php_rule(component: str, rule: RequiredRule, content: str) -> tuple[int, bool]:
+    """Evaluate the php rule."""
     lowered = content.lower()
     needle = rule.needle.lower()
     if needle == "request_superglobal" or rule.id == "php.uses_request":
@@ -1338,6 +1363,7 @@ def _evaluate_php_rule(component: str, rule: RequiredRule, content: str) -> tupl
 
 
 def _evaluate_sql_rule(component: str, rule: RequiredRule, content: str) -> tuple[int, bool]:
+    """Evaluate the sql rule."""
     lowered = content.lower()
     needle = rule.needle.lower()
     if needle == "foreign_key" or rule.id == "sql.has_foreign_key":
@@ -1371,6 +1397,7 @@ def _evaluate_sql_rule(component: str, rule: RequiredRule, content: str) -> tupl
 
 
 def _evaluate_api_rule(component: str, rule: RequiredRule, content: str) -> tuple[int, bool]:
+    """Evaluate the api rule."""
     lowered = content.lower()
     needle = rule.needle.lower()
     if needle == "json_encode" or rule.id == "api.json_encode":
@@ -1420,6 +1447,7 @@ def _evaluate_api_rule(component: str, rule: RequiredRule, content: str) -> tupl
 
 
 def _evaluate_rule(component: str, rule: RequiredRule, content: str) -> tuple[int, bool]:
+    """Evaluate the rule."""
     dispatch = {
         "html": _evaluate_html_rule,
         "css": _evaluate_css_rule,

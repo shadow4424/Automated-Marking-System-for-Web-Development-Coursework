@@ -58,6 +58,7 @@ class AssessmentPipeline:
         scoring_engine: Optional[ScoringEngine] = None,
         scoring_mode: ScoringMode = SCORING_MODE,
     ) -> None:
+        """Initialise the assessment pipeline."""
         self.assessors: Optional[List[Assessor]] = list(assessors) if assessors is not None else None
         self.scoring_engine = scoring_engine or ScoringEngine()
         self.scoring_mode = scoring_mode
@@ -87,6 +88,7 @@ class AssessmentPipeline:
         profile: str,
         metadata: Mapping[str, object] | None,
     ) -> tuple[SubmissionContext, ResolvedAssignmentConfig]:
+        """Prepare the submission context and resolved config for a run."""
         resolved_config = resolve_assignment_config(profile, metadata=metadata)
         context = self._prepare_context(
             submission_path,
@@ -128,6 +130,7 @@ class AssessmentPipeline:
         config: ResolvedAssignmentConfig,
         skip_threat_scan: bool,
     ) -> dict[str, object]:
+        """Run the assessment analysis for a prepared context."""
         findings: List[Finding] = []
         if skip_threat_scan:
             logger.warning(
@@ -198,6 +201,7 @@ class AssessmentPipeline:
         context: SubmissionContext,
         config: ResolvedAssignmentConfig,
     ) -> Path:
+        """Write the report artefacts for an assessment run."""
         profile = str(findings["profile_name"])
         llm_evidence = findings["llm_evidence"]
         finding_items = list(findings["findings"])
@@ -270,6 +274,7 @@ class AssessmentPipeline:
         metadata: Mapping[str, object] | None = None,
         skip_threat_scan: bool = False,
     ) -> Path:
+        """Run the pipeline."""
         context, config = self._setup_run(
             submission_path,
             workspace_path,
@@ -432,6 +437,7 @@ class AssessmentPipeline:
 
     @staticmethod
     def _record_llm_issue(context: SubmissionContext, message: object) -> None:
+        """Record an LLM issue on the submission context."""
         text = str(message or "").strip()
         if not text:
             text = "LLM-assisted marking failed and requires review."
@@ -448,6 +454,7 @@ class AssessmentPipeline:
         context: SubmissionContext,
         profile: str,
     ) -> Finding:
+        """Build the review finding shown when LLM processing fails."""
         messages = [
             str(item).strip()
             for item in list(context.metadata.get("llm_error_messages", []) or [])
@@ -480,6 +487,7 @@ class AssessmentPipeline:
         findings: List[Finding],
         profile_spec: ProfileSpec,
     ) -> dict[str, object]:
+        """Prepare batched LLM enrichment payloads for findings."""
         batch_size = 5
         enriched: List[Finding] = []
         llm_evidence: dict = {"feedback": [], "partial_credit": []}
@@ -604,6 +612,7 @@ class AssessmentPipeline:
         batch: Mapping[str, object],
         context: SubmissionContext,
     ) -> tuple[str, int, object | None, str | None]:
+        """Run a single feedback or partial-credit LLM batch."""
         task_type = str(batch["task_type"])
         idx = int(batch["idx"])
         payload = batch["payload"]
@@ -622,6 +631,7 @@ class AssessmentPipeline:
         findings: dict[str, object],
         llm_results: Sequence[tuple[str, int, object | None, str | None]],
     ) -> tuple[List[Finding], dict, list[str]]:
+        """Merge completed LLM results back into the finding set."""
         enriched = list(findings["enriched"])
         llm_evidence = findings["llm_evidence"]
         chunks = findings["chunks"]
@@ -702,6 +712,7 @@ class AssessmentPipeline:
         profile_spec: ProfileSpec,
         context: SubmissionContext,
     ) -> tuple[List[Finding], dict]:
+        """Enrich eligible findings with LLM feedback and scoring data."""
         prepared = self._prepare_llm_enrichment_batches(findings, profile_spec)
         chunks = prepared["chunks"]
         if chunks and self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
@@ -756,6 +767,7 @@ class AssessmentPipeline:
         context: SubmissionContext,
         profile: str,
     ) -> dict[str, object]:
+        """Capture screenshots for UX review."""
         from ams.assessors.playwright_assessor import PlaywrightAssessor as _PA
 
         pa = None
@@ -792,6 +804,7 @@ class AssessmentPipeline:
         screenshots: Mapping[str, object],
         static_findings: List[Finding] | None,
     ) -> tuple[List[Finding], list]:
+        """Evaluate captured screenshots with the vision reviewer."""
         del static_findings
         context = screenshots["context"]
         profile = str(screenshots["profile"])
@@ -924,6 +937,7 @@ class AssessmentPipeline:
         profile: str,
         static_findings: List[Finding] | None = None,
     ) -> tuple[List[Finding], list]:
+        """Run the UX review flow for a submission."""
         screenshots = self._capture_ux_screenshots(context, profile)
         page_shots = screenshots["page_shots"]
         if not page_shots:
@@ -1091,6 +1105,7 @@ class AssessmentPipeline:
         profile: str,
         resolved_config: ResolvedAssignmentConfig,
     ) -> SubmissionContext:
+        """Prepare the submission context for assessment."""
         context = SubmissionProcessor().prepare(
             submission_path,
             workspace_path,

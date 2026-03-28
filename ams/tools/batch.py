@@ -53,6 +53,7 @@ class ValidationResult:
 
 
 def discover_batch_items(submissions_dir: Path) -> List[BatchItem]:
+    """Discover batch items."""
     items: List[BatchItem] = []
     for entry in submissions_dir.iterdir():
         name = entry.name
@@ -67,10 +68,12 @@ def discover_batch_items(submissions_dir: Path) -> List[BatchItem]:
 
 
 def _build_empty_component_scores() -> Dict[str, Optional[float]]:
+    """Build the empty component scores."""
     return {"html": None, "css": None, "js": None, "php": None, "sql": None, "api": None}
 
 
 def _remove_legacy_batch_outputs(out_root: Path) -> None:
+    """Return the legacy batch outputs."""
     for filename in (
         "component_means.csv",
         "failure_reasons_frequency.csv",
@@ -94,6 +97,7 @@ def run_batch(
     profile_config_path: Optional[str] = None,
     scoring_mode: ScoringMode = ScoringMode.STATIC_PLUS_LLM,
 ) -> dict:
+    """Run the batch workflow."""
     out_root.mkdir(parents=True, exist_ok=True)
     runs_root = out_root / "runs"
     if keep_individual_runs:
@@ -140,6 +144,7 @@ def write_outputs(
     profile: str = "frontend",
     profile_config_path: Optional[str] = None,
 ) -> None:
+    """Write batch outputs."""
     _remove_legacy_batch_outputs(out_root)
     batch_summary = {"records": records}
     (out_root / "batch_summary.json").write_text(json.dumps(batch_summary, indent=2), encoding="utf-8")
@@ -195,6 +200,7 @@ def write_outputs(
 
 
 def _validate_submission_zip(submission_path: Path, assignment_id: Optional[str]) -> ValidationResult:
+    """Validate the submission zip."""
     stem = Path(submission_path.name).stem
     if "_" not in stem:
         return ValidationResult(
@@ -247,6 +253,7 @@ def _validate_submission_zip(submission_path: Path, assignment_id: Optional[str]
 
 
 def _extract_submission_zip(zip_path: Path, target_dir: Path) -> Path:
+    """Extract the submission zip."""
     extracted = target_dir / "extracted"
     extracted.mkdir(parents=True, exist_ok=True)
     safe_extract_zip(zip_path.resolve(), extracted)
@@ -258,6 +265,7 @@ def _run_submission_pipeline(
     config: Dict[str, object],
     pipeline: AssessmentPipeline,
 ) -> Path:
+    """Run the submission pipeline."""
     return pipeline.run(
         submission_path=submission_path,
         workspace_path=config["workspace_path"],
@@ -272,6 +280,7 @@ def _write_submission_output(
     out_root: Path,
     keep_individual_runs: bool,
 ) -> dict:
+    """Write the submission output."""
     record = result["record"]
     report_path = result["report_path"]
     report_data = result["report_data"]
@@ -324,6 +333,7 @@ def _process_one_submission(
     assignment_id: Optional[str] = None,
     profile_config_path: Optional[str] = None,
 ) -> dict:
+    """Process the one submission."""
     record: dict = {
         "id": item.id,
         "path": str(item.path),

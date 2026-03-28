@@ -265,7 +265,7 @@ class VisionAnalyst:
         Returns:
             VisionResult with responsiveness assessment.
         """
-        # For now, analyse mobile screenshot with responsiveness requirement
+        # For now, analyse the mobile screenshot against the responsiveness requirement
         return self.detect_layout_issues(
             mobile_screenshot,
             "The page should be responsive and readable on mobile. "
