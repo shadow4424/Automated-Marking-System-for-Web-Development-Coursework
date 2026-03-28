@@ -139,17 +139,25 @@
     transition: transform var(--transition-fast);
 }
 
-.export-dropdown.is-open .dropdown-caret {
+.export-dropdown [data-export-toggle] .chevron {
+    display: inline-flex;
+    transition: transform var(--transition-fast);
+}
+
+.export-dropdown.is-open .dropdown-caret,
+.export-dropdown.is-open [data-export-toggle] .chevron {
     transform: rotate(180deg);
 }
 
-.export-dropdown-menu {
+.export-dropdown-menu,
+.export-menu {
     position: absolute;
     top: 100%;
     left: 0;
     z-index: 100;
     min-width: 160px;
     margin-top: var(--space-xs);
+    margin-bottom: 0;
     padding: var(--space-xs) 0;
     background: #ffffff;
     border: 1px solid var(--color-border);
@@ -159,20 +167,24 @@
     visibility: hidden;
     transform: translateY(-4px);
     transition: all var(--transition-fast);
+    list-style: none;
 }
 
-.export-dropdown.is-open .export-dropdown-menu {
+.export-dropdown.is-open .export-dropdown-menu,
+.export-dropdown.is-open .export-menu {
     opacity: 1;
     visibility: visible;
     transform: translateY(0);
 }
 
-.export-dropdown-menu.align-right {
+.export-dropdown-menu.align-right,
+.export-menu.align-right {
     left: auto;
     right: 0;
 }
 
-.export-dropdown-item {
+.export-dropdown-item,
+.export-item {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
@@ -188,11 +200,13 @@
     transition: background var(--transition-fast);
 }
 
-.export-dropdown-item:hover {
+.export-dropdown-item:hover,
+.export-item:hover {
     background: var(--color-surface);
 }
 
-.export-dropdown-item:focus {
+.export-dropdown-item:focus,
+.export-item:focus {
     outline: none;
     background: var(--color-surface-hover);
 }

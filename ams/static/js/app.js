@@ -333,6 +333,67 @@
     }
 
     // =========================================================================
+    // Export Dropdowns
+    // =========================================================================
+
+    function initExportDropdowns() {
+        const dropdowns = Array.from(document.querySelectorAll('[data-export-dropdown]'));
+        if (!dropdowns.length) return;
+
+        function closeDropdown(dropdown) {
+            dropdown.classList.remove('is-open');
+            dropdown.querySelector('[data-export-toggle]')?.setAttribute('aria-expanded', 'false');
+        }
+
+        function closeAllDropdowns(except = null) {
+            dropdowns.forEach(dropdown => {
+                if (dropdown !== except) {
+                    closeDropdown(dropdown);
+                }
+            });
+        }
+
+        dropdowns.forEach(dropdown => {
+            const toggle = dropdown.querySelector('[data-export-toggle]');
+            const menu = dropdown.querySelector('[data-export-menu]');
+
+            if (!toggle || !menu) return;
+
+            toggle.setAttribute('aria-haspopup', 'menu');
+            toggle.setAttribute('aria-expanded', 'false');
+            menu.setAttribute('role', 'menu');
+
+            menu.querySelectorAll('a, button').forEach(item => {
+                item.setAttribute('role', 'menuitem');
+            });
+
+            toggle.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const shouldOpen = !dropdown.classList.contains('is-open');
+                closeAllDropdowns(dropdown);
+                dropdown.classList.toggle('is-open', shouldOpen);
+                toggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+            });
+
+            menu.addEventListener('click', event => {
+                event.stopPropagation();
+            });
+        });
+
+        document.addEventListener('click', () => {
+            closeAllDropdowns();
+        });
+
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                closeAllDropdowns();
+            }
+        });
+    }
+
+    // =========================================================================
     // Copy Buttons
     // =========================================================================
 
@@ -415,6 +476,7 @@
         initTabGroups();
         initEvidenceFilters();
         initStickyLocalNavs();
+        initExportDropdowns();
         initCopyButtons();
         initDisclosureControls();
         initAlertDismiss();
