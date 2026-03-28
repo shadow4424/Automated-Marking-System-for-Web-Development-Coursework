@@ -68,51 +68,62 @@ def _replace_existing_submissions(
     return
 
 
-def _build_submission_detail_view(
-    run: Mapping[str, object],
-    report: Mapping[str, object] | None,
-) -> dict[str, Any]:
+def _submission_detail_sections(report: Mapping[str, object] | None) -> dict[str, Any]:
+    """Normalize the report payload into the sections used by the detail view."""
     report_data = dict(report or {})
     score_evidence = dict(report_data.get("score_evidence", {}) or {})
-    confidence = dict(score_evidence.get("confidence", {}) or {})
-    review = dict(score_evidence.get("review", {}) or {})
-    role_mapping = dict(score_evidence.get("role_mapping", {}) or {})
-    environment = dict(report_data.get("environment", {}) or {})
-    component_scores = dict(((report_data.get("scores", {}) or {}).get("by_component", {}) or {}))
-    requirement_results = [
-        dict(item)
-        for item in list(score_evidence.get("requirements", []) or [])
-        if isinstance(item, Mapping)
-    ]
-    raw_findings = [
-        normalize_raw_finding(finding)
-        for finding in list(report_data.get("findings", []) or [])
-        if isinstance(finding, Mapping)
-    ]
-    diagnostics = [
-        normalize_raw_finding(finding)
-        for finding in list(report_data.get("diagnostics", []) or [])
-        if isinstance(finding, Mapping)
-    ]
-    checks = [
-        dict(item)
-        for item in list(report_data.get("checks", []) or [])
-        if isinstance(item, Mapping)
-    ]
-    behavioural_evidence = [
-        dict(item)
-        for item in list(report_data.get("behavioural_evidence", []) or [])
-        if isinstance(item, Mapping)
-    ]
-    browser_evidence = [
-        dict(item)
-        for item in list(report_data.get("browser_evidence", []) or [])
-        if isinstance(item, Mapping)
-    ]
+    return {
+        "report_data": report_data,
+        "score_evidence": score_evidence,
+        "confidence": dict(score_evidence.get("confidence", {}) or {}),
+        "review": dict(score_evidence.get("review", {}) or {}),
+        "role_mapping": dict(score_evidence.get("role_mapping", {}) or {}),
+        "environment": dict(report_data.get("environment", {}) or {}),
+        "component_scores": dict(((report_data.get("scores", {}) or {}).get("by_component", {}) or {})),
+        "requirement_results": [
+            dict(item)
+            for item in list(score_evidence.get("requirements", []) or [])
+            if isinstance(item, Mapping)
+        ],
+        "raw_findings": [
+            normalize_raw_finding(finding)
+            for finding in list(report_data.get("findings", []) or [])
+            if isinstance(finding, Mapping)
+        ],
+        "diagnostics": [
+            normalize_raw_finding(finding)
+            for finding in list(report_data.get("diagnostics", []) or [])
+            if isinstance(finding, Mapping)
+        ],
+        "checks": [
+            dict(item)
+            for item in list(report_data.get("checks", []) or [])
+            if isinstance(item, Mapping)
+        ],
+        "behavioural_evidence": [
+            dict(item)
+            for item in list(report_data.get("behavioural_evidence", []) or [])
+            if isinstance(item, Mapping)
+        ],
+        "browser_evidence": [
+            dict(item)
+            for item in list(report_data.get("browser_evidence", []) or [])
+            if isinstance(item, Mapping)
+        ],
+    }
 
+
+def _submission_detail_indexes(
+    raw_findings: list[dict[str, Any]],
+    checks: list[dict[str, Any]],
+    diagnostics: list[dict[str, Any]],
+    environment: Mapping[str, object],
+) -> dict[str, Any]:
+    """Build lookup tables and browser-reliability flags for the detail view."""
     findings_by_key: dict[str, list[dict[str, Any]]] = {}
     for finding in raw_findings:
         findings_by_key.setdefault(finding_group_key(finding), []).append(finding)
+
     checks_by_id = {
         str(check.get("check_id") or "").strip(): check
         for check in checks
@@ -126,8 +137,8 @@ def _build_submission_detail_view(
         and not browser_capture_failed
     )
 
-    valid_ux_findings: list[dict[str, Any]] = []
     raw_ux_findings: list[dict[str, Any]] = []
+    valid_ux_findings: list[dict[str, Any]] = []
     for finding in raw_findings:
         evidence = finding.get("evidence")
         if not isinstance(evidence, Mapping):
@@ -140,7 +151,88 @@ def _build_submission_detail_view(
             continue
         if browser_reliable:
             valid_ux_findings.append(finding)
+
     hidden_ux_keys = {finding_group_key(finding) for finding in raw_ux_findings} if not browser_reliable else set()
+    return {
+        "findings_by_key": findings_by_key,
+        "checks_by_id": checks_by_id,
+        "browser_reliable": browser_reliable,
+        "raw_ux_findings": raw_ux_findings,
+        "valid_ux_findings": valid_ux_findings,
+        "hidden_ux_keys": hidden_ux_keys,
+    }
+
+
+def _submission_detail_limitations(
+    run: Mapping[str, object],
+    environment: Mapping[str, object],
+    confidence: Mapping[str, object],
+    diagnostics: list[dict[str, Any]],
+    raw_ux_findings: list[dict[str, Any]],
+    browser_reliable: bool,
+) -> list[dict[str, Any]]:
+    """Build the limitation banners shown above the submission detail evidence."""
+    limitations: list[dict[str, Any]] = []
+
+    def push_limitation(title: str, detail: str = "", *, tone: str = "warning", secondary_id: str = "") -> None:
+        key = (title.strip().lower(), secondary_id.strip().lower())
+        if not title or any(item.get("_key") == key for item in limitations):
+            return
+        limitations.append({"_key": key, "title": title, "detail": detail or title, "tone": tone, "secondary_id": secondary_id})
+
+    run_status = str(run.get("status") or "").strip().lower()
+    if run_status == "pending":
+        push_limitation("Rerun is still in progress", "This submission is being reprocessed in the background, so the current result is incomplete.")
+    elif run_status in {"failed", "error"}:
+        push_limitation("The latest rerun failed", "The most recent attempt to reprocess this submission did not complete successfully.", tone="danger")
+    if bool(run.get("llm_error_flagged")):
+        push_limitation("LLM-assisted review failed", str(run.get("llm_error_message") or "An LLM-assisted review step failed, so manual review is required."), secondary_id="llm")
+    if environment and not environment.get("php_available", True):
+        push_limitation("PHP runtime was unavailable", "Server-side runtime checks could not be completed because PHP was unavailable in this run.", secondary_id="php_unavailable")
+    if environment and not environment.get("behavioural_tests_run", True):
+        push_limitation("Runtime checks were unavailable", "Behavioural runtime stages did not complete, so dynamic server-side evidence is incomplete.", secondary_id="runtime_unavailable")
+    if environment and not environment.get("browser_available", True):
+        push_limitation("Browser environment was unavailable", "Browser-based checks could not be completed in this run.", secondary_id="browser_unavailable")
+    if environment and not environment.get("browser_tests_run", True):
+        push_limitation("Browser checks were unavailable", "UI and browser-driven evidence was incomplete because the browser stage did not complete.", secondary_id="browser_tests_unavailable")
+    for flag in list(confidence.get("flags", []) or []):
+        text = CONFIDENCE_FLAG_TEXT.get(str(flag))
+        if text:
+            push_limitation(text.rstrip("."), text, secondary_id=str(flag))
+    for finding in diagnostics:
+        if finding["id"] == "BROWSER.CAPTURE_FAIL":
+            push_limitation("Browser screenshot capture failed", finding["message"], secondary_id=finding["id"])
+    if raw_ux_findings and not browser_reliable:
+        push_limitation("UX review is hidden for this run", "Browser capture was not reliable in this assessment result, so UX screenshots and review summaries are withheld to avoid contradictory evidence.", secondary_id="ux_hidden")
+    return limitations[:6]
+
+
+def _build_submission_detail_view(
+    run: Mapping[str, object],
+    report: Mapping[str, object] | None,
+) -> dict[str, Any]:
+    sections = _submission_detail_sections(report)
+    report_data = sections["report_data"]
+    score_evidence = sections["score_evidence"]
+    confidence = sections["confidence"]
+    review = sections["review"]
+    role_mapping = sections["role_mapping"]
+    environment = sections["environment"]
+    component_scores = sections["component_scores"]
+    requirement_results = sections["requirement_results"]
+    raw_findings = sections["raw_findings"]
+    diagnostics = sections["diagnostics"]
+    checks = sections["checks"]
+    behavioural_evidence = sections["behavioural_evidence"]
+    browser_evidence = sections["browser_evidence"]
+
+    detail_indexes = _submission_detail_indexes(raw_findings, checks, diagnostics, environment)
+    findings_by_key = detail_indexes["findings_by_key"]
+    checks_by_id = detail_indexes["checks_by_id"]
+    browser_reliable = detail_indexes["browser_reliable"]
+    raw_ux_findings = detail_indexes["raw_ux_findings"]
+    valid_ux_findings = detail_indexes["valid_ux_findings"]
+    hidden_ux_keys = detail_indexes["hidden_ux_keys"]
 
     evidence_items: list[dict[str, Any]] = []
     matched_keys: set[str] = set()
@@ -417,89 +509,14 @@ def _build_submission_detail_view(
         if item["kind"] == "requirement" and item["required"] and item["status"] in {"FAIL", "PARTIAL"}
     ]
 
-    limitations: list[dict[str, Any]] = []
-
-    def _push_limitation(title: str, detail: str = "", *, tone: str = "warning", secondary_id: str = "") -> None:
-        key = (title.strip().lower(), secondary_id.strip().lower())
-        if not title or any((item.get("_key") == key) for item in limitations):
-            return
-        limitations.append(
-            {
-                "_key": key,
-                "title": title,
-                "detail": detail or title,
-                "tone": tone,
-                "secondary_id": secondary_id,
-            }
-        )
-
-    run_status = str(run.get("status") or "").strip().lower()
-    if run_status == "pending":
-        _push_limitation(
-            "Rerun is still in progress",
-            "This submission is being reprocessed in the background, so the current result is incomplete.",
-        )
-    elif run_status in {"failed", "error"}:
-        _push_limitation(
-            "The latest rerun failed",
-            "The most recent attempt to reprocess this submission did not complete successfully.",
-            tone="danger",
-        )
-
-    if bool(run.get("llm_error_flagged")):
-        _push_limitation(
-            "LLM-assisted review failed",
-            str(run.get("llm_error_message") or "An LLM-assisted review step failed, so manual review is required."),
-            tone="warning",
-            secondary_id="llm",
-        )
-
-    if environment and not environment.get("php_available", True):
-        _push_limitation(
-            "PHP runtime was unavailable",
-            "Server-side runtime checks could not be completed because PHP was unavailable in this run.",
-            secondary_id="php_unavailable",
-        )
-    if environment and not environment.get("behavioural_tests_run", True):
-        _push_limitation(
-            "Runtime checks were unavailable",
-            "Behavioural runtime stages did not complete, so dynamic server-side evidence is incomplete.",
-            secondary_id="runtime_unavailable",
-        )
-    if environment and not environment.get("browser_available", True):
-        _push_limitation(
-            "Browser environment was unavailable",
-            "Browser-based checks could not be completed in this run.",
-            secondary_id="browser_unavailable",
-        )
-    if environment and not environment.get("browser_tests_run", True):
-        _push_limitation(
-            "Browser checks were unavailable",
-            "UI and browser-driven evidence was incomplete because the browser stage did not complete.",
-            secondary_id="browser_tests_unavailable",
-        )
-
-    for flag in list(confidence.get("flags", []) or []):
-        text = CONFIDENCE_FLAG_TEXT.get(str(flag))
-        if text:
-            _push_limitation(text.rstrip("."), text, secondary_id=str(flag))
-
-    for finding in diagnostics:
-        if finding["id"] == "BROWSER.CAPTURE_FAIL":
-            _push_limitation(
-                "Browser screenshot capture failed",
-                finding["message"],
-                secondary_id=finding["id"],
-            )
-
-    if raw_ux_findings and not browser_reliable:
-        _push_limitation(
-            "UX review is hidden for this run",
-            "Browser capture was not reliable in this assessment result, so UX screenshots and review summaries are withheld to avoid contradictory evidence.",
-            secondary_id="ux_hidden",
-        )
-
-    limitations = limitations[:6]
+    limitations = _submission_detail_limitations(
+        run,
+        environment,
+        confidence,
+        diagnostics,
+        raw_ux_findings,
+        browser_reliable,
+    )
 
     stage_status = [
         {"label": "Static checks", "value": "Completed"},
@@ -560,63 +577,6 @@ def _build_submission_detail_view(
 @marking_bp.route("/mark", methods=["GET", "POST"])
 @login_required
 def mark():
-    def _mark_assignment_context(include_released: bool = False) -> tuple[str, str, str, list[dict], bool]:
-        user_role = session.get("user_role", "")
-        view_as_role = session.get("view_as_role")
-        effective_role = view_as_role or user_role
-        user_id = session.get("user_id", "")
-        is_preview = False
-
-        if effective_role == "student":
-            now = datetime.now().strftime("%Y-%m-%dT%H:%M")
-            if user_role == "student":
-                assignments = [
-                    assignment
-                    for assignment in list_assignments_for_student(user_id)
-                    if not assignment.get("due_date") or assignment["due_date"] >= now
-                ]
-            else:
-                is_preview = True
-                assignments = [
-                    assignment
-                    for assignment in list_assignments()
-                    if not assignment.get("due_date") or assignment["due_date"] >= now
-                ]
-        else:
-            assignments = list_assignments() if user_role == "admin" else list_assignments(teacher_id=user_id)
-
-        if not include_released:
-            assignments = [
-                assignment
-                for assignment in assignments
-                if not _assignment_submission_locked(assignment)
-            ]
-        return user_role, effective_role, user_id, assignments, is_preview
-
-    def _render_mark_page(status_code: int = 200, selected_assignment_id: str = ""):
-        github_connected = bool(session.get("github_token"))
-        github_user = session.get("github_user", "")
-        user_role, effective_role, user_id, assignment_options, is_preview = _mark_assignment_context()
-        effective_student_id = PREVIEW_STUDENT_ID if is_preview else user_id
-        student_assignments = assignment_options if effective_role == "student" else []
-        teacher_assignments = assignment_options if effective_role != "student" else []
-        return (
-            render_template(
-                "marking/mark.html",
-                profiles=PROFILE_CHOICES,
-                github_connected=github_connected,
-                github_user=github_user,
-                user_role=user_role,
-                effective_role=effective_role,
-                user_id=effective_student_id,
-                student_assignments=student_assignments,
-                assignments=teacher_assignments,
-                is_preview=is_preview,
-                selected_assignment_id=selected_assignment_id,
-            ),
-            status_code,
-        )
-
     if request.method == "GET":
         return _render_mark_page(selected_assignment_id=request.args.get("assignment_id", "").strip())
 
