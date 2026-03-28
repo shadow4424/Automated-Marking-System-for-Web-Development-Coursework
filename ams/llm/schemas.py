@@ -5,7 +5,7 @@ parsing and prevent crashes from malformed LLM output.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Literal, Any, Optional
+from typing import Dict, List, Literal, Any
 
 from pydantic import BaseModel, Field, field_validator
 

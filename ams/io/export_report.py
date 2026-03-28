@@ -4,7 +4,7 @@ import io
 import json
 import textwrap
 import zipfile
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from typing import Any
 
 # ---------------------------------------------------------------------------

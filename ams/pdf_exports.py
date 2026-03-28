@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import textwrap
-from dataclasses import dataclass, field as dataclass_field
+from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 PAGE_WIDTH = 612
