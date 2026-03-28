@@ -1,0 +1,30 @@
+/* AMS Account Settings Page */
+
+.account-settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-xl);
+    align-items: start;
+}
+
+.account-settings-card {
+    height: 100%;
+}
+
+.account-settings-form {
+    max-width: 100%;
+}
+
+.account-settings-form .btn {
+    min-width: calc(var(--space-3xl) + var(--space-xl));
+}
+
+.account-settings-role {
+    margin-top: var(--space-sm);
+}
+
+@media (max-width: 64rem) {
+    .account-settings-grid {
+        grid-template-columns: 1fr;
+    }
+}

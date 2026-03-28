@@ -1,6 +1,11 @@
 {% extends "base.html" %}
+{% from "macros/_ui.html" import role_badge %}
 
 {% block title %}Account Settings — AMS{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/account-settings.css') }}">
+{% endblock %}
 
 {% block content %}
 <div class="page-shell">
@@ -29,71 +34,73 @@
                 </div>
                 <div class="info-item gc-full">
                     <span class="info-item-label">Role</span>
-                    <span class="info-item-value">{{ user.role|capitalize }}</span>
+                    <span class="account-settings-role">{{ role_badge(user.role) }}</span>
                 </div>
             </div>
             <p class="form-hint mt-md">User ID, first name, and last name are managed by an administrator and cannot be changed here.</p>
         </aside>
     </section>
 
-    {# ── Email update card ── #}
-    <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">Email address</h2>
+    <div class="account-settings-grid">
+        {# ── Email update card ── #}
+        <section class="card account-settings-card">
+            <div class="section-heading-row">
+                <div class="section-copy">
+                    <h2 class="card-title">Email address</h2>
+                </div>
+                <span class="badge badge-info">Editable</span>
             </div>
-            <span class="badge badge-info">Editable</span>
-        </div>
 
-        <p class="form-hint mb-lg">
-            Current email: <strong>{{ user.email }}</strong>
-        </p>
+            <p class="form-hint mb-lg">
+                Current email: <strong>{{ user.email }}</strong>
+            </p>
 
-        <form method="POST" action="{{ url_for('account.update_email') }}" style="max-width:480px;"> {# layout-specific, intentional #}
-            <div class="form-group">
-                <label class="form-label" for="email">New email address <span class="required">*</span></label>
-                <input type="email" id="email" name="email" class="form-input"
-                       placeholder="you@example.com" required autocomplete="email">
-            </div>
-            <div class="form-group">
-                <label class="form-label" for="email_current_password">Current password <span class="required">*</span></label>
-                <input type="password" id="email_current_password" name="current_password" class="form-input"
-                       placeholder="Enter your current password" required autocomplete="current-password">
-                <p class="form-hint">Required to confirm your identity before changing your email.</p>
-            </div>
-            <button type="submit" class="btn btn-primary">Update email</button>
-        </form>
-    </section>
+            <form method="POST" action="{{ url_for('account.update_email') }}" class="account-settings-form">
+                <div class="form-group">
+                    <label class="form-label" for="email">New email address <span class="required">*</span></label>
+                    <input type="email" id="email" name="email" class="form-input"
+                           placeholder="you@example.com" required autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="email_current_password">Current password <span class="required">*</span></label>
+                    <input type="password" id="email_current_password" name="current_password" class="form-input"
+                           placeholder="Enter your current password" required autocomplete="current-password">
+                    <p class="form-hint">Required to confirm your identity before changing your email.</p>
+                </div>
+                <button type="submit" class="btn btn-primary">Update email</button>
+            </form>
+        </section>
 
-    {# ── Password change card ── #}
-    <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">Change password</h2>
+        {# ── Password change card ── #}
+        <section class="card account-settings-card">
+            <div class="section-heading-row">
+                <div class="section-copy">
+                    <h2 class="card-title">Change password</h2>
+                </div>
+                <span class="badge badge-info">Editable</span>
             </div>
-            <span class="badge badge-info">Editable</span>
-        </div>
 
-        <form method="POST" action="{{ url_for('account.update_password') }}" style="max-width:480px;"> {# layout-specific, intentional #}
-            <div class="form-group">
-                <label class="form-label" for="pw_current">Current password <span class="required">*</span></label>
-                <input type="password" id="pw_current" name="current_password" class="form-input"
-                       placeholder="Enter your current password" required autocomplete="current-password">
-            </div>
-            <div class="form-group">
-                <label class="form-label" for="pw_new">New password <span class="required">*</span></label>
-                <input type="password" id="pw_new" name="new_password" class="form-input"
-                       placeholder="At least 8 characters" required autocomplete="new-password" minlength="8">
-                <p class="form-hint">Minimum 8 characters.</p>
-            </div>
-            <div class="form-group">
-                <label class="form-label" for="pw_confirm">Confirm new password <span class="required">*</span></label>
-                <input type="password" id="pw_confirm" name="confirm_password" class="form-input"
-                       placeholder="Repeat your new password" required autocomplete="new-password" minlength="8">
-            </div>
-            <button type="submit" class="btn btn-primary">Change password</button>
-        </form>
-    </section>
+            <form method="POST" action="{{ url_for('account.update_password') }}" class="account-settings-form">
+                <div class="form-group">
+                    <label class="form-label" for="pw_current">Current password <span class="required">*</span></label>
+                    <input type="password" id="pw_current" name="current_password" class="form-input"
+                           placeholder="Enter your current password" required autocomplete="current-password">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="pw_new">New password <span class="required">*</span></label>
+                    <input type="password" id="pw_new" name="new_password" class="form-input"
+                           placeholder="At least 8 characters" required autocomplete="new-password" minlength="8">
+                    <p class="form-hint">Minimum 8 characters.</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="pw_confirm">Confirm new password <span class="required">*</span></label>
+                    <input type="password" id="pw_confirm" name="confirm_password" class="form-input"
+                           placeholder="Repeat your new password" required autocomplete="new-password" minlength="8">
+                </div>
+                <button type="submit" class="btn btn-primary">Change password</button>
+            </form>
+        </section>
+    </div>
 
 </div>
 {% endblock %}
