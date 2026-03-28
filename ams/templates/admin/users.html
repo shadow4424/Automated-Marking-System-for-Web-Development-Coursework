@@ -20,24 +20,13 @@
         </div>
         <aside class="page-side-panel">
             <h2 class="card-title">Role mix</h2>
-            <div class="info-grid info-grid--2">
-                <div class="info-item">
-                    <span class="info-item-label">Total users</span>
-                    <span class="info-item-value">{{ users|length }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Admins</span>
-                    <span class="info-item-value">{{ admin_count }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Teachers</span>
-                    <span class="info-item-value">{{ teacher_count }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Students</span>
-                    <span class="info-item-value">{{ student_count }}</span>
-                </div>
-            </div>
+            {% set info_grid_items = [
+                {'label': 'Total users', 'value': users|length},
+                {'label': 'Admins', 'value': admin_count},
+                {'label': 'Teachers', 'value': teacher_count},
+                {'label': 'Students', 'value': student_count}
+            ] %}
+            {% include "partials/_info_grid.html" %}
         </aside>
     </section>
 

@@ -45,24 +45,13 @@
         </div>
         <aside class="page-side-panel">
             <h2 class="card-title">Current queue</h2>
-            <div class="info-grid info-grid--2">
-                <div class="info-item">
-                    <span class="info-item-label">Runs</span>
-                    <span class="info-item-value">{{ stats.total }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Pending</span>
-                    <span class="info-item-value">{{ stats.pending }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Active</span>
-                    <span class="info-item-value">{{ stats.active }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">History</span>
-                    <span class="info-item-value">{{ stats.history }}</span>
-                </div>
-            </div>
+            {% set info_grid_items = [
+                {'label': 'Runs', 'value': stats.total},
+                {'label': 'Pending', 'value': stats.pending},
+                {'label': 'Active', 'value': stats.active},
+                {'label': 'History', 'value': stats.history}
+            ] %}
+            {% include "partials/_info_grid.html" %}
         </aside>
     </section>
 

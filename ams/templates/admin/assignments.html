@@ -18,24 +18,13 @@
         </div>
         <aside class="page-side-panel">
             <h2 class="card-title">Assignment mix</h2>
-            <div class="info-grid info-grid--2">
-                <div class="info-item">
-                    <span class="info-item-label">Assignments</span>
-                    <span class="info-item-value">{{ assignments|length }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Released</span>
-                    <span class="info-item-value">{{ released_count }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Withheld</span>
-                    <span class="info-item-value">{{ withheld_count }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Teachers</span>
-                    <span class="info-item-value">{{ teacher_count }}</span>
-                </div>
-            </div>
+            {% set info_grid_items = [
+                {'label': 'Assignments', 'value': assignments|length},
+                {'label': 'Released', 'value': released_count},
+                {'label': 'Withheld', 'value': withheld_count},
+                {'label': 'Teachers', 'value': teacher_count}
+            ] %}
+            {% include "partials/_info_grid.html" %}
         </aside>
     </section>
 

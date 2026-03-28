@@ -40,24 +40,13 @@
         </div>
         <aside class="page-side-panel">
             <h2 class="card-title">Assignment summary</h2>
-            <div class="info-grid info-grid--2">
-                <div class="info-item">
-                    <span class="info-item-label">Students</span>
-                    <span class="info-item-value">{{ student_details|length }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Submissions</span>
-                    <span class="info-item-value">{{ runs|length }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Due date</span>
-                    <span class="info-item-value">{{ assignment.due_date[:10] if assignment.due_date else '-' }}</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-item-label">Teachers</span>
-                    <span class="info-item-value">{{ teacher_details|length }}</span>
-                </div>
-            </div>
+            {% set info_grid_items = [
+                {'label': 'Students', 'value': student_details|length},
+                {'label': 'Submissions', 'value': runs|length},
+                {'label': 'Due date', 'value': assignment.due_date[:10] if assignment.due_date else '-'},
+                {'label': 'Teachers', 'value': teacher_details|length}
+            ] %}
+            {% include "partials/_info_grid.html" %}
         </aside>
     </section>
 
