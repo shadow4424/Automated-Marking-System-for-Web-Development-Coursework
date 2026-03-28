@@ -340,9 +340,17 @@
         const dropdowns = Array.from(document.querySelectorAll('[data-export-dropdown]'));
         if (!dropdowns.length) return;
 
+        function getDropdownToggle(dropdown) {
+            return dropdown.querySelector('[data-export-toggle], .export-dropdown-trigger');
+        }
+
+        function getDropdownMenu(dropdown) {
+            return dropdown.querySelector('[data-export-menu], .export-dropdown-menu');
+        }
+
         function closeDropdown(dropdown) {
             dropdown.classList.remove('is-open');
-            dropdown.querySelector('[data-export-toggle]')?.setAttribute('aria-expanded', 'false');
+            getDropdownToggle(dropdown)?.setAttribute('aria-expanded', 'false');
         }
 
         function closeAllDropdowns(except = null) {
@@ -354,8 +362,8 @@
         }
 
         dropdowns.forEach(dropdown => {
-            const toggle = dropdown.querySelector('[data-export-toggle]');
-            const menu = dropdown.querySelector('[data-export-menu]');
+            const toggle = getDropdownToggle(dropdown);
+            const menu = getDropdownMenu(dropdown);
 
             if (!toggle || !menu) return;
 
