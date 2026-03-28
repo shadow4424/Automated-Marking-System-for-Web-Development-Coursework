@@ -124,6 +124,24 @@ def _db_path() -> Path:
     return _DEFAULT_DB_PATH
 
 
+def _query_one(sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
+    """Execute a query and return a single row, or ``None``."""
+    conn = get_db()
+    try:
+        return conn.execute(sql, params).fetchone()
+    finally:
+        conn.close()
+
+
+def _query_all(sql: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
+    """Execute a query and return all matching rows."""
+    conn = get_db()
+    try:
+        return conn.execute(sql, params).fetchall()
+    finally:
+        conn.close()
+
+
 def get_db() -> sqlite3.Connection:
     """Return a new SQLite connection with row-factory enabled."""
     conn = sqlite3.connect(str(_db_path()))
@@ -246,30 +264,18 @@ def init_db() -> None:
 
 def authenticate_user(user_id: str, password: str) -> dict | None:
     """Verify credentials. Returns user dict on success, ``None`` on failure."""
-    conn = get_db()
-    try:
-        row = conn.execute(
-            "SELECT * FROM users WHERE userID = ?", (user_id,)
-        ).fetchone()
-        if row is None:
-            return None
-        if not check_password_hash(row["password_hash"], password):
-            return None
-        return dict(row)
-    finally:
-        conn.close()
+    row = _query_one("SELECT * FROM users WHERE userID = ?", (user_id,))
+    if row is None:
+        return None
+    if not check_password_hash(row["password_hash"], password):
+        return None
+    return dict(row)
 
 
 def get_user(user_id: str) -> dict | None:
     """Fetch a single user by ID."""
-    conn = get_db()
-    try:
-        row = conn.execute(
-            "SELECT * FROM users WHERE userID = ?", (user_id,)
-        ).fetchone()
-        return dict(row) if row else None
-    finally:
-        conn.close()
+    row = _query_one("SELECT * FROM users WHERE userID = ?", (user_id,))
+    return dict(row) if row else None
 
 
 def get_preview_student() -> dict | None:
@@ -282,21 +288,17 @@ def list_users(role: str | None = None) -> list[dict]:
 
     Excludes system accounts (preview student) from listings.
     """
-    conn = get_db()
-    try:
-        if role:
-            rows = conn.execute(
-                "SELECT * FROM users WHERE role = ? AND userID != ? ORDER BY userID",
-                (role, PREVIEW_STUDENT_ID),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM users WHERE userID != ? ORDER BY role, userID",
-                (PREVIEW_STUDENT_ID,),
-            ).fetchall()
-        return [dict(r) for r in rows]
-    finally:
-        conn.close()
+    if role:
+        rows = _query_all(
+            "SELECT * FROM users WHERE role = ? AND userID != ? ORDER BY userID",
+            (role, PREVIEW_STUDENT_ID),
+        )
+    else:
+        rows = _query_all(
+            "SELECT * FROM users WHERE userID != ? ORDER BY role, userID",
+            (PREVIEW_STUDENT_ID,),
+        )
+    return [dict(row) for row in rows]
 
 
 def create_user(
@@ -338,14 +340,8 @@ def delete_user(user_id: str) -> bool:
 
 def get_user_by_email(email: str) -> dict | None:
     """Return the first user with the given email, or None."""
-    conn = get_db()
-    try:
-        row = conn.execute(
-            "SELECT * FROM users WHERE email = ?", (email,)
-        ).fetchone()
-        return dict(row) if row else None
-    finally:
-        conn.close()
+    row = _query_one("SELECT * FROM users WHERE email = ?", (email,))
+    return dict(row) if row else None
 
 
 def update_user_email(user_id: str, email: str) -> None:
@@ -481,16 +477,10 @@ def create_assignment(
 
 def get_assignment(assignment_id: str) -> dict | None:
     """Fetch a single assignment by ID."""
-    conn = get_db()
-    try:
-        row = conn.execute(
-            "SELECT * FROM assignments WHERE assignmentID = ?", (assignment_id,)
-        ).fetchone()
-        if row is None:
-            return None
-        return _normalize_assignment_record(row)
-    finally:
-        conn.close()
+    row = _query_one("SELECT * FROM assignments WHERE assignmentID = ?", (assignment_id,))
+    if row is None:
+        return None
+    return _normalize_assignment_record(row)
 
 
 def list_assignments(teacher_id: str | None = None) -> list[dict]:
@@ -501,26 +491,22 @@ def list_assignments(teacher_id: str | None = None) -> list[dict]:
     """
     from datetime import datetime
 
-    conn = get_db()
-    try:
-        rows = conn.execute("SELECT * FROM assignments").fetchall()
-        result = [_normalize_assignment_record(row) for row in rows]
-        if teacher_id:
-            result = [assignment for assignment in result if teacher_id in assignment.get("teacher_ids", [])]
+    rows = _query_all("SELECT * FROM assignments")
+    result = [_normalize_assignment_record(row) for row in rows]
+    if teacher_id:
+        result = [assignment for assignment in result if teacher_id in assignment.get("teacher_ids", [])]
 
-        # Sort: active/upcoming first, past-due last, alphanumeric within each group
-        now = datetime.now().strftime("%Y-%m-%dT%H:%M")
+    # Sort: active/upcoming first, past-due last, alphanumeric within each group
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M")
 
-        def sort_key(a: dict) -> tuple:
-            """Return a sort key."""
-            due = a.get("due_date", "")
-            is_past_due = 1 if (due and due < now) else 0
-            return (is_past_due, a.get("assignmentID", ""))
+    def sort_key(a: dict) -> tuple:
+        """Return a sort key."""
+        due = a.get("due_date", "")
+        is_past_due = 1 if (due and due < now) else 0
+        return (is_past_due, a.get("assignmentID", ""))
 
-        result.sort(key=sort_key)
-        return result
-    finally:
-        conn.close()
+    result.sort(key=sort_key)
+    return result
 
 
 def list_assignments_for_student(student_id: str) -> list[dict]:
