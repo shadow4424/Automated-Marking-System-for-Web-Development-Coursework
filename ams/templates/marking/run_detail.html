@@ -420,17 +420,17 @@
                             {%- set _ux_ev = (_ux_finding.evidence if _ux_finding and _ux_finding.evidence is mapping else {}) -%}
                             {%- set _ux_review = (_ux_ev.get('ux_review') or {}) if _ux_ev is mapping else {} -%}
                             {%- set _ux_vision = (_ux_ev.get('vision_analysis') or {}) if _ux_ev is mapping else {} -%}
-                            <div style="display:flex; gap:1.5rem; align-items:flex-start;"> {# layout-specific, intentional #}
-                                <div style="flex:0 0 auto; width:42%; min-width:200px;"> {# layout-specific, intentional #}
+                            <div class="submission-ux-layout">
+                                <div class="submission-ux-media">
                                     {% if _ux_finding and _ux_finding.screenshots %}
                                         {% for shot in _ux_finding.screenshots %}
-                                        <img src="{{ artifact_url(shot) }}" alt="Page screenshot" class="submission-screenshot" style="width:100%; border-radius:4px; display:block;" onerror="this.parentElement.innerHTML='<p class=\'submission-detail-note\'>Screenshot unavailable.</p>'"> {# layout-specific, intentional #}
+                                        <img src="{{ artifact_url(shot) }}" alt="Page screenshot" class="submission-screenshot submission-screenshot--full" onerror="this.parentElement.innerHTML='<p class=\'submission-detail-note\'>Screenshot unavailable.</p>'">
                                         {% endfor %}
                                     {% else %}
                                     <div class="submission-empty">No screenshot captured.</div>
                                     {% endif %}
                                 </div>
-                                <div style="flex:1 1 0; min-width:0;"> {# layout-specific, intentional #}
+                                <div class="submission-ux-content">
                                     <article class="submission-evidence-block">
                                         <div class="submission-card-title">UX Review</div>
                                         {% if item.detail %}
