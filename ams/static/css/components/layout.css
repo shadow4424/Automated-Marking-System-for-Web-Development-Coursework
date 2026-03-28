@@ -611,13 +611,6 @@
     color: var(--color-text-muted);
 }
 
-.split-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1.45fr) minmax(280px, 1fr);
-    gap: var(--space-lg);
-    align-items: start;
-}
-
 .table-compact th,
 .table-compact td {
     padding: 0.85rem 1rem;

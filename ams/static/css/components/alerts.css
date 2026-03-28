@@ -27,7 +27,6 @@
     color: var(--color-warning);
 }
 
-.alert-danger,
 .alert-error {
     background: var(--color-danger-light);
     border-color: var(--color-danger);

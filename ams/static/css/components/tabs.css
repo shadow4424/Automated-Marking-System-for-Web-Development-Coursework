@@ -129,7 +129,6 @@
     }
     .form-layout,
     .page-hero--split,
-    .split-layout,
     .summary-strip,
     .info-grid--2 {
         grid-template-columns: 1fr;
