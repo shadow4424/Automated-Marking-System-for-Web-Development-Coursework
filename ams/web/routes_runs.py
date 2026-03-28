@@ -32,9 +32,9 @@ from ams.io.web_storage import (
 from ams.web.auth import get_current_user, login_required, teacher_or_admin_required
 from ams.web.routes_batch import _load_batch_summary_records, _persist_batch_outputs
 from ams.web.routes_dashboard import _flash_assignment_review_state, _user_can_access_assignment
+from ams.web.routes_common import is_async_job_request
 from ams.web.routes_marking import (
     _build_submission_detail_view,
-    _is_async_job_request,
     _queue_mark_submission_rerun,
     _safe_delete_within_run,
 )
@@ -277,7 +277,7 @@ def run_submission_rerun(run_id: str):
     runs_root = get_runs_root(current_app)
     run_dir = find_run_by_id(runs_root, run_id)
     if run_dir is None:
-        if _is_async_job_request():
+        if is_async_job_request():
             return jsonify({"error": "Submission not found."}), 404
         flash("Rerun failed: submission not found.", "error")
         return redirect(url_for("runs.runs"))
@@ -285,7 +285,7 @@ def run_submission_rerun(run_id: str):
     run_info = load_run_info(run_dir) or {}
     if run_info.get("mode") != "mark":
         assignment_id = str(run_info.get("assignment_id") or "").strip()
-        if _is_async_job_request():
+        if is_async_job_request():
             return jsonify({"error": "Use the assignment submission rerun action for batch submissions."}), 400
         flash("Rerun failed: use the assignment submission rerun action for batch submissions.", "error")
         if assignment_id:
@@ -300,7 +300,7 @@ def run_submission_rerun(run_id: str):
             refresh_url=url_for("runs.run_detail", run_id=run_id),
         )
     except Exception as exc:
-        if _is_async_job_request():
+        if is_async_job_request():
             return jsonify({"error": str(exc)}), 400
         flash(f"Rerun failed: {exc}", "error")
         return redirect(url_for("runs.run_detail", run_id=run_id))

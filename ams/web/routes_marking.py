@@ -6,10 +6,10 @@ import shutil
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Mapping
 
 import requests as _requests
-from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, session
+from flask import Blueprint, current_app, flash, jsonify, render_template, request, session
 
 from ams.core.attempts import (
     create_attempt,
@@ -35,6 +35,7 @@ from ams.io.web_storage import (
     validate_file_type,
 )
 from ams.web.auth import login_required
+from ams.web.routes_common import submit_rerun_job
 from ams.web.routes_dashboard import _assignment_submission_locked, _submission_lock_message
 from ams.web.validators import validate_is_zipfile
 from ams.web.view_helpers import *
@@ -1302,32 +1303,6 @@ def _rerun_mark_submission(run_dir: Path, run_info: Mapping[str, object]) -> dic
         recompute_active_attempt(runs_root, assignment_id, student_id)
     return updated_run_info
 
-def _is_async_job_request() -> bool:
-    return request.headers.get("X-AMS-Async") == "1"
-
-def _build_rerun_job_response(
-    *,
-    job_id: str,
-    run_id: str,
-    label: str,
-    assignment_id: str,
-    view_url: str,
-    refresh_url: str,
-):
-    payload = {
-        "job_id": job_id,
-        "status": "accepted",
-        "run_id": run_id,
-        "assignment_id": assignment_id,
-        "label": label,
-        "view_url": view_url,
-        "refresh_url": refresh_url,
-    }
-    if _is_async_job_request():
-        return jsonify(payload), 202
-    flash(f"{label} queued. The submission will update when background processing finishes.", "success")
-    return redirect(refresh_url)
-
 def _queue_mark_submission_rerun(
     run_dir: Path,
     run_info: Mapping[str, object],
@@ -1367,11 +1342,11 @@ def _queue_mark_submission_rerun(
             "refresh_url": refresh_url,
         }
 
-    job_id = job_manager.submit_job("submission_rerun", _run_mark_rerun_job)
     assignment_id = str(queued_run_info.get("assignment_id") or "")
     label = f"Rerun: {queued_run_info.get('student_id') or run_dir.name}"
-    return _build_rerun_job_response(
-        job_id=job_id,
+    return submit_rerun_job(
+        job_manager,
+        _run_mark_rerun_job,
         run_id=str(queued_run_info.get("id") or run_dir.name),
         label=label,
         assignment_id=assignment_id,

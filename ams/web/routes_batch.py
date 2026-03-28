@@ -49,18 +49,22 @@ from ams.io.web_storage import (
 )
 from ams.tools.batch import discover_batch_items, run_batch, validate_submission_filename, write_outputs
 from ams.web.auth import get_current_user, login_required, teacher_or_admin_required
+from ams.web.routes_common import (
+    is_async_job_request,
+    json_error,
+    redirect_with_flash,
+    submit_rerun_job,
+)
 from ams.web.routes_dashboard import (
     _assignment_submission_locked,
     _submission_lock_message,
     _user_can_access_assignment,
 )
 from ams.web.routes_marking import (
-    _build_rerun_job_response,
     _build_pipeline,
     _build_rerun_metadata,
     _build_submission_detail_view,
     _clear_rerun_outputs,
-    _is_async_job_request,
     _prepare_source_tree,
     _prepare_zip_source,
     _queue_mark_submission_rerun,
@@ -698,11 +702,11 @@ def _queue_batch_submission_rerun(
             "refresh_url": refresh_url,
         }
 
-    job_id = job_manager.submit_job("submission_rerun", _run_batch_rerun_job)
     assignment_id = str(target.get("assignment_id") or queued_run_info.get("assignment_id") or "")
     label = f"Rerun: {target.get('student_id') or submission_id}"
-    return _build_rerun_job_response(
-        job_id=job_id,
+    return submit_rerun_job(
+        job_manager,
+        _run_batch_rerun_job,
         run_id=str(queued_run_info.get("id") or run_dir.name),
         label=label,
         assignment_id=assignment_id,
@@ -710,51 +714,51 @@ def _queue_batch_submission_rerun(
         refresh_url=refresh_url,
     )
 
-def _run_batch_rerun_job() -> dict:
-    updated = _rerun_batch_submission(run_dir, queued_run_info, submission_id)
-    return {
-        "run_id": str(queued_run_info.get("id") or run_dir.name),
-        "submission_id": submission_id,
-        "assignment_id": str(updated.get("assignment_id") or queued_run_info.get("assignment_id") or ""),
-        "student_id": str(updated.get("student_id") or submission_id),
-        "view_url": view_url,
-        "refresh_url": refresh_url,
-    }
-
 @batch_bp.route("/teacher/assignment/<assignment_id>/submissions/rerun", methods=["POST"])
 @batch_bp.route("/teacher/assignment/<assignment_id>/threats/reprocess", methods=["POST"])
 @teacher_or_admin_required
 def assignment_submission_rerun(assignment_id: str):
     if not _user_can_access_assignment(assignment_id):
-        if _is_async_job_request():
-            return jsonify({"error": "You do not have access to this assignment."}), 403
-        flash("You do not have access to this assignment.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
+        if is_async_job_request():
+            return json_error("You do not have access to this assignment.", 403)
+        return redirect_with_flash("teacher_dashboard.dashboard", "You do not have access to this assignment.", "error")
 
     run_id = str(request.form.get("run_id") or "").strip()
     submission_id = str(request.form.get("submission_id") or "").strip()
     if not run_id:
-        if _is_async_job_request():
-            return jsonify({"error": "Rerun failed: missing run ID."}), 400
-        flash("Rerun failed: missing run ID.", "error")
-        return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
+        if is_async_job_request():
+            return json_error("Rerun failed: missing run ID.", 400)
+        return redirect_with_flash(
+            "assignment_mgmt.assignment_detail",
+            "Rerun failed: missing run ID.",
+            "error",
+            assignment_id=assignment_id,
+        )
 
     runs_root = get_runs_root(current_app)
     run_dir = find_run_by_id(runs_root, run_id)
     if run_dir is None:
-        if _is_async_job_request():
-            return jsonify({"error": "Rerun failed: submission not found."}), 404
-        flash("Rerun failed: submission not found.", "error")
-        return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
+        if is_async_job_request():
+            return json_error("Rerun failed: submission not found.", 404)
+        return redirect_with_flash(
+            "assignment_mgmt.assignment_detail",
+            "Rerun failed: submission not found.",
+            "error",
+            assignment_id=assignment_id,
+        )
 
     run_info = load_run_info(run_dir) or {}
     try:
         if run_info.get("mode") == "batch":
             if not submission_id:
-                if _is_async_job_request():
-                    return jsonify({"error": "Rerun failed: missing batch submission ID."}), 400
-                flash("Rerun failed: missing batch submission ID.", "error")
-                return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
+                if is_async_job_request():
+                    return json_error("Rerun failed: missing batch submission ID.", 400)
+                return redirect_with_flash(
+                    "assignment_mgmt.assignment_detail",
+                    "Rerun failed: missing batch submission ID.",
+                    "error",
+                    assignment_id=assignment_id,
+                )
             return _queue_batch_submission_rerun(
                 run_dir,
                 run_info,
@@ -769,10 +773,14 @@ def assignment_submission_rerun(assignment_id: str):
             refresh_url=url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id),
         )
     except Exception as exc:
-        if _is_async_job_request():
-            return jsonify({"error": str(exc)}), 400
-        flash(f"Rerun failed: {exc}", "error")
-        return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
+        if is_async_job_request():
+            return json_error(str(exc), 400)
+        return redirect_with_flash(
+            "assignment_mgmt.assignment_detail",
+            f"Rerun failed: {exc}",
+            "error",
+            assignment_id=assignment_id,
+        )
 
 @batch_bp.route("/batch/<run_id>/submissions/<submission_id>/view")
 @login_required
@@ -1030,10 +1038,9 @@ def batch_submission_rerun(run_id: str, submission_id: str):
     runs_root = get_runs_root(current_app)
     run_dir = find_run_by_id(runs_root, run_id)
     if run_dir is None:
-        if _is_async_job_request():
-            return jsonify({"error": "Submission not found."}), 404
-        flash("Rerun failed: submission not found.", "error")
-        return redirect(url_for("runs.runs"))
+        if is_async_job_request():
+            return json_error("Submission not found.", 404)
+        return redirect_with_flash("runs.runs", "Rerun failed: submission not found.", "error")
 
     run_info = load_run_info(run_dir) or {}
     try:
@@ -1045,10 +1052,15 @@ def batch_submission_rerun(run_id: str, submission_id: str):
             refresh_url=url_for("batch.batch_submission_view", run_id=run_id, submission_id=submission_id),
         )
     except Exception as exc:
-        if _is_async_job_request():
-            return jsonify({"error": str(exc)}), 400
-        flash(f"Rerun failed: {exc}", "error")
-        return redirect(url_for("batch.batch_submission_view", run_id=run_id, submission_id=submission_id))
+        if is_async_job_request():
+            return json_error(str(exc), 400)
+        return redirect_with_flash(
+            "batch.batch_submission_view",
+            f"Rerun failed: {exc}",
+            "error",
+            run_id=run_id,
+            submission_id=submission_id,
+        )
 
 def _write_batch_reports_zip(run_dir: Path, profile: str, run_id: str) -> None:
     summary_path = run_dir / "batch_summary.json"
