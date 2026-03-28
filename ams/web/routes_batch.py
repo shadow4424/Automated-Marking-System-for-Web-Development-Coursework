@@ -7,7 +7,7 @@ import tempfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Mapping
 
 import requests as _requests
 from flask import Blueprint, Response, current_app, flash, jsonify, redirect, render_template, request, send_file, session, url_for
@@ -65,7 +65,6 @@ from ams.web.routes_marking import (
     _prepare_zip_source,
     _queue_mark_submission_rerun,
     _replace_existing_submissions,
-    _rerun_timestamp,
     _submission_identity,
 )
 from ams.web.validators import validate_is_zipfile

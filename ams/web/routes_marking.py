@@ -6,43 +6,34 @@ import shutil
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 import requests as _requests
-from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, session
 
 from ams.core.attempts import (
     create_attempt,
     create_attempt_storage_dir,
-    filter_attempts_for_root,
-    get_attempt_by_run_reference,
-    get_student_assignment_summary,
-    list_attempts,
     recompute_active_attempt,
     sync_attempts_from_storage,
     update_attempt,
     utc_now_iso,
 )
-from ams.core.config import GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_OAUTH_CALLBACK, ScoringMode
-from ams.core.db import PREVIEW_STUDENT_ID, get_assignment, list_assignments, list_assignments_for_student
+from ams.core.config import ScoringMode
+from ams.core.db import PREVIEW_STUDENT_ID, list_assignments, list_assignments_for_student
 from ams.core.job_manager import job_manager
 from ams.core.pipeline import AssessmentPipeline
 from ams.core.profiles import get_visible_profile_specs
 from ams.io.metadata import MetadataValidator, SubmissionMetadata
 from ams.io.web_storage import (
-    create_run_dir,
     extract_review_flags_from_report,
-    find_run_by_id,
     find_submission_root,
     get_runs_root,
-    load_run_info,
     safe_extract_zip,
-    save_metadata,
     save_run_info,
     validate_file_size,
     validate_file_type,
 )
-from ams.tools.batch import discover_batch_items, run_batch, validate_submission_filename, write_outputs
 from ams.web.auth import login_required
 from ams.web.routes_dashboard import _assignment_submission_locked, _submission_lock_message
 from ams.web.validators import validate_is_zipfile
