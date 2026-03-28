@@ -33,6 +33,18 @@
     --color-danger-light: rgba(239, 68, 68, 0.12);
     --color-info: #0ea5e9;
     --color-info-light: rgba(14, 165, 233, 0.12);
+    --color-pending-bg: var(--color-warning-light);
+    --color-pending-fg: var(--color-warning);
+    --color-released-bg: var(--color-success-light);
+    --color-released-fg: var(--color-success);
+    --color-withheld-bg: var(--color-danger-light);
+    --color-withheld-fg: var(--color-danger);
+    --color-role-admin-bg: var(--color-primary-glow);
+    --color-role-admin-fg: var(--color-primary);
+    --color-role-teacher-bg: var(--color-success-light);
+    --color-role-teacher-fg: var(--color-success);
+    --color-role-student-bg: var(--color-info-light);
+    --color-role-student-fg: var(--color-info);
 
     /* Text */
     --color-text: #0f172a;
@@ -72,6 +84,7 @@
     --radius-md: 10px;
     --radius-lg: 16px;
     --radius-xl: 24px;
+    --radius-full: 999px;
 
     /* Shadows */
     --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);

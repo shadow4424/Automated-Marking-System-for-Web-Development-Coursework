@@ -1,21 +1,26 @@
-/* AMS Components - Badges + Score Badge */
+/* AMS Components - Badges + Score Badge
+   ============================================================================
+   Badges
+   ============================================================================ */
 
-   4. Badges
-   ---------------------------------------------------------------------------- */
-.badge {
+.badge,
+.role-badge {
     display: inline-flex;
     align-items: center;
-    padding: var(--space-xs) var(--space-sm);
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: 0.2em 0.65em;
     font-size: var(--text-xs);
     font-weight: 600;
-    border-radius: var(--radius-sm);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    line-height: 1.2;
+    border: 1px solid transparent;
+    border-radius: var(--radius-full);
+    letter-spacing: 0.01em;
 }
 
 .badge-primary {
     background: var(--color-primary-glow);
-    color: var(--color-primary-light);
+    color: var(--color-primary);
 }
 
 .badge-success {
@@ -23,9 +28,10 @@
     color: var(--color-success);
 }
 
-.badge-warning {
-    background: var(--color-warning-light);
-    color: var(--color-warning);
+.badge-warning,
+.badge-pending {
+    background: var(--color-pending-bg);
+    color: var(--color-pending-fg);
 }
 
 .badge-danger {
@@ -38,43 +44,70 @@
     color: var(--color-info);
 }
 
+.badge-secondary,
 .badge-muted {
     background: var(--color-surface);
     color: var(--color-text-muted);
+    border-color: var(--color-border);
 }
 
-.badge-secondary {
-    background: var(--color-surface-hover);
-    color: var(--color-text-muted);
-    border: 1px solid var(--color-border);
+.badge-released {
+    background: var(--color-released-bg);
+    color: var(--color-released-fg);
 }
 
-/* Score Badge */
-/* Score Badge */
+.badge-withheld {
+    background: var(--color-withheld-bg);
+    color: var(--color-withheld-fg);
+}
+
+.role-badge {
+    text-transform: none;
+}
+
+.role-badge--admin {
+    background: var(--color-role-admin-bg);
+    color: var(--color-role-admin-fg);
+}
+
+.role-badge--teacher {
+    background: var(--color-role-teacher-bg);
+    color: var(--color-role-teacher-fg);
+}
+
+.role-badge--student {
+    background: var(--color-role-student-bg);
+    color: var(--color-role-student-fg);
+}
+
+/* ============================================================================
+   Score Badge
+   ============================================================================ */
+
 .score-badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 60px;
+    min-width: calc(var(--space-xl) * 1.5);
     padding: var(--space-sm) var(--space-md);
     font-size: var(--text-lg);
     font-weight: 700;
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     box-shadow: var(--shadow-sm);
 }
 
 .score-high {
-    background: rgba(22, 163, 74, 0.1);
+    background: var(--color-success-light);
     color: var(--color-success);
 }
 
 .score-medium {
-    background: rgba(245, 158, 11, 0.12);
+    background: var(--color-warning-light);
     color: var(--color-warning);
 }
 
 .score-low {
-    background: rgba(239, 68, 68, 0.1);
+    background: var(--color-danger-light);
     color: var(--color-danger);
 }
 

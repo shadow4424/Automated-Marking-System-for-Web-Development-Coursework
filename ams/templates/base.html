@@ -1,3 +1,4 @@
+{% from "macros/_ui.html" import role_badge %}
 <!DOCTYPE html>
 <html lang="en">
 
@@ -94,7 +95,7 @@
                     {{ current_user.firstName[0] }}{{ current_user.lastName[0] }}
                 </span>
                 <span class="navbar-user-name">{{ current_user.firstName }}</span>
-                <span class="badge {% if user_role == 'admin' %}badge-primary{% elif user_role == 'teacher' %}badge-success{% else %}badge-info{% endif %}" style="font-size:0.6rem;">{{ user_role|capitalize }}</span> {# layout-specific, intentional #}
+                {{ role_badge(user_role) }}
                 <a href="{{ url_for('account.settings') }}"
                    class="btn btn-ghost btn-sm ml-xs {% if request.endpoint and request.endpoint.startswith('account.') %}active{% endif %}"
                    title="Account Settings">Settings</a>

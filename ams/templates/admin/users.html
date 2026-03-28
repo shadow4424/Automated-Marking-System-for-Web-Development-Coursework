@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/_ui.html" import role_badge %}
 
 {% block title %}All Users - AMS{% endblock %}
 
@@ -94,13 +95,7 @@
                         <td>{{ u.firstName }} {{ u.lastName }}</td>
                         <td>{{ u.email }}</td>
                         <td>
-                            {% if u.role == 'admin' %}
-                            <span class="badge badge-primary">Admin</span>
-                            {% elif u.role == 'teacher' %}
-                            <span class="badge badge-success">Teacher</span>
-                            {% else %}
-                            <span class="badge badge-info">Student</span>
-                            {% endif %}
+                            {{ role_badge(u.role) }}
                         </td>
                         <td>
                             {% if u.userID != 'admin123' %}

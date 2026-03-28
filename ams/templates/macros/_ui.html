@@ -10,8 +10,21 @@
   {%- elif tone == 'warning' %} badge-warning
   {%- elif tone == 'danger' %} badge-danger
   {%- elif tone == 'info' %} badge-info
+  {%- elif tone == 'pending' %} badge-pending
+  {%- elif tone == 'released' %} badge-released
+  {%- elif tone == 'withheld' %} badge-withheld
+  {%- elif tone == 'primary' %} badge-primary
   {%- else %} badge-secondary
   {%- endif %}">{{ label }}</span>
+{% endmacro %}
+
+{% macro role_badge(role) %}
+{% set normalized_role = (role or '')|lower %}
+<span class="role-badge
+  {%- if normalized_role == 'admin' %} role-badge--admin
+  {%- elif normalized_role == 'teacher' %} role-badge--teacher
+  {%- else %} role-badge--student
+  {%- endif %}">{{ role|capitalize }}</span>
 {% endmacro %}
 
 {% macro score_badge(score, max_score=None) %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/_ui.html" import status_badge %}
 
 {% block title %}{{ assignment.title }} - AMS{% endblock %}
 
@@ -15,9 +16,9 @@
             <div class="page-status-row">
                 <span class="badge badge-secondary">{{ assignment.profile }}</span>
                 {% if assignment.marks_released %}
-                <span class="badge badge-success">Marks released</span>
+                {{ status_badge('Marks released', 'released') }}
                 {% else %}
-                <span class="badge badge-warning">Marks withheld</span>
+                {{ status_badge('Marks withheld', 'withheld') }}
                 {% endif %}
                 <span class="badge badge-secondary"><code>{{ assignment.assignmentID }}</code></span>
             </div>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/_ui.html" import role_badge %}
 
 {% block title %}Create Account - AMS{% endblock %}
 
@@ -39,7 +40,7 @@
                 <div class="section-copy">
                     <h2 class="card-title">Create teacher account</h2>
                 </div>
-                <span class="badge badge-success">Teacher</span>
+                {{ role_badge('teacher') }}
             </div>
             <form method="POST" action="{{ url_for('admin.create_teacher') }}">
                 <div class="form-group">
@@ -73,7 +74,7 @@
                 <div class="section-copy">
                     <h2 class="card-title">Create student account</h2>
                 </div>
-                <span class="badge badge-info">Student</span>
+                {{ role_badge('student') }}
             </div>
             <form method="POST" action="{{ url_for('admin.create_student') }}">
                 <div class="form-group">
