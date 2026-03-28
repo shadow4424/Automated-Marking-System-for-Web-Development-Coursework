@@ -25,7 +25,7 @@
                 <a href="{{ url_for('assignment_mgmt.view_analytics', assignment_id=assignment.assignmentID) }}" class="btn btn-primary">Analytics</a>
                 {% if assignment.marks_released %}
                 <form method="POST" action="{{ url_for('assignment_mgmt.withhold', assignment_id=assignment.assignmentID) }}">
-                    <button type="submit" class="btn btn-secondary">Withhold marks</button>
+                <button type="submit" class="btn btn-warning">Withhold marks</button>
                 </form>
                 {% else %}
                 <form method="POST" action="{{ url_for('assignment_mgmt.release', assignment_id=assignment.assignmentID) }}">
@@ -33,7 +33,7 @@
                 </form>
                 {% endif %}
                 <form method="POST" action="{{ url_for('assignment_mgmt.delete_assignment_route', assignment_id=assignment.assignmentID) }}" onsubmit="return confirm('Delete assignment {{ assignment.assignmentID }}? This cannot be undone.');">
-                    <button type="submit" class="btn btn-ghost">Delete assignment</button>
+                <button type="submit" class="btn btn-danger">Delete assignment</button>
                 </form>
             </div>
         </div>
@@ -87,7 +87,7 @@
                     <form method="POST" action="{{ url_for('runs.assignment_threat_delete', assignment_id=assignment.assignmentID) }}" onsubmit="return confirm('Delete the flagged submission for {{ threat.student_id }}?');">
                         <input type="hidden" name="run_id" value="{{ threat.run_id }}">
                         {% if threat.submission_id %}<input type="hidden" name="submission_id" value="{{ threat.submission_id }}">{% endif %}
-                        <button type="submit" class="btn btn-ghost btn-sm">Delete flagged submission</button>
+                                    <button type="submit" class="btn btn-danger btn-sm">Delete flagged submission</button>
                     </form>
                 </div>
             </div>
@@ -123,7 +123,7 @@
                     <form method="POST" action="{{ url_for('runs.assignment_threat_delete', assignment_id=assignment.assignmentID) }}" onsubmit="return confirm('Delete the flagged submission for {{ flagged.student_id }}?');">
                         <input type="hidden" name="run_id" value="{{ flagged.run_id }}">
                         {% if flagged.submission_id %}<input type="hidden" name="submission_id" value="{{ flagged.submission_id }}">{% endif %}
-                        <button type="submit" class="btn btn-ghost btn-sm">Delete flagged submission</button>
+                                    <button type="submit" class="btn btn-danger btn-sm">Delete flagged submission</button>
                     </form>
                 </div>
             </div>
