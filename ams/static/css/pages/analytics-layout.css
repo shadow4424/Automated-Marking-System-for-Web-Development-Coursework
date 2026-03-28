@@ -140,11 +140,12 @@
 .analytics-kicker {
         display: inline-flex;
         align-items: center;
-        width: fit-content;
+        width: auto;
+        max-width: max-content;
         gap: 0.5rem;
-        padding: 0.45rem 0.75rem;
-        border-radius: 999px;
-        background: rgba(37, 99, 235, 0.08);
+        padding: var(--space-xs) var(--space-md);
+        border-radius: var(--radius-full);
+        background: rgba(37, 99, 235, 0.06);
         color: var(--color-primary);
         font-size: var(--text-xs);
         font-weight: 700;
