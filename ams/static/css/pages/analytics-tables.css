@@ -1,0 +1,272 @@
+/* AMS Analytics Page Styles - Tables and summary panels */
+.analytics-score-source-grid {
+        display: grid;
+        gap: var(--space-md);
+    }
+    .analytics-list-stack { gap: 0.75rem; }
+    .analytics-detail-surface,
+    .analytics-coverage-card,
+    .analytics-signal-card,
+    .analytics-score-source-card {
+        padding: var(--space-lg);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-surface-elevated);
+    }
+    .analytics-detail-list {
+        margin: 0;
+        padding-left: 1.1rem;
+        display: grid;
+        gap: 0.45rem;
+    }
+    .analytics-empty-inline {
+        padding: var(--space-lg);
+        border-radius: var(--radius-md);
+        border: 1px dashed var(--color-border-light);
+        background: var(--color-surface-elevated);
+        color: var(--color-text-secondary);
+    }
+    .analytics-coverage-detail-list,
+    .analytics-limitation-list {
+        display: grid;
+        gap: 0.8rem;
+    }
+    .analytics-coverage-detail-item,
+    .analytics-limitation-item {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-md);
+        align-items: start;
+        padding: 0.9rem 1rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-surface-elevated);
+    }
+    .analytics-table-note {
+        display: block;
+        margin-top: 0.35rem;
+        color: var(--color-text-muted);
+        font-size: var(--text-sm);
+    }
+    .analytics-compact-note {
+        margin-bottom: var(--space-md);
+        color: var(--color-text-muted);
+        font-size: var(--text-sm);
+        line-height: 1.5;
+    }
+    .analytics-summary-headline {
+        margin-bottom: var(--space-md);
+        color: var(--color-text);
+        font-size: 1rem;
+        font-weight: 600;
+        line-height: 1.55;
+    }
+    .analytics-summary-item-title {
+        color: var(--color-text);
+        font-weight: 600;
+    }
+    .analytics-summary-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: var(--space-sm);
+        margin-bottom: var(--space-lg);
+    }
+    .analytics-summary-tile {
+        padding: 0.9rem 1rem;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-surface-elevated);
+    }
+    .analytics-summary-tile strong {
+        display: block;
+        margin-top: 0.4rem;
+        color: var(--color-text);
+        font-size: 1.12rem;
+    }
+    .analytics-compact-panel {
+        padding: 1rem 1.05rem;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--color-border-light);
+        background: var(--color-surface-elevated);
+        display: grid;
+        gap: 0.85rem;
+    }
+    .analytics-compact-split {
+        display: grid;
+        grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.1fr);
+        gap: var(--space-lg);
+        margin-bottom: var(--space-lg);
+    }
+    .analytics-compare-table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--color-border-light);
+        border-radius: var(--radius-lg);
+        background: var(--color-surface-elevated);
+    }
+    .analytics-compare-table {
+        width: 100%;
+        min-width: 920px;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .analytics-compare-table th,
+    .analytics-compare-table td {
+        padding: 0.85rem 0.9rem;
+        border-bottom: 1px solid var(--color-border-light);
+        vertical-align: middle;
+        text-align: left;
+    }
+    .analytics-compare-table thead th {
+        color: var(--color-text-muted);
+        font-size: 0.76rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        background: rgba(248, 250, 252, 0.82);
+    }
+    .analytics-compare-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+    .analytics-compare-primary {
+        min-width: 220px;
+    }
+    .analytics-inline-distribution {
+        display: flex;
+        width: 100%;
+        min-width: 210px;
+        height: 0.8rem;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.14);
+        box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
+    }
+    .analytics-inline-distribution--confidence {
+        min-width: 0;
+        height: 0.95rem;
+    }
+    .analytics-distribution-segment {
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        margin: 0;
+        cursor: pointer;
+    }
+    .analytics-distribution-segment--met,
+    .analytics-distribution-segment--high {
+        background: rgba(22, 163, 74, 0.82);
+    }
+    .analytics-distribution-segment--partial,
+    .analytics-distribution-segment--medium {
+        background: rgba(245, 158, 11, 0.82);
+    }
+    .analytics-distribution-segment--unmet,
+    .analytics-distribution-segment--low {
+        background: rgba(239, 68, 68, 0.86);
+    }
+    .analytics-distribution-segment--neutral {
+        background: rgba(148, 163, 184, 0.78);
+    }
+    .analytics-state-button {
+        min-width: 52px;
+        padding: 0.35rem 0.6rem;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.26);
+        background: rgba(255, 255, 255, 0.96);
+        color: var(--color-text);
+        font-size: 0.88rem;
+        font-weight: 700;
+        cursor: pointer;
+    }
+    .analytics-state-button.is-empty {
+        color: var(--color-text-muted);
+        background: rgba(248, 250, 252, 0.92);
+    }
+    .analytics-state-button.is-selected,
+    .analytics-diagnostic-action.is-selected,
+    .analytics-distribution-segment.is-selected {
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+        border-color: rgba(37, 99, 235, 0.45);
+    }
+    .analytics-diagnostic-list {
+        display: grid;
+        border: 1px solid var(--color-border-light);
+        border-radius: var(--radius-lg);
+        background: var(--color-surface-elevated);
+        overflow: hidden;
+    }
+    .analytics-diagnostic-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: var(--space-md);
+        align-items: center;
+        padding: 0.85rem 1rem;
+        border-bottom: 1px solid var(--color-border-light);
+    }
+    .analytics-diagnostic-row:last-child {
+        border-bottom: none;
+    }
+    .analytics-diagnostic-meta strong {
+        display: block;
+        color: var(--color-text);
+    }
+    .analytics-diagnostic-value {
+        color: var(--color-text);
+        font-weight: 700;
+        white-space: nowrap;
+    }
+    .analytics-diagnostic-action {
+        justify-self: end;
+    }
+    .analytics-requirement-row.is-selected td {
+        background: rgba(37, 99, 235, 0.08);
+    }
+    .analytics-coverage-grid,
+    .analytics-signals-grid,
+    .analytics-score-source-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .analytics-reliability-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-bottom: var(--space-lg);
+    }
+    .analytics-section-note {
+        margin-top: 0.45rem;
+        margin-bottom: 0;
+        color: var(--color-text-muted);
+        font-size: var(--text-sm);
+    }
+    .analytics-inline-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+    .analytics-priority-banner {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        gap: var(--space-md);
+        padding: 1rem 1.1rem;
+        border-radius: var(--radius-lg);
+        border: 1px solid rgba(245, 158, 11, 0.22);
+        background: rgba(245, 158, 11, 0.12);
+    }
+    .analytics-priority-banner strong {
+        color: var(--color-text);
+    }
+    .analytics-inline-panel {
+        margin-bottom: var(--space-lg);
+        padding: 0;
+    }
+    .analytics-inline-panel > summary {
+        padding: 0.9rem 1rem;
+        align-items: center;
+    }
+    .analytics-inline-panel .analytics-collapse-body {
+        padding: 0 var(--space-lg) var(--space-lg);
+    }
+    .analytics-secondary-stack {
+        display: grid;
+        gap: var(--space-lg);
+    }
+    .analytics-hidden-row,
+    .analytics-hidden-card { display: none; }
