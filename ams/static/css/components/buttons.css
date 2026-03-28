@@ -17,10 +17,8 @@
     color: var(--color-text);
     background: var(--color-surface);
     border: 1px solid transparent;
-    border-right: 1px solid transparent;
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-sm);
-    background-clip: padding-box;
     cursor: pointer;
     text-decoration: none;
     white-space: nowrap;

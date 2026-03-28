@@ -1,87 +1,51 @@
-/* AMS Components - Alerts */
-
+/* AMS Components - Alerts
    5. Alerts
    ---------------------------------------------------------------------------- */
 .alert {
     display: flex;
     align-items: flex-start;
-    gap: var(--space-sm);
-    padding: var(--space-md) var(--space-lg);
+    gap: var(--space-md);
+    padding: calc(var(--space-sm) + var(--space-xs)) var(--space-lg);
     border-radius: var(--radius-md);
-    border-left: 4px solid transparent;
-    font-size: var(--text-sm);
-    line-height: 1.5;
     margin-bottom: var(--space-md);
-    background: var(--color-surface-elevated);
-    color: var(--color-text);
+    border: 1px solid transparent;
     box-shadow: var(--shadow-sm);
 }
 
-.alert::before {
-    flex: 0 0 1.25rem;
-    width: 1.25rem;
-    margin-top: 0.05rem;
-    font-size: 1rem;
-    line-height: 1.25;
-    text-align: center;
-    content: "\2139";
-}
-
-.alert > span {
-    flex: 1;
-    min-width: 0;
-}
-
 .alert-success {
+    background: var(--color-success-light);
     border-color: var(--color-success);
-    background: var(--color-success-subtle);
-    color: var(--color-success-fg);
+    border-left-width: 4px;
+    color: var(--color-success);
 }
 
 .alert-warning {
+    background: var(--color-warning-light);
     border-color: var(--color-warning);
-    background: var(--color-warning-subtle);
-    color: var(--color-warning-fg);
+    border-left-width: 4px;
+    color: var(--color-warning);
 }
 
-.alert-danger,
 .alert-error {
+    background: var(--color-danger-light);
     border-color: var(--color-danger);
-    background: var(--color-danger-subtle);
-    color: var(--color-danger-fg);
+    border-left-width: 4px;
+    color: var(--color-danger);
 }
 
 .alert-info {
+    background: var(--color-info-light);
     border-color: var(--color-info);
-    background: var(--color-info-subtle);
-    color: var(--color-info-fg);
-}
-
-.alert-success::before {
-    content: "\2713";
-}
-
-.alert-warning::before {
-    content: "\26A0";
-}
-
-.alert-danger::before,
-.alert-error::before {
-    content: "\26A0";
-}
-
-.alert-info::before {
-    content: "\2139";
+    border-left-width: 4px;
+    color: var(--color-info);
 }
 
 .alert strong {
     font-weight: 700;
-    color: inherit;
 }
 
 .alert-close {
     margin-left: auto;
-    flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -100,13 +64,13 @@
 
 .alert-close:hover {
     opacity: 1;
-    background: rgba(15, 23, 42, 0.08);
+    background: rgba(255, 255, 255, 0.45);
 }
 
 .alert-close:focus-visible {
     outline: none;
     opacity: 1;
-    background: rgba(15, 23, 42, 0.08);
+    background: rgba(255, 255, 255, 0.45);
     box-shadow: 0 0 0 3px var(--color-primary-glow);
 }
 

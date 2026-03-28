@@ -9,8 +9,7 @@
     align-items: center;
     justify-content: center;
     gap: var(--space-xs);
-    min-width: max-content;
-    padding: var(--space-xs) var(--space-md);
+    padding: 0.2em 0.65em;
     font-size: var(--text-xs);
     font-weight: 600;
     line-height: 1.2;

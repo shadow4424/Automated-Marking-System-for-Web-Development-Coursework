@@ -108,8 +108,8 @@
 
     <main class="main-content">
         <div class="container">
-            {% if sandbox_status is defined and effective_role in ['admin', 'teacher'] and not sandbox_status.enforced and sandbox_status.mode == 'docker' %}
-            <div class="alert alert-danger sandbox-warning animate-slideUp" role="alert">
+            {% if sandbox_status is defined and show_staff_sandbox_status and not sandbox_status.enforced and sandbox_status.mode == 'docker' %}
+            <div class="alert alert-error sandbox-warning animate-slideUp">
                 <strong>&#x26a0; Sandbox Not Available</strong> — {{ sandbox_status.message }}
                 Submissions will be blocked until Docker sandboxing is operational.
             </div>
@@ -118,14 +118,7 @@
             {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
             {% for category, message in messages %}
-            {% set alert_class = {
-                'danger': 'alert-danger',
-                'error': 'alert-danger',
-                'success': 'alert-success',
-                'warning': 'alert-warning',
-                'info': 'alert-info'
-            }.get(category, 'alert-info') %}
-            <div class="alert {{ alert_class }} animate-slideUp" role="alert">
+            <div class="alert alert-{{ category }} animate-slideUp">
                 <span>{{ message }}</span>
                 <button type="button" class="alert-close" aria-label="Dismiss alert">&times;</button>
             </div>

@@ -124,16 +124,6 @@
         letter-spacing: 0.04em;
         background: rgba(248, 250, 252, 0.82);
     }
-    .analytics-compare-table tbody tr {
-        background: rgba(255, 255, 255, 0.96);
-        transition: background var(--transition-fast);
-    }
-    .analytics-compare-table tbody tr:nth-child(even) {
-        background: rgba(248, 250, 252, 0.92);
-    }
-    .analytics-compare-table tbody tr:hover {
-        background: var(--color-surface-hover);
-    }
     .analytics-compare-table tbody tr:last-child td {
         border-bottom: none;
     }
