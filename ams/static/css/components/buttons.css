@@ -148,6 +148,22 @@
     padding: 0;
 }
 
+.attempt-history-toggle.btn {
+    min-height: auto;
+    padding: 0;
+    color: var(--color-text-muted);
+}
+
+.attempt-history-toggle.btn:hover:not(:disabled):not([aria-disabled="true"]) {
+    color: var(--color-text);
+    background: transparent;
+}
+
+.attempt-history-chevron {
+    flex-shrink: 0;
+    transition: transform var(--transition-fast);
+}
+
 /* ============================================================================
    Export Dropdown
    ============================================================================ */

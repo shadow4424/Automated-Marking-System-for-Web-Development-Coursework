@@ -65,17 +65,17 @@
     <section class="card">
         <div class="section-heading-row">
             <div class="section-copy">
-                <h2 class="card-title" style="color:#991b1b;">Grade release blocked by security threats</h2> {# layout-specific, intentional #}
-                <p class="section-note" style="color:#7f1d1d;">Review each flagged submission before grades can be released.</p> {# layout-specific, intentional #}
+                <h2 class="card-title">Grade release blocked by security threats</h2>
+                <p class="section-note">Review each flagged submission before grades can be released.</p>
             </div>
-            <span class="badge" style="background:#dc2626;color:#fff;">{{ threat_rows|length }}</span> {# layout-specific, intentional #}
+            {{ status_badge(threat_rows|length, 'danger') }}
         </div>
         <div class="surface-list">
             {% for threat in threat_rows %}
             <div class="surface-item">
                 <div class="page-status-row jc-between">
                     <strong><code>{{ threat.student_id }}</code></strong>
-                    <span class="badge" style="background:#dc2626;color:#fff;">Threat</span> {# layout-specific, intentional #}
+                    {{ status_badge('Threat', 'danger') }}
                 </div>
                 <div class="surface-item-meta">{{ threat.mode|capitalize }} submission{% if threat.threat_count %} with {{ threat.threat_count }} threat finding{{ 's' if threat.threat_count != 1 else '' }}{% endif %}.</div>
                 <div class="page-inline-tools mt-sm">
@@ -101,17 +101,17 @@
     <section class="card">
         <div class="section-heading-row">
             <div class="section-copy">
-                <h2 class="card-title" style="color:#92400e;">Grade release blocked by LLM review errors</h2> {# layout-specific, intentional #}
-                <p class="section-note" style="color:#92400e;">One or more submissions failed during LLM-assisted marking. Resolve or rerun each flagged submission before releasing grades.</p> {# layout-specific, intentional #}
+                <h2 class="card-title">Grade release blocked by LLM review errors</h2>
+                <p class="section-note">One or more submissions failed during LLM-assisted marking. Resolve or rerun each flagged submission before releasing grades.</p>
             </div>
-            <span class="badge" style="background:#d97706;color:#fff;">{{ llm_error_rows|length }}</span> {# layout-specific, intentional #}
+            {{ status_badge(llm_error_rows|length, 'warning') }}
         </div>
         <div class="surface-list">
             {% for flagged in llm_error_rows %}
             <div class="surface-item">
                 <div class="page-status-row jc-between">
                     <strong><code>{{ flagged.student_id }}</code></strong>
-                    <span class="badge" style="background:#fef3c7;color:#92400e;">LLM Error - Requires Review</span> {# layout-specific, intentional #}
+                    {{ status_badge('LLM Error - Requires Review', 'warning') }}
                 </div>
                 <div class="surface-item-meta">{{ flagged.llm_error_message }}</div>
                 <div class="page-inline-tools mt-sm">
@@ -304,12 +304,11 @@
                             {% endif %}
                             {% if group.has_history %}
                             <div class="mt-xs">
-                                <button type="button"
-                                    class="attempt-history-toggle"
+                                <button type="button" class="btn btn-ghost btn-sm attempt-history-toggle"
                                     aria-expanded="false"
                                     aria-controls="{{ history_id }}"
-                                    style="display:inline-flex; align-items:center; gap:4px; background:none; border:none; padding:0; cursor:pointer; color:var(--color-text-muted); font-size:0.75rem;"> {# layout-specific, intentional #}
-                                    <svg class="attempt-history-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" style="transition:transform 0.15s ease; flex-shrink:0;"> {# layout-specific, intentional #}
+                                >
+                                    <svg class="attempt-history-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none">
                                         <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                                     </svg>
                                     <span>{{ group.history_count }} older attempt{{ '' if group.history_count == 1 else 's' }}</span>
@@ -347,9 +346,9 @@
                             {% elif primary.get('validity_status') == 'invalid' %}
                             <span class="badge badge-danger">Invalid</span>
                             {% elif primary.threat_flagged or primary_status == 'threat' %}
-                            <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span> {# layout-specific, intentional #}
+                            {{ status_badge('Threat', 'danger') }}
                             {% elif primary.llm_error_flagged or primary_status == 'llm_error' %}
-                            <span class="badge" style="background:#fef3c7;color:#92400e;">LLM error</span> {# layout-specific, intentional #}
+                            {{ status_badge('LLM error', 'warning') }}
                             {% elif primary_status == 'failed' %}
                             <span class="badge badge-danger">Failed</span>
                             {% elif primary_score is not none and primary_score >= 70 %}
@@ -426,7 +425,7 @@
                                                         {% if attempt_status == 'pending' %}
                                                         <span class="badge badge-secondary">Queued</span>
                                                         {% elif attempt.threat_flagged %}
-                                                        <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span> {# layout-specific, intentional #}
+                                                        {{ status_badge('Threat', 'danger') }}
                                                         {% elif attempt_score is not none %}
                                                         <strong>{{ attempt_score|round|int }}%</strong>
                                                         {% else %}
@@ -440,9 +439,9 @@
                                                         {% elif attempt.get('validity_status') == 'invalid' %}
                                                         <span class="badge badge-danger">Invalid</span>
                                                         {% elif attempt.threat_flagged or attempt_status == 'threat' %}
-                                                        <span class="badge" style="background:#dc2626;color:#fff;">THREAT</span> {# layout-specific, intentional #}
+                                                        {{ status_badge('Threat', 'danger') }}
                                                         {% elif attempt.llm_error_flagged or attempt_status == 'llm_error' %}
-                                                        <span class="badge" style="background:#fef3c7;color:#92400e;">LLM error</span> {# layout-specific, intentional #}
+                                                        {{ status_badge('LLM error', 'warning') }}
                                                         {% elif attempt_status == 'failed' %}
                                                         <span class="badge badge-danger">Failed</span>
                                                         {% elif attempt_score is not none and attempt_score >= 70 %}

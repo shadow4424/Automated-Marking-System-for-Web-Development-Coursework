@@ -214,12 +214,8 @@
                 <div class="analytics-summary-badges">
                     <span id="teaching-summary-status" class="badge badge-secondary">{% if teaching_summary_source|default('deterministic', true) == 'llm' %}LLM-enhanced wording{% else %}Deterministic wording{% endif %}</span>
                     {% if llm_summary_enabled and insights %}
-                    <button
-                        type="button"
-                        id="generate-teaching-summary"
-                        class="btn btn-secondary btn-sm"
-                        data-endpoint="{{ url_for('assignment_mgmt.teaching_insights_json', assignment_id=assignment.assignmentID) }}"
-                    >
+                    <button type="button" id="generate-teaching-summary" class="btn btn-secondary btn-sm"
+                        data-endpoint="{{ url_for('assignment_mgmt.teaching_insights_json', assignment_id=assignment.assignmentID) }}">
                         Generate LLM summary
                     </button>
                     {% endif %}
@@ -700,7 +696,7 @@
                 <div class="analytics-inline-distribution analytics-inline-distribution--confidence" aria-label="Confidence mix">
                     {% for segment in confidence_mix_segments %}
                     {% set tone = 'high' if 'High' in segment.label else ('medium' if 'Medium' in segment.label else 'low') %}
-                    <button type="button" class="analytics-distribution-segment analytics-distribution-segment--{{ tone }} js-subset-button" style="width: {{ '%.2f'|format(segment.percent|default(0, true)) }}%;" data-label="{{ segment.label }}" data-badge="{{ segment.percent|round|int }}% of active submissions" data-students="{{ segment.student_ids|join('|') }}"></button> {# layout-specific, intentional #}
+                    <button type="button" class="analytics-distribution-segment analytics-distribution-segment--{{ tone }} js-subset-button" style="width: {{ '%.2f'|format(segment.percent|default(0, true)) }}%;" data-label="{{ segment.label }}" data-badge="{{ segment.percent|round|int }}% of active submissions" data-students="{{ segment.student_ids|join('|') }}" title="{{ segment.label }}: {{ segment.percent|round|int }}% of active submissions" aria-label="{{ segment.label }}: {{ segment.percent|round|int }}% of active submissions"></button> {# layout-specific, intentional #}
                     {% endfor %}
                 </div>
                 <div class="analytics-summary-badges">

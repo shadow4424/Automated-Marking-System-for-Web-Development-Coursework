@@ -106,7 +106,7 @@
                 <div class="info-item"><span class="info-item-label">Profile</span><span class="info-item-value">{{ detail.assessment_context.profile|default(run.profile|default('Unknown'), true)|replace('_', ' ')|title }}</span></div>
                 <div class="info-item"><span class="info-item-label">Submitted</span><span class="info-item-value">{{ submitted_label }}</span></div>
                 {% if current_attempt.source_type %}<div class="info-item"><span class="info-item-label">Source</span><span class="info-item-value">{{ current_attempt.source_type|replace('_', ' ')|title }}</span></div>{% endif %}
-                {% if current_attempt.validity_status %}<div class="info-item"><span class="info-item-label">Validity</span><span class="info-item-value">{{ current_attempt.validity_status|title }}</span></div>{% endif %}
+                {% if current_attempt.validity_status %}<div class="info-item"><span class="info-item-label">Validity</span><span class="info-item-value">{{ status_badge(current_attempt.validity_status|title, 'danger' if current_attempt.validity_status == 'invalid' else ('warning' if current_attempt.validity_status == 'pending' else 'success')) }}</span></div>{% endif %}
             </div>
             {% if attempt_history_list %}
             <div class="mt-lg">

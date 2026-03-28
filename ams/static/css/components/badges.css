@@ -111,4 +111,14 @@
     color: var(--color-danger);
 }
 
+.score-badge--warning {
+    background: var(--color-warning-light);
+    color: var(--color-warning);
+}
+
+.score-badge--danger {
+    background: var(--color-danger);
+    color: var(--color-surface);
+}
+
 /* ----------------------------------------------------------------------------

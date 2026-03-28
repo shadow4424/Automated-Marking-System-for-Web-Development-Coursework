@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "macros/_ui.html" import status_badge %}
 {% block title %}Run History - AMS{% endblock %}
 
 {% block content %}
@@ -98,7 +99,7 @@
             <button type="button" class="filter-toggle" data-filter="state:active">Active</button>
             <button type="button" class="filter-toggle" data-filter="state:history">History</button>
             <button type="button" class="filter-toggle" data-filter="validity:invalid">Invalid</button>
-            <button type="button" class="filter-toggle" data-filter="threat:true" style="--toggle-active-bg:#dc2626;">Threats</button> {# layout-specific, intentional #}
+            <button type="button" class="filter-toggle filter-toggle--danger" data-filter="threat:true">Threats</button>
         </div>
         <span class="toolbar-count" data-count></span>
     </div>
@@ -122,11 +123,11 @@
                     {% if status == 'pending' %}
                     <span class="score-badge badge-muted" style="font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">...</span> {# layout-specific, intentional #}
                     {% elif status == 'failed' %}
-                    <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">FAIL</span> {# layout-specific, intentional #}
+                    <span class="score-badge score-badge--danger">FAIL</span>
                     {% elif r.threat_flagged %}
-                    <span class="score-badge" style="background:#dc2626;color:#fff;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">THREAT</span> {# layout-specific, intentional #}
+                    <span class="score-badge score-badge--danger">THREAT</span>
                     {% elif r.llm_error_flagged %}
-                    <span class="score-badge" style="background:#fef3c7;color:#92400e;font-size:0.7rem;padding:0.25rem 0.5rem;letter-spacing:0.03em;">LLM</span> {# layout-specific, intentional #}
+                    <span class="score-badge score-badge--warning">LLM</span>
                     {% else %}
                     {% set score = r.get('score') %}
                     {% if score is not none %}
@@ -160,16 +161,16 @@
                         {% if status == 'pending' %}
                         <span class="badge badge-warning">Pending</span>
                         {% elif status == 'failed' %}
-                        <span class="badge" style="background:#dc2626;color:#fff;">Failed</span> {# layout-specific, intentional #}
+                        {{ status_badge('Failed', 'danger') }}
                         {% endif %}
                         {% if validity == 'invalid' %}
                         <span class="badge badge-danger">Invalid</span>
                         {% endif %}
                         {% if r.threat_flagged %}
-                        <span class="badge" style="background:#dc2626;color:#fff;">Security threat</span> {# layout-specific, intentional #}
+                        {{ status_badge('Security threat', 'danger') }}
                         {% endif %}
                         {% if r.llm_error_flagged %}
-                        <span class="badge" style="background:#fef3c7;color:#92400e;">LLM error</span> {# layout-specific, intentional #}
+                        {{ status_badge('LLM error', 'warning') }}
                         {% endif %}
                     </div>
                     <div class="run-card-meta">
