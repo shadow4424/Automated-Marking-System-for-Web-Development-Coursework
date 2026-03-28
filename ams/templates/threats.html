@@ -1,21 +1,42 @@
 {% extends "base.html" %}
+{% from "macros/_ui.html" import status_badge %}
 {% block title %}Security Threats - AMS{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/threats.css') }}">
+{% endblock %}
 
 {% block content %}
-<div class="page-shell">
-    <section class="page-hero page-hero--split">
+{% set retained_count = containers|length if containers else (1 if inspected else 0) %}
+<div class="page-shell threats-page">
+    <section class="page-hero page-hero--split threats-hero">
         <div class="page-hero-main">
             <a href="{{ url_for('runs.runs') }}" class="page-back-link">Back to run history</a>
             <div class="page-kicker">Security review</div>
             <h1>Security threats</h1>
             <p class="page-context-line">Review retained threat containers, inspect filesystem or log evidence, and remove containers once the investigation is complete.</p>
+            <div class="page-status-row threats-status-row">
+                {{ status_badge('Threat review queue', 'danger') }}
+                {% if inspected %}
+                {{ status_badge('Inspection open', 'warning') }}
+                {% else %}
+                {{ status_badge('Manual review', 'info') }}
+                {% endif %}
+            </div>
         </div>
-        <aside class="page-side-panel">
+        <aside class="page-side-panel threats-state-panel">
             <h2 class="card-title">Current state</h2>
+            <div class="threats-state-summary">
+                {{ status_badge(retained_count ~ ' retained', 'danger') }}
+                {% if inspected %}
+                {{ status_badge('Inspection mode', 'warning') }}
+                {% else %}
+                {{ status_badge('Queue overview', 'info') }}
+                {% endif %}
+            </div>
             <div class="info-grid info-grid--2">
                 <div class="info-item">
                     <span class="info-item-label">Retained containers</span>
-                    <span class="info-item-value">{{ containers|length }}</span>
+                    <span class="info-item-value">{{ retained_count }}</span>
                 </div>
                 <div class="info-item">
                     <span class="info-item-label">Inspection open</span>
@@ -26,12 +47,13 @@
     </section>
 
     {% if inspected %}
-    <section class="card">
+    <section class="card threat-inspection-card">
         <div class="section-heading-row">
             <div class="section-copy">
                 <h2 class="card-title">Container inspection</h2>
+                <p class="section-note">Review filesystem and runtime evidence for <strong>{{ inspected.name }}</strong> before removing the retained container.</p>
             </div>
-            <div class="page-inline-tools">
+            <div class="page-inline-tools threats-inline-tools">
                 <a href="{{ url_for('github.threats') }}" class="btn btn-secondary btn-sm">Back to threat list</a>
                 <form method="post" action="{{ url_for('github.threat_cleanup', container_name=inspected.name) }}" onsubmit="return confirm('Are you sure you want to remove this container?');">
                     <button type="submit" class="btn btn-danger btn-sm">Remove container</button>
@@ -40,7 +62,7 @@
         </div>
 
         <div class="form-layout">
-            <div class="card" style="margin: 0; box-shadow: none;"> {# layout-specific, intentional #}
+            <div class="card threat-evidence-card">
                 <div class="section-heading-row">
                     <div class="section-copy">
                         <h3 class="card-title">Filesystem changes</h3>
@@ -50,14 +72,14 @@
                 <div class="code-surface"><pre>{% for line in inspected.diff %}{{ line }}
 {% endfor %}</pre></div>
                 {% else %}
-                <div class="empty-state" style="padding: var(--space-lg) 0;"> {# layout-specific, intentional #}
+                <div class="empty-state threat-empty-state">
                     <p class="empty-state-title">No filesystem changes detected</p>
                     <p class="empty-state-text">The container diff did not return any retained file modifications.</p>
                 </div>
                 {% endif %}
             </div>
 
-            <div class="page-side-panel">
+            <div class="page-side-panel threat-log-panel">
                 <h2 class="card-title">Container logs</h2>
                 {% if inspected.logs %}
                 <div class="code-surface"><pre>{{ inspected.logs }}</pre></div>
@@ -70,34 +92,42 @@
     {% endif %}
 
     {% if containers %}
-    <section class="card">
+    <section class="card threat-list-card">
         <div class="section-heading-row">
             <div class="section-copy">
                 <h2 class="card-title">Retained containers</h2>
+                <p class="section-note">Each retained environment is held for manual review after a submission is flagged as a potential threat.</p>
             </div>
-            <span class="badge" style="background:#dc2626;color:#fff;">{{ containers|length }}</span> {# layout-specific, intentional #}
+            {{ status_badge(containers|length ~ ' retained', 'danger') }}
         </div>
-        <div class="surface-list">
+        <div class="surface-list threat-list">
             {% for c in containers %}
-            <div class="surface-item" style="border-left: 4px solid #dc2626;"> {# layout-specific, intentional #}
-                <div class="surface-item-head">
-                    <div>
-                        <div class="surface-item-title" style="color:#b91c1c;">{{ c.name }}</div> {# layout-specific, intentional #}
-                        <div class="surface-item-meta">ID {{ c.container_id }} | Image {{ c.image }} | Status {{ c.status }} | Created {{ c.created }}</div>
+            {% set container_tone = 'warning' if c.status and c.status|lower in ['created', 'running', 'restarting'] else 'secondary' %}
+            <article class="surface-item threat-item">
+                <div class="surface-item-head threat-item-head">
+                    <div class="threat-item-copy">
+                        <div class="surface-item-title threat-item-title">{{ c.name }}</div>
+                        <div class="threat-item-topline">
+                            {{ status_badge('Retained', 'danger') }}
+                            {% if c.status %}
+                            {{ status_badge(c.status|replace('_', ' ')|title, container_tone) }}
+                            {% endif %}
+                        </div>
+                        <div class="surface-item-meta threat-item-meta">ID {{ c.container_id }} | Image {{ c.image }} | Status {{ c.status }} | Created {{ c.created }}</div>
                     </div>
-                    <div class="surface-item-actions">
+                    <div class="surface-item-actions threat-item-actions">
                         <a href="{{ url_for('github.threat_inspect', container_name=c.name) }}" class="btn btn-secondary btn-sm">Inspect</a>
                         <form method="post" action="{{ url_for('github.threat_cleanup', container_name=c.name) }}" onsubmit="return confirm('Remove container {{ c.name }}?');">
                             <button type="submit" class="btn btn-danger btn-sm">Remove</button>
                         </form>
                     </div>
                 </div>
-            </div>
+            </article>
             {% endfor %}
         </div>
     </section>
     {% elif not inspected %}
-    <div class="empty-state card">
+    <div class="empty-state card threat-empty-queue">
         <div class="empty-state-icon"></div>
         <h3 class="empty-state-title">No retained containers</h3>
         <p class="empty-state-text">No submissions are currently holding threat containers for manual review or cleanup.</p>
