@@ -64,13 +64,13 @@
 
 .alert-close:hover {
     opacity: 1;
-    background: rgba(255, 255, 255, 0.45);
+    background: var(--color-surface-overlay);
 }
 
 .alert-close:focus-visible {
     outline: none;
     opacity: 1;
-    background: rgba(255, 255, 255, 0.45);
+    background: var(--color-surface-overlay);
     box-shadow: 0 0 0 3px var(--color-primary-glow);
 }
 

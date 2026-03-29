@@ -24,7 +24,7 @@
     .submission-detail-banner {
         display:grid; gap:var(--space-lg); padding:clamp(1.1rem, 2vw, 1.5rem);
         border-radius:var(--radius-lg); border:1px solid rgba(148,163,184,0.22);
-        background:linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.94) 100%);
+        background:var(--gradient-panel);
         box-shadow:var(--shadow-sm);
     }
     .submission-banner-kicker,
@@ -38,7 +38,7 @@
     .submission-banner-title.is-danger { color:var(--color-danger); }
     .submission-band {
         display:inline-flex; align-items:center; gap:0.45rem; padding:0.55rem 0.9rem; border-radius:999px;
-        background:rgba(255,255,255,0.92); border:1px solid rgba(148,163,184,0.22); box-shadow:var(--shadow-sm);
+        background:var(--color-surface-overlay); border:1px solid rgba(148,163,184,0.22); box-shadow:var(--shadow-sm);
         font-size:var(--text-sm); font-weight:700; color:var(--color-text);
     }
     .submission-band strong { font-size:var(--text-base); }
@@ -85,7 +85,7 @@
     .submission-filter-row { display:flex; justify-content:space-between; align-items:center; gap:var(--space-md); flex-wrap:wrap; margin-bottom:var(--space-md); }
     .submission-filter-search { flex:1; min-width:min(100%, 320px); }
     .submission-filter-search .form-input {
-        min-height:48px; border-radius:999px; padding-inline:1rem; background:rgba(255,255,255,0.96);
+        min-height:48px; border-radius:999px; padding-inline:1rem; background:var(--color-surface-overlay-strong);
         border-color:rgba(148,163,184,0.35); box-shadow:0 1px 2px rgba(15,23,42,0.04);
     }
     .submission-filter-groups { display:grid; gap:var(--space-sm); }
@@ -93,12 +93,12 @@
     .submission-filter-label { min-width:4.75rem; font-size:var(--text-sm); font-weight:600; color:var(--color-text); }
     .submission-filter-chip {
         display:inline-flex; align-items:center; justify-content:center; min-height:36px; padding:0.45rem 0.85rem;
-        border-radius:999px; border:1px solid rgba(148,163,184,0.18); background:rgba(255,255,255,0.92);
+        border-radius:999px; border:1px solid rgba(148,163,184,0.18); background:var(--color-surface-overlay);
         color:var(--color-text-secondary); font-size:var(--text-sm); font-weight:600; cursor:pointer; transition:all var(--transition-fast);
     }
     .submission-filter-chip.is-active,
     .submission-filter-chip[aria-pressed="true"] {
-        color:white; border-color:rgba(37,99,235,0.82); background:linear-gradient(180deg, #4f8cff 0%, #2563eb 100%);
+        color:var(--color-on-accent); border-color:rgba(37,99,235,0.82); background:linear-gradient(180deg, #4f8cff 0%, #2563eb 100%);
         box-shadow:0 8px 18px rgba(37,99,235,0.18);
     }
     .submission-filter-count { margin-left:auto; font-size:var(--text-sm); color:var(--color-text-muted); white-space:nowrap; }
@@ -108,7 +108,7 @@
     .submission-evidence-item[open] { box-shadow:var(--shadow-sm); }
     .submission-evidence-item > summary { list-style:none; cursor:pointer; padding:var(--space-lg); }
     .submission-evidence-item > summary::-webkit-details-marker { display:none; }
-    .submission-evidence-item[open] > summary { border-bottom:1px solid var(--color-border-light); background:rgba(248,250,252,0.72); }
+    .submission-evidence-item[open] > summary { border-bottom:1px solid var(--color-border-light); background:var(--color-surface-subtle); }
     .submission-evidence-row { grid-template-columns:minmax(0, 1fr) auto; align-items:start; }
     .submission-evidence-main { min-width:0; display:grid; gap:0.45rem; }
     .submission-evidence-title { margin:0; font-size:var(--text-base); color:var(--color-text); line-height:1.45; }
@@ -121,7 +121,7 @@
     .submission-system-state-grid { grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); }
     .submission-system-state-card {
         padding:0.95rem 1rem; border-radius:var(--radius-md); border:1px solid var(--color-border-light);
-        background:rgba(248,250,252,0.78); display:grid; gap:0.45rem;
+        background:var(--color-surface-subtle); display:grid; gap:0.45rem;
     }
     .submission-system-state-label {
         font-size:var(--text-xs); font-weight:700; letter-spacing:0.06em; text-transform:uppercase;
@@ -134,7 +134,7 @@
     .submission-system-state-value div + div { margin-top:0.35rem; }
     .submission-system-item {
         padding:0.95rem 1rem; border-radius:var(--radius-md); border:1px solid var(--color-border-light);
-        background:rgba(248,250,252,0.78);
+        background:var(--color-surface-subtle);
     }
     .submission-system-item.is-success { border-color:rgba(22,163,74,0.2); background:rgba(22,163,74,0.05); }
     .submission-system-item.is-warning { border-color:rgba(245,158,11,0.22); background:rgba(245,158,11,0.06); }
@@ -144,7 +144,7 @@
         line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere;
     }
     .submission-system-meta { display:flex; flex-wrap:wrap; gap:0.45rem; margin-top:0.7rem; }
-    .submission-code { padding:0.9rem 1rem; border-radius:var(--radius-md); background:#0f172a; color:#e2e8f0; overflow-x:auto; }
+    .submission-code { padding:0.9rem 1rem; border-radius:var(--radius-md); background:var(--color-code-bg); color:var(--color-code-text); overflow-x:auto; }
     .submission-code pre { margin:0; background:transparent; border:0; color:inherit; white-space:pre-wrap; overflow-wrap:anywhere; }
     .submission-screenshot { max-width:100%; border-radius:var(--radius-md); border:1px solid var(--color-border); box-shadow:var(--shadow-sm); }
     .submission-screenshot--full { width:100%; display:block; }
@@ -153,20 +153,20 @@
     .submission-ux-content { flex:1 1 0; min-width:0; }
     .submission-empty {
         padding:1rem 1.1rem; border-radius:var(--radius-lg); border:1px dashed rgba(148,163,184,0.32);
-        background:rgba(248,250,252,0.72); color:var(--color-text-muted);
+        background:var(--color-surface-subtle); color:var(--color-text-muted);
     }
-    .submission-file { padding:0; overflow:hidden; border-radius:var(--radius-lg); border:1px solid rgba(220,38,38,0.18); background:#fffafb; }
+    .submission-file { padding:0; overflow:hidden; border-radius:var(--radius-lg); border:1px solid var(--color-code-danger-border); background:var(--color-code-danger-surface); }
     .submission-file > summary {
         list-style:none; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:var(--space-md);
-        padding:0.9rem 1rem; background:rgba(220,38,38,0.08);
+        padding:0.9rem 1rem; background:var(--color-code-danger-accent);
     }
     .submission-file > summary::-webkit-details-marker { display:none; }
-    .submission-file-scroll { overflow:auto; max-height:55vh; background:#0f172a; }
+    .submission-file-scroll { overflow:auto; max-height:55vh; background:var(--color-code-bg); }
     .submission-file-table { width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:0.8rem; line-height:1.55; }
-    .submission-file-table td { padding:0.05rem 0.75rem; vertical-align:top; color:#cbd5e1; white-space:pre; }
-    .submission-file-line { width:3.5rem; text-align:right; user-select:none; color:#64748b; border-right:1px solid #1e293b; }
-    .submission-file-row--threat { background:rgba(220,38,38,0.18); }
-    .submission-file-row--threat .submission-file-line { color:#fca5a5; border-right-color:#ef4444; font-weight:700; }
+    .submission-file-table td { padding:0.05rem 0.75rem; vertical-align:top; color:var(--color-code-text); white-space:pre; }
+    .submission-file-line { width:3.5rem; text-align:right; user-select:none; color:var(--color-code-muted); border-right:1px solid var(--color-code-border-strong); }
+    .submission-file-row--threat { background:var(--color-code-threat-row); }
+    .submission-file-row--threat .submission-file-line { color:var(--color-code-threat-line); border-right-color:var(--color-danger); font-weight:700; }
     @media (max-width: 64rem) { .submission-ux-media { flex-basis:100%; min-width:0; } }
     @media (max-width:1100px) { .submission-summary-grid, .submission-detail-body-grid { grid-template-columns:1fr; } }
     @media (max-width:960px) { .submission-banner-meta { grid-template-columns:1fr; } }

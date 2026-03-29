@@ -129,7 +129,7 @@
             icon = '<span class="wg-done wg-row-icon">&#10003;</span>';
             meta = 'Done in ' + _durationStr(job.duration || 0);
             action = (_isStudent() && !_isReleased(job.assignmentId))
-                ? '<span style="color:#818cf8;font-size:.8rem;">Awaiting release</span>'
+                ? '<span class="wg-awaiting">Awaiting release</span>'
                 : '<a href="' + _esc(viewUrl) + '" class="wg-view">View &rarr;</a>';
             dismissBtn = '<button class="wg-dismiss" data-dismiss="' + _esc(job.jobId) + '" title="Dismiss">&times;</button>';
         } else {

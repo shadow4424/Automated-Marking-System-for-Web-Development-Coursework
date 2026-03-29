@@ -14,9 +14,9 @@
     .analytics-graph-card {
         padding: 1.1rem 1.2rem 1.25rem;
         border-radius: var(--radius-lg);
-        border: 1px solid rgba(148, 163, 184, 0.16);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(248, 250, 252, 0.97) 100%);
-        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+        border: 1px solid var(--color-border-emphasis);
+        background: var(--gradient-panel);
+        box-shadow: var(--shadow-floating);
     }
     .analytics-graph-card--histogram {
         display: flex;
@@ -75,13 +75,13 @@
         padding: 1rem;
         border-radius: var(--radius-md);
         border: 1px dashed var(--color-border-light);
-        background: rgba(248, 250, 252, 0.7);
+        background: var(--color-surface-subtle);
     }
     .analytics-context-note {
         padding: 0.85rem 0.95rem;
         border-radius: var(--radius-md);
-        border: 1px solid rgba(148, 163, 184, 0.18);
-        background: rgba(248, 250, 252, 0.72);
+        border: 1px solid var(--color-border-emphasis);
+        background: var(--color-surface-subtle);
         color: var(--color-text-muted);
         font-size: var(--text-sm);
         line-height: 1.5;
@@ -96,9 +96,9 @@
         min-height: 0;
         padding: 0.45rem;
         border-radius: calc(var(--radius-lg) - 0.1rem);
-        border: 1px solid rgba(148, 163, 184, 0.18);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(250, 252, 255, 0.98) 100%);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+        border: 1px solid var(--color-border-emphasis);
+        background: var(--gradient-panel);
+        box-shadow: inset 0 1px 0 var(--color-surface-overlay);
     }
     .analytics-chart-shell--histogram {
         margin-top: 7.4rem;
@@ -120,25 +120,25 @@
         stroke-linecap: round;
         stroke-linejoin: round;
     }
-    .analytics-chart-axis { stroke: rgba(71, 85, 105, 0.6); stroke-width: 1.15; }
-    .analytics-chart-grid { stroke: rgba(148, 163, 184, 0.18); stroke-width: 1; }
+    .analytics-chart-axis { stroke: var(--chart-reference); stroke-width: 1.15; }
+    .analytics-chart-grid { stroke: var(--chart-surface-border); stroke-width: 1; }
     .analytics-chart-reference { stroke-width: 1.8; stroke-dasharray: 4 5; }
-    .analytics-chart-reference.mean { stroke: rgba(37, 99, 235, 0.38); }
-    .analytics-chart-reference.median { stroke: rgba(6, 182, 212, 0.34); }
-    .analytics-chart-reference.pass { stroke: rgba(245, 158, 11, 0.88); }
+    .analytics-chart-reference.mean { stroke: var(--chart-reference-primary); }
+    .analytics-chart-reference.median { stroke: var(--chart-reference-secondary); }
+    .analytics-chart-reference.pass { stroke: var(--chart-reference-threshold); }
     .analytics-chart-text {
-        fill: #475569;
+        fill: var(--color-text-secondary);
         font-size: 13px;
         font-weight: 600;
     }
     .analytics-chart-text.axis-title {
-        fill: #0f172a;
+        fill: var(--chart-ink);
         font-size: 14.5px;
         font-weight: 700;
         letter-spacing: 0.01em;
     }
     .analytics-chart-text.value-label {
-        fill: #1e293b;
+        fill: var(--color-text);
         font-size: 12.5px;
         font-weight: 700;
     }
@@ -186,18 +186,18 @@
     }
     .analytics-chart-bar.is-selected,
     .analytics-chart-point.is-selected {
-        filter: drop-shadow(0 0 0.35rem rgba(37, 99, 235, 0.35));
+        filter: drop-shadow(0 0 0.35rem var(--chart-selection-glow));
     }
     .analytics-matrix-cell.is-selected,
     .analytics-segment-button.is-selected,
     .analytics-bar-button.is-selected,
     .analytics-stage-button.is-selected,
     .analytics-requirement-card.is-selected {
-        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
-        border-color: rgba(37, 99, 235, 0.45);
+        box-shadow: 0 0 0 3px var(--chart-selection-outline-soft);
+        border-color: var(--chart-selection-outline);
     }
     .js-rule-row.is-selected td {
-        background: rgba(37, 99, 235, 0.08);
+        background: var(--color-surface-highlight);
     }
     .analytics-tooltip {
         position: fixed;
@@ -207,12 +207,12 @@
         pointer-events: none;
         padding: 0.8rem 0.9rem;
         border-radius: var(--radius-md);
-        border: 1px solid rgba(15, 23, 42, 0.12);
-        background: rgba(15, 23, 42, 0.94);
-        color: #f8fafc;
+        border: 1px solid var(--chart-surface-border);
+        background: var(--color-tooltip-bg);
+        color: var(--color-tooltip-text);
         font-size: 0.84rem;
         line-height: 1.45;
-        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.28);
+        box-shadow: 0 16px 40px rgba(2, 6, 23, 0.28);
         opacity: 0;
         transform: translateY(6px);
         transition: opacity var(--transition-fast), transform var(--transition-fast);
@@ -224,7 +224,7 @@
     .analytics-tooltip strong {
         display: block;
         margin-bottom: 0.25rem;
-        color: #fff;
+        color: var(--color-tooltip-text);
     }
     .analytics-segment-bar,
     .analytics-bar-list,
@@ -238,7 +238,7 @@
         min-height: 42px;
         overflow: hidden;
         border-radius: 999px;
-        background: rgba(226, 232, 240, 0.8);
+        background: var(--color-surface-muted);
         border: 1px solid rgba(148, 163, 184, 0.24);
     }
     .analytics-segment-button {
@@ -246,12 +246,12 @@
         min-width: 2.5rem;
         border: 0;
         padding: 0.45rem 0.65rem;
-        color: #0f172a;
+        color: var(--chart-ink);
         font-weight: 700;
         background: transparent;
     }
     .analytics-segment-button + .analytics-segment-button {
-        box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.6);
+        box-shadow: inset 1px 0 0 var(--color-surface-overlay);
     }
     .analytics-segment-button span {
         display: block;
@@ -268,7 +268,7 @@
         width: 100%;
         border-radius: var(--radius-md);
         border: 1px solid rgba(148, 163, 184, 0.22);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
+        background: var(--gradient-panel);
         padding: 0.85rem 0.95rem;
         text-align: left;
     }
@@ -278,7 +278,7 @@
         margin-top: 0.6rem;
         border-radius: 999px;
         overflow: hidden;
-        background: rgba(226, 232, 240, 0.85);
+        background: var(--color-surface-muted);
     }
     .analytics-bar-visual span,
     .analytics-stage-visual span {
@@ -292,7 +292,7 @@
         padding: 1rem;
         border-radius: var(--radius-md);
         border: 1px solid rgba(148, 163, 184, 0.22);
-        background: rgba(255, 255, 255, 0.92);
+        background: var(--color-surface-overlay);
     }
     .analytics-component-metrics {
         display: grid;
@@ -318,12 +318,12 @@
         padding: 0.85rem 0.95rem;
         border-radius: var(--radius-md);
         border: 1px solid rgba(148, 163, 184, 0.2);
-        background: rgba(248, 250, 252, 0.88);
+        background: var(--color-surface-subtle);
     }
     .analytics-matrix-cell {
         border: 1px solid rgba(148, 163, 184, 0.22);
         border-radius: var(--radius-md);
-        background: rgba(255, 255, 255, 0.94);
+        background: var(--color-surface-overlay-strong);
         padding: 0.8rem;
         text-align: left;
     }
@@ -340,7 +340,7 @@
         padding: 0.9rem 1rem;
         border-radius: var(--radius-md);
         border: 1px solid rgba(37, 99, 235, 0.18);
-        background: rgba(37, 99, 235, 0.08);
+        background: var(--color-surface-highlight);
     }
     .analytics-requirement-focus.is-visible { display: flex; }
     .analytics-stage-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -368,9 +368,13 @@
         border-radius: 999px;
         display: inline-block;
     }
+    .analytics-legend-swatch--student {
+        background: var(--chart-student-fill);
+        border: 1px solid var(--chart-student-stroke);
+    }
     .analytics-legend-swatch--outlined {
-        background: #ffffff;
-        border: 2px solid #0f172a;
+        background: var(--chart-surface);
+        border: 2px solid var(--chart-ink);
     }
     .analytics-drawer {
         position: fixed;
@@ -387,7 +391,7 @@
     .analytics-drawer-backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(15, 23, 42, 0.32);
+        background: var(--color-overlay);
         opacity: 0;
         pointer-events: none;
         transition: opacity var(--transition-fast);
@@ -401,9 +405,9 @@
         width: 100%;
         height: 100%;
         padding: 1rem;
-        background: rgba(255, 255, 255, 0.98);
+        background: var(--color-surface-overlay-strong);
         border-left: 1px solid rgba(148, 163, 184, 0.2);
-        box-shadow: -18px 0 44px rgba(15, 23, 42, 0.16);
+        box-shadow: -18px 0 44px rgba(2, 6, 23, 0.24);
         overflow-y: auto;
         transform: translateX(100%);
         transition: transform var(--transition-fast);
@@ -414,7 +418,7 @@
         padding: 0.9rem 0.95rem;
         border-radius: var(--radius-md);
         border: 1px solid rgba(148, 163, 184, 0.2);
-        background: rgba(248, 250, 252, 0.82);
+        background: var(--color-surface-subtle);
     }
     .analytics-student-card-metrics,
     .analytics-student-card-actions {
@@ -460,7 +464,7 @@
     }
     .analytics-collapse-card[open] > summary {
         border-bottom: 1px solid var(--color-border-light);
-        background: rgba(248, 250, 252, 0.75);
+        background: var(--color-surface-subtle);
     }
     .analytics-collapse-body { padding: var(--space-lg); }
     @media (max-width: 1280px) {

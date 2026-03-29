@@ -35,14 +35,33 @@
                 '</div>';
         }
 
+        function cssColor(name, fallback) {
+            if (window.AMS && typeof window.AMS.readCssVariable === 'function') {
+                return window.AMS.readCssVariable(name) || fallback;
+            }
+            return fallback;
+        }
+
         function graphColor(kind) {
             var palette = {
-                success: '#22c55e',
-                warning: '#f59e0b',
-                danger: '#ef4444',
-                info: '#2563eb',
-                muted: '#94a3b8',
-                ink: '#0f172a'
+                success: cssColor('--color-success', '#22c55e'),
+                warning: cssColor('--color-warning', '#f59e0b'),
+                danger: cssColor('--color-danger', '#ef4444'),
+                info: cssColor('--color-primary', '#2563eb'),
+                muted: cssColor('--color-text-muted', '#94a3b8'),
+                ink: cssColor('--chart-ink', '#0f172a'),
+                hoverTarget: cssColor('--chart-hover-target', 'rgba(15, 23, 42, 0.001)'),
+                hoverFill: cssColor('--chart-hover-fill', 'rgba(37, 99, 235, 0.06)'),
+                barFill: cssColor('--chart-bar-fill', 'rgba(20, 184, 166, 0.92)'),
+                barStroke: cssColor('--chart-bar-stroke', 'rgba(15, 23, 42, 0.55)'),
+                halo: cssColor('--chart-halo', 'rgba(255, 255, 255, 0.96)'),
+                lineStrong: cssColor('--chart-line-strong', 'rgba(15, 23, 42, 0.9)'),
+                surface: cssColor('--chart-surface', 'rgba(255, 255, 255, 0.96)'),
+                surfaceBorder: cssColor('--chart-surface-border', 'rgba(148, 163, 184, 0.2)'),
+                reference: cssColor('--chart-reference', 'rgba(71, 85, 105, 0.45)'),
+                pointRing: cssColor('--chart-point-ring', '#ffffff'),
+                studentFill: cssColor('--chart-student-fill', '#2563eb'),
+                studentStroke: cssColor('--chart-student-stroke', '#dbeafe')
             };
             return palette[kind] || palette.info;
         }
@@ -114,7 +133,7 @@
             hoverLine.setAttribute('x2', x2);
             hoverLine.setAttribute('y1', y1);
             hoverLine.setAttribute('y2', y2);
-            hoverLine.setAttribute('stroke', 'rgba(15, 23, 42, 0.001)');
+            hoverLine.setAttribute('stroke', graphColor('hoverTarget'));
             hoverLine.setAttribute('stroke-width', '14');
             hoverLine.setAttribute('pointer-events', 'stroke');
             bindTooltip(hoverLine, html);
@@ -139,22 +158,22 @@
             rect.setAttribute('y', region.y);
             rect.setAttribute('width', Math.max(region.width, 0));
             rect.setAttribute('height', Math.max(region.height, 0));
-            rect.setAttribute('fill', 'rgba(37, 99, 235, 0.001)');
+            rect.setAttribute('fill', graphColor('hoverTarget'));
             rect.setAttribute('stroke', 'none');
             rect.setAttribute('pointer-events', 'all');
             rect.setAttribute('tabindex', '0');
             rect.setAttribute('role', 'button');
             rect.addEventListener('mouseenter', function () {
-                rect.setAttribute('fill', 'rgba(37, 99, 235, 0.06)');
+                rect.setAttribute('fill', graphColor('hoverFill'));
             });
             rect.addEventListener('mouseleave', function () {
-                rect.setAttribute('fill', 'rgba(37, 99, 235, 0.001)');
+                rect.setAttribute('fill', graphColor('hoverTarget'));
             });
             rect.addEventListener('focus', function () {
-                rect.setAttribute('fill', 'rgba(37, 99, 235, 0.06)');
+                rect.setAttribute('fill', graphColor('hoverFill'));
             });
             rect.addEventListener('blur', function () {
-                rect.setAttribute('fill', 'rgba(37, 99, 235, 0.001)');
+                rect.setAttribute('fill', graphColor('hoverTarget'));
             });
             rect.addEventListener('click', function () {
                 renderScatterQuadrantNote(region);
@@ -272,10 +291,10 @@
                     rect.setAttribute('y', margin.top + innerHeight - barHeight);
                     rect.setAttribute('width', barWidth);
                     rect.setAttribute('height', barHeight);
-                    rect.setAttribute('fill', bin.is_current_student ? graphColor('info') : 'rgba(20, 184, 166, 0.92)');
-                    rect.setAttribute('stroke', bin.is_current_student ? 'rgba(29, 78, 216, 0.92)' : 'rgba(15, 23, 42, 0.55)');
-                    rect.setAttribute('stroke-width', bin.is_current_student ? '1.15' : '0.75');
-                    rect.setAttribute('class', 'analytics-chart-bar' + (bin.is_current_student ? ' is-selected' : ''));
+                    rect.setAttribute('fill', bin.is_current_student ? graphColor('studentFill') : graphColor('barFill'));
+                    rect.setAttribute('stroke', bin.is_current_student ? graphColor('studentStroke') : graphColor('barStroke'));
+                    rect.setAttribute('stroke-width', '0.75');
+                    rect.setAttribute('class', 'analytics-chart-bar');
                     rect.setAttribute('tabindex', '0');
                     bindTooltip(rect, tooltipText(bin.is_current_student ? 'Your mark band' : bin.label, [
                         bin.count + ' student' + (bin.count === 1 ? '' : 's'),
@@ -293,7 +312,7 @@
                 halo.setAttribute('x2', referenceX);
                 halo.setAttribute('y1', margin.top);
                 halo.setAttribute('y2', margin.top + innerHeight);
-                halo.setAttribute('stroke', 'rgba(255, 255, 255, 0.96)');
+                halo.setAttribute('stroke', graphColor('halo'));
                 halo.setAttribute('stroke-width', '4.6');
                 halo.setAttribute('stroke-linecap', 'round');
                 svg.appendChild(halo);
@@ -302,7 +321,7 @@
                 line.setAttribute('x2', referenceX);
                 line.setAttribute('y1', margin.top);
                 line.setAttribute('y2', margin.top + innerHeight);
-                line.setAttribute('stroke', 'rgba(15, 23, 42, 0.9)');
+                line.setAttribute('stroke', graphColor('lineStrong'));
                 line.setAttribute('stroke-width', '2.25');
                 line.setAttribute('stroke-dasharray', '7 5');
                 line.setAttribute('stroke-linecap', 'round');
@@ -378,8 +397,8 @@
             plot.setAttribute('width', innerWidth);
             plot.setAttribute('height', innerHeight);
             plot.setAttribute('rx', '18');
-            plot.setAttribute('fill', 'rgba(255, 255, 255, 0.96)');
-            plot.setAttribute('stroke', 'rgba(148, 163, 184, 0.2)');
+            plot.setAttribute('fill', graphColor('surface'));
+            plot.setAttribute('stroke', graphColor('surfaceBorder'));
             svg.appendChild(plot);
 
             ticks.forEach(function (tick) {
@@ -417,7 +436,7 @@
                 diagonal.setAttribute('x2', margin.left + innerWidth);
                 diagonal.setAttribute('y1', margin.top + innerHeight);
                 diagonal.setAttribute('y2', margin.top);
-                diagonal.setAttribute('stroke', 'rgba(71, 85, 105, 0.45)');
+                diagonal.setAttribute('stroke', graphColor('reference'));
                 diagonal.setAttribute('stroke-width', '1.6');
                 diagonal.setAttribute('stroke-dasharray', '5 5');
                 svg.appendChild(diagonal);
@@ -546,21 +565,23 @@
                 if (typeof staticScore !== 'number' || typeof behaviouralScore !== 'number') return;
                 var cx = margin.left + ((staticScore / 100) * innerWidth);
                 var cy = margin.top + innerHeight - ((behaviouralScore / 100) * innerHeight);
-                var confidenceFill = point.confidence === 'low'
-                    ? graphColor('danger')
-                    : (point.confidence === 'medium' ? graphColor('warning') : graphColor('success'));
+                var confidenceFill = point.is_current_student
+                    ? graphColor('studentFill')
+                    : (point.confidence === 'low'
+                        ? graphColor('danger')
+                        : (point.confidence === 'medium' ? graphColor('warning') : graphColor('success')));
                 var circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 circle.setAttribute('cx', cx);
                 circle.setAttribute('cy', cy);
-                circle.setAttribute('r', point.is_current_student ? (point.manual_review_recommended ? '9' : '7.5') : (point.manual_review_recommended ? '8' : '6'));
+                circle.setAttribute('r', point.manual_review_recommended ? '8' : '6');
                 circle.setAttribute('fill', confidenceFill);
                 circle.setAttribute('fill-opacity', point.is_current_student ? '1' : (point.functional_evidence_limited ? '0.45' : (point.manual_review_recommended ? '0.94' : '0.78')));
-                circle.setAttribute('stroke', point.is_current_student ? graphColor('info') : (point.manual_review_recommended ? graphColor('ink') : '#ffffff'));
-                circle.setAttribute('stroke-width', point.is_current_student ? '3' : (point.manual_review_recommended ? '2.5' : '1.6'));
+                circle.setAttribute('stroke', point.is_current_student ? graphColor('studentStroke') : (point.manual_review_recommended ? graphColor('ink') : graphColor('pointRing')));
+                circle.setAttribute('stroke-width', point.manual_review_recommended ? '2.5' : '1.6');
                 if (point.functional_evidence_limited) {
                     circle.setAttribute('stroke-dasharray', '4 3');
                 }
-                circle.setAttribute('class', 'analytics-chart-point' + (point.is_current_student ? ' is-selected' : ''));
+                circle.setAttribute('class', 'analytics-chart-point');
                 circle.setAttribute('tabindex', '0');
                 bindTooltip(circle, tooltipText(point.is_current_student ? 'You' : 'Anonymous cohort submission', [
                     'Overall mark: ' + formatPercent(point.overall_mark_percent != null ? point.overall_mark_percent : point.overall_percent),
@@ -618,6 +639,10 @@
         activateCurrentNav();
         window.addEventListener('resize', function () { setOffsets(); activateCurrentNav(); });
         window.addEventListener('scroll', activateCurrentNav, { passive: true });
+        window.addEventListener((window.AMS && window.AMS.themeChangeEvent) || 'ams:themechange', function () {
+            renderHistogram();
+            renderScatter();
+        });
 
         var feedbackButton = document.getElementById('generate-student-feedback');
         var feedbackPanel = document.getElementById('student-feedback-panel');

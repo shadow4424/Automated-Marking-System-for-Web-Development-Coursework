@@ -6,6 +6,9 @@
 (function () {
     'use strict';
 
+    const THEME_STORAGE_KEY = 'ams-theme';
+    const THEME_CHANGE_EVENT = 'ams:themechange';
+
     // =========================================================================
     // Utilities
     // =========================================================================
@@ -44,6 +47,70 @@
         }
     }
 
+    function readCssVariable(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    function getStoredTheme() {
+        try {
+            const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+            return stored === 'dark' || stored === 'light' ? stored : null;
+        } catch {
+            return null;
+        }
+    }
+
+    function systemTheme() {
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light';
+    }
+
+    function resolveTheme(theme) {
+        return theme === 'dark' || theme === 'light' ? theme : systemTheme();
+    }
+
+    function currentTheme() {
+        return resolveTheme(document.documentElement.dataset.theme);
+    }
+
+    function updateThemeToggleState(theme) {
+        const isDark = theme === 'dark';
+        const label = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+
+        document.querySelectorAll('[data-theme-toggle]').forEach(toggle => {
+            toggle.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+            toggle.setAttribute('aria-label', label);
+            toggle.setAttribute('title', label);
+            toggle.dataset.themeCurrent = theme;
+        });
+    }
+
+    function dispatchThemeChange(theme) {
+        window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, {
+            detail: { theme },
+        }));
+    }
+
+    function applyTheme(theme, { persist = false, notify = true } = {}) {
+        const resolved = resolveTheme(theme);
+        document.documentElement.dataset.theme = resolved;
+        document.documentElement.style.colorScheme = resolved;
+        updateThemeToggleState(resolved);
+
+        if (persist) {
+            try {
+                window.localStorage.setItem(THEME_STORAGE_KEY, resolved);
+            } catch {
+                // Ignore storage write failures and keep the in-memory theme.
+            }
+        }
+
+        if (notify) {
+            dispatchThemeChange(resolved);
+        }
+    }
+
     /**
      * Show copy feedback on button
      */
@@ -55,6 +122,43 @@
             btn.innerHTML = original;
             btn.disabled = false;
         }, 1500);
+    }
+
+    // =========================================================================
+    // Theme Toggle
+    // =========================================================================
+
+    function initThemeToggle() {
+        const mediaQuery = window.matchMedia
+            ? window.matchMedia('(prefers-color-scheme: dark)')
+            : null;
+
+        applyTheme(getStoredTheme() || currentTheme(), { notify: false });
+
+        document.querySelectorAll('[data-theme-toggle]').forEach(toggle => {
+            toggle.addEventListener('click', () => {
+                const nextTheme = currentTheme() === 'dark' ? 'light' : 'dark';
+                applyTheme(nextTheme, { persist: true });
+            });
+        });
+
+        if (mediaQuery) {
+            const handlePreferenceChange = event => {
+                if (getStoredTheme()) return;
+                applyTheme(event.matches ? 'dark' : 'light');
+            };
+
+            if (typeof mediaQuery.addEventListener === 'function') {
+                mediaQuery.addEventListener('change', handlePreferenceChange);
+            } else if (typeof mediaQuery.addListener === 'function') {
+                mediaQuery.addListener(handlePreferenceChange);
+            }
+        }
+
+        window.addEventListener('storage', event => {
+            if (event.key !== THEME_STORAGE_KEY) return;
+            applyTheme(event.newValue);
+        });
     }
 
     // =========================================================================
@@ -480,6 +584,7 @@
     // =========================================================================
 
     function init() {
+        initThemeToggle();
         initDashboardFilters();
         initTabGroups();
         initEvidenceFilters();
@@ -498,6 +603,12 @@
     }
 
     // Export utilities
-    window.AMS = { copyToClipboard, debounce };
+    window.AMS = {
+        copyToClipboard,
+        debounce,
+        currentTheme,
+        readCssVariable,
+        themeChangeEvent: THEME_CHANGE_EVENT,
+    };
 
 })();

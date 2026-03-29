@@ -7,7 +7,7 @@
     align-items: center;
     gap: var(--space-md);
     padding: var(--space-md);
-    background: #ffffff;
+    background: var(--color-surface);
     border: 1px solid var(--color-border-light);
     border-radius: var(--radius-md);
     margin-bottom: var(--space-lg);
@@ -52,7 +52,7 @@
     background: transparent;
     color: var(--color-text-secondary);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .filter-toggle:hover {
@@ -62,7 +62,7 @@
 .filter-toggle.active {
     background: var(--color-primary);
     border-color: var(--color-primary);
-    color: white;
+    color: var(--color-on-accent);
 }
 
 .filter-toggle--danger.active {
@@ -120,7 +120,7 @@
     gap: var(--space-xs);
     padding: 6px 14px;
     border-radius: 999px;
-    background: rgba(37, 99, 235, 0.12);
+    background: var(--color-surface-highlight-strong);
     color: var(--color-primary);
     font-size: var(--text-xs);
     font-weight: 600;
@@ -172,14 +172,14 @@
 }
 
 .mini-stat {
-    background: #ffffff;
+    background: var(--color-surface-overlay-strong);
     border: 1px solid var(--color-border-light);
     border-radius: 14px;
     padding: var(--space-md);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+    box-shadow: var(--shadow-card-hover);
 }
 
 .mini-stat-label {
@@ -249,11 +249,11 @@
     display: grid;
     gap: var(--space-xl);
     padding: clamp(1.25rem, 2vw, 1.85rem);
-    border: 1px solid rgba(15, 23, 42, 0.08);
+    border: 1px solid var(--color-border-emphasis);
     border-radius: var(--radius-xl);
     background:
         radial-gradient(circle at top right, rgba(37, 99, 235, 0.1), transparent 34%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%);
+        var(--gradient-panel);
     box-shadow: var(--shadow-sm);
 }
 
@@ -275,7 +275,7 @@
     width: fit-content;
     padding: 0.45rem 0.8rem;
     border-radius: 999px;
-    background: rgba(37, 99, 235, 0.08);
+    background: var(--color-surface-highlight);
     color: var(--color-primary);
     font-size: var(--text-xs);
     font-weight: 700;
@@ -305,7 +305,7 @@
     padding: var(--space-lg);
     border-radius: var(--radius-lg);
     border: 1px solid var(--color-border-light);
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--color-surface-overlay);
     box-shadow: var(--shadow-sm);
 }
 
@@ -350,7 +350,7 @@
     padding: 1rem 1.1rem;
     border-radius: var(--radius-lg);
     border: 1px solid var(--color-border-light);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%);
+    background: var(--gradient-panel);
     box-shadow: var(--shadow-sm);
 }
 
@@ -422,7 +422,7 @@
     padding: var(--space-lg);
     border-radius: var(--radius-lg);
     border: 1px solid var(--color-border-light);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.96) 100%);
+    background: var(--gradient-panel);
     box-shadow: var(--shadow-sm);
     text-decoration: none;
     color: inherit;
@@ -432,7 +432,7 @@
 .action-card:hover {
     transform: translateY(-2px);
     border-color: var(--color-border);
-    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.12);
+    box-shadow: var(--shadow-floating);
 }
 
 .action-card-header {
@@ -471,7 +471,7 @@
     padding: 1rem 1.1rem;
     border-radius: var(--radius-lg);
     border: 1px solid var(--color-border-light);
-    background: rgba(255, 255, 255, 0.92);
+    background: var(--color-surface-overlay);
     box-shadow: var(--shadow-sm);
 }
 
@@ -525,12 +525,12 @@
 }
 
 .code-surface {
-    background: #0f172a;
-    color: #e2e8f0;
+    background: var(--color-code-bg);
+    color: var(--color-code-text);
     padding: 1rem;
     border-radius: var(--radius-md);
     overflow: auto;
-    border: 1px solid rgba(148, 163, 184, 0.18);
+    border: 1px solid var(--color-code-border);
 }
 
 .code-surface pre {
@@ -662,7 +662,7 @@
 
 .disclosure-card[open] > summary {
     border-bottom: 1px solid var(--color-border-light);
-    background: rgba(248, 250, 252, 0.72);
+    background: var(--color-surface-subtle);
 }
 
 .disclosure-body {
@@ -675,7 +675,7 @@
     padding: 1rem 1.1rem;
     border-radius: var(--radius-lg);
     border: 1px solid var(--color-border-light);
-    background: rgba(241, 245, 249, 0.72);
+    background: var(--color-surface-muted);
 }
 
 .callout-card--info {

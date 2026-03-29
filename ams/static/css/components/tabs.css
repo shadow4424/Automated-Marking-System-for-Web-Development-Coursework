@@ -12,10 +12,10 @@
     padding: 0.8rem 0.9rem;
     border-radius: var(--radius-lg);
     border: 1px solid rgba(148, 163, 184, 0.2);
-    background: rgba(255, 255, 255, 0.92);
+    background: var(--color-surface-overlay);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+    box-shadow: var(--shadow-md);
 }
 
 .detail-tab-scroll {
@@ -73,7 +73,7 @@
 
 .detail-tab-button:hover {
     color: var(--color-text);
-    background: rgba(248, 250, 252, 0.92);
+    background: var(--color-surface-subtle);
     border-color: rgba(148, 163, 184, 0.2);
 }
 
@@ -85,7 +85,7 @@
 .detail-tab-button.is-active,
 .detail-tab-button[aria-selected="true"] {
     color: var(--color-primary);
-    background: rgba(37, 99, 235, 0.12);
+    background: var(--color-surface-highlight-strong);
     border-color: rgba(37, 99, 235, 0.18);
     box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.05);
 }
@@ -97,7 +97,7 @@
     min-width: 1.35rem;
     padding: 0.16rem 0.35rem;
     border-radius: 999px;
-    background: rgba(148, 163, 184, 0.16);
+    background: var(--color-surface-muted);
     color: var(--color-text-muted);
     font-size: 0.68rem;
     font-weight: 700;
@@ -105,7 +105,7 @@
 
 .detail-tab-button.is-active .detail-tab-count,
 .detail-tab-button[aria-selected="true"] .detail-tab-count {
-    background: rgba(37, 99, 235, 0.16);
+    background: var(--color-surface-highlight);
     color: var(--color-primary);
 }
 

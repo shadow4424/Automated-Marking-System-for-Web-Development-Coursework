@@ -7,16 +7,15 @@
     border-radius: var(--radius-lg);
     padding: var(--space-xl);
     box-shadow: var(--shadow-sm);
-    transition: all var(--transition-base);
+    transition: background var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
 }
 
 .card:hover {
     background: var(--color-surface);
     border-color: var(--color-border);
-    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+    box-shadow: var(--shadow-card-hover);
     transform: none;
 }
-
 .card-glass {
     background: var(--gradient-glass);
     backdrop-filter: blur(10px);

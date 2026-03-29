@@ -25,10 +25,10 @@
     font-family: var(--font-sans);
     font-size: var(--text-base);
     color: var(--color-text);
-    background: #ffffff;
+    background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    transition: all var(--transition-fast);
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .form-input:focus,
@@ -47,7 +47,7 @@
 
 .form-select {
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+    background-image: var(--form-select-caret);
     background-repeat: no-repeat;
     background-position: right var(--space-md) center;
     padding-right: var(--space-2xl);
@@ -78,10 +78,10 @@
 .form-file-input {
     width: 100%;
     padding: var(--space-xl);
-    background: #f8fafc;
+    background: var(--color-surface-subtle);
     border: 2px dashed var(--color-border);
     border-radius: var(--radius-lg);
-    transition: all var(--transition-fast);
+    transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
     cursor: pointer;
 }
 
