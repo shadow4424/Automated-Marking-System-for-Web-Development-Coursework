@@ -22,16 +22,6 @@ FEEDBACK_SYSTEM_PROMPT = (
     "No markdown, no code fences, no explanations. Use only the keys shown."
 )
 
-# Legacy feedback system prompt (kept for backward compatibility)
-SYSTEM_PROMPT = (
-    "You are a backend service in an automated marking system. Follow formatting rules exactly. "
-    "If the user requests JSON, output ONLY a raw JSON object and nothing else: no markdown, no code fences, "
-    "no explanations, no extra text, no line breaks. Use only the keys requested, in the exact order. "
-    "Do not invent or rename keys. You may propose a score_adjustment only when explicitly requested, based "
-    "strictly on the rules in the user prompt; you do not decide the final mark. If you cannot comply, output "
-    '{"error":"cannot_comply"}.'
-)
-
 # ============================================================================
 # Partial Credit / Hybrid Scoring
 # ============================================================================
@@ -258,7 +248,6 @@ Respond with a JSON object containing exactly three keys:
 
 __all__ = [
     "FEEDBACK_SYSTEM_PROMPT",
-    "SYSTEM_PROMPT",
     "PARTIAL_CREDIT_SYSTEM_PROMPT",
     "PARTIAL_CREDIT_USER_PROMPT_TEMPLATE",
     "BATCH_FEEDBACK_SYSTEM_PROMPT",

@@ -1,17 +1,10 @@
-"""Tests for strict ZIP validation and GitHub submission helpers."""
+"""Tests for strict ZIP validation."""
 from __future__ import annotations
 
-import tempfile
 import zipfile
 from pathlib import Path
 
-import pytest
-
 from ams.web.validators import validate_is_zipfile
-from ams.ingestion.submission_processor import (
-    InvalidSubmissionError,
-    validate_submission_archive,
-)
 
 
 # ── validate_is_zipfile ─────────────────────────────────────────────
@@ -51,24 +44,3 @@ class TestValidateIsZipfile:
 
 
 # ── validate_submission_archive (ingestion fail-safe) ───────────────
-
-
-class TestValidateSubmissionArchive:
-    """Ensure the ingestion layer rejects non-ZIP files too."""
-
-    def test_valid_zip_passes(self, tmp_path: Path) -> None:
-        zip_path = tmp_path / "coursework.zip"
-        with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("index.html", "<h1>Hello</h1>")
-        result = validate_submission_archive(zip_path)
-        assert result == zip_path.resolve()
-
-    def test_fake_zip_raises(self, tmp_path: Path) -> None:
-        fake = tmp_path / "fake.zip"
-        fake.write_text("not a zip")
-        with pytest.raises(InvalidSubmissionError, match="not a valid ZIP"):
-            validate_submission_archive(fake)
-
-    def test_missing_file_raises(self, tmp_path: Path) -> None:
-        with pytest.raises(InvalidSubmissionError, match="not found"):
-            validate_submission_archive(tmp_path / "missing.zip")

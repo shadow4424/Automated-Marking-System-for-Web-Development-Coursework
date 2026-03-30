@@ -192,10 +192,6 @@ def _normalize_teaching_insights(insights: Sequence[object] | None) -> list[dict
     return normalized
 
 
-def _numeric_tokens(value: object) -> set[str]:
-    return set(NUMERIC_TOKEN_RE.findall(str(value or "")))
-
-
 def _validation_failure(
     category: str,
     message: str,

@@ -27,21 +27,4 @@
   {%- endif %}">{{ role|capitalize }}</span>
 {% endmacro %}
 
-{% macro score_badge(score, max_score=None) %}
-<span class="score-badge">
-  {{ score }}{% if max_score is not none %} / {{ max_score }}{% endif %}
-</span>
-{% endmacro %}
 
-{% macro export_dropdown(items) %}
-<div class="export-dropdown" data-export-dropdown>
-  <button class="btn btn-secondary btn-sm" data-export-toggle>
-    Export <span class="chevron">▾</span>
-  </button>
-  <ul class="export-menu" data-export-menu>
-    {% for item in items %}
-    <li><a href="{{ item.href }}" class="export-item">{{ item.label }}</a></li>
-    {% endfor %}
-  </ul>
-</div>
-{% endmacro %}

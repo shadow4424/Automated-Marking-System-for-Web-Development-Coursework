@@ -16,7 +16,7 @@ from typing import Any
 
 from ams.core.llm_factory import get_llm_provider
 from ams.llm.providers import LLMResponse
-from ams.llm.prompts import SYSTEM_PROMPT
+from ams.llm.prompts import FEEDBACK_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ def scrub_pii(text: str) -> str:
 from ams.llm.utils import clean_json_response as _clean_json_response  # noqa: F401
 
 
-def ask_llama(prompt: str, system_prompt: str = SYSTEM_PROMPT) -> str:
+def ask_llama(prompt: str, system_prompt: str = FEEDBACK_SYSTEM_PROMPT) -> str:
     """Send a prompt to the configured LLM provider and return the response.
 
     This function now uses the LLMProvider abstraction, respecting config.py.

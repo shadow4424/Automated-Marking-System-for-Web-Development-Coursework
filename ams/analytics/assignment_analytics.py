@@ -156,11 +156,6 @@ def generate_student_assignment_analytics(
     return payload
 
 
-def _assignment_search_root(runs_root: Path, assignment_id: str) -> Path:
-    candidate = runs_root / MetadataValidator.sanitize_identifier(assignment_id)
-    return candidate if candidate.exists() else runs_root
-
-
 def _collect_assignment_records(runs_root: Path, assignment_id: str) -> tuple[List[dict], dict]:
     sync_attempts_from_storage(runs_root)
     attempts = filter_attempts_for_root(
@@ -261,54 +256,6 @@ def _record_from_attempt(attempt: Mapping[str, object]) -> dict | None:
     return record
 
 
-def _count_run_submissions(run_dir: Path, run_info: Mapping[str, object], assignment_id: str) -> tuple[int, List[str]]:
-    mode = str(run_info.get("mode") or "")
-    if mode == "mark":
-        student_id = str(run_info.get("student_id") or "").strip()
-        return 1, [student_id] if student_id else []
-    if mode != "batch":
-        return 0, []
-
-    summary_path = run_dir / "batch_summary.json"
-    summary_data = _load_json(summary_path) if summary_path.exists() else None
-    if summary_data is not None:
-        matching_entries = [
-            entry
-            for entry in summary_data.get("records", []) or []
-            if str(entry.get("assignment_id") or run_info.get("assignment_id") or "") == assignment_id
-            and _batch_entry_is_active(entry)
-        ]
-        return len(matching_entries), [
-            str(entry.get("student_id") or "").strip()
-            for entry in matching_entries
-            if str(entry.get("student_id") or "").strip()
-        ]
-
-    pending = run_info.get("pending_submissions", []) or []
-    if isinstance(pending, list):
-        matching_entries = [
-            entry
-            for entry in pending
-            if str(entry.get("assignment_id") or run_info.get("assignment_id") or "") == assignment_id
-        ]
-        return len(matching_entries), [
-            str(entry.get("student_id") or "").strip()
-            for entry in matching_entries
-            if str(entry.get("student_id") or "").strip()
-        ]
-    return 0, []
-
-
-def _records_from_run(run_dir: Path, run_info: Mapping[str, object], assignment_id: str) -> List[dict]:
-    mode = str(run_info.get("mode") or "")
-    if mode == "mark":
-        record = _record_from_mark_run(run_dir, run_info, assignment_id)
-        return [record] if record is not None else []
-    if mode == "batch":
-        return _records_from_submission_batch(run_dir, run_info, assignment_id)
-    return []
-
-
 def _load_json(path: Path) -> dict | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -329,129 +276,6 @@ def _batch_entry_is_active(entry: Mapping[str, object]) -> bool:
     if entry.get("invalid") is True:
         return False
     return not _normalize_submission_status(entry.get("status")).startswith("invalid")
-
-
-def _record_from_mark_run(run_dir: Path, run_info: Mapping[str, object], assignment_id: str) -> dict | None:
-    report_path = run_dir / "report.json"
-    report = _load_json(report_path)
-    student_id = str(run_info.get("student_id") or "").strip()
-
-    if report is not None:
-        submission_meta = report.get("metadata", {}).get("submission_metadata", {}) or {}
-        record_assignment_id = str(submission_meta.get("assignment_id") or run_info.get("assignment_id") or "")
-        if record_assignment_id != assignment_id:
-            return None
-        student_id = str(submission_meta.get("student_id") or student_id).strip()
-        if not student_id:
-            return None
-        return _report_to_record(
-            report=report,
-            student_id=student_id,
-            assignment_id=assignment_id,
-            report_path=report_path,
-            run_id=str(run_info.get("id") or run_dir.name),
-            created_at=str(run_info.get("created_at") or ""),
-            submission_id=str(run_info.get("id") or run_dir.name),
-            status=_normalize_submission_status(run_info.get("status") or "ok"),
-            source_mode="mark",
-        )
-
-    if str(run_info.get("assignment_id") or "") != assignment_id or not student_id:
-        return None
-    return _empty_record(
-        student_id=student_id,
-        assignment_id=assignment_id,
-        run_id=str(run_info.get("id") or run_dir.name),
-        created_at=str(run_info.get("created_at") or ""),
-        submission_id=str(run_info.get("id") or run_dir.name),
-        status=_normalize_submission_status(run_info.get("status") or "failed"),
-        report_path="",
-        original_filename=str(run_info.get("original_filename") or ""),
-        error=str(run_info.get("error") or ""),
-        source_mode="mark",
-    )
-
-
-def _records_from_submission_batch(run_dir: Path, run_info: Mapping[str, object], assignment_id: str) -> List[dict]:
-    summary_path = run_dir / "batch_summary.json"
-    summary_data = _load_json(summary_path)
-    if summary_data is None:
-        pending = run_info.get("pending_submissions", []) or []
-        if not isinstance(pending, list):
-            return []
-        return [
-            _empty_record(
-                student_id=str(entry.get("student_id") or "").strip(),
-                assignment_id=assignment_id,
-                run_id=str(run_info.get("id") or run_dir.name),
-                created_at=str(run_info.get("created_at") or ""),
-                submission_id=str(entry.get("submission_id") or entry.get("student_id") or ""),
-                status=_normalize_submission_status(entry.get("status") or "pending"),
-                report_path="",
-                original_filename=str(entry.get("original_filename") or ""),
-                error=str(entry.get("error") or ""),
-                source_mode="batch",
-            )
-            for entry in pending
-            if str(entry.get("assignment_id") or run_info.get("assignment_id") or "") == assignment_id
-            and str(entry.get("student_id") or "").strip()
-        ]
-
-    records: List[dict] = []
-    created_at = str(run_info.get("created_at") or "")
-    run_id = str(run_info.get("id") or run_dir.name)
-
-    for entry in summary_data.get("records", []) or []:
-        entry_assignment_id = str(entry.get("assignment_id") or run_info.get("assignment_id") or "")
-        if entry_assignment_id != assignment_id:
-            continue
-        if not _batch_entry_is_active(entry):
-            continue
-        student_id = str(entry.get("student_id") or "").strip()
-        if not student_id:
-            continue
-
-        report_path = _resolve_batch_report_path(run_dir, entry)
-        report = _load_json(report_path) if report_path is not None else None
-        if report is not None:
-            submission_meta = report.get("metadata", {}).get("submission_metadata", {}) or {}
-            student_id = str(submission_meta.get("student_id") or student_id).strip()
-            if not student_id:
-                continue
-            record = _report_to_record(
-                report=report,
-                student_id=student_id,
-                assignment_id=assignment_id,
-                report_path=report_path,
-                run_id=run_id,
-                created_at=created_at,
-                submission_id=str(entry.get("id") or ""),
-                status=_normalize_submission_status(entry.get("status") or "ok"),
-                source_mode="batch",
-            )
-            if entry.get("error"):
-                record["error"] = str(entry.get("error"))
-            records.append(record)
-            continue
-
-        records.append(
-            _empty_record(
-                student_id=student_id,
-                assignment_id=assignment_id,
-                run_id=run_id,
-                created_at=created_at,
-                submission_id=str(entry.get("id") or student_id),
-                status=_normalize_submission_status(entry.get("status") or "failed"),
-                report_path=str(report_path) if report_path is not None else "",
-                original_filename=str(entry.get("original_filename") or ""),
-                error=str(entry.get("error") or entry.get("validation_error") or ""),
-                source_mode="batch",
-                overall=entry.get("overall"),
-                components=entry.get("components", {}),
-            )
-        )
-
-    return records
 
 
 def _resolve_batch_report_path(run_dir: Path, entry: Mapping[str, object]) -> Path | None:
