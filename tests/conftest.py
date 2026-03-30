@@ -14,20 +14,13 @@ from ams.core.config import ScoringMode
 from ams.core.pipeline import AssessmentPipeline
 
 
-# ---------------------------------------------------------------------------
 # Database isolation — use a per-test SQLite file so tests never share state
-# in the submission_attempts (or any other) table.
-# ---------------------------------------------------------------------------
+# In the submission_attempts (or any other) table.
+
 
 @pytest.fixture(autouse=True)
 def _isolate_database(tmp_path, monkeypatch):
-    """Redirect ams.core.db to a fresh per-test SQLite database.
-
-    This prevents cross-test contamination via the shared ``ams_users.db``
-    file, which stores users, assignments, and submission attempts.
-    Each test gets its own in-process database that is discarded after
-    the test completes.
-    """
+    """Redirect ams.core.db to a fresh per-test SQLite database."""
     import ams.core.db as _db_module
 
     test_db = tmp_path / "test_ams.db"
@@ -38,19 +31,14 @@ def _isolate_database(tmp_path, monkeypatch):
     yield
 
 
-# ---------------------------------------------------------------------------
 # Global sandbox fixture — force subprocess mode for all tests so that the
-# test suite does not require a running Docker daemon.  Individual sandbox
-# tests that need to test Docker behaviour mock the prerequisites instead.
-# ---------------------------------------------------------------------------
+# Test suite does not require a running Docker daemon. Individual sandbox
+# Tests that need to test Docker behaviour mock the prerequisites instead.
+
 
 @pytest.fixture(autouse=True)
 def _force_subprocess_sandbox():
-    """Ensure all tests run in subprocess sandbox mode by default.
-
-    This runs before *every* test so that sandbox config tests which
-    manipulate env vars cannot leak DOCKER mode into subsequent tests.
-    """
+    """Ensure all tests run in subprocess sandbox mode by default."""
     prev = os.environ.get("AMS_SANDBOX_MODE")
     os.environ["AMS_SANDBOX_MODE"] = "subprocess"
 

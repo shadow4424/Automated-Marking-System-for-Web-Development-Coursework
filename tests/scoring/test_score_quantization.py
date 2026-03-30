@@ -37,7 +37,7 @@ def test_overall_score_is_continuous(tmp_path: Path) -> None:
 
 def test_overall_full_marks(tmp_path: Path) -> None:
     # Browser capture is unavailable in the test environment (no live browser),
-    # so the achievable score is lower than 0.5 — verify it's meaningfully positive.
+    # So the achievable score is lower than 0.5 — verify it's meaningfully positive.
     score = _run(
         tmp_path,
         {

@@ -9,9 +9,8 @@ from ams.core.db import create_user, get_user, init_db
 from ams.webui import create_app
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
+
 
 def _use_temp_db(monkeypatch, tmp_path: Path) -> None:
     db_path = tmp_path / "ams_users.db"
@@ -40,9 +39,8 @@ def _make_client(
     return client
 
 
-# ---------------------------------------------------------------------------
 # GET /account/settings
-# ---------------------------------------------------------------------------
+
 
 def test_settings_page_loads(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
@@ -70,7 +68,7 @@ def test_readonly_fields_in_template(tmp_path, monkeypatch):
     body = response.get_data(as_text=True)
     # The identity panel uses info-item blocks (not editable inputs)
     assert "info-item" in body
-    # userID, firstName, lastName appear on the page
+    # UserID, firstName, lastName appear on the page
     assert "testuser" in body
     assert "Test" in body
     assert "User" in body
@@ -80,9 +78,8 @@ def test_readonly_fields_in_template(tmp_path, monkeypatch):
     assert 'name="lastName"' not in body
 
 
-# ---------------------------------------------------------------------------
 # POST /account/settings/email
-# ---------------------------------------------------------------------------
+
 
 def test_update_email_success(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
@@ -176,9 +173,8 @@ def test_settings_page_unauthenticated_post_email(tmp_path, monkeypatch):
     assert "login" in response.headers["Location"]
 
 
-# ---------------------------------------------------------------------------
 # POST /account/settings/password
-# ---------------------------------------------------------------------------
+
 
 def test_update_password_success(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
@@ -270,9 +266,8 @@ def test_settings_page_unauthenticated_post_password(tmp_path, monkeypatch):
     assert "login" in response.headers["Location"]
 
 
-# ---------------------------------------------------------------------------
 # Protected fields — backend enforcement
-# ---------------------------------------------------------------------------
+
 
 def test_protected_fields_unchanged_after_email_update(tmp_path, monkeypatch):
     client = _make_client(tmp_path, monkeypatch)
@@ -328,7 +323,7 @@ def test_admin_can_use_account_settings(tmp_path, monkeypatch):
     """Admin users should also be able to update their own email via account settings."""
     client = _make_client(tmp_path, monkeypatch, user_id="admin123", role="admin",
                           email="admin@ams.local", setup_db=False)
-    # setup_db=False because _make_client already calls _use_temp_db via the DB monkeypatch
+    # Setup_db=False because _make_client already calls _use_temp_db via the DB monkeypatch
     # We need the temp db here
     _use_temp_db(monkeypatch, tmp_path)
     create_user("admin123", "System", "Admin", "admin@ams.local", "Pass1234!", "admin")

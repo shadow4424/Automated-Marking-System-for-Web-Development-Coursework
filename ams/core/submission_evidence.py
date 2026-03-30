@@ -48,7 +48,7 @@ class _HTMLDiscovery:
 
 class _HTMLDiscoveryParser(HTMLParser):
     def __init__(self) -> None:
-        """Return the ."""
+        """Return the."""
         super().__init__()
         self.css_links: List[str] = []
         self.js_links: List[str] = []
@@ -200,7 +200,7 @@ def _apply_manifest_flags(
 
 
 def _materialize_scoring_files(root: Path, relevant_files: Mapping[str, Sequence[str]]) -> Dict[str, List[Path]]:
-    """Return the scoring files."""
+    """Return scoring files."""
     result: Dict[str, List[Path]] = {}
     for component, files in relevant_files.items():
         materialized: List[Path] = []
@@ -391,7 +391,7 @@ def _map_roles(
     reachable: set[str],
     candidate_execution_map: Mapping[str, Sequence[str]],
 ) -> RoleMappedSubmission:
-    """Return the roles."""
+    """Return roles."""
     relation_lookup: Dict[str, List[ArtefactRelation]] = defaultdict(list)
     for relation in relations:
         relation_lookup[relation.source].append(relation)
@@ -563,7 +563,7 @@ def _targets_for_sources(
     relation_lookup: Mapping[str, Sequence[ArtefactRelation]],
     relation_name: str,
 ) -> List[str]:
-    """Return the for sources."""
+    """Return for sources."""
     targets: List[str] = []
     for source in sources:
         for relation in relation_lookup.get(source, []):
@@ -578,7 +578,7 @@ def _expand_connected_targets(
     relation_lookup: Mapping[str, Sequence[ArtefactRelation]],
     relation_names: set[str],
 ) -> List[str]:
-    """Return the connected targets."""
+    """Return connected targets."""
     queue = deque([source])
     visited: set[str] = set()
     discovered: List[str] = []
@@ -645,18 +645,18 @@ def _select_relevant_group(
 
 
 def _is_backup_file(path: Path) -> bool:
-    """Return the backup file."""
+    """Return backup file."""
     return bool(_BACKUP_NAME_RE.search(path.stem) or _BACKUP_NAME_RE.search(path.name))
 
 
 def _looks_like_api_reference(value: str) -> bool:
-    """Return the like api reference."""
+    """Return like api reference."""
     lowered = (value or "").lower()
     return lowered.startswith("/api") or "/api/" in lowered or lowered.startswith("http")
 
 
 def _looks_like_php_api_endpoint(content: str, filename: str) -> bool:
-    """Return the like php api endpoint."""
+    """Return like php api endpoint."""
     lowered = content.lower()
     return (
         "json_encode(" in lowered

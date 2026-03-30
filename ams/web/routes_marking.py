@@ -46,11 +46,13 @@ MAX_UPLOAD_MB = 25
 PROFILE_CHOICES = tuple(get_visible_profile_specs().keys())
 
 
+# Delegate mark run index writing to the shared route helper.
 def _write_run_index_mark(*args, **kwargs):
     from ams.web.routes_runs import _write_run_index_mark as writer
     return writer(*args, **kwargs)
 
 
+# Build the submission identity key used for replacement checks.
 def _submission_identity(student_id: str | None, assignment_id: str | None) -> tuple[str, str] | None:
     student_val = (student_id or "").strip()
     assignment_val = (assignment_id or "").strip()
@@ -58,6 +60,7 @@ def _submission_identity(student_id: str | None, assignment_id: str | None) -> t
         return None
     return assignment_val, student_val
 
+# Keep legacy replacement calls as a no-op.
 def _replace_existing_submissions(
     runs_root: Path,
     submissions: list[tuple[str, str]],
@@ -69,7 +72,7 @@ def _replace_existing_submissions(
 
 
 def _submission_detail_sections(report: Mapping[str, object] | None) -> dict[str, Any]:
-    """Normalize the report payload into the sections used by the detail view."""
+    """Normalise the report payload into the sections used by the detail view."""
     report_data = dict(report or {})
     score_evidence = dict(report_data.get("score_evidence", {}) or {})
     return {
@@ -174,6 +177,7 @@ def _submission_detail_limitations(
     """Build the limitation banners shown above the submission detail evidence."""
     limitations: list[dict[str, Any]] = []
 
+    # Push the limitation into the review summary shown to the teacher.
     def push_limitation(title: str, detail: str = "", *, tone: str = "warning", secondary_id: str = "") -> None:
         key = (title.strip().lower(), secondary_id.strip().lower())
         if not title or any(item.get("_key") == key for item in limitations):
@@ -207,6 +211,7 @@ def _submission_detail_limitations(
     return limitations[:6]
 
 
+# Build submission detail view.
 def _build_submission_detail_view(
     run: Mapping[str, object],
     report: Mapping[str, object] | None,
@@ -574,13 +579,14 @@ def _build_submission_detail_view(
         },
     }
 
+# Process the main marking upload flow.
 @marking_bp.route("/mark", methods=["GET", "POST"])
 @login_required
 def mark():
     if request.method == "GET":
         return _render_mark_page(selected_assignment_id=request.args.get("assignment_id", "").strip())
 
-    # ── Sandbox enforcement ──────────────────────────────────────
+    # Stop early if sandboxing is required but Docker is unavailable.
     selected_assignment_id = request.form.get("assignment_id", "").strip()
     user_role, effective_role, user_id, assignment_options, is_preview = _mark_assignment_context(include_released=True)
     assignment_map = {
@@ -611,7 +617,7 @@ def mark():
     assignment_id = request.form.get("assignment_id", "").strip()
     scoring_mode_str = request.form.get("scoring_mode", "static_plus_llm").strip()
 
-    # ── Determine submission source (ZIP upload vs GitHub) ──
+    # Decide whether this submission comes from GitHub or a ZIP upload.
     using_github = bool(github_repo)
     tmp_zip_path: Path | None = None
     run_dir: Path | None = None
@@ -619,7 +625,7 @@ def mark():
     attempt_number = 0
 
     if using_github:
-        # ------ GitHub submission path ------
+        # GitHub submission path.
         github_token = session.get("github_token")
         if not github_token:
             flash("Please link your GitHub account first.", "error")
@@ -634,7 +640,7 @@ def mark():
         original_filename = f"{github_repo.replace('/', '_')}{branch_suffix}.zip"
 
     else:
-        # ------ ZIP upload path ------
+        # ZIP upload path.
         if not file or not file.filename:
             flash("Please upload a .zip file or select a GitHub repository.", "error")
             return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
@@ -645,8 +651,8 @@ def mark():
 
         original_filename = MetadataValidator.sanitize_filename(file.filename)
 
-    # ── Strict ZIP content validation (magic-byte check) ─────
-    # Validate and convert scoring mode
+    # Validate the submitted scoring mode before running the pipeline.
+
     try:
         scoring_mode = ScoringMode(scoring_mode_str)
     except ValueError:
@@ -658,7 +664,7 @@ def mark():
         flash(f"Invalid Assignment ID: {assignment_error}", "error")
         return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
 
-    # Sanitize identifiers
+    # Sanitize identifiers before they are stored or used in paths.
     assignment_id = MetadataValidator.sanitize_identifier(assignment_id)
     selected_assignment_id = assignment_id
     assignment = assignment_map.get(assignment_id)
@@ -848,7 +854,7 @@ def mark():
         shutil.copy2(tmp_zip_path, upload_zip)
         update_attempt(attempt_id, ingestion_status="stored")
 
-        # Extract for processing
+        # Extract the ZIP into the run workspace for processing.
         extracted = run_dir / "uploaded_extract"
         extracted.mkdir(parents=True, exist_ok=True)
         try:
@@ -874,15 +880,15 @@ def mark():
             flash(f"Failed to extract ZIP archive: {exc}", "error")
             return _render_mark_page(status_code=400, selected_assignment_id=selected_assignment_id)
 
-        # ── Find true root of submission (bypassing macOS folders or zip wrappers)
+        # Find the real submission root after unwrapping archive folders.
         submission_root = find_submission_root(extracted)
         update_attempt(attempt_id, ingestion_status="completed")
 
-        # ── Zero-content guard ───────────────────────────────────────
-        # Reject the submission instantly if there are zero relevant web files
+        # Reject submissions that do not contain any supported coursework files.
+
         SUPPORTED_EXTENSIONS = {".html", ".css", ".js", ".php", ".sql"}
         has_web_files = any(
-            f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS 
+            f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
             for f in submission_root.rglob("*")
         )
 
@@ -910,7 +916,7 @@ def mark():
 
         pipeline = AssessmentPipeline(scoring_mode=scoring_mode)
 
-        # Pass metadata to pipeline via context
+        # Log the extracted submission paths before background processing starts.
         current_app.logger.debug(
             "mark run extract complete",
             extra={
@@ -924,9 +930,9 @@ def mark():
             },
         )
 
-        # ── Background execution ─────────────────────────────────
-        # Heavy pipeline work is submitted to the thread pool so the
-        # HTTP request returns immediately with a job ID.
+        # Run the heavy assessment work in the background and return a job id.
+
+
         meta_dict = metadata.to_dict()
         meta_dict.update(
             {
@@ -1030,13 +1036,14 @@ def mark():
         job_id = job_manager.submit_job("single_mark", _run_mark_job)
         return jsonify({"job_id": job_id, "status": "accepted", "run_id": run_id}), 202
     finally:
-        # Clean up temporary file
+        # Remove the temporary ZIP file after the request finishes.
         try:
             if tmp_zip_path is not None:
                 tmp_zip_path.unlink()
         except Exception:
             pass
 
+# Build the assignment list for the current user and view mode.
 def _mark_assignment_context(include_released: bool = False) -> tuple[str, str, str, list[dict], bool]:
     user_role = session.get("user_role", "")
     view_as_role = session.get("view_as_role")
@@ -1070,6 +1077,7 @@ def _mark_assignment_context(include_released: bool = False) -> tuple[str, str, 
         ]
     return user_role, effective_role, user_id, assignments, is_preview
 
+# Render the marking page with the correct assignment options.
 def _render_mark_page(status_code: int = 200, selected_assignment_id: str = ""):
     github_connected = bool(session.get("github_token"))
     github_user = session.get("github_user", "")
@@ -1094,6 +1102,7 @@ def _render_mark_page(status_code: int = 200, selected_assignment_id: str = ""):
         status_code,
     )
 
+# Delete a path only when it stays inside the run directory.
 def _safe_delete_within_run(run_dir: Path, candidate: Path | str | None) -> None:
     if not candidate:
         return
@@ -1114,6 +1123,7 @@ def _safe_delete_within_run(run_dir: Path, candidate: Path | str | None) -> None
         except FileNotFoundError:
             pass
 
+# Parse a rerun timestamp and fall back to the current time.
 def _rerun_timestamp(value: object) -> datetime:
     text = str(value or "").strip()
     if text:
@@ -1123,6 +1133,7 @@ def _rerun_timestamp(value: object) -> datetime:
             pass
     return datetime.now(timezone.utc)
 
+# Build clean submission metadata for a rerun.
 def _build_rerun_metadata(
     *,
     student_id: object,
@@ -1146,6 +1157,7 @@ def _build_rerun_metadata(
     )
     return metadata.to_dict()
 
+# Build the assessment pipeline for a rerun.
 def _build_pipeline(run_info: Mapping[str, object]) -> AssessmentPipeline:
     scoring_mode_str = str(run_info.get("scoring_mode") or "static_plus_llm")
     try:
@@ -1154,18 +1166,21 @@ def _build_pipeline(run_info: Mapping[str, object]) -> AssessmentPipeline:
         scoring_mode = ScoringMode("static_plus_llm")
     return AssessmentPipeline(scoring_mode=scoring_mode)
 
+# Remove old artefacts before a rerun starts.
 def _clear_rerun_outputs(workspace_path: Path) -> None:
     for filename in ("report.json", "report.html", "summary.txt"):
         _safe_delete_within_run(workspace_path, workspace_path / filename)
     for dirname in ("artifacts", "evaluation", "reports"):
         _safe_delete_within_run(workspace_path, workspace_path / dirname)
 
+# Copy a stored source tree into a fresh rerun workspace.
 def _prepare_source_tree(source_root: Path, staging_root: Path) -> Path:
     if staging_root.exists():
         shutil.rmtree(staging_root, ignore_errors=True)
     shutil.copytree(source_root, staging_root, dirs_exist_ok=True)
     return find_submission_root(staging_root)
 
+# Extract a stored ZIP into a fresh rerun workspace.
 def _prepare_zip_source(zip_path: Path, extract_root: Path) -> Path:
     if extract_root.exists():
         shutil.rmtree(extract_root, ignore_errors=True)
@@ -1174,6 +1189,7 @@ def _prepare_zip_source(zip_path: Path, extract_root: Path) -> Path:
     return find_submission_root(extract_root)
 
 
+# Resolve the runs root from a nested run directory.
 def _runs_root_for_run_dir(run_dir: Path) -> Path:
     try:
         return run_dir.parents[2]
@@ -1183,6 +1199,7 @@ def _runs_root_for_run_dir(run_dir: Path) -> Path:
         except RuntimeError:
             return run_dir.parent
 
+# Resolve mark rerun source.
 def _resolve_mark_rerun_source(run_dir: Path, run_info: Mapping[str, object]) -> Path:
     uploaded_extract = run_dir / "uploaded_extract"
     if uploaded_extract.exists():
@@ -1204,6 +1221,7 @@ def _resolve_mark_rerun_source(run_dir: Path, run_info: Mapping[str, object]) ->
 
     raise FileNotFoundError("Stored submission content is unavailable.")
 
+# Rerun marking for a single stored submission.
 def _rerun_mark_submission(run_dir: Path, run_info: Mapping[str, object]) -> dict:
     submission_source = _resolve_mark_rerun_source(run_dir, run_info)
     metadata = _build_rerun_metadata(
@@ -1263,6 +1281,7 @@ def _rerun_mark_submission(run_dir: Path, run_info: Mapping[str, object]) -> dic
         recompute_active_attempt(runs_root, assignment_id, student_id)
     return updated_run_info
 
+# Queue mark submission rerun.
 def _queue_mark_submission_rerun(
     run_dir: Path,
     run_info: Mapping[str, object],
@@ -1293,6 +1312,7 @@ def _queue_mark_submission_rerun(
     queued_run_info.pop("error", None)
     save_run_info(run_dir, queued_run_info)
 
+    # Run the rerun job and return the refresh payload.
     def _run_mark_rerun_job() -> dict:
         updated = _rerun_mark_submission(run_dir, queued_run_info)
         return {

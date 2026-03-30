@@ -6,11 +6,7 @@ from typing import Dict
 
 
 class TagCountingParser(HTMLParser):
-    """HTML parser that counts tags and tracks specific attributes for rule checking.
-
-    This parser is shared across the required-elements and static HTML
-    assessors so that HTML is parsed once and interrogated many times.
-    """
+    """HTML parser that counts tags and tracks specific attributes for rule checking."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -115,7 +111,7 @@ class TagCountingParser(HTMLParser):
         if lowered == "label":
             self.label_count += 1
 
-        # Stylesheet linkage: <link rel="stylesheet" ...>
+        # Stylesheet linkage: <link rel="stylesheet"...>
         if lowered == "link":
             rel = attrs_dict.get("rel", "") or ""
             if "stylesheet" in rel.lower():

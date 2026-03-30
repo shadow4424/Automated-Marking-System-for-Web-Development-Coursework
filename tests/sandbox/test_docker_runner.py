@@ -12,9 +12,7 @@ from ams.sandbox.config import SandboxConfig, SandboxMode
 from ams.sandbox.docker_runner import DockerCommandRunner, is_docker_available
 
 
-# ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -33,9 +31,7 @@ def docker_config() -> SandboxConfig:
     )
 
 
-# ---------------------------------------------------------------------------
 # Unit tests (Docker CLI mocked)
-# ---------------------------------------------------------------------------
 
 
 class TestDockerCommandRunnerInit:

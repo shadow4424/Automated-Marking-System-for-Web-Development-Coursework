@@ -45,12 +45,7 @@ logger = logging.getLogger(__name__)
 
 
 class AssessmentPipeline:
-    """Orchestrates assessors, scoring, and reporting.
-    
-    LLM Integration:
-    - If SCORING_MODE includes LLM, failed findings are enriched with LLM feedback
-    - Partial credit is evaluated for rules that allow it
-    """
+    """Orchestrates assessors, scoring, and reporting."""
 
     def __init__(
         self,
@@ -63,11 +58,11 @@ class AssessmentPipeline:
         self.scoring_engine = scoring_engine or ScoringEngine()
         self.scoring_mode = scoring_mode
         self.requirement_engine = RequirementEvaluationEngine()
-        
+
         # Vision Integration: Lazy-load VisionAnalyst only if enabled
         self._vision_analyst = None
         self._vision_enabled = VISION_ENABLED
-    
+
     @property
     def vision_analyst(self):
         """Lazy-load VisionAnalyst to avoid import overhead if not used."""
@@ -284,18 +279,13 @@ class AssessmentPipeline:
         findings = self._run_analysis(context, config, skip_threat_scan)
         return self._generate_report(findings, context, config)
 
-    # ------------------------------------------------------------------
+
     # Post-run cleanup
-    # ------------------------------------------------------------------
+
 
     @staticmethod
     def _cleanup_uploaded_extract(workspace_path: Path) -> None:
-        """Remove ``uploaded_extract/`` once ``submission/`` is confirmed.
-
-        ``uploaded_extract`` is the raw unzip of the student upload and is
-        fully superseded by the sanitised ``submission/`` tree.  Deleting it
-        after assessment halves per-student disk usage.
-        """
+        """Remove uploaded_extract/ once submission/ is confirmed."""
         extracted = workspace_path / "uploaded_extract"
         submission = workspace_path / "submission"
 
@@ -316,19 +306,15 @@ class AssessmentPipeline:
         except Exception as exc:
             logger.warning("Failed to remove uploaded_extract/: %s", exc)
 
-    # ------------------------------------------------------------------
+
     # Threat Scanning
-    # ------------------------------------------------------------------
+
 
     @staticmethod
     def _run_threat_scan(
         context: SubmissionContext,
     ) -> tuple[List[Finding], bool]:
-        """Run the threat scanner on submission files.
-
-        Returns ``(threat_findings, container_retain)``.
-        *container_retain* is ``True`` when HIGH-severity threats are found.
-        """
+        """Run the threat scanner on submission files."""
         from ams.sandbox.threat_scanner import ThreatScanner
         from ams.sandbox.threat_patterns import ThreatCategory
         from ams.core.finding_ids import SANDBOX
@@ -361,7 +347,7 @@ class AssessmentPipeline:
             for threat in scan_result.threats:
                 finding_id = _CATEGORY_TO_ID.get(
                     threat.category,
-                    SANDBOX.THREAT.SHELL_EXECUTION,  # fallback
+                    SANDBOX.THREAT.SHELL_EXECUTION,  # Fallback
                 )
 
                 findings.append(Finding(
@@ -479,7 +465,7 @@ class AssessmentPipeline:
         )
 
     def _should_use_llm(self) -> bool:
-        """Check if LLM should be used based on scoring mode."""
+        """Check whether LLM should be used based on scoring mode."""
         return self.scoring_mode == ScoringMode.STATIC_PLUS_LLM
 
     def _prepare_llm_enrichment_batches(
@@ -758,9 +744,9 @@ class AssessmentPipeline:
 
         return prepared["enriched"] + [item["finding"] for item in prepared["llm_candidates"]], prepared["llm_evidence"]
 
-    # -----------------------------------------------------------------
+
     # UX Review — multi-page qualitative feedback (zero scoring impact)
-    # -----------------------------------------------------------------
+
 
     def _capture_ux_screenshots(
         self,
@@ -944,34 +930,25 @@ class AssessmentPipeline:
             return [], []
         return self._evaluate_ux_screenshots(screenshots, static_findings)
 
-    # -----------------------------------------------------------------
+
     # Phase E: Static-grounding helper for UX reviews
-    # -----------------------------------------------------------------
+
 
     @staticmethod
     def _build_ux_context_note(findings: List[Finding]) -> str | None:
-        """Condense static-analysis findings into a short context note.
-
-        The note is injected into the vision model's system prompt so that
-        the LLM is *grounded* in verifiable facts before it interprets the
-        screenshot.  This prevents hallucinated praise for blank or unstyled
-        pages.
-
-        Returns ``None`` when there is nothing noteworthy to report (i.e.
-        both HTML and CSS are present and well-formed).
-        """
+        """Condense static-analysis findings into a short context note."""
         # Collect finding IDs for quick look-up
         ids = {f.id for f in findings}
 
         warnings: list[str] = []
 
-        # --- HTML ---
+        # HTML.
         if "HTML.MISSING_FILES" in ids or "HTML.REQ.MISSING_FILES" in ids:
             warnings.append(
                 "- No HTML files were found in the submission."
             )
 
-        # --- CSS ---
+        # CSS.
         if "CSS.MISSING_FILES" in ids or "CSS.REQ.MISSING_FILES" in ids:
             warnings.append(
                 "- No CSS files were found.  The page has NO external stylesheet."
@@ -982,7 +959,7 @@ class AssessmentPipeline:
                 "The page is effectively unstyled."
             )
 
-        # --- JS ---
+        # JS.
         if "JS.MISSING_FILES" in ids or "JS.REQ.MISSING_FILES" in ids:
             warnings.append(
                 "- No JavaScript files were found in the submission."
@@ -993,9 +970,9 @@ class AssessmentPipeline:
 
         return "\n".join(warnings)
 
-    # -----------------------------------------------------------------
+
     # Phase I: Per-page context builder for UX reviews
-    # -----------------------------------------------------------------
+
 
     _LINK_CSS_RE = re.compile(
         r"""<link\b[^>]*rel\s*=\s*["']stylesheet["'][^>]*>""",
@@ -1008,17 +985,7 @@ class AssessmentPipeline:
 
     @staticmethod
     def _build_per_page_context(page_name: str, html_path: Path | None) -> str:
-        """Read the HTML source for *one* page and produce a short context note.
-
-        Unlike the submission-level ``_build_ux_context_note`` this method
-        inspects the **actual HTML file** being evaluated so the context is
-        accurate per page.  For example, ``about.html`` may lack a
-        ``<link rel="stylesheet">`` while ``index.html`` includes one —
-        each page gets its own truthful context note.
-
-        Returns a short string suitable for injection into the system
-        prompt's ``{context_note}`` placeholder.
-        """
+        """Read the HTML source for *one* page and produce a short context note."""
         if html_path is None or not html_path.exists():
             return (
                 f"WARNING: The HTML source for {page_name} could not be read. "
@@ -1055,16 +1022,7 @@ class AssessmentPipeline:
         )
 
     def _get_rule_metadata(self, rule_id: str, profile_spec: ProfileSpec, finding: Finding | None = None) -> dict:
-        """Extract metadata for a rule from the profile spec.
-        
-        Args:
-            rule_id: The rule identifier to look up
-            profile_spec: The profile specification
-            finding: Optional Finding object to use for fallback metadata
-            
-        Returns:
-            Dictionary with rule metadata, or minimal metadata using finding.category as fallback
-        """
+        """Extract metadata for a rule from the profile spec."""
         # Search through all rule types
         all_rules = (
             list(profile_spec.required_html) +
@@ -1073,7 +1031,7 @@ class AssessmentPipeline:
             list(profile_spec.required_php) +
             list(profile_spec.required_sql)
         )
-        
+
         for rule in all_rules:
             if rule.id == rule_id:
                 return {
@@ -1084,7 +1042,7 @@ class AssessmentPipeline:
                     "llm_guidance": getattr(rule, "llm_guidance", ""),
                     "visual_check": getattr(rule, "visual_check", False),
                 }
-        
+
         # Fallback: construct minimal metadata from finding's category if available
         if finding:
             return {
@@ -1095,7 +1053,7 @@ class AssessmentPipeline:
                 "llm_guidance": "",
                 "visual_check": False,
             }
-        
+
         return {}
 
     def _prepare_context(
@@ -1115,35 +1073,16 @@ class AssessmentPipeline:
         context.resolved_config = resolved_config
         build_submission_evidence(context)
         return context
-    
+
     def _find_screenshot(
         self,
         workspace_path: Path,
         context: Optional[SubmissionContext] = None,
     ) -> Optional[Path]:
-        """Find the best screenshot for vision analysis.
+        """Find the best screenshot for vision analysis."""
 
-        Priority order:
-        1. Real Playwright screenshots from ``context.browser_evidence``
-           (stored under ``artifacts/browser/``).  The *newest* capture
-           is preferred so we evaluate what the browser actually rendered.
-        2. Common filenames in the workspace / submission directory
-           (``screenshot.*``, ``page.*``, …).
-        3. Any image file found via glob.
-
-        Args:
-            workspace_path: Path to the assessment workspace.
-            context: The current :class:`SubmissionContext` (optional).
-                     When provided the method inspects ``browser_evidence``
-                     for real Playwright captures.
-
-        Returns:
-            Absolute path to the screenshot, or *None* if nothing usable
-            was found.
-        """
-        # ---------------------------------------------------------
         # Pass 0 — real Playwright captures (highest priority)
-        # ---------------------------------------------------------
+
         if context is not None:
             playwright_shots: list[Path] = []
             for be in context.browser_evidence:
@@ -1157,9 +1096,9 @@ class AssessmentPipeline:
                 logger.info(f"Using Playwright screenshot for vision: {best}")
                 return best
 
-        # ---------------------------------------------------------
+
         # Pass 1 — preferred filenames in workspace / submission
-        # ---------------------------------------------------------
+
         search_dirs = [workspace_path]
         submission_dir = workspace_path / "submission"
         if submission_dir.exists():
@@ -1182,9 +1121,9 @@ class AssessmentPipeline:
                         logger.debug(f"Found screenshot: {path}")
                         return path
 
-        # ---------------------------------------------------------
+
         # Pass 2 — any image file via glob (last resort)
-        # ---------------------------------------------------------
+
         for directory in search_dirs:
             for ext in image_extensions:
                 matches = sorted(directory.glob(f"*{ext}"))
@@ -1198,11 +1137,11 @@ class AssessmentPipeline:
         """Check for configuration issues: required components with no required rules."""
         warnings: List[Finding] = []
         components = ["html", "css", "js", "php", "sql"]
-        
+
         for component in components:
             is_required = profile_spec.is_component_required(component)
             has_required_rules = profile_spec.has_required_rules(component)
-            
+
             if is_required and not has_required_rules:
                 # Component is required but has no required rules configured
                 warnings.append(
@@ -1223,7 +1162,7 @@ class AssessmentPipeline:
                         required=True,
                     )
                 )
-        
+
         return warnings
 
 
@@ -1233,7 +1172,7 @@ def _default_assessors(
     container_retain: bool = False,
     run_id: str | None = None,
 ) -> List[Assessor]:
-    """Return the default ordered assessor pipeline for a profile."""
+    """Return default ordered assessor pipeline for a profile."""
     from ams.sandbox.factory import get_command_runner, get_browser_runner
 
     cmd_runner = get_command_runner(
@@ -1261,6 +1200,5 @@ def _default_assessors(
 
 
 __all__ = ["AssessmentPipeline"]
-
 
 

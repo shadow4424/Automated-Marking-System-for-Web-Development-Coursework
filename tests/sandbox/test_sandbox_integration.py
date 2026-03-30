@@ -1,9 +1,4 @@
-"""Integration tests verifying that the sandbox wiring is correct.
-
-These tests confirm that the modified DeterministicTestEngine and
-PlaywrightAssessor correctly delegate through the factory and that
-the default (subprocess) mode still works end-to-end.
-"""
+"""Integration tests verifying that the sandbox wiring is correct."""
 from __future__ import annotations
 
 import os

@@ -91,48 +91,40 @@ def golden_submission(build_submission) -> Path:
     })
 
 def test_pipeline_determinism(golden_submission, tmp_path):
-    """
-    Verify that the pipeline produces identical results for the same input across two runs.
-    
-    Checks:
-    1. Overall score matches exactly.
-    2. Component scores match exactly.
-    3. Findings match exactly (canonicalized).
-    4. Report structure matches strict schema.
-    """
-    
+    """Verify that the pipeline produces identical results for the same input across two runs."""
+
     # Run 1
     pipeline = AssessmentPipeline(scoring_mode=ScoringMode.STATIC_ONLY)
     workspace1 = tmp_path / "run1"
     report_path1 = pipeline.run(golden_submission, workspace1, profile="frontend")
     report1 = json.loads(report_path1.read_text(encoding="utf-8"))
-    
+
     # Run 2
     workspace2 = tmp_path / "run2"
     report_path2 = pipeline.run(golden_submission, workspace2, profile="frontend")
     report2 = json.loads(report_path2.read_text(encoding="utf-8"))
-    
+
     # 1. Compare Scores
     score1 = report1["scores"].get("overall", 0)
     score2 = report2["scores"].get("overall", 0)
     assert score1 == score2, f"Scores differed: {score1} vs {score2}"
-    
+
     comp1 = report1["scores"].get("by_component", {})
     comp2 = report2["scores"].get("by_component", {})
     # Compare component scores, ignoring rationales which might have slight ordering variances (though shouldn't)
     for key in comp1:
         assert comp1[key]["score"] == comp2[key]["score"], f"Component {key} score differed"
-        
+
     # 2. Compare Findings
     findings1 = report1.get("findings", [])
     findings2 = report2.get("findings", [])
-    
+
     assert len(findings1) == len(findings2), "Different number of findings"
-    
+
     # Canonicalize and clean timestamps
     sorted_f1 = canonical_sort(clean_timestamps(findings1))
     sorted_f2 = canonical_sort(clean_timestamps(findings2))
-    
+
     import difflib
     if sorted_f1 != sorted_f2:
         diff = difflib.unified_diff(
@@ -143,7 +135,7 @@ def test_pipeline_determinism(golden_submission, tmp_path):
             lineterm=''
         )
         print("\n".join(diff))
-    
+
     assert sorted_f1 == sorted_f2, "Findings differed after canonical sort"
 
     # 3. Verify Constraints

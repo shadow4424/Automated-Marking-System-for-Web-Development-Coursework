@@ -17,7 +17,7 @@ class CSSStaticAssessor(Assessor):
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
         css_files = sorted(context.files_for("css", relevant_only=True))
-        
+
         # Determine if CSS is required for this profile
         profile_name = context.metadata.get("profile")
         is_required = False
@@ -167,30 +167,30 @@ class CSSStaticAssessor(Assessor):
             lines = content.splitlines()
             overly_specific_selectors = []
             max_specificity_score = 0
-            
+
             for line in lines:
                 # Extract selector part (before {)
                 if "{" in line:
                     selector_part = line.split("{", 1)[0].strip()
                     if selector_part and not selector_part.startswith("@"):
                         # Calculate specificity: count IDs, classes, elements
-                        # Simplified: count #, ., and element names
+                        # Simplified: count #,., and element names
                         id_count = selector_part.count("#")
                         class_count = selector_part.count(".")
-                        # Count element names (simplified - count words that aren't # or .)
+                        # Count element names (simplified - count words that aren't # or.)
                         element_count = len(re.findall(r'\b[a-z]+\b', selector_part.lower()))
-                        
+
                         # Weighted specificity: IDs=100, classes=10, elements=1
                         specificity = id_count * 100 + class_count * 10 + element_count
                         max_specificity_score = max(max_specificity_score, specificity)
-                        
-                        # Flag selectors with specificity > 120 (e.g., #id .class .class element)
+
+                        # Flag selectors with specificity > 120 (e.g., #id.class.class element)
                         if specificity > 120:
                             overly_specific_selectors.append({
                                 "selector": selector_part[:50],  # Truncate for display
                                 "specificity": specificity,
                             })
-            
+
             if overly_specific_selectors:
                 findings.append(
                     Finding(

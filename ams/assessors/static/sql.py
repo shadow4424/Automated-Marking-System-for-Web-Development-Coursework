@@ -17,7 +17,7 @@ class SQLStaticAssessor(Assessor):
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
         sql_files = sorted(context.files_for("sql", relevant_only=True))
-        
+
         # Determine if SQL is required for this profile
         profile_name = context.metadata.get("profile")
         is_required = False
@@ -90,7 +90,7 @@ class SQLStaticAssessor(Assessor):
             lowered = content.lower()
             # For SQL evidence, show the first 500 chars as a snippet
             evidence_snippet = content[:500] + ("..." if len(content) > 500 else "")
-            
+
             evidence_finding = Finding(
                 id=SID.EVIDENCE,
                 category="sql",
@@ -158,7 +158,7 @@ class SQLStaticAssessor(Assessor):
 
             # Security Checks
             # 1. Detect dynamic SQL without sanitisation (look for string concatenation in queries)
-            # This is a simplified check - look for SELECT/INSERT/UPDATE with + or . (concatenation)
+            # This is a simplified check - look for SELECT/INSERT/UPDATE with + or. (concatenation)
             dynamic_sql_patterns = [
                 r'select\s+.*[+\'"`]',  # SELECT with concatenation
                 r'insert\s+.*[+\'"`]',  # INSERT with concatenation
@@ -172,7 +172,7 @@ class SQLStaticAssessor(Assessor):
                     dynamic_sql_found = True
                     dynamic_snippet = self._extract_snippet(content, match.group(0))
                     break
-            
+
             if dynamic_sql_found:
                 findings.append(
                     Finding(
@@ -221,7 +221,7 @@ class SQLStaticAssessor(Assessor):
                     # Might be user-controlled if it has WHERE
                     selects_without_limit.append(i + 1)
                     limit_snippets.append(stmt.strip())
-            
+
             if selects_without_limit:
                 findings.append(
                     Finding(
@@ -248,7 +248,7 @@ class SQLStaticAssessor(Assessor):
             lower_needle = needle.lower()
             if not lower_needle:
                  # If needle is regex match, use it directly to find line
-                 pass 
+                 pass
 
             # Simple line-based search
             for i, line in enumerate(lines):
@@ -256,12 +256,12 @@ class SQLStaticAssessor(Assessor):
                 if needle in line or needle.lower() in line.lower() or (len(needle) > 20 and line.strip() in needle):
                     start = max(0, i - context_lines)
                     end = min(len(lines), i + context_lines + 1)
-                    
+
                     snippet = []
                     for j in range(start, end):
                         snippet.append(f"{j+1:3d} | {lines[j]}")
                     return "\n".join(snippet)
-            
+
             # Fallback for multiline match that wasn't found line-by-line
             if needle in content:
                 # Find index
@@ -269,7 +269,7 @@ class SQLStaticAssessor(Assessor):
                 # Find line number...
                 # This is sufficient for now
                 return needle
-                
+
             return ""
         except Exception:
             return ""

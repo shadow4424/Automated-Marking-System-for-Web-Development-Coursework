@@ -21,7 +21,7 @@ class FindingCategory(str, Enum):
     MISSING = "missing"  # Required artefact/files missing
     SYNTAX = "syntax"  # Syntax errors or issues
     STRUCTURE = "structure"  # Structural issues (e.g., unbalanced braces)
-    BEHAVIORAL = "behavioral"  # Behavioral/runtime issues
+    BEHAVIORAL = "behavioral"  # Behavioural/runtime issues
     CONFIG = "config"  # Configuration issues (marker setup problems)
     EVIDENCE = "evidence"  # Informational evidence collected
     VISUAL = "visual"  # Phase C: Visual/layout issues from vision analysis
@@ -255,12 +255,12 @@ class Finding:
     severity: Severity  # Severity level
     evidence: Mapping[str, object]  # Structured evidence dict
     source: str  # Source assessor name
-    
+
     # Standardised fields for auditability
     finding_category: FindingCategory = field(default=FindingCategory.OTHER)  # Type: missing/syntax/structure/etc
     profile: str | None = None  # Profile name if applicable
     required: bool | None = None  # Whether component is required for profile
-    
+
     # Phase A: Baseline Hardening additions
     score_delta: Optional[float] = None  # Deterministic score impact (e.g., -5.0)
     tags: List[str] = field(default_factory=list)  # Descriptive tags
@@ -419,7 +419,7 @@ class Report:
     marking_policy: Dict[str, object]
     generated_at: str
     report_version: str = "1.0"
-    
+
     def to_dict(self) -> Dict[str, object]:
         """Serialize the full report to a plain dictionary."""
         from ams.core.aggregation import aggregate_findings_to_checks, compute_check_stats

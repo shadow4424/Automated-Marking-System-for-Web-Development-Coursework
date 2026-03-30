@@ -1,10 +1,4 @@
-"""Forensic utilities for retained threat containers.
-
-When the threat scanner flags a submission, containers are retained
-(``--rm`` removed) so instructors can inspect the filesystem state.
-This module provides helper functions for listing, inspecting, and
-cleaning up those containers.
-"""
+"""Forensic utilities for retained threat containers."""
 from __future__ import annotations
 
 import logging
@@ -29,10 +23,7 @@ class RetainedContainer:
 
 
 def list_retained_containers() -> List[RetainedContainer]:
-    """List all retained ``ams-threat-*`` containers.
-
-    Returns an empty list if Docker is unavailable or no containers match.
-    """
+    """List all retained ams-threat-* containers. Returns an empty list if Docker is unavailable or no containers match."""
     try:
         result = subprocess.run(
             [
@@ -66,10 +57,7 @@ def list_retained_containers() -> List[RetainedContainer]:
 
 
 def inspect_container(container_name: str) -> Optional[dict]:
-    """Return filesystem diff and logs for a retained container.
-
-    Returns ``None`` if the container does not exist or Docker fails.
-    """
+    """Return filesystem diff and logs for a retained container. Returns None if the container does not exist or Docker fails."""
     if not container_name.startswith(_THREAT_CONTAINER_PREFIX):
         logger.warning("Refusing to inspect non-threat container: %s", container_name)
         return None
@@ -105,10 +93,7 @@ def inspect_container(container_name: str) -> Optional[dict]:
 
 
 def cleanup_container(container_name: str) -> bool:
-    """Remove a retained threat container after review.
-
-    Returns ``True`` if the container was successfully removed.
-    """
+    """Remove a retained threat container after review. Returns True if the container was successfully removed."""
     if not container_name.startswith(_THREAT_CONTAINER_PREFIX):
         logger.warning("Refusing to remove non-threat container: %s", container_name)
         return False

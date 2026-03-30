@@ -1,4 +1,6 @@
 """Assignment-level analytics engine."""
+
+# Imports
 from __future__ import annotations
 
 import json
@@ -16,8 +18,10 @@ from ams.core.profiles import get_relevant_components
 from ams.io.metadata import MetadataValidator
 from ams.io.web_storage import get_runs_root
 
+# logger setup
 logger = logging.getLogger(__name__)
 
+# Constants and configuration for report generation
 COMPONENT_ORDER = ["html", "css", "js", "php", "sql", "api"]
 SMALL_COHORT_THRESHOLD = 5
 SEVERITY_PRIORITY = {"FAIL": 3, "WARN": 2, "SKIPPED": 1, "PASS": 0}
@@ -75,7 +79,7 @@ FINDING_LABELS = {
     "BROWSER.CONSOLE_ERRORS_PRESENT": ("Browser console errors", "Console errors were observed during browser checks."),
 }
 
-
+# Functions for generating assignment analytics
 def generate_assignment_analytics(
     assignment_id: str,
     *,
@@ -85,6 +89,7 @@ def generate_assignment_analytics(
     if assignment is None:
         raise ValueError(f"Assignment '{assignment_id}' not found")
 
+    # Validate assignment metadata and configuration
     profile = assignment.get("profile", "frontend")
     if app is not None:
         runs_root = get_runs_root(app)
@@ -92,6 +97,7 @@ def generate_assignment_analytics(
         runs_root = Path("ams_web_runs")
         runs_root.mkdir(parents=True, exist_ok=True)
 
+    # Collect and process records for the assignment
     records, scan = _collect_assignment_records(runs_root, assignment_id)
     analytics = _build_analytics(
         records=records,
@@ -99,13 +105,15 @@ def generate_assignment_analytics(
         assigned_students=assignment.get("assigned_students", []) or [],
         scan=scan,
     )
+
+    # Enrich analytics with assignment-level context and metadata
     analytics["assignment_id"] = assignment_id
     analytics["generated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     analytics["submission_count"] = len(records)
     analytics["teaching_insight_context"]["assignment_id"] = assignment_id
     return analytics
 
-
+# Functions for generating student-specific analytics
 def generate_student_assignment_analytics(
     assignment_id: str,
     student_id: str,
@@ -116,6 +124,7 @@ def generate_student_assignment_analytics(
     if assignment is None:
         raise ValueError(f"Assignment '{assignment_id}' not found")
 
+    # Student-specific analytics should be generated based on the same underlying data and profile as the overall assignment analytics
     profile = assignment.get("profile", "frontend")
     if app is not None:
         runs_root = get_runs_root(app)
@@ -145,6 +154,7 @@ def generate_student_assignment_analytics(
     if student_record is None:
         raise ValueError("No active submission is available for this student in the current assignment scope.")
 
+    # Build student-specific analytics context and insights
     payload = _build_student_assignment_analytics(
         assignment=assignment,
         analytics=analytics,
@@ -155,7 +165,7 @@ def generate_student_assignment_analytics(
     payload["generated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     return payload
 
-
+# Internal helper functions for data collection and processing
 def _collect_assignment_records(runs_root: Path, assignment_id: str) -> tuple[List[dict], dict]:
     sync_attempts_from_storage(runs_root)
     attempts = filter_attempts_for_root(
@@ -169,6 +179,7 @@ def _collect_assignment_records(runs_root: Path, assignment_id: str) -> tuple[Li
         "superseded_student_ids": set[str](),
     }
 
+    # Process attempts to build records and track inactive/superseded submissions
     records: List[dict] = []
     for attempt in attempts:
         student_id = str(attempt.get("student_id") or "").strip()
@@ -185,13 +196,16 @@ def _collect_assignment_records(runs_root: Path, assignment_id: str) -> tuple[Li
         if record is not None:
             records.append(record)
 
+    # Sort records by student_id for consistent ordering
     records.sort(key=lambda rec: rec.get("student_id", ""))
+
+    # Calculate superseded records count based on attempts and active records
     scan["superseded_records"] = max(len(attempts) - len(records) - scan["inactive_submissions"], 0)
     scan["inactive_student_ids"] = sorted(str(student_id) for student_id in scan["inactive_student_ids"] if str(student_id).strip())
     scan["superseded_student_ids"] = sorted(str(student_id) for student_id in scan["superseded_student_ids"] if str(student_id).strip())
     return records, scan
 
-
+# Helper functions for transforming attempts into analytics records
 def _record_from_attempt(attempt: Mapping[str, object]) -> dict | None:
     report_path_text = str(attempt.get("report_path") or "").strip()
     report_path = Path(report_path_text) if report_path_text else None
@@ -201,6 +215,7 @@ def _record_from_attempt(attempt: Mapping[str, object]) -> dict | None:
     if not assignment_id or not student_id:
         return None
 
+    # Determine submission status, source mode, and identifiers for the attempt
     status = _normalize_submission_status(
         attempt.get("pipeline_status") or attempt.get("validity_status") or "ok"
     )
@@ -223,6 +238,7 @@ def _record_from_attempt(attempt: Mapping[str, object]) -> dict | None:
         "submitted_at": created_at,
     }
 
+    # If a valid report is available, transform it into a structured record; otherwise, create an empty record with error information
     if report is not None and report_path is not None:
         record = _report_to_record(
             report=report,
@@ -238,6 +254,7 @@ def _record_from_attempt(attempt: Mapping[str, object]) -> dict | None:
         record.update(attempt_context)
         return record
 
+    # If report is missing or invalid, create an empty record with error details for visibility in analytics
     record = _empty_record(
         student_id=student_id,
         assignment_id=assignment_id,
@@ -255,14 +272,14 @@ def _record_from_attempt(attempt: Mapping[str, object]) -> dict | None:
     record.update(attempt_context)
     return record
 
-
+# Helper functions for data normalisation, enrichment, and transformation
 def _load_json(path: Path) -> dict | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
 
-
+# Normalise various representations of submission status into a consistent set of categories for analytics interpretation
 def _normalize_submission_status(value: object) -> str:
     status = str(value or "").strip().lower()
     if status in {"", "ok", "success", "succeeded", "completed", "complete"}:
@@ -271,28 +288,7 @@ def _normalize_submission_status(value: object) -> str:
         return "pending"
     return status
 
-
-def _batch_entry_is_active(entry: Mapping[str, object]) -> bool:
-    if entry.get("invalid") is True:
-        return False
-    return not _normalize_submission_status(entry.get("status")).startswith("invalid")
-
-
-def _resolve_batch_report_path(run_dir: Path, entry: Mapping[str, object]) -> Path | None:
-    raw_report_path = entry.get("report_path")
-    if isinstance(raw_report_path, str) and raw_report_path:
-        candidate = Path(raw_report_path)
-        if candidate.exists():
-            return candidate
-
-    submission_id = entry.get("id")
-    if isinstance(submission_id, str) and submission_id:
-        candidate = run_dir / "runs" / submission_id / "report.json"
-        if candidate.exists():
-            return candidate
-    return None
-
-
+# Function to transform a raw report into a structured record for analytics, extracting relevant information and normalising it
 def _report_to_record(
     *,
     report: Mapping[str, object],
@@ -307,6 +303,7 @@ def _report_to_record(
 ) -> dict:
     from ams.analytics.insights import _first_non_empty
 
+    # Extract scores, findings, checks, and metadata from the report
     scores = report.get("scores", {}) or {}
     component_scores = scores.get("by_component", {}) or {}
     findings = list(report.get("findings", []) or [])
@@ -314,6 +311,7 @@ def _report_to_record(
     submission_meta = report.get("metadata", {}).get("submission_metadata", {}) or {}
     identity_meta = report.get("metadata", {}).get("student_identity", {}) or {}
 
+    # Builds structured record
     return {
         "id": student_id or submission_id or run_id,
         "student_id": student_id,
@@ -347,7 +345,7 @@ def _report_to_record(
         "error": "",
     }
 
-
+# Defines template for empty record
 def _empty_record(
     *,
     student_id: str,
@@ -390,7 +388,7 @@ def _empty_record(
         "error": error or original_filename,
     }
 
-
+# Function to check report contains necessary payload for checks and diagnostics
 def _ensure_check_payload(report: Mapping[str, object], findings: List[dict]) -> tuple[List[dict], dict, List[dict]]:
     raw_checks = report.get("checks")
     raw_stats = report.get("check_stats")
@@ -399,10 +397,11 @@ def _ensure_check_payload(report: Mapping[str, object], findings: List[dict]) ->
     if isinstance(raw_checks, list) and isinstance(raw_stats, Mapping):
         return [dict(check) for check in raw_checks], dict(raw_stats), list(raw_diagnostics or [])
 
+    # If the report does not contain pre-aggregated checks and stats, perform aggregation from findings
     checks, diagnostics = aggregate_findings_to_checks(findings)
     return [check.to_dict() for check in checks], compute_check_stats(checks), diagnostics
 
-
+# Extract required rules from findings or score evidence, normalising and structuring them for analytics interpretation
 def _extract_required_rules(
     findings: List[dict],
     score_evidence: Mapping[str, object] | None = None,
@@ -412,6 +411,7 @@ def _extract_required_rules(
     required_by_component: Dict[str, Dict[str, dict]] = defaultdict(dict)
     requirements = list((score_evidence or {}).get("requirements", []) or [])
 
+    # If explicit requirements are provided in score evidence, use them to determine required rules and their status 
     if requirements:
         for requirement in requirements:
             if not isinstance(requirement, Mapping):
@@ -420,12 +420,14 @@ def _extract_required_rules(
                 continue
             if str(requirement.get("aggregation_mode") or "") == "CAPPED_PENALTY":
                 continue
-
+            
+            # Extract and normalise for each requirement
             rule_id = str(requirement.get("requirement_id") or "").strip()
             component = str(requirement.get("component") or "").strip().lower()
             if not rule_id or not component:
                 continue
-
+            
+            # Normalise status to PASS, FAIL, WARN
             status = str(requirement.get("status") or "").upper()
             if status == "PARTIAL":
                 normalized_status = "WARN"
@@ -434,6 +436,8 @@ def _extract_required_rules(
             else:
                 normalized_status = "FAIL"
 
+            """ when multiple requirements reference the same rule_id - 
+            FAIL takes precedence over PASS, and WARN takes precedence over PASS but not over FAIL"""
             required_by_component[component][rule_id] = {
                 "rule_id": rule_id,
                 "status": normalized_status,
@@ -445,6 +449,7 @@ def _extract_required_rules(
 
         return {component: dict(rule_map) for component, rule_map in required_by_component.items()}
 
+    # If explicit requirements are not provided, fall back to inferring required rules from findings with specific ID patterns and associated evidence
     for finding in findings:
         finding_id = str(finding.get("id") or "")
         if not finding_id.endswith(".REQ.PASS") and not finding_id.endswith(".REQ.FAIL"):
@@ -471,7 +476,7 @@ def _extract_required_rules(
 
     return {component: dict(rule_map) for component, rule_map in required_by_component.items()}
 
-
+# Main function to build comprehensive analytics from collected records
 def _build_analytics(
     *,
     records: List[dict],
@@ -482,6 +487,7 @@ def _build_analytics(
     from ams.analytics.graphs import _interactive_graphs, _score_composition
     from ams.analytics.insights import _teaching_insight_context, _teaching_insights
 
+    # Use Profile to find relevant components for the assignment
     relevant_components = [component for component in COMPONENT_ORDER if component in get_relevant_components(profile)]
     enriched_records = [_enrich_record(record, profile) for record in records]
     total_records = len(enriched_records)
@@ -492,6 +498,7 @@ def _build_analytics(
         if isinstance(record.get("overall"), (int, float))
     ]
 
+    # Calculate overall statistics for the cohort's overall scores
     overall_stats: Dict[str, float] | None = None
     if overall_scores:
         overall_stats = {
@@ -502,6 +509,7 @@ def _build_analytics(
             "standard_deviation": statistics.pstdev(overall_scores) if len(overall_scores) > 1 else 0.0,
         }
 
+    # Calculate grade counts based on enriched records
     grade_counts = {
         "unknown": 0,
         "failing": 0,
@@ -514,6 +522,7 @@ def _build_analytics(
         grade = str(record.get("grade") or "unknown").lower()
         grade_counts[grade] = grade_counts.get(grade, 0) + 1
 
+    # Calculate score distribution buckets for overall scores
     buckets = {"zero": 0, "gt_0_to_0_5": 0, "gt_0_5_to_1": 0, "one": 0}
     for score in overall_scores:
         if score == 0.0:
@@ -525,6 +534,7 @@ def _build_analytics(
         elif score == 1.0:
             buckets["one"] += 1
 
+    # Calculate various analytics components for the assignment based on enriched records and relevant components
     coverage = _coverage_summary(enriched_records, assigned_students, scan)
     components = _component_readiness(enriched_records, relevant_components)
     signals, student_issues, runner_limitations = _cohort_signals(enriched_records, total_records)
@@ -542,6 +552,7 @@ def _build_analytics(
         top_failing_rules=top_failing_rules,
         reliability=reliability,
     )
+
     for index, signal in enumerate(signals):
         signal["default_visible"] = index < int(small_cohort.get("signal_limit", 6) or 6)
     for index, rule in enumerate(top_failing_rules):
@@ -561,6 +572,7 @@ def _build_analytics(
             "Full marks (100%)": buckets["one"],
         },
     }
+    # Build teaching insight context and insights based on the calculated analytics components and enriched records
     teaching_insight_context = _teaching_insight_context(
         profile=profile,
         overall=overall_summary,
@@ -576,6 +588,7 @@ def _build_analytics(
     )
     teaching_insights = _teaching_insights(context=teaching_insight_context)
 
+    # Compile all analytics components into a comprehensive analytics dictionary for the assignment
     return {
         "profile": profile,
         "small_cohort": small_cohort,
@@ -595,7 +608,7 @@ def _build_analytics(
         "teaching_insight_context": teaching_insight_context,
     }
 
-
+# Function to summarise coverage of active submissions against assigned students
 def _coverage_summary(records: List[dict], assigned_students: Sequence[str], scan: Mapping[str, int]) -> dict:
     assigned_unique = sorted({str(student).strip() for student in assigned_students if str(student).strip()})
     active_students = sorted({str(record.get("student_id") or "").strip() for record in records if record.get("student_id")})
@@ -629,7 +642,7 @@ def _coverage_summary(records: List[dict], assigned_students: Sequence[str], sca
         "coverage_percent": round((active_count / assigned_count) * 100) if assigned_count else 0,
     }
 
-
+# Function to determine if the cohort is considered "small" based on total active records 
 def _small_cohort_state(total_records: int) -> dict:
     enabled = 0 < total_records < SMALL_COHORT_THRESHOLD
     return {
@@ -645,7 +658,7 @@ def _small_cohort_state(total_records: int) -> dict:
         ),
     }
 
-
+# Function to calculate readiness statistics for relevant components based on the scores in the records
 def _component_readiness(records: List[Mapping[str, object]], relevant_components: Sequence[str]) -> List[dict]:
     result: List[dict] = []
     for component in relevant_components:
@@ -681,7 +694,7 @@ def _component_readiness(records: List[Mapping[str, object]], relevant_component
         )
     return result
 
-
+# Function to enrich individual records with additional derived information and analytics context for deeper insights
 def _enrich_record(record: dict, profile: str) -> dict:
     del profile
     record_copy = dict(record)
@@ -691,7 +704,8 @@ def _enrich_record(record: dict, profile: str) -> dict:
     runtime_flags = _runtime_flags(record_copy)
     problem_outcomes = _problem_outcomes(record_copy)
     matched_rules = [outcome for outcome in problem_outcomes if outcome["status"] in {"FAIL", "WARN", "SKIPPED"}]
-
+    
+    # Determine evaluation state, confidence level, grade, flags, reason, severity, and review recommendation
     evaluation_state = _evaluation_state(record_copy, runtime_flags)
     confidence_level, confidence_reasons = _confidence(record_copy, runtime_flags, evaluation_state)
     if explicit_confidence.get("level"):
@@ -712,6 +726,7 @@ def _enrich_record(record: dict, profile: str) -> dict:
     else:
         grade = "full marks"
 
+    # Determine flags
     flags: List[str] = []
     if record_copy.get("status") != "ok":
         flags.append("submission not analysable")
@@ -730,6 +745,7 @@ def _enrich_record(record: dict, profile: str) -> dict:
     if runtime_flags["consistency_issue"]:
         flags.append("consistency issue")
 
+    # Determine primary reason and severity for attention
     reason = _primary_reason(record_copy, runtime_flags)
     severity = _attention_severity(record_copy, runtime_flags, confidence_level, overall)
     manual_review = bool(explicit_review.get("recommended")) or severity in {"high", "medium"} or confidence_level != "high"
@@ -742,11 +758,13 @@ def _enrich_record(record: dict, profile: str) -> dict:
     if runtime_flags["browser_issue"] and "Browser failures, timeouts, or console errors were detected." not in limitation_details:
         limitation_details.append("Browser failures, timeouts, or console errors were detected.")
 
+    # Extract matched rule IDs, labels, and messages for the problem outcomes
     matched_rule_ids = [outcome["id"] for outcome in matched_rules]
     matched_rule_labels = [outcome["label"] for outcome in matched_rules]
     matched_rule_messages = [str(outcome.get("message") or "") for outcome in matched_rules if str(outcome.get("message") or "").strip()]
     reason_detail = ", ".join(matched_rule_labels[:2]) if matched_rule_labels else ", ".join(confidence_reasons[:2])
 
+    # Update the record copy with the enriched information for analytics consumption
     record_copy.update(
         {
             "runtime_flags": runtime_flags,
@@ -772,12 +790,13 @@ def _enrich_record(record: dict, profile: str) -> dict:
     )
     return record_copy
 
-
+# Function to determine runtime and browser flags based on findings and environment information in the record
 def _runtime_flags(record: Mapping[str, object]) -> dict:
     findings = list(record.get("findings", []) or [])
     finding_ids = {str(finding.get("id") or "") for finding in findings}
     environment = dict(record.get("environment", {}) or {})
 
+    # Determine if any findings indicate skipped checks, issues, or unavailability
     runtime_skipped = any(fid.startswith("BEHAVIOUR.") and "SKIPPED" in fid for fid in finding_ids)
     browser_skipped = any(fid.startswith("BROWSER.") and "SKIPPED" in fid for fid in finding_ids)
     runtime_issue = any(
@@ -803,7 +822,7 @@ def _runtime_flags(record: Mapping[str, object]) -> dict:
         "consistency_issue": consistency_issue,
     }
 
-
+# Function to extract problem outcomes from the record's findings, checks and score evidence
 def _problem_outcomes(record: Mapping[str, object]) -> List[dict]:
     from ams.analytics.insights import _coerce_float, _description_for_identifier, _first_non_empty, _label_for_identifier
 
@@ -811,6 +830,7 @@ def _problem_outcomes(record: Mapping[str, object]) -> List[dict]:
     seen: set[str] = set()
     score_evidence = dict(record.get("score_evidence", {}) or {})
 
+    # If submission status is not "ok", add a problem outcome indicating that the submission is not analysable
     if record.get("status") != "ok":
         outcomes.append(
             {
@@ -824,6 +844,7 @@ def _problem_outcomes(record: Mapping[str, object]) -> List[dict]:
         )
         seen.add("submission.not_analysable")
 
+    # Extract problem outcomes from score evidence requirements, prioritising FAIL over PARTIAL/WARN
     for requirement in score_evidence.get("requirements", []) or []:
         if not isinstance(requirement, Mapping):
             continue
@@ -853,6 +874,8 @@ def _problem_outcomes(record: Mapping[str, object]) -> List[dict]:
             }
         )
 
+    """ Extract problem outcomes from checks, prioritising FAIL over WARN - 
+        Ignoring any checks that end with .REQ.PASS, .REQ.FAIL, or .REQ.SKIPPED"""
     for check in record.get("checks", []) or []:
         status = str(check.get("status") or "").upper()
         if status not in {"FAIL", "WARN"}:
@@ -874,6 +897,7 @@ def _problem_outcomes(record: Mapping[str, object]) -> List[dict]:
             }
         )
 
+    # Extract problem outcomes from findings with specific ID patterns and severity, prioritising FAIL over WARN over SKIPPED
     for finding in record.get("findings", []) or []:
         finding_id = str(finding.get("id") or "").strip()
         severity = str(finding.get("severity") or "").upper()
@@ -898,7 +922,7 @@ def _problem_outcomes(record: Mapping[str, object]) -> List[dict]:
     outcomes.sort(key=lambda item: (-SEVERITY_PRIORITY.get(item["status"], 0), item["id"]))
     return outcomes
 
-
+# Function to determine the primary reason for attention based on the record's status, overall score, and runtime/browser flags
 def _evaluation_state(record: Mapping[str, object], runtime_flags: Mapping[str, bool]) -> str:
     if record.get("status") != "ok" or record.get("overall") is None:
         return "not_analysable"
@@ -906,7 +930,7 @@ def _evaluation_state(record: Mapping[str, object], runtime_flags: Mapping[str, 
         return "partially_evaluated"
     return "fully_evaluated"
 
-
+# Function to determine confidence level and reasons based on the evaluation state and runtime/browser flags
 def _confidence(record: Mapping[str, object], runtime_flags: Mapping[str, bool], evaluation_state: str) -> tuple[str, List[str]]:
     reasons: List[str] = []
     if evaluation_state == "not_analysable":
@@ -930,7 +954,7 @@ def _confidence(record: Mapping[str, object], runtime_flags: Mapping[str, bool],
         return "medium", reasons or ["Some checks were skipped, so reliability is reduced."]
     return "high", ["Static, runtime, and browser signals completed without known limitations."]
 
-
+# Function to determine the severity of attention needed
 def _attention_severity(record: Mapping[str, object], runtime_flags: Mapping[str, bool], confidence_level: str, overall: object) -> str:
     if record.get("status") != "ok" or overall is None:
         return "high"
@@ -942,7 +966,7 @@ def _attention_severity(record: Mapping[str, object], runtime_flags: Mapping[str
         return "medium"
     return "low"
 
-
+# Function to determine the manual review note
 def _manual_review_note(record: Mapping[str, object], runtime_flags: Mapping[str, bool], confidence_level: str, overall: object) -> str:
     if record.get("status") != "ok" or overall is None:
         return "Submission could not be fully analysed automatically."
@@ -956,10 +980,11 @@ def _manual_review_note(record: Mapping[str, object], runtime_flags: Mapping[str
         return "Reliability is reduced, so manual review is recommended."
     return "Repeated rubric issues suggest this submission should be reviewed."
 
-
+# Function to extract records that need attention
 def _needs_attention(records: List[Mapping[str, object]]) -> List[dict]:
     from ams.analytics.insights import _first_non_empty
 
+    # Only include records that have flags or are recommended for manual review
     attention: List[dict] = []
     for record in records:
         if not record.get("manual_review_recommended") and not record.get("flags"):
@@ -997,6 +1022,7 @@ def _needs_attention(records: List[Mapping[str, object]]) -> List[dict]:
             }
         )
 
+    # Sort attention records by severity (high to low), then by overall score (low to high), then by student ID
     attention.sort(
         key=lambda item: (
             {"high": 0, "medium": 1, "low": 2}.get(str(item.get("severity") or "low"), 3),
@@ -1006,7 +1032,7 @@ def _needs_attention(records: List[Mapping[str, object]]) -> List[dict]:
     )
     return attention
 
-
+# Function to determine the primary reason for attention
 def _primary_reason(record: Mapping[str, object], runtime_flags: Mapping[str, bool]) -> str:
     if record.get("status") != "ok" or record.get("overall") is None:
         return "submission not analysable"
@@ -1017,6 +1043,7 @@ def _primary_reason(record: Mapping[str, object], runtime_flags: Mapping[str, bo
     if runtime_flags["browser_issue"]:
         return "browser runtime issue"
 
+    # Prioritise findings
     findings = record.get("findings", []) or []
     priorities: Sequence[tuple[str, str]] = [
         ("missing", "missing required files"),
@@ -1035,13 +1062,14 @@ def _primary_reason(record: Mapping[str, object], runtime_flags: Mapping[str, bo
         return "low score"
     return "other"
 
-
+# Function to summarise cohort signals
 def _cohort_signals(records: List[Mapping[str, object]], total: int) -> tuple[List[dict], List[dict], List[dict]]:
     categories: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
     runner_limits: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
     labels_by_rule: dict[str, str] = {}
     messages_by_rule: dict[str, str] = {}
 
+    # Iterate through records and their problem outcomes
     for record in records:
         student_id = str(record.get("student_id") or "")
         for outcome in record.get("problem_outcomes", []) or []:
@@ -1078,6 +1106,7 @@ def _cohort_signals(records: List[Mapping[str, object]], total: int) -> tuple[Li
             else:
                 categories["other"].append((student_id, outcome_id, status))
 
+    # Helper function to summarise signals for a given category
     def _summary(category_name: str, entries: list[tuple[str, str, str]], kind: str) -> dict:
         if not entries:
             return {}
@@ -1103,6 +1132,7 @@ def _cohort_signals(records: List[Mapping[str, object]], total: int) -> tuple[Li
             "severity": worst_status,
         }
 
+    # Summarise signals for student issues and runner limitations
     student_sections = [
         _summary("missing_backend", categories["missing_backend"], "cohort_issue"),
         _summary("missing_frontend", categories["missing_frontend"], "cohort_issue"),
@@ -1126,11 +1156,12 @@ def _cohort_signals(records: List[Mapping[str, object]], total: int) -> tuple[Li
     )
     return signals, student_sections, runner_sections
 
-
+# Function to identify the top failing rules across the cohort
 def _top_failing_rules(records: List[Mapping[str, object]], total: int) -> List[dict]:
     from ams.analytics.graphs import _rule_category
     from ams.analytics.insights import _coerce_float
 
+    # Aggregate rule outcomes across all records to determine the most common and impactful rules
     rules: dict[str, dict] = {}
     for record in records:
         student_id = str(record.get("student_id") or "")
@@ -1169,6 +1200,7 @@ def _top_failing_rules(records: List[Mapping[str, object]], total: int) -> List[
             if message and message not in entry["messages"]:
                 entry["messages"].append(message)
 
+    # Compile the results into a list of dicts
     results: List[dict] = []
     for outcome_id, entry in rules.items():
         students = sorted(student for student in entry["students"] if student)
@@ -1206,6 +1238,7 @@ def _top_failing_rules(records: List[Mapping[str, object]], total: int) -> List[
             }
         )
 
+    # Sort results
     results.sort(
         key=lambda item: (
             -int(item.get("students_affected", 0)),
@@ -1216,7 +1249,7 @@ def _top_failing_rules(records: List[Mapping[str, object]], total: int) -> List[
     )
     return results
 
-
+# Function to calculate requirement coverage for relevant components
 def _requirement_coverage(records: List[Mapping[str, object]], relevant_components: Sequence[str], total: int) -> List[dict]:
     coverage_rows: List[dict] = []
     for component in relevant_components:
@@ -1272,7 +1305,7 @@ def _requirement_coverage(records: List[Mapping[str, object]], relevant_componen
         )
     return coverage_rows
 
-
+# Function to summarise reliability and limitations of the automated analysis
 def _reliability_summary(records: List[Mapping[str, object]], total: int) -> dict:
     fully_evaluated = sum(1 for record in records if record.get("evaluation_state") == "fully_evaluated")
     partially_evaluated = sum(1 for record in records if record.get("evaluation_state") == "partially_evaluated")
@@ -1286,6 +1319,7 @@ def _reliability_summary(records: List[Mapping[str, object]], total: int) -> dic
     medium_confidence = sum(1 for record in records if record.get("confidence") == "medium")
     low_confidence = sum(1 for record in records if record.get("confidence") == "low")
 
+    # Create a breakdown of limitation incidents by category
     limitation_breakdown: List[dict] = []
     for category_id, label, count in [
         ("analysis_failure", "Not analysable submissions", not_analysable),
@@ -1303,7 +1337,7 @@ def _reliability_summary(records: List[Mapping[str, object]], total: int) -> dic
                     "incident_unit": "limitation incidents",
                 }
             )
-
+    
     return {
         "fully_evaluated": fully_evaluated,
         "fully_evaluated_submissions": fully_evaluated,

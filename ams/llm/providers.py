@@ -1,14 +1,4 @@
-"""LLM Provider Abstraction for Local and Cloud APIs.
-
-This module provides a unified interface for different LLM backends:
-- LocalLMStudioProvider: For LM Studio at localhost:1234
-- OpenAIProvider: For OpenAI cloud API
-- MockProvider: For testing without a server
-
-Key Features:
-- JSON repair for "chatty" small models (Llama 3.2 3B)
-- Phase 3: Multimodal vision support (Qwen2-VL)
-"""
+"""LLM Provider Abstraction for Local and Cloud APIs."""
 from __future__ import annotations
 
 import base64
@@ -33,9 +23,7 @@ from ams.llm.utils import encode_image_safely
 logger = logging.getLogger(__name__)
 
 
-# =============================================================================
 # Response Dataclass
-# =============================================================================
 
 
 @dataclass
@@ -50,12 +38,12 @@ class LLMResponse:
     latency_ms: int = 0
     raw_response: dict = field(default_factory=dict)
     error: str | None = None
-    
+
     @property
     def success(self) -> bool:
         """True if the response contains valid content."""
         return self.error is None and bool(self.content)
-    
+
     def to_dict(self) -> dict:
         return {
             "content": self.content,
@@ -69,17 +57,12 @@ class LLMResponse:
         }
 
 
-# =============================================================================
 # Abstract Base Provider
-# =============================================================================
 
 
 class LLMProvider(ABC):
-    """Abstract base class for LLM providers.
-    
-    Allows swapping between Local/OpenAI/Azure without refactoring.
-    """
-    
+    """Abstract base class for LLM providers. Allows swapping between Local/OpenAI/Azure without refactoring."""
+
     @abstractmethod
     def complete(
         self,
@@ -90,65 +73,39 @@ class LLMProvider(ABC):
         json_mode: bool = False,
         image_path: str | None = None,
     ) -> LLMResponse:
-        """Generate a completion from the LLM.
-        
-        Args:
-            prompt: User prompt text.
-            system_prompt: System prompt for behaviour control.
-            temperature: Sampling temperature (0.0 = deterministic).
-            max_tokens: Maximum response tokens.
-            json_mode: If True, enforce JSON output.
-            image_path: Optional path to image for vision models.
-        """
+        """Generate a completion from the LLM."""
         pass
-    
+
     @property
     @abstractmethod
     def model_name(self) -> str:
-        """Return the model identifier."""
+        """Return model identifier."""
         pass
-    
-    def _clean_json_response(self, text: str) -> str:
-        """Clean JSON response from chatty small models.
 
-        Delegates to the shared utility in ams.llm.utils.
-        """
+    def _clean_json_response(self, text: str) -> str:
+        """Clean JSON response from chatty small models. Delegates to the shared utility in ams.llm.utils."""
         from ams.llm.utils import clean_json_response
         return clean_json_response(text)
 
 
-# =============================================================================
 # Local LM Studio Provider (Phase 3: Vision Support)
-# =============================================================================
 
 
 class LocalLMStudioProvider(LLMProvider):
-    """Provider for LM Studio running locally.
-    
-    Connects to http://localhost:1234/v1 using the OpenAI SDK.
-    Supports:
-    - Text-only models (Llama 3.2 3B)
-    - Vision models (Qwen2.5-VL-7B-Instruct)
-    """
-    
+    """Provider for LM Studio running locally."""
+
     def __init__(
         self,
         base_url: str = "http://localhost:1234/v1",
         model: str = "qwen2.5-vl-7b-instruct",
         timeout: int = 120,
     ):
-        """Initialise local provider.
-        
-        Args:
-            base_url: LM Studio API endpoint
-            model: Model name as shown in LM Studio
-            timeout: Request timeout in seconds
-        """
+        """Initialise local provider."""
         self._base_url = base_url
         self._model = model
         self._timeout = timeout
         self._client = None
-    
+
     def _get_client(self):
         """Lazy-load the OpenAI client configured for local use."""
         if self._client is None:
@@ -162,26 +119,11 @@ class LocalLMStudioProvider(LLMProvider):
             except ImportError:
                 raise ImportError("openai package not installed. Run: pip install openai")
         return self._client
-    
+
     def _encode_image(
         self, image_path: str, max_size: int = VISION_MAX_IMAGE_SIZE,
     ) -> tuple[str, str]:
-        """Encode an image file as a compressed JPEG Base64 string.
-
-        Resizes to *max_size* and compresses to JPEG (quality 85) to
-        prevent Vision-LLM Out-of-Memory crashes.  The *max_size*
-        parameter can be lowered on retry to further reduce tokens.
-
-        Args:
-            image_path: Path to the image file.
-            max_size:   Maximum width/height in pixels.
-
-        Returns:
-            Tuple of (base64_string, mime_type)
-
-        Raises:
-            FileNotFoundError: If the image doesn't exist.
-        """
+        """Encode an image file as a compressed JPEG Base64 string."""
         path = Path(image_path)
 
         if not path.exists():
@@ -213,13 +155,9 @@ class LocalLMStudioProvider(LLMProvider):
         base64_string = base64.b64encode(image_data).decode("utf-8")
         logger.debug(f"Encoded image (raw): {path.name} ({len(image_data)} bytes, {mime_type})")
         return base64_string, mime_type
-    
+
     def health_check(self) -> tuple[bool, str]:
-        """Check if LM Studio is running and responsive.
-        
-        Returns:
-            Tuple of (is_healthy, message)
-        """
+        """Check whether LM Studio is running and responsive. Returns: Tuple of (is_healthy, message)"""
         try:
             client = self._get_client()
             # Simple test completion
@@ -233,9 +171,9 @@ class LocalLMStudioProvider(LLMProvider):
             return True, f"LM Studio OK: {content[:50]}"
         except Exception as e:
             return False, f"LM Studio Error: {e}"
-    
+
     # Patterns in LM Studio / llama.cpp errors that indicate VRAM / slot
-    # exhaustion.  These are retryable with a smaller image payload.
+    # Exhaustion. These are retryable with a smaller image payload.
     _RETRYABLE_PATTERNS = (
         "memory slot",
         "failed to find a memory slot",
@@ -244,9 +182,9 @@ class LocalLMStudioProvider(LLMProvider):
     )
 
     _MAX_ATTEMPTS = 3
-    _BACKOFF_SCHEDULE = (0.5, 1.5)  # seconds to sleep before attempt 2, 3
-    _SHRINK_FACTOR = 0.8            # reduce max_size by 20% each retry
-    _MIN_IMAGE_SIZE = 320           # never shrink below this
+    _BACKOFF_SCHEDULE = (0.5, 1.5)  # Seconds to sleep before attempt 2, 3
+    _SHRINK_FACTOR = 0.8            # Reduce max_size by 20% each retry
+    _MIN_IMAGE_SIZE = 320           # Never shrink below this
 
     def _is_retryable(self, error_msg: str) -> bool:
         """Return True if *error_msg* looks like a transient slot/OOM error."""
@@ -262,20 +200,7 @@ class LocalLMStudioProvider(LLMProvider):
         json_mode: bool = False,
         image_path: str | None = None,
     ) -> LLMResponse:
-        """Generate a completion from the local LLM.
-
-        For vision requests, implements adaptive retry with exponential
-        backoff and progressive image down-scaling when LM Studio reports
-        VRAM / context-slot exhaustion.
-
-        Args:
-            prompt: User prompt text.
-            system_prompt: System prompt for behaviour control.
-            temperature: Sampling temperature.
-            max_tokens: Maximum response tokens.
-            json_mode: If True, enforce JSON output.
-            image_path: Optional path to image for vision requests.
-        """
+        """Generate a completion from the local LLM."""
         try:
             client = self._get_client()
         except ImportError as e:
@@ -285,7 +210,7 @@ class LocalLMStudioProvider(LLMProvider):
                 error=str(e),
             )
 
-        # ── Prepare system prompt (once) ─────────────────────────────────
+        # Prepare system prompt (once.
         effective_system_prompt = system_prompt
         if json_mode:
             json_instruction = (
@@ -301,13 +226,13 @@ class LocalLMStudioProvider(LLMProvider):
             else:
                 effective_system_prompt = json_instruction
 
-        # ── Retry loop (vision requests only) ────────────────────────────
+        # Retry loop (vision requests only.
         current_max_size = VISION_MAX_IMAGE_SIZE
         last_error: str = ""
         start_time = time.time()
 
         for attempt in range(1, self._MAX_ATTEMPTS + 1):
-            # ── Build a *fresh* messages list each attempt ───────────────
+            # Build a *fresh* messages list each attempt.
             messages: list[dict[str, Any]] = []
 
             if effective_system_prompt:
@@ -349,7 +274,7 @@ class LocalLMStudioProvider(LLMProvider):
             else:
                 messages.append({"role": "user", "content": prompt})
 
-            # ── Call the LLM ─────────────────────────────────────────────
+            # Call the LLM.
             try:
                 response = client.chat.completions.create(
                     model=self._model,
@@ -383,7 +308,7 @@ class LocalLMStudioProvider(LLMProvider):
             except Exception as e:
                 last_error = str(e)
 
-                # ── Check for retryable slot/OOM error ───────────────────
+                # Check for retryable slot/OOM error.
                 if (
                     image_path is not None
                     and self._is_retryable(last_error)
@@ -402,12 +327,12 @@ class LocalLMStudioProvider(LLMProvider):
                     )
                     time.sleep(backoff)
                     current_max_size = new_size
-                    continue  # retry with smaller image
+                    continue  # Retry with smaller image
 
-                # ── Non-retryable or final attempt ───────────────────────
+                # Non-retryable or final attempt.
                 break
 
-        # ── All attempts exhausted or non-retryable error ────────────────
+        # All attempts exhausted or non-retryable error.
         if "Connection" in last_error or "refused" in last_error.lower():
             last_error = (
                 f"Cannot connect to LM Studio at {self._base_url}. "
@@ -421,26 +346,24 @@ class LocalLMStudioProvider(LLMProvider):
             latency_ms=int((time.time() - start_time) * 1000),
             error=last_error,
         )
-    
+
     @property
     def model_name(self) -> str:
         return self._model
 
 
-# =============================================================================
 # OpenAI Cloud Provider
-# =============================================================================
 
 
 class OpenAIProvider(LLMProvider):
     """OpenAI GPT provider for cloud fallback."""
-    
+
     def __init__(self, model: str = "gpt-4o-mini", api_key: str | None = None):
         import os
         self._model = model
         self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
         self._client = None
-    
+
     def _get_client(self):
         if self._client is None:
             try:
@@ -449,7 +372,7 @@ class OpenAIProvider(LLMProvider):
             except ImportError:
                 raise ImportError("openai package not installed")
         return self._client
-    
+
     def complete(
         self,
         prompt: str,
@@ -468,29 +391,29 @@ class OpenAIProvider(LLMProvider):
             client = self._get_client()
         except ImportError as e:
             return LLMResponse(content="", model=self._model, error=str(e))
-        
+
         messages: list[dict[str, str]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
-        
+
         kwargs: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
-        
+
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
-        
+
         start_time = time.time()
-        
+
         try:
             response = client.chat.completions.create(**kwargs)
             latency_ms = int((time.time() - start_time) * 1000)
             usage = response.usage
-            
+
             return LLMResponse(
                 content=response.choices[0].message.content or "",
                 model=self._model,
@@ -507,24 +430,22 @@ class OpenAIProvider(LLMProvider):
                 latency_ms=int((time.time() - start_time) * 1000),
                 error=str(e),
             )
-    
+
     @property
     def model_name(self) -> str:
         return self._model
 
 
-# =============================================================================
 # Mock Provider for Testing
-# =============================================================================
 
 
 class MockProvider(LLMProvider):
     """Mock provider for testing without any server."""
-    
+
     def __init__(self, responses: dict[str, str] | None = None):
         self._responses = responses or {}
         self._call_count = 0
-    
+
     def complete(
         self,
         prompt: str,
@@ -535,7 +456,7 @@ class MockProvider(LLMProvider):
         image_path: str | None = None,
     ) -> LLMResponse:
         self._call_count += 1
-        
+
         # Check for canned responses
         for key, response in self._responses.items():
             if key in prompt:
@@ -545,24 +466,24 @@ class MockProvider(LLMProvider):
                     input_tokens=len(prompt) // 4,
                     output_tokens=len(response) // 4,
                 )
-        
+
         # Default mock response
         if json_mode:
             content = '{"feedback": "Mock feedback", "score": 0.8}'
         else:
             content = f"Mock response #{self._call_count}"
-        
+
         return LLMResponse(
             content=content,
             model="mock",
             input_tokens=len(prompt) // 4,
             output_tokens=len(content) // 4,
         )
-    
+
     @property
     def model_name(self) -> str:
         return "mock"
-    
+
     @property
     def call_count(self) -> int:
         return self._call_count

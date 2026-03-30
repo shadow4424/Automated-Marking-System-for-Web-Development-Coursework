@@ -1,16 +1,11 @@
-"""Centralised Finding ID constants.
-
-Every assessor and the scoring engine should import IDs from this module
-instead of using inline magic strings.  This makes renaming safe and
-prevents silent mismatches between producers and consumers.
-"""
+"""Centralised Finding ID constants."""
 from __future__ import annotations
 
 
 class HTML:
     """Finding IDs emitted by HTML assessors."""
 
-    # --- Static assessor ---
+    # Static assessor.
     MISSING_FILES = "HTML.MISSING_FILES"
     SKIPPED = "HTML.SKIPPED"
     READ_ERROR = "HTML.READ_ERROR"
@@ -20,14 +15,14 @@ class HTML:
     QUALITY_INLINE_CSS = "HTML.QUALITY.INLINE_CSS"
     QUALITY_DEPRECATED_TAGS = "HTML.QUALITY.DEPRECATED_TAGS"
 
-    # --- Required assessor ---
+    # Required assessor.
     REQ_PASS = "HTML.REQ.PASS"
     REQ_FAIL = "HTML.REQ.FAIL"
     REQ_SKIPPED = "HTML.REQ.SKIPPED"
     REQ_MISSING_FILES = "HTML.REQ.MISSING_FILES"
     REQ_READ_ERROR = "HTML.REQ.READ_ERROR"
 
-    # --- Behavioural ---
+    # Behavioural.
     BEHAVIORAL_PAGE_LOADS = "HTML.BEHAVIORAL.PAGE_LOADS"
     BEHAVIORAL_FORM_EXISTS = "HTML.BEHAVIORAL.FORM_EXISTS"
     BEHAVIORAL_NO_FORM = "HTML.BEHAVIORAL.NO_FORM"
@@ -40,7 +35,7 @@ class HTML:
 class CSS:
     """Finding IDs emitted by CSS assessors."""
 
-    # --- Static assessor ---
+    # Static assessor.
     MISSING_FILES = "CSS.MISSING_FILES"
     SKIPPED = "CSS.SKIPPED"
     READ_ERROR = "CSS.READ_ERROR"
@@ -50,7 +45,7 @@ class CSS:
     EVIDENCE = "CSS.EVIDENCE"
     QUALITY_OVERLY_SPECIFIC = "CSS.QUALITY.OVERLY_SPECIFIC"
 
-    # --- Required assessor ---
+    # Required assessor.
     REQ_PASS = "CSS.REQ.PASS"
     REQ_FAIL = "CSS.REQ.FAIL"
     REQ_SKIPPED = "CSS.REQ.SKIPPED"
@@ -61,7 +56,7 @@ class CSS:
 class JS:
     """Finding IDs emitted by JS assessors."""
 
-    # --- Static assessor ---
+    # Static assessor.
     MISSING_FILES = "JS.MISSING_FILES"
     SKIPPED = "JS.SKIPPED"
     READ_ERROR = "JS.READ_ERROR"
@@ -76,7 +71,7 @@ class JS:
     QUALITY_UNREACHABLE_CODE = "JS.QUALITY.UNREACHABLE_CODE"
     QUALITY_LACK_OF_MODULARITY = "JS.QUALITY.LACK_OF_MODULARITY"
 
-    # --- Required assessor ---
+    # Required assessor.
     REQ_PASS = "JS.REQ.PASS"
     REQ_FAIL = "JS.REQ.FAIL"
     REQ_SKIPPED = "JS.REQ.SKIPPED"
@@ -87,7 +82,7 @@ class JS:
 class PHP:
     """Finding IDs emitted by PHP assessors."""
 
-    # --- Static assessor ---
+    # Static assessor.
     MISSING_FILES = "PHP.MISSING_FILES"
     SKIPPED = "PHP.SKIPPED"
     READ_ERROR = "PHP.READ_ERROR"
@@ -112,7 +107,7 @@ class PHP:
     SECURITY_SESSION_NOT_STARTED = "PHP.SECURITY.SESSION_NOT_STARTED"
     SECURITY_SESSION_NOT_REGENERATED = "PHP.SECURITY.SESSION_NOT_REGENERATED"
 
-    # --- Required assessor ---
+    # Required assessor.
     REQ_PASS = "PHP.REQ.PASS"
     REQ_FAIL = "PHP.REQ.FAIL"
     REQ_SKIPPED = "PHP.REQ.SKIPPED"
@@ -123,7 +118,7 @@ class PHP:
 class SQL:
     """Finding IDs emitted by SQL assessors."""
 
-    # --- Static assessor ---
+    # Static assessor.
     MISSING_FILES = "SQL.MISSING_FILES"
     SKIPPED = "SQL.SKIPPED"
     READ_ERROR = "SQL.READ_ERROR"
@@ -137,7 +132,7 @@ class SQL:
     SECURITY_DYNAMIC_SQL = "SQL.SECURITY.DYNAMIC_SQL"
     SECURITY_MISSING_LIMIT = "SQL.SECURITY.MISSING_LIMIT"
 
-    # --- Required assessor ---
+    # Required assessor.
     REQ_PASS = "SQL.REQ.PASS"
     REQ_FAIL = "SQL.REQ.FAIL"
     REQ_SKIPPED = "SQL.REQ.SKIPPED"
@@ -148,12 +143,12 @@ class SQL:
 class API:
     """Finding IDs emitted by API assessors."""
 
-    # --- Static assessor ---
+    # Static assessor.
     MISSING_FILES = "API.MISSING_FILES"
     SKIPPED = "API.SKIPPED"
     EVIDENCE = "API.EVIDENCE"
 
-    # --- Required assessor ---
+    # Required assessor.
     REQ_PASS = "API.REQ.PASS"
     REQ_FAIL = "API.REQ.FAIL"
     REQ_SKIPPED = "API.REQ.SKIPPED"
@@ -172,7 +167,7 @@ class CONSISTENCY:
     FORM_FIELD_UNUSED_IN_PHP = "CONSISTENCY.FORM_FIELD_UNUSED_IN_PHP"
     PHP_EXPECTS_MISSING_FORM_FIELD = "CONSISTENCY.PHP_EXPECTS_MISSING_FORM_FIELD"
 
-    # --- Cross-file alignment checks ---
+    # Cross-file alignment checks.
     PHP_FORM_ALIGNED = "CONSISTENCY.PHP_FORM_ALIGNED"
     PHP_FORM_MISALIGNED = "CONSISTENCY.PHP_FORM_MISALIGNED"
     SQL_APP_ALIGNED = "CONSISTENCY.SQL_APP_ALIGNED"
@@ -189,7 +184,7 @@ class BROWSER:
     PERFORMANCE = "BROWSER.PERFORMANCE"
     CAPTURE_FAIL = "BROWSER.CAPTURE_FAIL"
 
-    # --- Extended browser checks ---
+    # Extended browser checks.
     CONSOLE_CLEAN = "BROWSER.CONSOLE_CLEAN"
     CONSOLE_ERRORS_FATAL = "BROWSER.CONSOLE_ERRORS_FATAL"
     NETWORK_ASSETS_OK = "BROWSER.NETWORK_ASSETS_OK"
@@ -227,7 +222,7 @@ class BEHAVIOUR:
     API_JSON_VALID = "BEHAVIOUR.API_JSON_VALID"
     API_JSON_INVALID = "BEHAVIOUR.API_JSON_INVALID"
 
-    # --- Calculator behavioural tests ---
+    # Calculator behavioural tests.
     CALCULATOR_PASS = "BEHAVIOUR.CALCULATOR_PASS"
     CALCULATOR_FAIL = "BEHAVIOUR.CALCULATOR_FAIL"
     CALCULATOR_PARTIAL = "BEHAVIOUR.CALCULATOR_PARTIAL"

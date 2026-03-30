@@ -40,7 +40,7 @@ class FormChecker(HTMLParser):
 
 
 class HTMLBehavioralAssessor(Assessor):
-    """Behavioral checks: verifies HTML can be parsed and forms exist."""
+    """Behavioural checks: verifies HTML can be parsed and forms exist."""
 
     name = "html_behavioral"
 
@@ -94,7 +94,7 @@ class HTMLBehavioralAssessor(Assessor):
                 )
                 continue
 
-            # Check if page loads (has body tag)
+            # Check whether page loads (has body tag)
             if parser.has_body:
                 findings.append(
                     Finding(
@@ -118,7 +118,7 @@ class HTMLBehavioralAssessor(Assessor):
                     )
                 )
 
-            # Check if form exists
+            # Check whether form exists
             if parser.has_form:
                 findings.append(
                     Finding(
@@ -150,7 +150,5 @@ class HTMLBehavioralAssessor(Assessor):
 
 
 __all__ = ["HTMLBehavioralAssessor"]
-
-
 
 

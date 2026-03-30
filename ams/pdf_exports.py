@@ -333,21 +333,17 @@ def _escape_pdf_text(text: str) -> str:
 
 
 def build_rich_submission_pdf(report: Any) -> bytes:
-    """Produce a comprehensive assessment PDF from an ExportReport instance.
-
-    Uses the existing _build_pdf/_PdfLine infrastructure. Called from
-    ams.io.export_report.export_pdf via a lazy import to avoid circular dependencies.
-    """
+    """Produce a comprehensive assessment PDF from an ExportReport instance."""
     lines: list[_PdfLine] = []
 
-    # ── Title block ──────────────────────────────────────────────────────
+    # Title block.
     lines.append(_PdfLine(_normalize_text("Submission Assessment Report"), size=16, bold=True))
     lines.append(_PdfLine(_normalize_text(f"Generated: {report.generated_at}"), size=9))
     if report.run_id:
         lines.append(_PdfLine(_normalize_text(f"Run ID: {report.run_id}"), size=9))
     lines.append(_PdfLine(""))
 
-    # ── Section 1: Submission Details ────────────────────────────────────
+    # Section 1: Submission Details.
     lines.append(_PdfLine("", separator=True))
     lines.append(_PdfLine("Submission Details", size=13, bold=True, spacing_before=4))
     for label, val in [
@@ -363,7 +359,7 @@ def build_rich_submission_pdf(report: Any) -> bytes:
             lines.extend(_format_field(label, _normalize_text(str(val))))
     lines.append(_PdfLine(""))
 
-    # ── Section 2: Overall Result ─────────────────────────────────────────
+    # Section 2: Overall Result.
     lines.append(_PdfLine("", separator=True))
     lines.append(_PdfLine("Overall Result", size=13, bold=True, spacing_before=4))
     score_display = f"{report.overall_pct}  —  {report.overall_label}"
@@ -378,7 +374,7 @@ def build_rich_submission_pdf(report: Any) -> bytes:
         lines.append(_PdfLine(_normalize_text(f"  - {reason}"), size=9, indent=24))
     lines.append(_PdfLine(""))
 
-    # ── Section 3: Component Scores ───────────────────────────────────────
+    # Section 3: Component Scores.
     if report.components:
         lines.append(_PdfLine("", separator=True))
         lines.append(_PdfLine("Component Scores", size=13, bold=True, spacing_before=4))
@@ -392,7 +388,7 @@ def build_rich_submission_pdf(report: Any) -> bytes:
                 lines.append(_PdfLine(_normalize_text(counts), size=9, indent=32, spacing_before=2))
         lines.append(_PdfLine(""))
 
-    # ── Section 4: Key Findings ───────────────────────────────────────────
+    # Section 4: Key Findings.
     # Only show FAIL, WARN, THREAT findings (not INFO/SKIPPED) to keep PDF concise
     key_findings = [f for f in report.findings if f.severity in ("FAIL", "WARN", "THREAT")][:25]
     if key_findings:
@@ -409,7 +405,7 @@ def build_rich_submission_pdf(report: Any) -> bytes:
                 lines.append(wrapped_line)
         lines.append(_PdfLine(""))
 
-    # ── Section 5: Rule Outcomes ──────────────────────────────────────────
+    # Section 5: Rule Outcomes.
     # Group by component; skip all-skipped rules to reduce noise
     non_skipped_outcomes = [r for r in report.rule_outcomes
                             if r.status not in ("SKIPPED_BY_PROFILE",)]
@@ -418,13 +414,13 @@ def build_rich_submission_pdf(report: Any) -> bytes:
         lines.append(_PdfLine("Rule Outcomes", size=13, bold=True, spacing_before=4))
         # Group by component
         by_comp: dict[str, list] = {}
-        for outcome in non_skipped_outcomes[:40]:  # cap at 40 for PDF length
+        for outcome in non_skipped_outcomes[:40]:  # Cap at 40 for PDF length
             by_comp.setdefault(outcome.component, []).append(outcome)
         for comp_name, outcomes in sorted(by_comp.items()):
             lines.append(_PdfLine(_normalize_text(comp_name.upper()), size=10, bold=True, indent=8, spacing_before=6))
             for outcome in outcomes:
                 score_display = outcome.score_pct if hasattr(outcome, 'score_pct') else str(outcome.score)
-                # score_pct may not exist on RuleOutcome - compute inline
+                # Score_pct may not exist on RuleOutcome - compute inline
                 if isinstance(outcome.score, (int, float)):
                     score_display = f"{float(outcome.score) * 100:.2f}%"
                 else:
@@ -442,7 +438,7 @@ def build_rich_submission_pdf(report: Any) -> bytes:
                         lines.append(ll)
         lines.append(_PdfLine(""))
 
-    # ── Section 6: Execution Summary ──────────────────────────────────────
+    # Section 6: Execution Summary.
     lines.append(_PdfLine("", separator=True))
     lines.append(_PdfLine("Execution Summary", size=13, bold=True, spacing_before=4))
     php_str = "available" if report.execution.php_available else "unavailable"
@@ -465,7 +461,7 @@ def build_rich_submission_pdf(report: Any) -> bytes:
         lines.append(_PdfLine(_normalize_text(entry), size=8, indent=24, spacing_before=2))
     lines.append(_PdfLine(""))
 
-    # ── Section 7: Marking Policy Notes ──────────────────────────────────
+    # Section 7: Marking Policy Notes.
     if report.policy_notes:
         lines.append(_PdfLine("", separator=True))
         lines.append(_PdfLine("Marking Policy Notes", size=13, bold=True, spacing_before=4))

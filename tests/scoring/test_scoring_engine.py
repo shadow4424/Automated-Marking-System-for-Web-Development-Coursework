@@ -46,10 +46,10 @@ def test_scoring_html_only_partial(tmp_path):
     for component in others:
         score = data["scores"]["by_component"][component]["score"]
         if component in ["css", "js"]:
-            assert score <= 0.1  # may be slightly > 0 due to optional (min_count=0) rules
+            assert score <= 0.1  # May be slightly > 0 due to optional (min_count=0) rules
         else:
             assert score == "SKIPPED"
-    assert data["scores"]["overall"] <= 0.3  # only partial HTML, no CSS/JS
+    assert data["scores"]["overall"] <= 0.3  # Only partial HTML, no CSS/JS
 
 
 def test_scoring_html_css_js_good_attempt(tmp_path):
@@ -152,8 +152,8 @@ def test_profile_skipped_components_not_in_denominator(tmp_path):
     data = run_pipeline_with_profile(tmp_path, files, profile="frontend")
 
     # Only html, css, js are relevant (3 components)
-    # php and sql should be SKIPPED
+    # Php and sql should be SKIPPED
     assert data["scores"]["by_component"]["php"]["score"] == "SKIPPED"
     assert data["scores"]["by_component"]["sql"]["score"] == "SKIPPED"
 
-    assert data["scores"]["overall"] <= 0.5  # minimal HTML only
+    assert data["scores"]["overall"] <= 0.5  # Minimal HTML only

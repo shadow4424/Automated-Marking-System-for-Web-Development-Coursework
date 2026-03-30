@@ -1,11 +1,4 @@
-"""Tests for the redesigned AMS export system.
-
-Covers:
-  - build_export_report field mapping
-  - validate_export_report
-  - export_txt, export_csv_*, export_csv_zip, export_json, export_pdf
-  - Web routes for individual and batch exports
-"""
+"""Tests for the redesigned AMS export system."""
 from __future__ import annotations
 
 import io
@@ -35,7 +28,7 @@ from ams.io.export_report import (
 )
 
 
-# ── Shared fixture ────────────────────────────────────────────────────────────
+# Shared fixture.
 
 
 def _make_report(
@@ -192,7 +185,7 @@ def _make_report(
     }
 
 
-# ── Group A: TestBuildExportReport ────────────────────────────────────────────
+# Group A: TestBuildExportReport.
 
 
 class TestBuildExportReport:
@@ -287,7 +280,7 @@ class TestBuildExportReport:
         data["score_evidence"] = None
         report = build_export_report(data)
         assert report.rule_outcomes == []
-        assert report.components == [] or len(report.components) >= 0  # falls back to by_component
+        assert report.components == [] or len(report.components) >= 0  # Falls back to by_component
 
     def test_handles_missing_findings_key(self):
         data = _make_report()
@@ -300,7 +293,7 @@ class TestBuildExportReport:
         assert report.run_id == "run999"
 
 
-# ── Group B: TestValidateExportReport ────────────────────────────────────────
+# Group B: TestValidateExportReport.
 
 
 class TestValidateExportReport:
@@ -345,7 +338,7 @@ class TestValidateExportReport:
         validate_export_report(report)
 
 
-# ── Group C: TestExportTxt ────────────────────────────────────────────────────
+# Group C: TestExportTxt.
 
 
 class TestExportTxt:
@@ -391,7 +384,7 @@ class TestExportTxt:
         assert len(output) > 50  # Still produces output
 
 
-# ── Group D: TestExportCsvSummary ─────────────────────────────────────────────
+# Group D: TestExportCsvSummary.
 
 
 class TestExportCsvSummary:
@@ -432,7 +425,7 @@ class TestExportCsvSummary:
         assert "fail_findings" in row
 
 
-# ── Group E: TestExportCsvFindings ────────────────────────────────────────────
+# Group E: TestExportCsvFindings.
 
 
 class TestExportCsvFindings:
@@ -442,7 +435,7 @@ class TestExportCsvFindings:
 
     def test_has_finding_rows(self):
         rows = self.output.strip().splitlines()
-        # header + 2 data rows
+        # Header + 2 data rows
         assert len(rows) == 3
 
     def test_finding_row_has_severity(self):
@@ -455,7 +448,7 @@ class TestExportCsvFindings:
         assert "Images are missing alt text attributes" in self.output
 
 
-# ── Group F: TestExportCsvRules ───────────────────────────────────────────────
+# Group F: TestExportCsvRules.
 
 
 class TestExportCsvRules:
@@ -465,7 +458,7 @@ class TestExportCsvRules:
 
     def test_has_rule_rows(self):
         rows = self.output.strip().splitlines()
-        # header + 4 requirements
+        # Header + 4 requirements
         assert len(rows) >= 2
 
     def test_rule_row_has_status(self):
@@ -483,7 +476,7 @@ class TestExportCsvRules:
         assert len(scored) >= 1
 
 
-# ── Group G: TestExportCsvZip ─────────────────────────────────────────────────
+# Group G: TestExportCsvZip.
 
 
 class TestExportCsvZip:
@@ -512,7 +505,7 @@ class TestExportCsvZip:
                 assert len(zf.read(name)) > 0
 
 
-# ── Group H: TestExportJson ───────────────────────────────────────────────────
+# Group H: TestExportJson.
 
 
 class TestExportJson:
@@ -545,7 +538,7 @@ class TestExportJson:
         assert isinstance(data["rule_outcomes"], list)
 
 
-# ── Group I: TestExportPdf ────────────────────────────────────────────────────
+# Group I: TestExportPdf.
 
 
 class TestExportPdf:
@@ -563,7 +556,7 @@ class TestExportPdf:
         assert len(self.result) > 500
 
 
-# ── Group J: TestWebRoutes ────────────────────────────────────────────────────
+# Group J: TestWebRoutes.
 
 
 def _client(tmp_path):

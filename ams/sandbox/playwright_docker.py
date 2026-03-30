@@ -1,8 +1,4 @@
-"""Docker-isolated Playwright execution.
-
-Runs Playwright browser automation inside a Docker container so that
-student JavaScript code cannot access the host filesystem or network.
-"""
+"""Docker-isolated Playwright execution."""
 from __future__ import annotations
 
 import json
@@ -20,11 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class DockerPlaywrightRunner(BrowserRunner):
-    """Execute Playwright in an isolated Docker container.
-
-    The student's workspace is mounted read-only at ``/workspace`` and
-    accessed via ``file://`` URLs.  Network access is disabled.
-    """
+    """Execute Playwright in an isolated Docker container."""
 
     def __init__(
         self,
@@ -46,10 +38,7 @@ class DockerPlaywrightRunner(BrowserRunner):
         workdir: Path,
         interaction: bool = True,
     ) -> BrowserRunResult:
-        """Run browser automation inside a Docker container.
-
-        Retries once on timeout to handle transient Docker/Chromium delays.
-        """
+        """Run browser automation inside a Docker container. Retries once on timeout to handle transient Docker/Chromium delays."""
         result = self._run_once(entry_path, workdir, interaction)
         if result.status == "timeout":
             logger.info(
@@ -118,7 +107,6 @@ class DockerPlaywrightRunner(BrowserRunner):
             # Clean up the temporary script
             script_path.unlink(missing_ok=True)
 
-    # ------------------------------------------------------------------
 
     def _build_docker_run_command(self, workdir: Path, script_path: Path) -> list[str]:
         """Build the Docker command for a single Playwright run."""
@@ -200,7 +188,7 @@ class DockerPlaywrightRunner(BrowserRunner):
         cfg = self.config
 
         # Ensure a writable output directory exists on the host so the
-        # container can persist screenshots back to the Windows filesystem.
+        # Container can persist screenshots back to the Windows filesystem.
         output_dir = workdir / "artifacts" / "browser"
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -230,8 +218,8 @@ class DockerPlaywrightRunner(BrowserRunner):
         ])
 
         # Security hardening — NOTE: we intentionally skip --cap-drop ALL
-        # for Playwright containers because Chromium's internal sandbox
-        # requires default Linux capabilities (even with --no-sandbox flag).
+        # For Playwright containers because Chromium's internal sandbox
+        # Requires default Linux capabilities (even with --no-sandbox flag).
         # Docker network=none + user namespacing provides sufficient isolation.
         if cfg.no_new_privileges:
             cmd.extend(["--security-opt", "no-new-privileges"])

@@ -1,10 +1,4 @@
-"""Pre-execution threat scanner for student submissions.
-
-Scans extracted submission files for indicators of malicious intent
-*before* any code enters the Docker sandbox.  Returns a list of
-``ThreatFinding`` objects that the pipeline can inspect to decide
-whether to halt, retain containers, or simply flag.
-"""
+"""Pre-execution threat scanner for student submissions."""
 from __future__ import annotations
 
 import logging
@@ -72,10 +66,7 @@ class ThreatScanner:
     """Scans submission files against the threat pattern registry."""
 
     def scan(self, submission_path: Path) -> ScanResult:
-        """Scan all files under *submission_path* for threat patterns.
-
-        Returns a :class:`ScanResult` containing all detected threats.
-        """
+        """Scan all files under *submission_path* for threat patterns. Returns a:class:`ScanResult` containing all detected threats."""
         result = ScanResult()
 
         if not submission_path.is_dir():

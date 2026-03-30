@@ -80,12 +80,14 @@ MAX_UPLOAD_MB = 25
 PROFILE_CHOICES = tuple(get_visible_profile_specs().keys())
 
 
+# Build batch readme.
 def _build_batch_readme(*args, **kwargs):
     from ams.web.routes_export import _build_batch_readme as builder
 
     return builder(*args, **kwargs)
 
 
+# Discover pending batch submissions.
 def _discover_pending_batch_submissions(submissions_root: Path, assignment_id: str, upload_timestamp: str) -> list[dict]:
     pending_by_identity: dict[tuple[str, str], dict] = {}
 
@@ -111,6 +113,7 @@ def _discover_pending_batch_submissions(submissions_root: Path, assignment_id: s
 
     return sorted(pending_by_identity.values(), key=lambda sub: (sub.get("student_id", ""), sub.get("submission_id", "")))
 
+# Resolve the report path for a batch submission record.
 def _batch_report_path(run_dir: Path, record: Mapping[str, object]) -> Path | None:
     report_path = record.get("report_path")
     if isinstance(report_path, str) and report_path:
@@ -126,6 +129,7 @@ def _batch_report_path(run_dir: Path, record: Mapping[str, object]) -> Path | No
 
     return None
 
+# Rebuild batch outputs.
 def _rebuild_batch_outputs(run_dir: Path, run_info: dict, records: list[dict]) -> None:
     if not records:
         shutil.rmtree(run_dir, ignore_errors=True)
@@ -141,6 +145,7 @@ def _rebuild_batch_outputs(run_dir: Path, run_info: dict, records: list[dict]) -
     cleanup_batch_run_storage(run_dir, updated_run_info)
 
 
+# Resolve the runs root from a nested batch run directory.
 def _runs_root_for_run_dir(run_dir: Path) -> Path:
     try:
         return run_dir.parents[2]
@@ -150,9 +155,11 @@ def _runs_root_for_run_dir(run_dir: Path) -> Path:
         except RuntimeError:
             return run_dir.parent
 
+# Process the main batch upload flow.
 @batch_bp.route("/batch", methods=["GET", "POST"])
 @teacher_or_admin_required
 def batch():
+    # Filter assignments that can still accept submissions.
     def _available_batch_assignments(include_released: bool = False) -> list[dict]:
         if session.get("user_role") == "admin":
             assignments = list_assignments()
@@ -180,7 +187,7 @@ def batch():
             github_user=github_user,
         )
 
-    # ── Sandbox enforcement ──────────────────────────────────────
+    # Stop early if sandboxing is required but Docker is unavailable.
     from ams.sandbox.config import get_sandbox_status, get_sandbox_config, SandboxMode
     _sb = get_sandbox_status()
     _cfg = get_sandbox_config()
@@ -210,7 +217,7 @@ def batch():
         for assignment in assignment_options_all
     }
 
-    # ── Determine submission source (ZIP upload vs GitHub) ──
+    # Decide whether this submission comes from GitHub or a ZIP upload.
     submission_method = request.form.get("submission_method", "upload")
     github_repo = request.form.get("github_repo", "").strip()
     github_branch = request.form.get("github_branch", "").strip()
@@ -219,7 +226,7 @@ def batch():
     tmp_zip_path: Path | None = None
 
     if using_github:
-        # ------ GitHub submission path ------
+        # GitHub submission path.
         github_token = session.get("github_token")
         if not github_token:
             flash("Please link your GitHub account first.", "error")
@@ -279,7 +286,7 @@ def batch():
         original_filename = f"{github_repo.replace('/', '_')}{branch_suffix}.zip"
 
     else:
-        # ------ ZIP upload path ------
+        # ZIP upload path.
         if not file or not file.filename:
             flash("Please upload a .zip file or select a GitHub repository.", "error")
             return render_template(
@@ -359,7 +366,7 @@ def batch():
 
     runs_root = get_runs_root(current_app)
 
-    # ── Strict ZIP content validation (magic-byte check) ─────
+    # Validate the uploaded archive before starting the batch run.
     if not validate_is_zipfile(tmp_zip_path):
         try:
             tmp_zip_path.unlink()
@@ -428,7 +435,7 @@ def batch():
             created_at,
         )
 
-        # Run batch with metadata context — off the request thread
+        # Run the batch job in the background and return a job id.
         initial_run_info = {
             "id": run_id,
             "mode": "batch",
@@ -501,6 +508,7 @@ def batch():
         except Exception:
             pass
 
+# Filter assignments that can still accept submissions.
 def _available_batch_assignments(include_released: bool = False) -> list[dict]:
     if session.get("user_role") == "admin":
         assignments = list_assignments()
@@ -514,6 +522,7 @@ def _available_batch_assignments(include_released: bool = False) -> list[dict]:
         ]
     return assignments
 
+# Load batch summary records.
 def _load_batch_summary_records(run_dir: Path) -> dict | None:
     summary_path = run_dir / "batch_summary.json"
     if not summary_path.exists():
@@ -530,6 +539,7 @@ def _load_batch_summary_records(run_dir: Path) -> dict | None:
     batch_summary["records"] = list(records)
     return batch_summary
 
+# Persist batch outputs.
 def _persist_batch_outputs(run_dir: Path, run_info: dict, records: list[dict]) -> dict:
     profile = str(run_info.get("profile") or "frontend")
     write_outputs(run_dir, records, profile=profile)
@@ -542,6 +552,7 @@ def _persist_batch_outputs(run_dir: Path, run_info: dict, records: list[dict]) -
     cleanup_batch_run_storage(run_dir, updated_run_info)
     return updated_run_info
 
+# Resolve batch rerun source.
 def _resolve_batch_rerun_source(run_dir: Path, submission_id: str, record: Mapping[str, object]) -> tuple[Path, Path]:
     submission_dir = run_dir / "runs" / submission_id
     submission_root = submission_dir / "submission"
@@ -566,6 +577,7 @@ def _resolve_batch_rerun_source(run_dir: Path, submission_id: str, record: Mappi
 
     raise FileNotFoundError("Stored submission content is unavailable.")
 
+# Apply batch report.
 def _apply_batch_report(record: dict, report_path: Path, report: Mapping[str, object], assignment_id: str) -> None:
     meta = report.get("metadata", {}) or {}
     submission_meta = meta.get("submission_metadata", {}) or {}
@@ -599,6 +611,7 @@ def _apply_batch_report(record: dict, report_path: Path, report: Mapping[str, ob
     record["llm_error_message"] = review_flags.get("llm_error_message")
     record["llm_error_messages"] = list(review_flags.get("llm_error_messages") or [])
 
+# Rerun marking for one batch submission.
 def _rerun_batch_submission(run_dir: Path, run_info: Mapping[str, object], submission_id: str) -> dict:
     batch_summary = _load_batch_summary_records(run_dir)
     if batch_summary is None:
@@ -657,6 +670,7 @@ def _rerun_batch_submission(run_dir: Path, run_info: Mapping[str, object], submi
         recompute_active_attempt(runs_root, assignment_id, student_id)
     return target
 
+# Queue batch submission rerun.
 def _queue_batch_submission_rerun(
     run_dir: Path,
     run_info: Mapping[str, object],
@@ -691,6 +705,7 @@ def _queue_batch_submission_rerun(
     queued_run_info.pop("error", None)
     _persist_batch_outputs(run_dir, queued_run_info, records)
 
+    # Run the batch rerun job and return the refresh payload.
     def _run_batch_rerun_job() -> dict:
         updated = _rerun_batch_submission(run_dir, queued_run_info, submission_id)
         return {
@@ -714,6 +729,7 @@ def _queue_batch_submission_rerun(
         refresh_url=refresh_url,
     )
 
+# Queue or run a rerun for one assignment submission.
 @batch_bp.route("/teacher/assignment/<assignment_id>/submissions/rerun", methods=["POST"])
 @batch_bp.route("/teacher/assignment/<assignment_id>/threats/reprocess", methods=["POST"])
 @teacher_or_admin_required
@@ -831,13 +847,13 @@ def batch_submission_view(run_id: str, submission_id: str):
                 record_status = "llm_error"
 
     # Extract real student_id from batch_summary or report metadata
-    # (submission_id is the full stem like "testStudent_test_assignment1",
-    #  we need just the parsed student part e.g. "testStudent")
-    real_student_id = submission_id  # fallback
+    # Submission_id is the full stem like "testStudent_test_assignment1.
+    # We need just the parsed student part e.g. "testStudent")
+    real_student_id = submission_id  # Fallback
     real_assignment_id = run_info.get("assignment_id", "")
     attempt = get_attempt_by_run_reference(run_id, submission_id, runs_root=runs_root)
 
-    # Try report metadata first (most reliable — set during pipeline run)
+    # Use report metadata first because it is the most reliable source.
     report_meta = (report or {}).get("metadata", {}).get("submission_metadata", {})
     if report_meta.get("student_id"):
         real_student_id = report_meta["student_id"]
@@ -915,8 +931,8 @@ def batch_submission_view(run_id: str, submission_id: str):
             }
         )
 
-    # submission_dir doubles as the "run_dir" for threat file loading
-    # because batch sub-runs store their files under runs/<id>/submission/
+    # Submission_dir doubles as the "run_dir" for threat file loading
+    # Because batch sub-runs store their files under runs/<id>/submission/
     detail_run_info = submission_run_info
     detail_report = report
     return render_template(
@@ -936,6 +952,7 @@ def batch_submission_view(run_id: str, submission_id: str):
         back_url=back_url,
     )
 
+# Render the batch submission report view.
 @batch_bp.route("/batch/<run_id>/submissions/<submission_id>/report.json")
 @login_required
 def batch_submission_report(run_id: str, submission_id: str):
@@ -968,12 +985,7 @@ def batch_submission_report(run_id: str, submission_id: str):
 def _export_report_content(
     report: dict, run_id: str, fmt: str
 ) -> tuple:
-    """Build an ExportReport from a raw report dict and render the requested format.
-
-    Returns (content, mimetype, file_extension).
-    Raises ValueError if the report is too incomplete to export meaningfully.
-    Supported fmt values: "json", "txt", "csv", "pdf".
-    """
+    """Build an ExportReport from a raw report dict and render the requested format."""
     er = build_export_report(report, run_id=run_id)
     validate_export_report(er)
     if fmt == "json":
@@ -1032,6 +1044,7 @@ def batch_submission_export(run_id: str, submission_id: str, format: str):
         headers={"Content-Disposition": f'attachment; filename="{base_name}.{ext}"'},
     )
 
+# Queue or run a rerun for one batch report row.
 @batch_bp.route("/batch/<run_id>/submissions/<submission_id>/rerun", methods=["POST"])
 @teacher_or_admin_required
 def batch_submission_rerun(run_id: str, submission_id: str):
@@ -1062,6 +1075,7 @@ def batch_submission_rerun(run_id: str, submission_id: str):
             submission_id=submission_id,
         )
 
+# Write batch reports zip.
 def _write_batch_reports_zip(run_dir: Path, profile: str, run_id: str) -> None:
     summary_path = run_dir / "batch_summary.json"
     if not summary_path.exists():
@@ -1093,6 +1107,7 @@ def _write_batch_reports_zip(run_dir: Path, profile: str, run_id: str) -> None:
                 arc = f"{run_id}/submissions/{submission_id}/report.json"
                 zf.write(path, arc)
 
+# Write run index batch.
 def _write_run_index_batch(run_dir: Path, run_info: dict) -> None:
     summary_path = run_dir / "batch_summary.json"
     if not summary_path.exists():

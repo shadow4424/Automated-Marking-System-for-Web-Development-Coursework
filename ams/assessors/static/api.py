@@ -11,9 +11,9 @@ from ams.core.profiles import get_profile_spec
 
 class APIStaticAssessor(Assessor):
     """Deterministic API static checks — detects RESTful patterns in PHP and JS files."""
-
     name = "api_static"
 
+    # Run the API static checks for PHP and JavaScript files.
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
 
@@ -93,7 +93,7 @@ class APIStaticAssessor(Assessor):
 
         return findings
 
-    # ------------------------------------------------------------------ helpers
+    # Route the file to the correct API pattern detector.
     def _detect_api_patterns(self, path, content: str) -> dict:
         lowered = content.lower()
         suffix = path.suffix.lower()
@@ -104,6 +104,7 @@ class APIStaticAssessor(Assessor):
             return self._detect_js_api(content, lowered, path)
         return {}
 
+    # Detect API-style behaviour in PHP files.
     def _detect_php_api(self, content: str, lowered: str, path) -> dict:
         json_content_type = bool(re.search(
             r"""header\s*\(\s*['"]Content-Type\s*:\s*application/json""",
@@ -139,6 +140,7 @@ class APIStaticAssessor(Assessor):
             "has_api_patterns": has_api_patterns,
         }
 
+    # Detect API-style behaviour in JavaScript files.
     def _detect_js_api(self, content: str, lowered: str, path) -> dict:
         fetch_count = lowered.count("fetch(") + lowered.count("fetch (")
         xhr_count = lowered.count("xmlhttprequest") + lowered.count("xhr.")

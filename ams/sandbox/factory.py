@@ -1,13 +1,4 @@
-"""Factory functions for creating sandboxed or unsandboxed runners.
-
-The factory reads the global ``SandboxConfig`` and returns:
-  • ``DockerCommandRunner``     when mode is DOCKER and Docker is available
-  • ``SubprocessRunner``        **only** when mode is explicitly SUBPROCESS
-
-When mode is DOCKER (the default), Docker **must** be available.  The factory
-will raise ``RuntimeError`` if Docker is unreachable or the sandbox image is
-missing, ensuring student code is never silently executed without isolation.
-"""
+"""Factory functions for creating sandboxed or unsandboxed runners."""
 from __future__ import annotations
 
 import logging
@@ -32,15 +23,7 @@ def get_command_runner(
     container_retain: bool = False,
     run_id: str | None = None,
 ) -> CommandRunner:
-    """Return a ``CommandRunner`` appropriate for the configured sandbox mode.
-
-    When mode is DOCKER (default), Docker **must** be reachable and the
-    sandbox image must exist.  A ``SandboxUnavailableError`` is raised
-    otherwise so that student code is never run without isolation.
-
-    Set ``AMS_SANDBOX_MODE=subprocess`` explicitly to opt out (e.g. for
-    local development or testing).
-    """
+    """Return a CommandRunner appropriate for the configured sandbox mode."""
     cfg = config or get_sandbox_config()
 
     if cfg.mode == SandboxMode.DOCKER:
@@ -82,11 +65,7 @@ def get_browser_runner(
     container_retain: bool = False,
     run_id: str | None = None,
 ) -> BrowserRunner:
-    """Return a ``BrowserRunner`` appropriate for the configured sandbox mode.
-
-    When mode is DOCKER (default), Docker **must** be reachable.
-    A ``SandboxUnavailableError`` is raised otherwise.
-    """
+    """Return a BrowserRunner appropriate for the configured sandbox mode."""
     cfg = config or get_sandbox_config()
 
     if cfg.mode == SandboxMode.DOCKER:

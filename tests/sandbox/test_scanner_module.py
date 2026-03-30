@@ -1,8 +1,4 @@
-"""Tests for the pre-execution scanner module.
-
-Test payloads are assembled at runtime via base64 decoding
-to avoid triggering host antivirus heuristics on this file.
-"""
+"""Tests for the pre-execution scanner module."""
 from __future__ import annotations
 
 import base64
@@ -14,9 +10,8 @@ from ams.sandbox.threat_scanner import ScanResult, ThreatFinding, ThreatScanner
 from ams.sandbox.threat_patterns import ThreatCategory, ThreatSeverity
 
 
-# ---------------------------------------------------------------------------
-# Helpers: build payloads at runtime so the .py file stays AV-clean
-# ---------------------------------------------------------------------------
+# Helpers: build payloads at runtime so the.py file stays AV-clean
+
 def _enc(s: str) -> str:
     return base64.b64encode(s.encode()).decode()
 
@@ -54,9 +49,8 @@ def _payload(key: str) -> str:
     return _dec(_P[key])
 
 
-# ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
+
 @pytest.fixture
 def scanner():
     return ThreatScanner()
@@ -69,9 +63,8 @@ def submission_dir(tmp_path: Path):
     return sub
 
 
-# ---------------------------------------------------------------------------
 # ScanResult
-# ---------------------------------------------------------------------------
+
 class TestScanResult:
 
     def test_empty_result(self):
@@ -96,9 +89,8 @@ class TestScanResult:
         assert r.has_high_threats
 
 
-# ---------------------------------------------------------------------------
 # ThreatScanner
-# ---------------------------------------------------------------------------
+
 class TestScanner:
 
     def test_clean_submission(self, scanner, submission_dir):

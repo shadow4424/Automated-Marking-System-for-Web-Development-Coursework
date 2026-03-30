@@ -8,87 +8,68 @@ from ams.core.profiles import ProfileSpec, RequiredJSRule
 
 
 class JSRequiredFeaturesAssessor(BaseRequiredAssessor):
-    """Checks required JS features based on profile spec.
-    
-    Inherits common behaviour from BaseRequiredAssessor:
-    - File reading and error handling
-    - Snippet extraction
-    - Finding creation
-    - Unified run() pipeline
-    
-    Implements JS-specific:
-    - Rule evaluation with DOM, async, and feature pattern matching
-    - Message building
-    - Finding ID mapping
-    """
+    """Checks required JS features based on profile spec."""
 
     name = "js_required"
 
+    # Initialise the JavaScript required assessor.
     def __init__(self, profile: str | ProfileSpec = "frontend") -> None:
         super().__init__(profile)
-    
+
+    # Return the component name.
     @property
     def component_name(self) -> str:
         return "js"
-    
+
+    # Return the required rules for this component.
     @property
     def required_rules(self) -> List[RequiredJSRule]:
         return list(self.profile_spec.required_js)
-    
+
+    # Return the pass finding id.
     def _get_finding_id_pass(self) -> str:
         return JID.REQ_PASS
-    
+
+    # Return the fail finding id.
     def _get_finding_id_fail(self) -> str:
         return JID.REQ_FAIL
-    
+
+    # Return the skipped finding id.
     def _get_finding_id_skipped(self) -> str:
         return JID.REQ_SKIPPED
-    
+
+    # Return the missing-files finding id.
     def _get_finding_id_missing_files(self) -> str:
         return JID.REQ_MISSING_FILES
-    
+
     def _evaluate_rule_impl(
         self, rule: RequiredJSRule, content: str
     ) -> Tuple[int, bool]:
-        """Evaluate a single JS rule against content.
-        
-        Args:
-            rule: The JS rule to evaluate
-            content: Raw JS content as string
-            
-        Returns:
-            Tuple of (count, passed) where count is the number of matches found
-            and passed indicates whether the requirement is satisfied.
-        """
+        """Evaluate a single JS rule against content."""
         content_lower = content.lower()
         return self._evaluate_rule(rule, content_lower)
-    
+
     def _evaluate_rule(
         self, rule: RequiredJSRule, content_lower: str
     ) -> tuple[int, bool]:
-        """Evaluate a single JS rule and return count and pass status.
-        
-        Returns:
-            Tuple of (count, passed) where count is the number of matches found
-            and passed indicates whether the requirement is satisfied.
-        """
+        """Evaluate a single JS rule and return count and pass status."""
         needle = rule.needle.lower()
-        
-        # === DOM QUERY ===
+
+        # DOM QUERY.
         if needle == "dom_query" or rule.id == "js.has_dom_query":
-            dom_queries = ["queryselector", "getelementbyid", "getelementsbyclass", 
+            dom_queries = ["queryselector", "getelementbyid", "getelementsbyclass",
                           "getelementsbytagname", "queryselectorall"]
             count = sum(1 for q in dom_queries if q in content_lower)
             return count, count >= rule.min_count
-        
-        # === DOM MANIPULATION ===
+
+        # DOM MANIPULATION.
         if needle == "dom_manipulation" or rule.id == "js.has_dom_manipulation":
             dom_methods = ["innerhtml", "textcontent", "appendchild", "removechild",
                           "createelement", "setattribute", "classlist", "style."]
             count = sum(1 for m in dom_methods if m in content_lower)
             return count, count >= rule.min_count
-        
-        # === LOOPS ===
+
+        # LOOPS.
         if needle == "loops" or rule.id == "js.has_loops":
             has_for = "for " in content_lower or "for(" in content_lower
             has_while = "while " in content_lower or "while(" in content_lower
@@ -96,33 +77,33 @@ class JSRequiredFeaturesAssessor(BaseRequiredAssessor):
             has_map = ".map(" in content_lower
             count = sum([has_for, has_while, has_foreach, has_map])
             return count, count >= rule.min_count
-        
-        # === FORM VALIDATION ===
+
+        # FORM VALIDATION.
         if needle == "form_validation" or rule.id == "js.has_form_validation":
             validation_patterns = [".value", "validity", "checkvalidity", "required",
                                   "pattern", ".length", "isnan", "typeof"]
             count = sum(1 for p in validation_patterns if p in content_lower)
             return count, count >= rule.min_count
-        
-        # === ASYNC PATTERNS ===
+
+        # ASYNC PATTERNS.
         if needle == "async_patterns" or rule.id == "js.has_async_patterns":
             async_patterns = ["async ", "await ", "fetch(", "promise", ".then("]
             count = sum(1 for p in async_patterns if p in content_lower)
             return count, count >= rule.min_count
-        
-        # === CONST/LET ===
+
+        # CONST/LET.
         if needle == "const_let" or rule.id == "js.has_const_let":
             has_const = "const " in content_lower
             has_let = "let " in content_lower
             count = (1 if has_const else 0) + (1 if has_let else 0)
             return count, count >= rule.min_count
-        
-        # === TEMPLATE LITERALS ===
+
+        # TEMPLATE LITERALS.
         if needle == "`" or rule.id == "js.has_template_literals":
             count = content_lower.count("`")
             return count, count >= rule.min_count
 
-        # === CALCULATOR: DISPLAY DOM ===
+        # CALCULATOR: DISPLAY DOM.
         if needle == "creates_display_dom" or rule.id == "js.creates_display_dom":
             # Check for theDisplay reference (exact name from spec) or equivalent display input
             has_thedisplay = "thedisplay" in content_lower
@@ -131,7 +112,7 @@ class JSRequiredFeaturesAssessor(BaseRequiredAssessor):
             count = 1 if (has_thedisplay or has_getelm_display) else 0
             return count, count >= rule.min_count
 
-        # === CALCULATOR: DIGIT BUTTONS ===
+        # CALCULATOR: DIGIT BUTTONS.
         if needle == "creates_digit_buttons" or rule.id == "js.creates_digit_buttons":
             # Count how many digit characters appear as string literals in a createElement context
             has_createelement = "createelement" in content_lower
@@ -145,7 +126,7 @@ class JSRequiredFeaturesAssessor(BaseRequiredAssessor):
             total = digit_count + (1 if has_decimal else 0) + (1 if has_equals else 0)
             return total, total >= 8  # Full pass: 8+ of 12 digit/decimal/equals buttons
 
-        # === CALCULATOR: OPERATOR BUTTONS ===
+        # CALCULATOR: OPERATOR BUTTONS.
         if needle == "creates_operator_buttons" or rule.id == "js.creates_operator_buttons":
             has_createelement = "createelement" in content_lower
             if not has_createelement:
@@ -158,7 +139,7 @@ class JSRequiredFeaturesAssessor(BaseRequiredAssessor):
                                if any(a in content_lower for a in [op, alts]))
             return distinct_ops, distinct_ops >= 4  # Full pass: all 4 operators
 
-        # === CALCULATOR: UPDATE DISPLAY ===
+        # CALCULATOR: UPDATE DISPLAY.
         if needle == "has_updatedisplay" or rule.id == "js.has_updateDisplay":
             has_fn_name = "updatedisplay" in content_lower
             # Also detect display.value += pattern
@@ -167,14 +148,14 @@ class JSRequiredFeaturesAssessor(BaseRequiredAssessor):
             count = 1 if (has_fn_name or has_value_concat) else 0
             return count, count >= rule.min_count
 
-        # === CALCULATOR: STATE TRACKING ===
+        # CALCULATOR: STATE TRACKING.
         if needle == "has_prevalue_preop" or rule.id == "js.has_prevalue_preop_state":
             has_prevalue = "prevalue" in content_lower or "prevvalue" in content_lower
             has_preop = "preop" in content_lower or "prevop" in content_lower or "operator" in content_lower
             count = sum([has_prevalue, has_preop])
-            return count, count >= rule.min_count  # min_count=1, need at least 1
+            return count, count >= rule.min_count  # Min_count=1, need at least 1
 
-        # === CALCULATOR: doCalc ===
+        # CALCULATOR: doCalc.
         if needle == "has_docalc" or rule.id == "js.has_doCalc":
             has_fn_name = "docalc" in content_lower or "calculate" in content_lower or "compute" in content_lower
             # Count how many arithmetic operators are handled in logic
@@ -185,7 +166,7 @@ class JSRequiredFeaturesAssessor(BaseRequiredAssessor):
             count = 1 if (has_fn_name or has_arithmetic) else 0
             return count, count >= rule.min_count
 
-        # === CALCULATOR: DISPLAY CLEAR/RESULT ===
+        # CALCULATOR: DISPLAY CLEAR/RESULT.
         if needle == "clears_display" or rule.id == "js.clears_or_updates_display_correctly":
             # Check for display value being cleared (set to "" or "0")
             has_clear = ('display.value = ""' in content_lower or
@@ -196,25 +177,25 @@ class JSRequiredFeaturesAssessor(BaseRequiredAssessor):
             count = 1 if has_clear else 0
             return count, count >= rule.min_count
 
-        # === createElement USAGE ===
+        # CreateElement USAGE.
         if needle == "uses_createelement" or rule.id == "js.uses_createElement":
             count = content_lower.count("createelement(")
             return count, count >= rule.min_count
 
-        # === AVOIDS document.write ===
+        # AVOIDS document.write.
         if needle == "avoids_document_write" or rule.id == "js.avoids_document_write":
             # Inverted check: passes when document.write is absent
             uses_docwrite = "document.write(" in content_lower
             count = 0 if uses_docwrite else 1
-            return count, count >= rule.min_count  # min_count=1 → passes only when absent
+            return count, count >= rule.min_count  # Min_count=1 → passes only when absent
 
-        # === EXTRA FEATURES ===
+        # EXTRA FEATURES.
         if needle == "extra_features" or rule.id == "js.extra_features":
             extras = ["sqrt", "math.sqrt", "percent", "memory", "sin", "cos", "tan", "clear", "clearall", "backspace"]
             count = sum(1 for e in extras if e in content_lower)
-            return count, count >= rule.min_count  # min_count=0 → optional
+            return count, count >= rule.min_count  # Min_count=0 → optional
 
-        # === STANDARD NEEDLE COUNTING ===
+        # STANDARD NEEDLE COUNTING.
         count = content_lower.count(needle)
         return count, count >= rule.min_count
 

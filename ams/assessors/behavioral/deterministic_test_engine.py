@@ -36,14 +36,7 @@ class CommandRunner:
 
 
 class SubprocessRunner(CommandRunner):
-    """Direct host-process runner (dev/test only).
-
-    .. deprecated:: 2.0
-        Production execution uses :class:`~ams.sandbox.docker_runner.DockerCommandRunner`.
-        This class is retained only for local development and unit tests that
-        inject it explicitly via the *runner* parameter of
-        :class:`DeterministicTestEngine`.
-    """
+    """Direct host-process runner (dev/test only)..."""
 
     def run(self, args: Sequence[str], timeout: float, cwd: Path | None = None) -> RunResult:
         """Execute a command on the host and capture its outputs."""
@@ -81,6 +74,7 @@ class SubprocessRunner(CommandRunner):
 class FormDetector(HTMLParser):
     """Extract form actions and field names from HTML."""
 
+    # Store runner settings and timeout limits.
     def __init__(self) -> None:
         super().__init__()
         self.actions: List[str] = []
@@ -104,6 +98,7 @@ class DeterministicTestEngine(Assessor):
 
     name = "deterministic_test_engine"
 
+    # Store runner settings and timeout limits.
     def __init__(
         self,
         runner: CommandRunner | None = None,
@@ -122,12 +117,7 @@ class DeterministicTestEngine(Assessor):
         self._fatal_error_tokens = ("fatal error", "parse error")
 
     def _is_php_available(self) -> bool:
-        """Check whether the PHP binary is reachable by the active runner.
-
-        When a Docker-based runner is in use, PHP is guaranteed to be
-        available inside the sandbox image — we skip the host-side
-        ``shutil.which`` check that would produce a false-negative.
-        """
+        """Check whether the PHP binary is reachable by the active runner."""
         try:
             from ams.sandbox.docker_runner import DockerCommandRunner
             if isinstance(self.runner, DockerCommandRunner):
@@ -184,7 +174,7 @@ class DeterministicTestEngine(Assessor):
             )
         return findings
 
-    # ------------------------------------------------------------------ PHP smoke
+    # PHP smoke.
     def _php_smoke(self, context: SubmissionContext, profile: str, started_at: float) -> List[Finding]:
         target = self._select_php_entrypoint(context)
         php_available = self._is_php_available()
@@ -330,7 +320,7 @@ class DeterministicTestEngine(Assessor):
             )
         ]
 
-    # ------------------------------------------------------------------ PHP form injection
+    # PHP form injection.
     def _php_form_injection(self, context: SubmissionContext, profile: str, started_at: float) -> List[Finding]:
         target = self._select_php_entrypoint(context)
         php_available = self._is_php_available()
@@ -459,7 +449,7 @@ class DeterministicTestEngine(Assessor):
             )
         ]
 
-    # ------------------------------------------------------------------ SQL SQLite execution
+    # SQL SQLite execution.
     def _sql_sqlite_exec(self, context: SubmissionContext, profile: str, started_at: float) -> List[Finding]:
         sql_files = sorted(context.files_for("sql", relevant_only=True))
         component_required = False
@@ -588,14 +578,14 @@ class DeterministicTestEngine(Assessor):
             )
         ]
 
-    # ------------------------------------------------------------------ API execution
+    # API execution.
     def _api_exec(
         self, context: SubmissionContext, profile: str, started_at: float
     ) -> List[Finding]:
         """Execute API endpoint tests against PHP files that serve JSON."""
         component_required = False
 
-        # --- Discovery: find files that look like API endpoints ---
+        # Discovery: find files that look like API endpoints.
         api_endpoint = self._discover_api_endpoint(context)
 
         if not api_endpoint:
@@ -673,7 +663,7 @@ class DeterministicTestEngine(Assessor):
                 )
             ]
 
-        # --- Execute API test via PHP wrapper ---
+        # Execute API test via PHP wrapper.
         findings: List[Finding] = []
         test_start = time.time()
 
@@ -718,7 +708,7 @@ class DeterministicTestEngine(Assessor):
                 )
             ]
 
-        # --- Validate output ---
+        # Validate output.
         output = result.stdout.strip()
         fatal_seen = self._contains_fatal(result.stderr) or self._contains_fatal(
             result.stdout
@@ -820,7 +810,7 @@ class DeterministicTestEngine(Assessor):
 
         return findings
 
-    # ------------------------------------------------------------------ helpers
+    # Run SQL statements in an in-memory SQLite database.
     def _execute_sql_files(self, sql_files: Iterable[Path]) -> dict:
         statements: List[tuple[Path, str]] = []
         for path in sql_files:
@@ -874,7 +864,7 @@ class DeterministicTestEngine(Assessor):
             "insert_ok": insert_ok,
             "select_ok": select_ok,
             "row_count": row_count,
-            "errors": errors[:20],  # guard runaway error lists
+            "errors": errors[:20],  # Guard runaway error lists
         }
 
     def _php_wrapper(self, inputs: Mapping[str, str], target: Path) -> str:
@@ -883,6 +873,7 @@ class DeterministicTestEngine(Assessor):
         target_posix = target.resolve().as_posix()
         return "<?php\n$_POST = array(" + php_array + ");\n$_GET = $_POST;\ninclude '" + target_posix + "';\n"
 
+    # Build sample form inputs from the HTML files.
     def _discover_form_inputs(self, context: SubmissionContext) -> Mapping[str, str]:
         html_files = sorted(context.files_for("html", relevant_only=True))
         inputs: dict[str, str] = {}
@@ -900,6 +891,7 @@ class DeterministicTestEngine(Assessor):
                 inputs[name] = f"sample_{name}"
         return inputs
 
+    # Choose the PHP entrypoint that best matches the submission.
     def _select_php_entrypoint(self, context: SubmissionContext) -> Path | None:
         php_files = sorted(context.files_for("php", relevant_only=True))
         if not php_files:
@@ -923,6 +915,7 @@ class DeterministicTestEngine(Assessor):
 
         return php_files[0]
 
+    # Collect form actions from the HTML files.
     def _extract_form_actions(self, context: SubmissionContext) -> List[str]:
         actions: List[str] = []
         html_files = sorted(context.files_for("html", relevant_only=True))
@@ -988,13 +981,7 @@ class DeterministicTestEngine(Assessor):
         return None
 
     def _api_wrapper(self, target: Path) -> str:
-        """Generate a PHP wrapper that simulates a GET request to an API endpoint.
-
-        The wrapper:
-        1. Sets REQUEST_METHOD to GET
-        2. Captures all output via ob_start/ob_get_clean
-        3. Uses __DIR__ relative include so it works inside Docker containers
-        """
+        """Generate a PHP wrapper that simulates a GET request to an API endpoint."""
         # Use relative path from the wrapper's temp dir up to the target's parent
         target_name = target.name
         return (
@@ -1009,6 +996,7 @@ class DeterministicTestEngine(Assessor):
             "echo $output;\n"
         )
 
+    # Record behavioural evidence on the submission context.
     def _record_evidence(self, context: SubmissionContext, evidence: BehaviouralEvidence) -> None:
         # Ensure standard stage label and capped outputs
         evidence.stage = "behavioural"
@@ -1016,6 +1004,7 @@ class DeterministicTestEngine(Assessor):
         evidence.stderr = self._cap(evidence.stderr)
         context.behavioural_evidence.append(evidence)
 
+    # Record evidence first, then return the paired finding.
     def _record_finding(
         self,
         context: SubmissionContext,
@@ -1038,6 +1027,7 @@ class DeterministicTestEngine(Assessor):
             required=required,
         )
 
+    # Build a behavioural finding with standard metadata.
     def _finding(
         self,
         code: str,
@@ -1064,20 +1054,25 @@ class DeterministicTestEngine(Assessor):
             required=required,
         )
 
+    # Check whether the overall behavioural timeout has been reached.
     def _timed_out(self, started_at: float) -> bool:
         return (time.time() - started_at) > self.overall_timeout
 
+    # Cap long output so stored evidence stays manageable.
     def _cap(self, text: str) -> str:
         if len(text) <= self.output_cap:
             return text
         return text[: self.output_cap] + "...[truncated]"
 
+    # Check whether the text contains any visible content.
     def _has_content(self, text: str) -> bool:
         return bool(text and text.strip())
 
+    # Return the first line of text for compact error messages.
     def _first_line(self, text: str) -> str:
         return (text.splitlines() or [""])[0]
 
+    # Check whether the output contains a fatal PHP error token.
     def _contains_fatal(self, text: str) -> bool:
         lowered = (text or "").lower()
         return any(token in lowered for token in self._fatal_error_tokens)

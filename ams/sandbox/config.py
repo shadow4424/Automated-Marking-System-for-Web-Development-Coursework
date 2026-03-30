@@ -1,8 +1,4 @@
-"""Sandbox configuration for AMS.
-
-Controls whether Docker-based sandboxing is used for student code execution,
-and specifies resource limits for containers.
-"""
+"""Sandbox configuration for AMS."""
 from __future__ import annotations
 
 import logging
@@ -22,60 +18,40 @@ class SandboxMode(str, Enum):
 
 @dataclass
 class SandboxConfig:
-    """Configuration for Docker sandbox resource limits and policies.
+    """Configuration for Docker sandbox resource limits and policies."""
 
-    All values can be overridden via environment variables prefixed with
-    ``AMS_SANDBOX_``.  For example ``AMS_SANDBOX_MEMORY_LIMIT=256m``.
-
-    The default mode is **DOCKER** so student code is always executed inside
-    an isolated container.  Set ``AMS_SANDBOX_MODE=subprocess`` only for
-    local development or testing where Docker is not available.
-    """
-
-    # ── Execution mode ──────────────────────────────────────────────
+    # Execution mode.
     mode: SandboxMode = SandboxMode.DOCKER
 
-    # ── Docker image ────────────────────────────────────────────────
+    # Docker image.
     image: str = "ams-sandbox:latest"
 
-    # ── Resource limits ─────────────────────────────────────────────
+    # Resource limits.
     cpu_limit: float = 1.0          # CPU cores
     memory_limit: str = "512m"      # Docker memory limit string
     disk_quota: str = "100m"        # Storage limit (overlay2 driver)
     pids_limit: int = 64            # Max number of processes
 
-    # ── Network ─────────────────────────────────────────────────────
+    # Network.
     network_mode: str = "none"      # "none" = fully isolated
 
-    # ── Filesystem ──────────────────────────────────────────────────
+    # Filesystem.
     read_only_root: bool = True     # Mount root filesystem read-only
     tmpfs_size: str = "50m"         # Writable tmpfs for /tmp
 
-    # ── Security ────────────────────────────────────────────────────
+    # Security.
     drop_all_caps: bool = True      # --cap-drop ALL
     no_new_privileges: bool = True  # --security-opt no-new-privileges
     seccomp_profile: str | None = None   # Path to seccomp JSON (None = Docker default)
     user: str = "1000:1000"         # UID:GID inside container
 
-    # ── Playwright-specific ─────────────────────────────────────────
+    # Playwright-specific.
     playwright_image: str = "ams-sandbox:latest"
     browser_timeout_ms: int = 30000  # Timeout for browser operations inside container (increased to handle slow submissions)
 
     @classmethod
     def from_env(cls) -> SandboxConfig:
-        """Build configuration from environment variables.
-
-        Environment variables (all optional, shown with defaults):
-            AMS_SANDBOX_MODE=subprocess
-            AMS_SANDBOX_IMAGE=ams-sandbox:latest
-            AMS_SANDBOX_CPU_LIMIT=1.0
-            AMS_SANDBOX_MEMORY_LIMIT=512m
-            AMS_SANDBOX_DISK_QUOTA=100m
-            AMS_SANDBOX_PIDS_LIMIT=64
-            AMS_SANDBOX_NETWORK_MODE=none
-            AMS_SANDBOX_TMPFS_SIZE=50m
-            AMS_SANDBOX_USER=1000:1000
-        """
+        """Build configuration from environment variables."""
         mode_str = os.environ.get("AMS_SANDBOX_MODE", "docker").lower()
         try:
             mode = SandboxMode(mode_str)
@@ -96,12 +72,12 @@ class SandboxConfig:
         )
 
 
-# Singleton — lazily populated on first access via ``get_sandbox_config()``.
+# Singleton — lazily populated on first access via get_sandbox_config().
 _config: SandboxConfig | None = None
 
 
 def get_sandbox_config() -> SandboxConfig:
-    """Return the global sandbox configuration (created once from env)."""
+    """Return global sandbox configuration (created once from env)."""
     global _config
     if _config is None:
         _config = SandboxConfig.from_env()
@@ -115,17 +91,7 @@ def reset_sandbox_config() -> None:
 
 
 def get_sandbox_status() -> dict:
-    """Return a status dict describing the current sandbox state.
-
-    Useful for CLI banners and WebUI status indicators.
-
-    Returns a dict with keys:
-        mode:            'docker' or 'subprocess'
-        docker_available: bool – True if Docker daemon is reachable
-        image_available:  bool – True if the sandbox image exists
-        enforced:         bool – True when mode is DOCKER and Docker is ready
-        message:          str  – human-readable status summary
-    """
+    """Return a status dict describing the current sandbox state."""
     import shutil
     import subprocess as _sp
 

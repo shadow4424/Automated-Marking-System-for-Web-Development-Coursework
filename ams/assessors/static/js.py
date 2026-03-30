@@ -14,6 +14,7 @@ class JSStaticAssessor(Assessor):
 
     name = "js_static"
 
+    # Check js syntax.
     def _check_js_syntax(self, files: list[tuple[object, str]]) -> List[Finding]:
         findings: List[Finding] = []
         for path, content in files:
@@ -71,6 +72,7 @@ class JSStaticAssessor(Assessor):
                 )
         return findings
 
+    # Check js patterns.
     def _check_js_patterns(self, files: list[tuple[object, str]]) -> List[Finding]:
         findings: List[Finding] = []
         for path, content in files:
@@ -221,6 +223,7 @@ class JSStaticAssessor(Assessor):
 
         return findings
 
+    # Check js dependencies.
     def _check_js_dependencies(self, files: list[tuple[object, str]]) -> List[Finding]:
         findings: List[Finding] = []
         for path, content in files:
@@ -254,10 +257,11 @@ class JSStaticAssessor(Assessor):
             )
         return findings
 
+    # Run the JavaScript static checks.
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
         js_files = sorted(context.files_for("js", relevant_only=True))
-        
+
         # Determine if JS is required for this profile
         profile_name = context.metadata.get("profile")
         is_required = False
@@ -334,13 +338,13 @@ class JSStaticAssessor(Assessor):
         findings.extend(self._check_js_dependencies(loaded_files))
         return findings
 
-    # ------------------------------------------------------------------ API
+    # API.
     def _analyse_api_usage(self, path, content: str) -> List[Finding]:
         """Detect and report API usage patterns in JavaScript files."""
         lowered = content.lower()
         findings: List[Finding] = []
 
-        # --- HTTP Method Extraction ---
+        # HTTP Method Extraction.
         # Match method specifications inside fetch options objects
         method_pattern = re.compile(
             r"""(?:method\s*:\s*['"])(GET|POST|PUT|DELETE|PATCH)(?:['"])""",
@@ -348,7 +352,7 @@ class JSStaticAssessor(Assessor):
         )
         http_methods_found = [m.upper() for m in method_pattern.findall(content)]
 
-        # --- Endpoint Detection ---
+        # Endpoint Detection.
         # Look for URL-like strings inside fetch() calls
         endpoint_pattern = re.compile(
             r"""fetch\s*\(\s*['"`]([^'"`]+)['"`]""",
@@ -360,12 +364,12 @@ class JSStaticAssessor(Assessor):
             if "/api" in ep.lower() or ep.startswith("http") or ep.startswith("/")
         ]
 
-        # --- Payload & Headers ---
+        # Payload & Headers.
         json_stringify_count = lowered.count("json.stringify")
         content_type_json = lowered.count("application/json")
         headers_count = lowered.count("headers")
 
-        # --- Response Handling ---
+        # Response Handling.
         response_json_count = lowered.count(".json(")
         catch_count = lowered.count(".catch(")
         then_count = lowered.count(".then(")

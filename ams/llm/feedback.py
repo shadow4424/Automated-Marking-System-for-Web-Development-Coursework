@@ -1,13 +1,4 @@
-"""Phase 1: Feedback & Reliability - LLM Feedback Generation Module.
-
-This module implements Phase 1 of the LLM integration roadmap:
-- 1.1: Strict JSON output with explicit system prompts
-- 1.2: Feedback templates for rule-based explanations
-- 1.3: PII scrubbing before sending to LLM
-- 1.4: Safety rails (LLM provides feedback only, no scores)
-
-Refactored to use the LLMProvider abstraction from ams.core.llm_factory.
-"""
+"""Phase 1: Feedback & Reliability - LLM Feedback Generation Module."""
 from __future__ import annotations
 
 import logging
@@ -20,29 +11,15 @@ from ams.llm.prompts import FEEDBACK_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
-# =============================================================================
+
 # Configuration
-# =============================================================================
 
 
-# =============================================================================
 # Phase 1.3: PII Scrubbing
-# =============================================================================
 
 
 def scrub_pii(text: str) -> str:
-    """Scrub personally identifiable information from text before sending to LLM.
-
-    Replaces:
-    - Email addresses with [EMAIL_REDACTED]
-    - Student IDs (8-digit or c/s + 7 digits) with [STUDENT_ID]
-
-    Args:
-        text: Input text potentially containing PII.
-
-    Returns:
-        Sanitized text with PII replaced by placeholders.
-    """
+    """Scrub personally identifiable information from text before sending to LLM."""
     if not text:
         return text
 
@@ -50,57 +27,42 @@ def scrub_pii(text: str) -> str:
     email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
     text = re.sub(email_pattern, "[EMAIL_REDACTED]", text)
 
-    # Student ID patterns:
-    # - 8 consecutive digits: 12345678
-    # - c or s prefix + 7 digits: c1234567, s1234567
+    # Student ID patterns
+    # 8 consecutive digits: 12345678.
+    # C or s prefix + 7 digits: c1234567, s1234567.
     student_id_pattern = r"\b[cCsS]?\d{7,8}\b"
     text = re.sub(student_id_pattern, "[STUDENT_ID]", text)
 
     return text
 
 
-# =============================================================================
 # Phase 1.2: Feedback Templates
-# =============================================================================
 
 
-# =============================================================================
 # LLM Communication (Refactored to use LLMProvider)
-# =============================================================================
+
 
 # Re-export from shared utility for backward compatibility
 from ams.llm.utils import clean_json_response as _clean_json_response  # noqa: F401
 
 
 def ask_llama(prompt: str, system_prompt: str = FEEDBACK_SYSTEM_PROMPT) -> str:
-    """Send a prompt to the configured LLM provider and return the response.
-
-    This function now uses the LLMProvider abstraction, respecting config.py.
-
-    Args:
-        prompt: User prompt to send.
-        system_prompt: System prompt for behaviour control.
-
-    Returns:
-        Raw response content from the LLM.
-    """
+    """Send a prompt to the configured LLM provider and return the response."""
     provider = get_llm_provider()
-    
+
     response: LLMResponse = provider.complete(
         prompt=prompt,
         system_prompt=system_prompt,
         json_mode=True,  # Enable JSON mode for cleaner output
     )
-    
+
     if response.error:
         return f'{{"error": "llm_error", "message": "{response.error}"}}'
-    
+
     return response.content
 
 
-# =============================================================================
 # Main Feedback Generation Function
-# =============================================================================
 
 
 def generate_feedback(
@@ -109,23 +71,9 @@ def generate_feedback(
     error_context: str,
     category: str = "unknown",
 ) -> dict[str, Any]:
-    """Generate structured feedback for a failed rule check.
-
-    This is the main entry point for Phase 1 feedback generation.
-    Now uses the Phase B FeedbackGenerator with Pydantic validation.
-
-    Args:
-        rule_name: The identifier of the failed rule (e.g., "html.has_doctype").
-        student_code: The relevant snippet of student code.
-        error_context: Description of what went wrong.
-        category: Rule category (e.g., "Structure", "Semantics").
-
-    Returns:
-        Parsed JSON feedback as a dictionary. Always returns a valid dict,
-        never raises exceptions.
-    """
+    """Generate structured feedback for a failed rule check."""
     from ams.llm.generators import FeedbackGenerator
-    
+
     # Phase 1.3: Scrub PII before sending
     sanitized_code = scrub_pii(student_code)
     sanitized_context = scrub_pii(error_context)
@@ -141,10 +89,10 @@ def generate_feedback(
     # Use the new robust generator
     generator = FeedbackGenerator()
     feedback = generator.generate(evidence)
-    
+
     # Convert to dict for backward compatibility
     result = feedback.model_dump()
-    
+
     # Map to legacy format if needed (keep backward compat)
     if feedback.items:
         # Include first item's message as top-level for legacy consumers
@@ -152,6 +100,6 @@ def generate_feedback(
         result["category"] = category
         result["result"] = feedback.items[0].severity if feedback.items else "INFO"
         result["evidence"] = feedback.summary
-    
+
     logger.debug(f"Feedback generated for rule: {rule_name}, fallback={feedback.meta.get('fallback', False)}")
     return result

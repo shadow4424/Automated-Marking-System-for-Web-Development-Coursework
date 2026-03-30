@@ -1,12 +1,4 @@
-"""Tests for the check aggregation layer (ams.core.aggregation).
-
-Validates that:
-- Raw findings are correctly classified as rubric checks vs diagnostics.
-- Multiple findings from the same rule collapse into one check.
-- Consistency findings aggregate by type (not by occurrence).
-- Diagnostic / browser / deterministic-engine events are excluded from checks.
-- Check stats accurately reflect distinct logical checks.
-"""
+"""Tests for the check aggregation layer (ams.core.aggregation)."""
 
 from __future__ import annotations
 
@@ -23,9 +15,8 @@ from ams.core.aggregation import (
 )
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
+
 
 def _finding(
     fid: str,
@@ -48,9 +39,8 @@ def _finding(
     }
 
 
-# ---------------------------------------------------------------------------
-# is_diagnostic
-# ---------------------------------------------------------------------------
+# Is_diagnostic
+
 
 class TestIsDiagnostic:
     def test_browser_events(self):
@@ -90,9 +80,8 @@ class TestIsDiagnostic:
         assert not is_diagnostic(_finding("HTML.MISSING_FILES", source="html_static"))
 
 
-# ---------------------------------------------------------------------------
-# get_check_key
-# ---------------------------------------------------------------------------
+# Get_check_key
+
 
 class TestGetCheckKey:
     def test_required_rule_uses_evidence_rule_id(self):
@@ -115,9 +104,8 @@ class TestGetCheckKey:
         assert get_check_key(f) == "HTML.MISSING_FILES"
 
 
-# ---------------------------------------------------------------------------
-# aggregate_findings_to_checks
-# ---------------------------------------------------------------------------
+# Aggregate_findings_to_checks
+
 
 class TestAggregation:
     def test_sql_required_rules_each_unique(self):
@@ -202,7 +190,7 @@ class TestAggregation:
         # 12 SQL required rules
         for i in range(12):
             findings.append(_finding("SQL.REQ.PASS", source="sql_required", evidence={"rule_id": f"sql.rule_{i}", "weight": 0.08}))
-        # 2 behavioral rules
+        # 2 behavioural rules
         findings.append(_finding("HTML.BEHAVIORAL.PAGE_LOADS", source="html_behavioral"))
         findings.append(_finding("HTML.BEHAVIORAL.FORM_EXISTS", source="html_behavioral"))
         # 3 consistency (one type, 3 occurrences)
@@ -225,12 +213,12 @@ class TestAggregation:
 
         assert total_findings >= 70  # Many findings
         assert total_checks < total_findings  # Checks < findings
-        # Expected: 16+13+12+12+12 + 2 behavioral + 1 consistency = 68 checks
+        # Expected: 16+13+12+12+12 + 2 behavioural + 1 consistency = 68 checks
         assert total_checks == 68
         assert len(diags) == 9
 
     def test_check_stats(self):
-        """compute_check_stats returns correct counts."""
+        """Compute_check_stats returns correct counts."""
         checks = [
             CheckResult(check_id="a", component="html", status="PASS"),
             CheckResult(check_id="b", component="html", status="PASS"),
@@ -289,7 +277,7 @@ class TestAggregation:
         # There should be some diagnostics
         assert diag_count > 0
         # Sum of checks + diagnostics = total findings
-        assert checks_count + diag_count <= findings_count  # checks from rubric + diags from non-rubric
+        assert checks_count + diag_count <= findings_count  # Checks from rubric + diags from non-rubric
         # Stats should add up
         stats = report["check_stats"]
         assert stats["passed"] + stats["failed"] + stats["warnings"] + stats["skipped"] == stats["total"]

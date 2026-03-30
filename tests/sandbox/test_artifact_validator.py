@@ -1,4 +1,4 @@
-"""Tests for the post-execution artifact validator."""
+"""Tests for the post-execution artefact validator."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,7 +11,7 @@ from ams.core.models import Severity
 
 @pytest.fixture
 def workspace(tmp_path: Path):
-    """Create a workspace directory with a standard artifact folder."""
+    """Create a workspace directory with a standard artefact folder."""
     browser_dir = tmp_path / "artifacts" / "browser"
     browser_dir.mkdir(parents=True)
     return tmp_path
@@ -44,7 +44,7 @@ class TestValidateScreenshot:
         assert len(findings) == 1
 
     def test_no_artifact_directory(self, tmp_path: Path):
-        """Workspace without any artifact directories should emit finding."""
+        """Workspace without any artefact directories should emit finding."""
         path, findings = validate_screenshot(tmp_path)
         assert path is None
         assert len(findings) == 1
@@ -56,11 +56,11 @@ class TestValidateScreenshot:
         (browser_dir / "zzz.png").write_bytes(b"\x89PNG" + b"\x00" * 700)
         path, findings = validate_screenshot(workspace)
         assert path is not None
-        assert path.name == "aaa.png"  # sorted, 'a' before 'z'
+        assert path.name == "aaa.png"  # Sorted, 'a' before 'z'
         assert findings == []
 
     def test_submission_artifacts_path(self, tmp_path: Path):
-        """Screenshots under submission/artifacts/browser should also be found."""
+        """Screenshots under submission/artefacts/browser should also be found."""
         browser_dir = tmp_path / "submission" / "artifacts" / "browser"
         browser_dir.mkdir(parents=True)
         png = browser_dir / "screenshot.png"

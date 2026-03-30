@@ -1,8 +1,4 @@
-"""Tests for multi-page UX review pipeline.
-
-Verifies that ALL pages get independent UX review findings, not just the last one.
-Also tests the adaptive retry/backoff mechanism in LocalLMStudioProvider.
-"""
+"""Tests for multi-page UX review pipeline."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -22,21 +18,15 @@ from ams.llm.providers import LocalLMStudioProvider, LLMResponse
 from ams.llm.schemas import UXReviewResult
 
 
-# ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
+
 
 PAGES = ["index.html", "about.html", "contact.html"]
 
 
 @pytest.fixture
 def workspace(tmp_path) -> Path:
-    """Create a 3-page workspace with fake runner screenshots.
-
-    The runner screenshots live in ``_runner_shots/`` (simulating what
-    DockerPlaywrightRunner would produce).  ``capture_all_pages`` will
-    copy them into ``artifacts/browser/`` via ``shutil.copy2``.
-    """
+    """Create a 3-page workspace with fake runner screenshots."""
     sub = tmp_path / "submission"
     sub.mkdir()
     for p in PAGES:
@@ -53,6 +43,7 @@ def workspace(tmp_path) -> Path:
     return tmp_path
 
 
+# Build a submission context for the UX review tests.
 @pytest.fixture
 def context(workspace) -> SubmissionContext:
     sub = workspace / "submission"
@@ -79,17 +70,15 @@ def fake_image(tmp_path) -> Path:
 
 
 class FakeRunner(BrowserRunner):
-    """A stub runner that returns pre-built screenshots per call.
+    """A stub runner that returns pre-built screenshots per call."""
 
-    Screenshots are served from a separate ``_runner_shots/`` directory,
-    simulating what DockerPlaywrightRunner would produce.
-    """
-
+    # Store the fake UX reviews returned by the stub analyst.
     def __init__(self, runner_shot_dir: Path, pages: list[str]):
         self._shot_dir = runner_shot_dir
         self._pages = pages
         self.call_log: list[str] = []
 
+    # Return the prepared UX reviews for the test run.
     def run(self, entry_path: Path, workdir: Path, interaction: bool = True) -> BrowserRunResult:
         page = entry_path.name
         self.call_log.append(page)
@@ -101,16 +90,14 @@ class FakeRunner(BrowserRunner):
         )
 
 
-# ---------------------------------------------------------------------------
 # Tests
-# ---------------------------------------------------------------------------
 
 
 class TestMultiPageUXReview:
     """Ensure every page produces its own UX review finding."""
 
     def test_capture_all_pages_returns_entry_per_page(self, context, workspace):
-        """capture_all_pages must return one entry per HTML file."""
+        """Capture_all_pages must return one entry per HTML file."""
         runner_dir = workspace / "_runner_shots"
         runner = FakeRunner(runner_dir, PAGES)
         pa = PlaywrightAssessor(runner=runner)
@@ -150,6 +137,7 @@ class TestMultiPageUXReview:
         mock_analyst = MagicMock()
         call_counter = {"n": 0}
 
+        # Return the fake UX review for this screenshot.
         def fake_review_ux(screenshot_path, page_name, context_note=None):
             call_counter["n"] += 1
             return UXReviewResult(
@@ -225,11 +213,11 @@ class TestMultiPageUXReview:
 
         assert len(ux_findings) == 3
 
-        # index.html should have real feedback
+        # Index.html should have real feedback
         idx_f = next(f for f in ux_findings if f.evidence["page"] == "index.html")
         assert idx_f.evidence["ux_review"]["status"] != "NOT_EVALUATED"
 
-        # about and contact should be NOT_EVALUATED
+        # About and contact should be NOT_EVALUATED
         for name in ["about.html", "contact.html"]:
             nf = next(f for f in ux_findings if f.evidence["page"] == name)
             assert nf.evidence["ux_review"]["status"] == "NOT_EVALUATED", (
@@ -237,15 +225,13 @@ class TestMultiPageUXReview:
             )
 
 
-# ---------------------------------------------------------------------------
 # Provider Adaptive Retry / Backoff Tests
-# ---------------------------------------------------------------------------
 
 
 class TestProviderAdaptiveRetry:
     """Verify that LocalLMStudioProvider retries on slot/OOM errors."""
 
-    @patch("ams.llm.providers.time.sleep")  # don't actually sleep in tests
+    @patch("ams.llm.providers.time.sleep")  # Don't actually sleep in tests
     def test_retry_recovers_on_slot_error(self, mock_sleep, fake_image):
         """First attempt fails with 'failed to process image', second succeeds."""
         provider = LocalLMStudioProvider(
@@ -276,6 +262,7 @@ class TestProviderAdaptiveRetry:
         original_encode = provider._encode_image
         encode_calls: list[int] = []
 
+        # Track which screenshots were encoded during the run.
         def tracking_encode(image_path, max_size=768):
             encode_calls.append(max_size)
             return original_encode(image_path, max_size=max_size)
@@ -290,12 +277,12 @@ class TestProviderAdaptiveRetry:
 
         # Should succeed (second attempt)
         assert result.success, f"Expected success but got error: {result.error}"
-        assert result.content  # non-empty response
+        assert result.content  # Non-empty response
 
         # Provider should have called the API twice
         assert mock_client.chat.completions.create.call_count == 2
 
-        # _encode_image should have been called twice with decreasing max_size
+        # Encode_image should have been called twice with decreasing max_size.
         assert len(encode_calls) == 2
         assert encode_calls[0] > encode_calls[1], (
             f"Expected decreasing max_size, got {encode_calls}"

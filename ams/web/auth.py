@@ -1,15 +1,4 @@
-"""AMS Authentication — login, 2FA, session management, and role decorators.
-
-Blueprint ``auth_bp`` provides:
-- ``/login``  — credential entry
-- ``/2fa``    — two-factor verification
-- ``/logout`` — session tear-down
-
-Decorators:
-- ``login_required``  — redirect anonymous users to login
-- ``role_required(roles)`` — restrict to specified roles
-- ``admin_required`` / ``teacher_required`` / ``teacher_or_admin_required``
-"""
+"""AMS Authentication — login, 2FA, session management, and role decorators."""
 from __future__ import annotations
 
 import functools
@@ -34,9 +23,9 @@ logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint("auth", __name__)
 
-# ---------------------------------------------------------------------------
-#  2FA helpers
-# ---------------------------------------------------------------------------
+
+# 2FA helpers
+
 _2FA_CODE_LENGTH = 6
 
 
@@ -56,12 +45,11 @@ def _mock_send_email(email: str, code: str) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-#  Session helpers
-# ---------------------------------------------------------------------------
+# Session helpers
+
 
 def get_current_user() -> dict | None:
-    """Return the full user dict for the logged-in user, or ``None``."""
+    """Return full user dict for the logged-in user, or None."""
     uid = session.get("user_id")
     if uid is None:
         return None
@@ -69,7 +57,7 @@ def get_current_user() -> dict | None:
 
 
 def inject_user_context() -> dict:
-    """Context processor — makes ``current_user`` available in every template."""
+    """Context processor — makes current_user available in every template."""
     user = get_current_user()
     raw_preview_role = session.get("view_as_role")
     effective_role = None
@@ -93,9 +81,8 @@ def inject_user_context() -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-#  Decorators
-# ---------------------------------------------------------------------------
+# Decorators
+
 
 def login_required(f):
     """Redirect to login if no active session."""
@@ -138,9 +125,8 @@ def teacher_or_admin_required(f):
     return role_required("teacher", "admin")(f)
 
 
-# ---------------------------------------------------------------------------
-#  Routes
-# ---------------------------------------------------------------------------
+# Routes
+
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():

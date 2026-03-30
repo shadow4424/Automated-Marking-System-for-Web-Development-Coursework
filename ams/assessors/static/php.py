@@ -14,6 +14,7 @@ class PHPStaticAssessor(Assessor):
 
     name = "php_static"
 
+    # Check php syntax.
     def _check_php_syntax(self, files: list[tuple[object, str]]) -> List[Finding]:
         findings: List[Finding] = []
         for path, content in files:
@@ -91,6 +92,7 @@ class PHPStaticAssessor(Assessor):
                 )
         return findings
 
+    # Check php patterns.
     def _check_php_patterns(self, files: list[tuple[object, str]]) -> List[Finding]:
         findings: List[Finding] = []
         for path, content in files:
@@ -283,13 +285,15 @@ class PHPStaticAssessor(Assessor):
             findings.extend(self._analyse_api_usage(path, content))
         return findings
 
+    # Check php structure.
     def _check_php_structure(self, files: list[tuple[object, str]]) -> List[Finding]:
         return []
 
+    # Run the PHP static checks.
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
         php_files = sorted(context.files_for("php", relevant_only=True))
-        
+
         # Determine if PHP is required for this profile
         profile_name = context.metadata.get("profile")
         is_required = False
@@ -366,13 +370,13 @@ class PHPStaticAssessor(Assessor):
         findings.extend(self._check_php_structure(loaded_files))
         return findings
 
-    # ------------------------------------------------------------------ API
+    # API.
     def _analyse_api_usage(self, path, content: str) -> List[Finding]:
         """Detect and report API endpoint patterns in PHP files."""
         lowered = content.lower()
         findings: List[Finding] = []
 
-        # --- Endpoint Recognition ---
+        # Endpoint Recognition.
         # Detect files returning JSON instead of HTML
         json_content_type = bool(re.search(
             r"""header\s*\(\s*['"]Content-Type\s*:\s*application/json""",
@@ -381,14 +385,14 @@ class PHPStaticAssessor(Assessor):
         ))
         json_encode_count = lowered.count("json_encode(")
 
-        # --- Method Routing ---
+        # Method Routing.
         # Detect $_SERVER['REQUEST_METHOD'] routing
         method_routing = bool(re.search(
             r"""\$_SERVER\s*\[\s*['"]REQUEST_METHOD['"]\s*\]""",
             content,
         ))
 
-        # --- Input Parsing ---
+        # Input Parsing.
         # Detect raw JSON input consumption
         php_input = bool(re.search(
             r"""file_get_contents\s*\(\s*['"]php://input['"]""",
@@ -397,7 +401,7 @@ class PHPStaticAssessor(Assessor):
         ))
         json_decode_count = lowered.count("json_decode(")
 
-        # --- HTTP Response Codes ---
+        # HTTP Response Codes.
         http_response_code = bool(re.search(
             r"""http_response_code\s*\(""",
             content,

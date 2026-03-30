@@ -1,9 +1,4 @@
-"""Phase B: LLM Feedback Reliability - Robust Generator.
-
-Implements the FeedbackGenerator class with strict validation and
-deterministic fallback handling. The system never crashes due to
-bad LLM output - it always returns a valid LLMFeedback object.
-"""
+"""Phase B: LLM Feedback Reliability - Robust Generator."""
 from __future__ import annotations
 
 import json
@@ -22,82 +17,55 @@ logger = logging.getLogger(__name__)
 
 
 class FeedbackGenerator:
-    """Robust LLM feedback generator with strict validation.
-    
-    Guarantees:
-    - Always returns a valid LLMFeedback object
-    - Never raises exceptions to callers
-    - Validates all LLM output through Pydantic schemas
-    - Falls back gracefully on any error
-    
-    Example:
-        generator = FeedbackGenerator()
-        feedback = generator.generate({"rule_id": "html.has_doctype", "code": "..."})
-        # feedback is always a valid LLMFeedback, even if LLM failed
-    """
-    
+    """Robust LLM feedback generator with strict validation."""
+
     def __init__(self, provider=None):
-        """Initialise the generator.
-        
-        Args:
-            provider: Optional LLMProvider instance. If None, uses factory default.
-        """
+        """Initialise the generator. Args: provider: Optional LLMProvider instance. If None, uses factory default."""
         self._provider = provider
-    
+
     @property
     def provider(self):
         """Lazy-load the LLM provider."""
         if self._provider is None:
             self._provider = get_llm_provider()
         return self._provider
-    
+
     def generate(self, evidence: Dict[str, Any]) -> LLMFeedback:
-        """Generate validated feedback from evidence.
-        
-        This method NEVER raises exceptions. All errors result in a
-        deterministic fallback object.
-        
-        Args:
-            evidence: Dictionary containing rule context and code snippets.
-                Expected keys: rule_id, category, code_snippet, error_context
-                
-        Returns:
-            LLMFeedback: Always returns a valid feedback object.
-        """
+        """Generate validated feedback from evidence."""
         try:
             return self._generate_internal(evidence)
         except Exception as e:
             logger.warning(f"Feedback generation failed, using fallback: {e}")
             return create_fallback_feedback(e)
-    
+
     def _generate_internal(self, evidence: Dict[str, Any]) -> LLMFeedback:
         """Internal generation logic that may raise exceptions."""
         # Step 1: Build compact prompt
         prompt = self._build_prompt(evidence)
-        
+
         # Step 2: Call LLM provider
         response: LLMResponse = self.provider.complete(
             prompt=prompt,
             system_prompt=FEEDBACK_SYSTEM_PROMPT,
             json_mode=True,
         )
-        
+
         if response.error:
             raise RuntimeError(f"LLM provider error: {response.error}")
-        
+
         # Step 3: Clean and parse JSON
         cleaned = clean_json_response(response.content)
         raw_data = json.loads(cleaned)
-        
+
         # Step 4: Validate through Pydantic schema
         feedback = self._parse_response(raw_data)
-        
+
         # Step 5: Add success metadata
         feedback.meta["fallback"] = False
         feedback.meta["provider"] = type(self.provider).__name__
-        
+
         return feedback
-    
+
     def _build_prompt(self, evidence: Dict[str, Any]) -> str:
         """Build a compact JSON prompt from evidence."""
         # Extract key fields, providing defaults
@@ -105,11 +73,11 @@ class FeedbackGenerator:
         category = evidence.get("category", "unknown")
         code_snippet = evidence.get("code_snippet", "")
         error_context = evidence.get("error_context", "Rule check failed.")
-        
+
         # Truncate code if too long (keep LLM focused)
         if len(code_snippet) > 500:
             code_snippet = code_snippet[:500] + "\n... [truncated]"
-        
+
         prompt = f"""Analyse this failed rule check and provide structured feedback.
 
 Rule: {rule_id}
@@ -122,23 +90,20 @@ Code:
 ```
 
 Respond with JSON only: {{"summary": "...", "items": [{{"severity": "FAIL|WARN|INFO", "message": "...", "evidence_refs": []}}]}}"""
-        
+
         return prompt
-    
+
     def _parse_response(self, raw_data: Dict[str, Any]) -> LLMFeedback:
-        """Parse raw LLM response into validated LLMFeedback.
-        
-        Handles various LLM output formats and normalises them.
-        """
-        # Handle case where LLM returns error object
+        """Parse raw LLM response into validated LLMFeedback. Handles various LLM output formats and normalises them."""
+        # Stop early if the provider returned an error.
         if "error" in raw_data and "summary" not in raw_data:
             raise ValueError(f"LLM returned error: {raw_data.get('error')}")
-        
+
         # Normalise items if the LLM used different key names.
         items_raw = raw_data.get("items", [])
         if not isinstance(items_raw, list):
             items_raw = [items_raw] if items_raw else []
-        
+
         # Parse items with validation
         validated_items = []
         for item in items_raw:
@@ -151,18 +116,18 @@ Respond with JSON only: {{"summary": "...", "items": [{{"severity": "FAIL|WARN|I
                     # Map common variations
                     severity_map = {
                         "ERROR": "FAIL",
-                        "WARNING": "WARN", 
+                        "WARNING": "WARN",
                         "INFORMATION": "INFO",
                         "NOTE": "INFO",
                     }
                     item["severity"] = severity_map.get(item["severity"], item["severity"])
-                
+
                 validated_item = FeedbackItem(**item)
                 validated_items.append(validated_item)
             except ValidationError as e:
                 logger.debug(f"Skipping invalid feedback item: {e}")
                 continue
-        
+
         # Build the feedback object
         return LLMFeedback(
             summary=str(raw_data.get("summary", ""))[:200],
@@ -178,12 +143,7 @@ __all__ = [
 
 
 class BatchFeedbackGenerator:
-    """Batch LLM feedback generator — consolidates multiple failed rules into one prompt.
-
-    Sends up to N failed rules in a single LLM call and maps the response
-    back to individual rule_ids.  Falls back to per-rule generation when a
-    batch response is unparseable.
-    """
+    """Batch LLM feedback generator — consolidates multiple failed rules into one prompt."""
 
     def __init__(self, provider=None):
         self._provider = provider
@@ -197,15 +157,7 @@ class BatchFeedbackGenerator:
     def generate_batch(
         self, evidence_list: list[dict[str, Any]]
     ) -> dict[str, LLMFeedback]:
-        """Generate feedback for multiple rules in a single LLM call.
-
-        Args:
-            evidence_list: List of evidence dicts, each with keys:
-                rule_id, category, code_snippet, error_context
-
-        Returns:
-            Dict mapping rule_id -> LLMFeedback
-        """
+        """Generate feedback for multiple rules in a single LLM call."""
         if not evidence_list:
             return {}
 
@@ -224,7 +176,6 @@ class BatchFeedbackGenerator:
             fallback = create_fallback_feedback(e)
             return {rid: fallback for rid in rule_ids}
 
-    # ------------------------------------------------------------------
 
     def _generate_internal(
         self,

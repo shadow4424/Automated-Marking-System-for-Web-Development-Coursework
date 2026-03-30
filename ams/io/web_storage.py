@@ -21,26 +21,26 @@ def get_runs_root(app) -> Path:
 
 
 def create_run_dir(
-    runs_root: Path, 
-    mode: str, 
+    runs_root: Path,
+    mode: str,
     profile: str,
     metadata: Optional[SubmissionMetadata] = None
 ) -> Tuple[str, Path]:
     """Create a run directory with optional metadata-based structure."""
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     suffix = secrets.token_hex(4)
-    
+
     # If metadata provided, use student_id and assignment_id in directory structure
     if metadata:
         # Sanitize identifiers for directory names
         student_id_safe = MetadataValidator.sanitize_identifier(metadata.student_id)
         assignment_id_safe = MetadataValidator.sanitize_identifier(metadata.assignment_id)
-        
+
         # Create nested structure: assignment_id/student_id/run_id
         assignment_dir = runs_root / assignment_id_safe
         student_dir = assignment_dir / student_id_safe
         student_dir.mkdir(parents=True, exist_ok=True)
-        
+
         run_id = f"{timestamp}_{mode}_{profile}_{suffix}"
         run_dir = student_dir / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -49,7 +49,7 @@ def create_run_dir(
         run_id = f"{timestamp}_{mode}_{profile}_{suffix}"
         run_dir = runs_root / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
-    
+
     return run_id, run_dir
 
 
@@ -57,34 +57,34 @@ def safe_extract_zip(zip_path: Path, dest_dir: Path, max_size_mb: int = 100) -> 
     """Safely extract ZIP file with size and path validation."""
     max_size_bytes = max_size_mb * 1024 * 1024
     total_size = 0
-    
+
     with ZipFile(zip_path, "r") as zf:
         # Validate ZIP file first
         for info in zf.infolist():
             # Check individual file size
             if info.file_size > max_size_bytes:
                 raise ValueError(f"File {info.filename} exceeds maximum size limit")
-            
+
             # Check total extracted size
             total_size += info.file_size
             if total_size > max_size_bytes:
                 raise ValueError("Total extracted size would exceed maximum limit")
-            
+
             member_path = PurePosixPath(info.filename)
             _validate_zip_entry(member_path)
-        
+
         # Extract after validation
         for info in zf.infolist():
             member_path = PurePosixPath(info.filename)
             _validate_zip_entry(member_path)
             target = dest_dir.joinpath(*member_path.parts)
-            
+
             # Additional path validation
             try:
                 target.resolve().relative_to(dest_dir.resolve())
             except ValueError:
                 raise ValueError(f"Zip entry would escape extraction directory: {info.filename}")
-            
+
             if info.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
             else:
@@ -99,11 +99,7 @@ def _validate_zip_entry(member_path: PurePosixPath) -> None:
 
 
 def find_submission_root(extracted_dir: Path) -> Path:
-    """Resolve the actual submission root within an extracted zip.
-
-    If there is exactly one top-level directory and no files, descend into it.
-    Otherwise, return the extracted_dir.
-    """
+    """Resolve the actual submission root within an extracted zip."""
     junk = {"__MACOSX", ".DS_Store", "Thumbs.db"}
     entries: List[Path] = [p for p in extracted_dir.iterdir() if not p.name.startswith(".") and p.name not in junk]
     top_level_dirs = [p for p in entries if p.is_dir()]
@@ -134,17 +130,17 @@ def load_metadata(run_dir: Path) -> Optional[SubmissionMetadata]:
     metadata_path = run_dir / "metadata.json"
     if not metadata_path.exists():
         return None
-    
+
     try:
         data = json.loads(metadata_path.read_text(encoding="utf-8"))
         stored_hash = data.pop("_integrity", None)
-        
+
         # Verify integrity
         computed_hash = _compute_metadata_hash(data)
         if stored_hash != computed_hash:
             # Metadata may have been tampered with
             return None
-        
+
         return SubmissionMetadata.from_dict(data)
     except Exception:
         return None
@@ -159,14 +155,7 @@ def _compute_metadata_hash(metadata_dict: dict) -> str:
 
 
 def load_run_info(run_dir: Path):
-    """Load run metadata from run_info.json file.
-    
-    Args:
-        run_dir: Path to the run directory containing run_info.json
-        
-    Returns:
-        Dictionary containing run metadata, or None if file doesn't exist
-    """
+    """Load run metadata from run_info.json file."""
     info_path = run_dir / "run_info.json"
     if not info_path.exists():
         return None
@@ -685,23 +674,15 @@ def list_runs(runs_root: Path, only_active: bool = True) -> list[dict]:
 
 
 def find_run_by_id(runs_root: Path, run_id: str) -> Optional[Path]:
-    """Find a run directory by its ID, searching recursively.
-    
-    Args:
-        runs_root: The root directory for runs.
-        run_id: The run ID to find.
-        
-    Returns:
-        The Path to the run directory, or None if not found.
-    """
+    """Find a run directory by its ID, searching recursively."""
     if not runs_root.exists():
         return None
-    
+
     # First, check if it exists directly under runs_root (flat structure)
     direct_path = runs_root / run_id
     if direct_path.exists() and (direct_path / "run_info.json").exists():
         return direct_path
-    
+
     # Search recursively for the run_id directory
     for run_info_path in runs_root.rglob("run_info.json"):
         run_dir = run_info_path.parent
@@ -713,7 +694,7 @@ def find_run_by_id(runs_root: Path, run_id: str) -> Optional[Path]:
             continue
         if str(run_info.get("id") or "") == str(run_id):
             return run_dir
-    
+
     return None
 
 
@@ -734,36 +715,36 @@ def store_submission_with_metadata(
     # Sanitize identifiers
     student_id_safe = MetadataValidator.sanitize_identifier(metadata.student_id)
     assignment_id_safe = MetadataValidator.sanitize_identifier(metadata.assignment_id)
-    
+
     # Create directory structure
     assignment_dir = runs_root / assignment_id_safe
     student_dir = assignment_dir / student_id_safe
     student_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Check for existing submissions if versioned
     if versioned:
         existing_runs = [d for d in student_dir.iterdir() if d.is_dir()]
         metadata.version = len(existing_runs) + 1
-    
+
     # Create run directory
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     suffix = secrets.token_hex(4)
     run_id = f"{timestamp}_{mode}_{profile}_{suffix}"
     run_dir = student_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Compute file hash
     metadata.file_hash = MetadataValidator.compute_file_hash(zip_file)
-    
+
     # Save metadata
     save_metadata(run_dir, metadata)
-    
+
     # Copy zip file with sanitized name
     sanitized_filename = MetadataValidator.sanitize_filename(metadata.original_filename)
     stored_zip = run_dir / sanitized_filename
     import shutil
     shutil.copy2(zip_file, stored_zip)
-    
+
     return run_id, run_dir
 
 

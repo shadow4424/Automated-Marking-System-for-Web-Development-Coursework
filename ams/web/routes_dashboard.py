@@ -14,12 +14,12 @@ dashboard_bp = Blueprint("dashboard", __name__)
 
 
 def _assignment_submission_locked(assignment: Mapping[str, Any] | None) -> bool:
-    """Return ``True`` when an assignment no longer accepts submissions."""
+    """Return True when an assignment no longer accepts submissions."""
     return bool((assignment or {}).get("marks_released"))
 
 
 def _submission_lock_message() -> str:
-    """Return the standard message shown when submissions are locked."""
+    """Return standard message shown when submissions are locked."""
     return "Grades have already been released for this assignment, so new submissions are locked."
 
 
@@ -67,7 +67,7 @@ def home():
 
 @dashboard_bp.route("/api/jobs/<job_id>")
 def job_status(job_id: str):
-    """Return the current state of a background job as JSON."""
+    """Return current state of a background job as JSON."""
     status = job_manager.get_job_status(job_id)
     if status is None:
         return jsonify({"error": "Job not found"}), 404

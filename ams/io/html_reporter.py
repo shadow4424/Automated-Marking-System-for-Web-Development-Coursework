@@ -1,18 +1,4 @@
-"""HTML Report Generator for Assessment Results.
-
-This module generates beautiful, user-friendly HTML dashboards from
-assessment JSON data, including:
-- Circular score indicator
-- Feedback cards for failed rules
-- AI feedback badges
-- Statistics and check summaries
-
-Usage:
-    from ams.io.html_reporter import HTMLReporter
-
-    reporter = HTMLReporter()
-    html_path = reporter.generate(report_data, output_path)
-"""
+"""HTML Report Generator for Assessment Results."""
 from __future__ import annotations
 
 import html
@@ -427,16 +413,7 @@ class HTMLReporter:
         output_path: Path,
         screenshot_path: Optional[Path] = None,
     ) -> Path:
-        """Generate an HTML report from assessment data.
-
-        Args:
-            report_data: The assessment report dictionary (from JSON).
-            output_path: Directory to write the HTML report.
-            screenshot_path: Optional path to screenshot for vision display.
-
-        Returns:
-            Path to the generated HTML file.
-        """
+        """Generate an HTML report from assessment data."""
         metadata, findings, score_evidence, llm_analysis, scores = self._extract_report_context(report_data)
         final_score, max_score, percentage = self._calculate_score_display(score_evidence, scores)
         grade_color, grade_class = self._resolve_grade_style(percentage)
@@ -574,7 +551,7 @@ class HTMLReporter:
         """
 
     def _get_template(self) -> str:
-        """Return the HTML template."""
+        """Return HTML template."""
         return HTML_REPORT_TEMPLATE
 
 

@@ -1,16 +1,4 @@
-"""Aggregate raw findings into logical rubric checks.
-
-The pipeline emits one Finding per rule evaluation, per occurrence, and per
-diagnostic event.  The UI should report *distinct logical checks* rather than
-raw event counts.  This module provides the translation layer.
-
-Key concepts
-------------
-* **Check** – one rubric-aligned unit (e.g., ``sql.has_insert``).
-* **Diagnostic** – a runtime/infrastructure event that is informational but
-  does *not* represent a rubric check (e.g., ``BROWSER.PAGE_LOAD_PASS``).
-* **Enrichment** – LLM / Vision meta-events (``VISUAL.*``); not checks.
-"""
+"""Aggregate raw findings into logical rubric checks."""
 
 from __future__ import annotations
 
@@ -20,9 +8,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
-# ---------------------------------------------------------------------------
 # Constants
-# ---------------------------------------------------------------------------
+
 
 # Sources whose findings are diagnostic by default (not rubric checks).
 _DIAGNOSTIC_SOURCES: frozenset[str] = frozenset(
@@ -73,16 +60,15 @@ _STATIC_DIAGNOSTIC_IDS: frozenset[str] = frozenset(
 )
 
 
-# ---------------------------------------------------------------------------
 # CheckResult data class
-# ---------------------------------------------------------------------------
+
 
 @dataclass
 class CheckResult:
     """Aggregated result for a single logical rubric check."""
 
     check_id: str
-    component: str          # html / css / js / php / sql / consistency / behavioral
+    component: str          # Html / css / js / php / sql / consistency / behavioural
     status: str             # PASS / WARN / FAIL / SKIPPED
     occurrences: int = 1
     weight: Optional[float] = None
@@ -104,9 +90,8 @@ class CheckResult:
         }
 
 
-# ---------------------------------------------------------------------------
 # Classification helpers
-# ---------------------------------------------------------------------------
+
 
 def _severity_to_status(severity: str) -> str:
     """Map a Finding severity string to a CheckResult status."""
@@ -119,11 +104,7 @@ def _severity_to_status(severity: str) -> str:
 
 
 def is_diagnostic(finding: dict) -> bool:
-    """Return True if *finding* is a diagnostic/infrastructure event.
-
-    Diagnostic events are kept for transparency but do **not** count toward
-    the rubric check totals.
-    """
+    """Return True if *finding* is a diagnostic/infrastructure event."""
     fid: str = finding.get("id", "")
     source: str = finding.get("source", "")
 
@@ -155,18 +136,7 @@ def is_diagnostic(finding: dict) -> bool:
 
 
 def get_check_key(finding: dict) -> str:
-    """Derive a stable, unique check key for aggregation.
-
-    For required-assessor findings (``HTML.REQ.PASS``, ``SQL.REQ.FAIL``, …)
-    the actual rule identity lives in ``evidence.rule_id``.  We use that to
-    get one check per rubric rule.
-
-    For consistency findings the key is the finding *type* ID (e.g.
-    ``CONSISTENCY.CSS_MISSING_HTML_ID``), **not** the per-occurrence
-    selector_value.
-
-    For everything else the finding ``id`` itself is the key.
-    """
+    """Derive a stable, unique check key for aggregation."""
     fid: str = finding.get("id", "")
     evidence: dict = finding.get("evidence", {}) or {}
 
@@ -178,41 +148,24 @@ def get_check_key(finding: dict) -> str:
     return fid
 
 
-# ---------------------------------------------------------------------------
 # Status merging
-# ---------------------------------------------------------------------------
+
 
 _STATUS_PRIORITY = {"SKIPPED": 0, "PASS": 1, "WARN": 2, "FAIL": 3}
 
 
 def _merge_status(existing: str, incoming: str) -> str:
-    """Merge two statuses; the more severe one wins.
-
-    Priority: FAIL > WARN > PASS > SKIPPED.
-    """
+    """Merge two statuses; the more severe one wins. Priority: FAIL > WARN > PASS > SKIPPED."""
     return existing if _STATUS_PRIORITY.get(existing, 0) >= _STATUS_PRIORITY.get(incoming, 0) else incoming
 
 
-# ---------------------------------------------------------------------------
 # Main aggregation function
-# ---------------------------------------------------------------------------
+
 
 def aggregate_findings_to_checks(
     findings: List[dict],
 ) -> tuple[List[CheckResult], List[dict]]:
-    """Aggregate raw findings into logical rubric checks.
-
-    Parameters
-    ----------
-    findings:
-        List of serialised finding dicts (as stored in ``report.json``).
-
-    Returns
-    -------
-    (checks, diagnostics)
-        *checks* – one ``CheckResult`` per distinct rubric check.
-        *diagnostics* – findings classified as diagnostic/enrichment events.
-    """
+    """Aggregate raw findings into logical rubric checks."""
     checks_map: Dict[str, CheckResult] = {}
     diagnostics: List[dict] = []
 
@@ -263,10 +216,7 @@ def aggregate_findings_to_checks(
 
 
 def compute_check_stats(checks: List[CheckResult]) -> Dict[str, int]:
-    """Compute summary statistics from aggregated checks.
-
-    Returns a dict with keys: total, passed, failed, warnings, skipped.
-    """
+    """Compute summary statistics from aggregated checks. Returns a dict with keys: total, passed, failed, warnings, skipped."""
     stats: Dict[str, int] = {
         "total": len(checks),
         "passed": 0,
@@ -297,9 +247,8 @@ __all__ = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # Conflict resolution (formerly ams.core.arbitration)
-# ---------------------------------------------------------------------------
+
 
 from ams.core.models import Finding, FindingCategory, Severity  # noqa: E402
 
@@ -307,15 +256,7 @@ _conflict_logger = logging.getLogger(__name__ + ".arbitration")
 
 
 def resolve_conflicts(findings: List[Finding]) -> List[Finding]:
-    """Resolve conflicts between Static and Visual findings.
-
-    Policy: Visual failures override static passes for the same feature.
-
-    Example:
-        - CSS.MEDIA_QUERY passes (code exists)
-        - VISUAL.CSS.MEDIA_QUERY fails (layout broken on mobile)
-        → Result: Penalize the component by keeping the VISUAL finding
-    """
+    """Resolve conflicts between Static and Visual findings."""
     if not findings:
         return []
 

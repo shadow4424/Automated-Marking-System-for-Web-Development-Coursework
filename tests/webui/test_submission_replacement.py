@@ -266,11 +266,7 @@ def test_list_runs_does_not_let_invalid_batch_hide_valid_submissions(tmp_path: P
 
 
 def test_replace_existing_submissions_is_a_noop_shim(tmp_path: Path) -> None:
-    """_replace_existing_submissions is now an immutability shim that does nothing.
-
-    Submission attempts are immutable records; pruning is no longer supported.
-    This test confirms the function is safe to call and leaves storage untouched.
-    """
+    """_replace_existing_submissions is now an immutability shim that does nothing."""
     run_dir = _make_batch_run(
         tmp_path,
         run_id="20260319-090000_batch_frontend_old",

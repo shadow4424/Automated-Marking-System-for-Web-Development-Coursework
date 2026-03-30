@@ -184,7 +184,7 @@ class ScoringEngine:
         static_results: Mapping[str, object],
         findings: List[Finding],
     ) -> Tuple[Mapping[str, object], ScoreEvidenceBundle]:
-        """Return the with llm hybrid."""
+        """Return with llm hybrid."""
         requirement_results = list(static_results["requirement_results"])
         self._apply_llm_hybrid_to_requirement_results(requirement_results, findings)
         relevant_components = list(static_results["relevant_components"])
@@ -434,7 +434,7 @@ class ScoringEngine:
         relevant_components: List[str],
         component_weights: Mapping[str, float],
     ) -> float:
-        """Return the overall."""
+        """Return overall."""
         total_weight = 0.0
         total_score = 0.0
         for component in relevant_components:
@@ -498,7 +498,7 @@ class ScoringEngine:
         )
 
     def _determine_relevant_components(self, profile: str | None) -> List[str]:
-        """Return the relevant components."""
+        """Return relevant components."""
         if profile is None:
             return self.COMPONENTS
         return get_relevant_components(profile)
@@ -509,34 +509,34 @@ class ScoringEngine:
         relevant_components: List[str],
         overall_raw: float,
     ) -> Tuple[float, List[str]]:
-        """Return the overall."""
+        """Return overall."""
         numeric_scores: List[float] = []
         for comp in relevant_components:
             score = component_results.get(comp, {}).get("score")
             if isinstance(score, (float, int)):
                 numeric_scores.append(float(score))
-        
+
         all_required_full = bool(numeric_scores) and all(score == 1.0 for score in numeric_scores)
         no_attempt = not any(score > 0 for score in numeric_scores)
-        
+
         rationale: List[str] = [f"Raw overall average: {overall_raw:.2f}."]
-        
+
         if all_required_full:
             rationale.append("All required components scored 1.0.")
             return 1.0, rationale
-        
+
         if no_attempt:
             rationale.append("No meaningful attempt evidence detected in required components.")
             return 0.0, rationale
-        
+
         # Use the raw average rounded to 2 decimal places
         # This gives more granular and accurate overall scores
         final_score = round(overall_raw, 2)
-        
+
         not_full = [comp for comp in relevant_components if component_results.get(comp, {}).get("score") != 1.0]
         if not_full:
             rationale.append(f"Components below full: {', '.join(sorted(not_full))}.")
-        
+
         return final_score, rationale
 
     def _score_component(
@@ -643,12 +643,7 @@ class ScoringEngine:
         return weighted_score, rule_details
 
     def _calculate_weighted_rule_score(self, findings: List[Finding], component: str) -> Tuple[float, List[dict]]:
-        """Calculate weighted score from required rule findings (HTML.REQ.PASS/FAIL, etc.).
-
-        LLM Integration:
-        - Reads `hybrid_score` from finding evidence for partial credit
-        - Reads `vision_analysis` for visual check overrides
-        """
+        """Calculate weighted score from required rule findings (HTML.REQ.PASS/FAIL, etc.)."""
         weight_map = self._build_rule_weight_map(findings, component)
         return self._apply_weights_to_findings(findings, weight_map)
 
@@ -1285,7 +1280,7 @@ class ScoringEngine:
         return self._score_language_component("api", findings, behavioural_evidence, self._analyse_api)
 
     def _static_summary(self, component: str, findings: List[Finding]) -> Dict[str, object]:
-        """Return the summary."""
+        """Return summary."""
         ids = [f.id for f in findings]
         return {
             "component": component,
@@ -1295,7 +1290,7 @@ class ScoringEngine:
         }
 
     def _behavioural_view(self, evidence: List[BehaviouralEvidence]) -> Dict[str, object]:
-        """Return the view."""
+        """Return view."""
         view: Dict[str, object] = {}
         for ev in evidence:
             test_id = (getattr(ev, "test_id", "") or "").upper()
@@ -1313,7 +1308,7 @@ class ScoringEngine:
         return view
 
     def _browser_view(self, evidence: List[BrowserEvidence]) -> Dict[str, object]:
-        """Return the view."""
+        """Return view."""
         if not evidence:
             return {}
         ev = evidence[0]
@@ -1334,7 +1329,7 @@ class ScoringEngine:
         """Calculate penalty for code quality, security, and consistency issues."""
         penalty = 0.0
         quality_findings = [f for f in findings if "QUALITY" in f.id or "SECURITY" in f.id or "CONSISTENCY" in f.id]
-        
+
         for finding in quality_findings:
             severity = finding.severity
             # FAIL severity (security issues) = 0.2 penalty
@@ -1343,49 +1338,49 @@ class ScoringEngine:
                 penalty += 0.2
             elif severity == Severity.WARN:
                 penalty += 0.1
-        
+
         # Cap penalty at 0.5 (50% reduction)
         return min(0.5, penalty)
 
     def _calculate_functional_test_score(
-        self, 
-        findings: List[Finding], 
+        self,
+        findings: List[Finding],
         browser_evidence: List[BrowserEvidence]
     ) -> float | None:
         """Calculate score based on functional test results."""
         functional_findings = [f for f in findings if "BROWSER.FUNCTIONAL" in f.id and not f.id.endswith(".SUMMARY")]
-        
+
         if not functional_findings:
             return None
-        
+
         passed = sum(1 for f in functional_findings if f.severity == Severity.INFO and "passed" in f.message.lower())
         failed = sum(1 for f in functional_findings if f.severity == Severity.WARN and "failed" in f.message.lower())
         total = len(functional_findings)
-        
+
         if total == 0:
             return None
-        
+
         # Score is percentage of passed tests
         score = passed / total if total > 0 else 0.0
         return score
-    
+
     def _calculate_performance_penalty(self, findings: List[Finding]) -> float:
         """Calculate penalty for performance issues."""
         penalty = 0.0
         performance_findings = [f for f in findings if "BROWSER.PERFORMANCE" in f.id and f.severity == Severity.FAIL]
-        
+
         for finding in performance_findings:
             # Each failed performance check = 0.1 penalty
             penalty += 0.1
-        
+
         # Cap penalty at 0.3 (30% reduction)
         return min(0.3, penalty)
-    
+
     def _calculate_error_penalty(self, findings: List[Finding]) -> float:
         """Calculate penalty for runtime errors."""
         penalty = 0.0
         error_findings = [f for f in findings if "BROWSER.ERROR" in f.id]
-        
+
         for finding in error_findings:
             if finding.severity == Severity.FAIL:
                 # Critical errors = 0.15 penalty each
@@ -1393,7 +1388,7 @@ class ScoringEngine:
             elif finding.severity == Severity.WARN:
                 # Warnings = 0.05 penalty each
                 penalty += 0.05
-        
+
         # Cap penalty at 0.4 (40% reduction)
         return min(0.4, penalty)
 

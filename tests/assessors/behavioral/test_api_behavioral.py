@@ -139,9 +139,9 @@ class TestApiExecExecution:
         )
         runner = FakeRunner(
             [
-                # php_smoke
+                # Php_smoke
                 RunResult(exit_code=0, stdout="ok", stderr="", duration_ms=5, timed_out=False),
-                # api_exec
+                # Api_exec
                 RunResult(
                     exit_code=0,
                     stdout='{"ok":true}',
@@ -181,9 +181,9 @@ class TestApiExecExecution:
         )
         runner = FakeRunner(
             [
-                # php_smoke
+                # Php_smoke
                 RunResult(exit_code=0, stdout="ok", stderr="", duration_ms=5, timed_out=False),
-                # api_exec returning invalid JSON
+                # Api_exec returning invalid JSON
                 RunResult(
                     exit_code=0,
                     stdout="<html>Not JSON</html>",
@@ -220,7 +220,7 @@ class TestApiExecExecution:
         )
         runner = FakeRunner(
             [
-                # php_smoke
+                # Php_smoke
                 RunResult(exit_code=0, stdout="ok", stderr="", duration_ms=5, timed_out=False),
             ]
         )
@@ -246,9 +246,9 @@ class TestApiExecExecution:
         )
         runner = FakeRunner(
             [
-                # php_smoke
+                # Php_smoke
                 RunResult(exit_code=0, stdout="ok", stderr="", duration_ms=5, timed_out=False),
-                # api_exec times out
+                # Api_exec times out
                 RunResult(
                     exit_code=None,
                     stdout="",

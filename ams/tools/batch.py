@@ -73,7 +73,7 @@ def _build_empty_component_scores() -> Dict[str, Optional[float]]:
 
 
 def _remove_legacy_batch_outputs(out_root: Path) -> None:
-    """Return the legacy batch outputs."""
+    """Return legacy batch outputs."""
     for filename in (
         "component_means.csv",
         "failure_reasons_frequency.csv",

@@ -1,10 +1,4 @@
-"""AMS Database Layer — SQLite-backed user and assignment management.
-
-Provides:
-- Schema initialisation for ``Users`` and ``Assignments`` tables.
-- Auto-provisioning of the root admin account (``admin123`` / ``Pass123``).
-- Thread-safe connection management via context manager.
-"""
+"""AMS Database Layer — SQLite-backed user and assignment management."""
 from __future__ import annotations
 
 import json
@@ -29,9 +23,9 @@ _ROOT_ADMIN_EMAIL = "admin@ams.local"
 PREVIEW_STUDENT_ID = "_preview_student_"
 _PREVIEW_STUDENT_EMAIL = "preview@ams.local"
 
-# ---------------------------------------------------------------------------
-#  Schema
-# ---------------------------------------------------------------------------
+
+# Schema
+
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS users (
     userID        TEXT PRIMARY KEY,
@@ -99,7 +93,7 @@ CREATE TABLE IF NOT EXISTS student_assignment_summary (
 
 
 def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
-    """Return the columns."""
+    """Return columns."""
     return {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
 
 
@@ -115,17 +109,16 @@ def _ensure_column(
     conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
 
 
-# ---------------------------------------------------------------------------
-#  Connection helpers
-# ---------------------------------------------------------------------------
+# Connection helpers
+
 
 def _db_path() -> Path:
-    """Return the path."""
+    """Return path."""
     return _DEFAULT_DB_PATH
 
 
 def _query_one(sql: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
-    """Execute a query and return a single row, or ``None``."""
+    """Execute a query and return a single row, or None."""
     conn = get_db()
     try:
         return conn.execute(sql, params).fetchone()
@@ -151,9 +144,8 @@ def get_db() -> sqlite3.Connection:
     return conn
 
 
-# ---------------------------------------------------------------------------
-#  Initialisation
-# ---------------------------------------------------------------------------
+# Initialisation
+
 
 def init_db() -> None:
     """Create tables if they don't exist and ensure system accounts are present."""
@@ -258,12 +250,11 @@ def init_db() -> None:
         conn.close()
 
 
-# ---------------------------------------------------------------------------
-#  User CRUD
-# ---------------------------------------------------------------------------
+# User CRUD
+
 
 def authenticate_user(user_id: str, password: str) -> dict | None:
-    """Verify credentials. Returns user dict on success, ``None`` on failure."""
+    """Verify credentials. Returns user dict on success, None on failure."""
     row = _query_one("SELECT * FROM users WHERE userID = ?", (user_id,))
     if row is None:
         return None
@@ -279,15 +270,12 @@ def get_user(user_id: str) -> dict | None:
 
 
 def get_preview_student() -> dict | None:
-    """Return the dedicated preview student account for admin view-as mode."""
+    """Return dedicated preview student account for admin view-as mode."""
     return get_user(PREVIEW_STUDENT_ID)
 
 
 def list_users(role: str | None = None) -> list[dict]:
-    """Return all users, optionally filtered by role.
-
-    Excludes system accounts (preview student) from listings.
-    """
+    """Return all users, optionally filtered by role. Excludes system accounts (preview student) from listings."""
     if role:
         rows = _query_all(
             "SELECT * FROM users WHERE role = ? AND userID != ? ORDER BY userID",
@@ -309,7 +297,7 @@ def create_user(
     password: str,
     role: str = "student",
 ) -> bool:
-    """Insert a new user. Returns ``True`` on success, ``False`` if the ID already exists."""
+    """Insert a new user. Returns True on success, False if the ID already exists."""
     conn = get_db()
     try:
         conn.execute(
@@ -326,9 +314,9 @@ def create_user(
 
 
 def delete_user(user_id: str) -> bool:
-    """Delete a user. Returns ``True`` if a row was removed."""
+    """Delete a user. Returns True if a row was removed."""
     if user_id == _ROOT_ADMIN_ID:
-        return False  # protect root admin
+        return False  # Protect root admin
     conn = get_db()
     try:
         cur = conn.execute("DELETE FROM users WHERE userID = ?", (user_id,))
@@ -339,7 +327,7 @@ def delete_user(user_id: str) -> bool:
 
 
 def get_user_by_email(email: str) -> dict | None:
-    """Return the first user with the given email, or None."""
+    """Return first user with the given email, or None."""
     row = _query_one("SELECT * FROM users WHERE email = ?", (email,))
     return dict(row) if row else None
 
@@ -370,12 +358,11 @@ def update_user_password(user_id: str, password: str) -> None:
         conn.close()
 
 
-# ---------------------------------------------------------------------------
-#  Assignment CRUD
-# ---------------------------------------------------------------------------
+# Assignment CRUD
+
 
 def _decode_identifier_list(value: Any) -> list[str]:
-    """Return the identifier list."""
+    """Return identifier list."""
     if isinstance(value, list):
         raw_items = value
     else:
@@ -393,7 +380,7 @@ def _decode_identifier_list(value: Any) -> list[str]:
 
 
 def assignment_teacher_ids(assignment: dict[str, Any] | None) -> list[str]:
-    """Return the teacher ids."""
+    """Return teacher ids."""
     if not assignment:
         return []
 
@@ -414,7 +401,7 @@ def assignment_allows_teacher(
     user_id: str,
     role: str | None = None,
 ) -> bool:
-    """Return the allows teacher."""
+    """Return allows teacher."""
     if not assignment or not user_id:
         return False
     if role == "admin":
@@ -445,7 +432,7 @@ def create_assignment(
     assigned_teachers: list[str] | None = None,
     due_date: str = "",
 ) -> bool:
-    """Create a new assignment. Returns ``True`` on success."""
+    """Create a new assignment. Returns True on success."""
     extra_teacher_ids = [
         extra_teacher_id
         for extra_teacher_id in _decode_identifier_list(assigned_teachers or [])
@@ -484,11 +471,7 @@ def get_assignment(assignment_id: str) -> dict | None:
 
 
 def list_assignments(teacher_id: str | None = None) -> list[dict]:
-    """List all assignments, optionally filtered by teacher.
-
-    Sorting: active/upcoming assignments first (alphanumeric by ID),
-    then past-due assignments at the bottom (also alphanumeric by ID).
-    """
+    """List all assignments, optionally filtered by teacher."""
     from datetime import datetime
 
     rows = _query_all("SELECT * FROM assignments")
@@ -583,7 +566,7 @@ def withhold_marks(assignment_id: str) -> bool:
 
 
 def delete_assignment(assignment_id: str) -> bool:
-    """Delete an assignment. Returns ``True`` if a row was removed."""
+    """Delete an assignment. Returns True if a row was removed."""
     conn = get_db()
     try:
         cur = conn.execute(

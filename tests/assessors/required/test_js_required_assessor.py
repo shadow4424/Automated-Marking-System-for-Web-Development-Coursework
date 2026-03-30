@@ -41,7 +41,7 @@ def test_js_avoids_document_write_pass(build_submission, run_pipeline):
 
 
 def test_js_avoids_document_write_fail(build_submission, run_pipeline):
-    """document.write present → js.avoids_document_write fails in calculator profile."""
+    """Document.write present → js.avoids_document_write fails in calculator profile."""
     js = (
         "document.write('<button>1</button>');\n"
         "const display = document.getElementById('theDisplay');\n"
@@ -53,7 +53,7 @@ def test_js_avoids_document_write_fail(build_submission, run_pipeline):
 
 
 def test_js_uses_createElement_pass(build_submission, run_pipeline):
-    """document.createElement calls → js.uses_createElement passes in calculator profile."""
+    """Document.createElement calls → js.uses_createElement passes in calculator profile."""
     js = (
         "const display = document.getElementById('theDisplay');\n"
         "['1','2','+','-'].forEach(val => {\n"
@@ -70,7 +70,7 @@ def test_js_uses_createElement_pass(build_submission, run_pipeline):
 
 
 def test_js_creates_display_dom_pass(build_submission, run_pipeline):
-    """theDisplay reference → js.creates_display_dom passes in calculator profile."""
+    """TheDisplay reference → js.creates_display_dom passes in calculator profile."""
     js = (
         "const theDisplay = document.getElementById('theDisplay');\n"
         "function updateDisplay(val) { theDisplay.value += val; }\n"
@@ -90,7 +90,7 @@ def test_js_creates_display_dom_pass(build_submission, run_pipeline):
 
 
 def test_js_has_doCalc_pass(build_submission, run_pipeline):
-    """doCalc function with arithmetic → js.has_doCalc passes in calculator profile."""
+    """DoCalc function with arithmetic → js.has_doCalc passes in calculator profile."""
     js = (
         "let preValue = '', preOp = '';\n"
         "const theDisplay = document.getElementById('theDisplay');\n"

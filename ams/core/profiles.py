@@ -9,14 +9,7 @@ from typing import Dict, List, Mapping, Optional, Sequence
 
 @dataclass(frozen=True)
 class RequiredRule:
-    """Unified rule definition for all assessable components.
-
-    The ``pattern`` field holds the match string used by assessors — this
-    replaces the former ``selector`` (HTML) and ``needle`` (CSS/JS/PHP/SQL)
-    fields.  Backward-compatible factory functions are provided below so
-    that existing code using ``RequiredHTMLRule(selector=…)`` or
-    ``RequiredCSSRule(needle=…)`` continues to work without changes.
-    """
+    """Unified rule definition for all assessable components."""
     id: str
     description: str
     pattern: str
@@ -34,25 +27,25 @@ class RequiredRule:
     attempt_signal: Optional[str] = None  # Regex pattern to detect attempt
     related_rules: tuple[str, ...] = ()  # Related rule IDs for conflict resolution
 
-    # ------------------------------------------------------------------
+
     # Backward-compatible property aliases so that existing assessor code
-    # using ``rule.selector`` or ``rule.needle`` keeps working.
-    # ------------------------------------------------------------------
+    # Using rule.selector or rule.needle keeps working.
+
     @property
-    def selector(self) -> str:  # used by HTML assessors
-        """Return the selector."""
+    def selector(self) -> str:  # Used by HTML assessors
+        """Return selector."""
         return self.pattern
 
     @property
-    def needle(self) -> str:  # used by CSS / JS / PHP / SQL assessors
-        """Return the search needle."""
+    def needle(self) -> str:  # Used by CSS / JS / PHP / SQL assessors
+        """Return search needle."""
         return self.pattern
 
 
 def _make_rule_factory(legacy_kwarg: str):
-    """Return a factory that accepts *legacy_kwarg* and maps it to ``pattern``."""
+    """Return a factory that accepts *legacy_kwarg* and maps it to pattern."""
     def _factory(*args, **kwargs):
-        """Return the factory."""
+        """Return factory."""
         if legacy_kwarg in kwargs:
             kwargs["pattern"] = kwargs.pop(legacy_kwarg)
         return RequiredRule(*args, **kwargs)
@@ -71,7 +64,7 @@ RequiredAPIRule  = _make_rule_factory("needle")
 
 @dataclass(frozen=True)
 class BehavioralRule:
-    """Dynamic behavioral rule for runtime testing."""
+    """Dynamic behavioural rule for runtime testing."""
     id: str
     description: str
     test_type: str  # "page_load", "form_submit", "js_interaction", "db_persist"
@@ -153,11 +146,11 @@ class ProfileSpec:
     aliases: tuple[str, ...] = ()
 
     def is_component_required(self, component: str) -> bool:
-        """Check if a component is required for this profile."""
+        """Check whether a component is required for this profile."""
         return component in self.relevant_artefacts
 
     def has_required_rules(self, component: str) -> bool:
-        """Check if a component has required rules defined for this profile."""
+        """Check whether a component has required rules defined for this profile."""
         rule_map = {
             "html": self.required_html,
             "css": self.required_css,
@@ -170,7 +163,7 @@ class ProfileSpec:
         return len(rules) > 0
 
     def component_rule_map(self) -> Dict[str, List[RequiredRule]]:
-        """Return the rule map."""
+        """Return rule map."""
         return {
             "html": list(self.required_html),
             "css": list(self.required_css),
@@ -181,7 +174,7 @@ class ProfileSpec:
         }
 
     def enabled_components(self) -> List[str]:
-        """Return the components."""
+        """Return components."""
         ordered = list(self.relevant_artefacts)
         for component in self.optional_components:
             if component not in ordered:
@@ -189,7 +182,7 @@ class ProfileSpec:
         return ordered
 
     def get_component_weight(self, component: str) -> float:
-        """Return the component weight."""
+        """Return component weight."""
         if self.component_weights:
             return float(self.component_weights.get(component, 0.0))
         required = list(self.relevant_artefacts)
@@ -263,7 +256,7 @@ def _build_html_profile_specs() -> Dict[str, object]:
     # Categories: Structure, Metadata, Semantic, Interactive/Forms, Accessibility
     """Build the html profile specs."""
     html_rules = [
-        # === STRUCTURE (0.26 total) ===
+        # STRUCTURE (0.26 total).
         RequiredHTMLRule(
             id="html.has_doctype",
             description="Document begins with a valid DOCTYPE declaration",
@@ -312,7 +305,7 @@ def _build_html_profile_specs() -> Dict[str, object]:
             severity="high",
             llm_guidance="Body section is binary - either present or not.",
         ),
-        # === METADATA (0.16 total) ===
+        # METADATA (0.16 total).
         RequiredHTMLRule(
             id="html.has_title",
             description="Document has a <title> element in the head",
@@ -349,7 +342,7 @@ def _build_html_profile_specs() -> Dict[str, object]:
             severity="medium",
             llm_guidance="Award partial if viewport exists but has suboptimal settings.",
         ),
-        # === SEMANTIC HTML (0.18 total) ===
+        # SEMANTIC HTML (0.18 total).
         RequiredHTMLRule(
             id="html.has_semantic_structure",
             description="Uses semantic container elements (header, nav, main, section, article, aside, footer)",
@@ -386,7 +379,7 @@ def _build_html_profile_specs() -> Dict[str, object]:
             severity="low",
             llm_guidance="List usage is binary - either present or not.",
         ),
-        # === INTERACTIVE / FORMS (0.26 total) ===
+        # INTERACTIVE / FORMS (0.26 total).
         RequiredHTMLRule(
             id="html.has_form",
             description="Page includes at least one <form> element",
@@ -435,7 +428,7 @@ def _build_html_profile_specs() -> Dict[str, object]:
             severity="low",
             llm_guidance="Link presence is binary - either present or not.",
         ),
-        # === ACCESSIBILITY (0.14 total) ===
+        # ACCESSIBILITY (0.14 total).
         RequiredHTMLRule(
             id="html.has_alt_attributes",
             description="All <img> elements include meaningful alt attributes",
@@ -460,7 +453,7 @@ def _build_html_profile_specs() -> Dict[str, object]:
             severity="medium",
             llm_guidance="Lang attribute is binary - either present or not.",
         ),
-        # === ASSETS / LINKAGE (0.04 total, weights trimmed from structure rules) ===
+        # ASSETS / LINKAGE (0.04 total, weights trimmed from structure rules).
         RequiredHTMLRule(
             id="html.links_stylesheet",
             description="Page links to an external stylesheet via <link rel='stylesheet'>",
@@ -485,7 +478,7 @@ def _build_html_profile_specs() -> Dict[str, object]:
             severity="low",
             llm_guidance="Script linkage is optional. Award if present.",
         ),
-        # === CONTENT ELEMENTS (optional - bonus if used) ===
+        # CONTENT ELEMENTS (optional - bonus if used).
         RequiredHTMLRule(
             id="html.has_table",
             description="Page uses table markup when tabular content is expected",
@@ -520,7 +513,7 @@ def _build_css_profile_specs() -> Dict[str, object]:
     # Categories: Structure, selectors, layout, styling, responsiveness.
     """Build the css profile specs."""
     css_rules = [
-        # === STRUCTURE (0.14 total) ===
+        # STRUCTURE (0.14 total).
         RequiredCSSRule(
             id="css.has_rule_block",
             description="Stylesheet contains at least one CSS rule block",
@@ -545,7 +538,7 @@ def _build_css_profile_specs() -> Dict[str, object]:
             severity="medium",
             llm_guidance="Award partial if 1-2 rules exist. Full credit for 3+.",
         ),
-        # === SELECTORS (0.20 total) ===
+        # SELECTORS (0.20 total).
         RequiredCSSRule(
             id="css.has_class_selector",
             description="Uses class selectors for reusable styling",
@@ -582,7 +575,7 @@ def _build_css_profile_specs() -> Dict[str, object]:
             severity="medium",
             llm_guidance="Element selector usage is binary.",
         ),
-        # === LAYOUT (0.24 total) ===
+        # LAYOUT (0.24 total).
         RequiredCSSRule(
             id="css.has_layout",
             description="Uses layout properties (margin, padding, display, position)",
@@ -619,7 +612,7 @@ def _build_css_profile_specs() -> Dict[str, object]:
             severity="low",
             llm_guidance="Grid is optional. Award if present.",
         ),
-        # === STYLING (0.16 total) ===
+        # STYLING (0.16 total).
         RequiredCSSRule(
             id="css.has_color",
             description="Defines color and background properties",
@@ -644,7 +637,7 @@ def _build_css_profile_specs() -> Dict[str, object]:
             severity="medium",
             llm_guidance="Award partial based on typography property variety.",
         ),
-        # === RESPONSIVENESS (0.16 total) ===
+        # RESPONSIVENESS (0.16 total).
         RequiredCSSRule(
             id="css.has_media_query",
             description="Uses media queries for responsive design",
@@ -658,7 +651,7 @@ def _build_css_profile_specs() -> Dict[str, object]:
             llm_guidance="Award partial based on media query coverage. Full credit for multiple breakpoints.",
             visual_check=True,  # Phase 3: Enable vision-based responsiveness check
         ),
-        # === MAINTAINABILITY (0.10 total) ===
+        # MAINTAINABILITY (0.10 total).
         RequiredCSSRule(
             id="css.has_custom_properties",
             description="Uses CSS custom properties (variables) for maintainability",
@@ -683,7 +676,7 @@ def _build_css_profile_specs() -> Dict[str, object]:
             severity="low",
             llm_guidance="Comments are optional. Award if present.",
         ),
-        # === QUALITY / RESET (new generic rules) ===
+        # QUALITY / RESET (new generic rules).
         RequiredCSSRule(
             id="css.has_universal_reset",
             description="Applies a universal CSS reset or box-sizing strategy",
@@ -807,7 +800,7 @@ def _build_js_profile_specs() -> Dict[str, object]:
     # Categories: Events, DOM, functions, control flow, validation, async, errors.
     """Build the js profile specs."""
     js_rules = [
-        # === EVENTS (0.12 total) ===
+        # EVENTS (0.12 total).
         RequiredJSRule(
             id="js.has_event_listener",
             description="Registers event listeners for user interaction",
@@ -820,7 +813,7 @@ def _build_js_profile_specs() -> Dict[str, object]:
             severity="high",
             llm_guidance="Award partial if inline event handlers (onclick) are used instead of addEventListener.",
         ),
-        # === DOM (0.20 total) ===
+        # DOM (0.20 total).
         RequiredJSRule(
             id="js.has_dom_query",
             description="Queries DOM elements (querySelector, getElementById, etc.)",
@@ -845,7 +838,7 @@ def _build_js_profile_specs() -> Dict[str, object]:
             severity="high",
             llm_guidance="Award partial based on variety and appropriateness of DOM manipulation methods.",
         ),
-        # === FUNCTIONS (0.16 total) ===
+        # FUNCTIONS (0.16 total).
         RequiredJSRule(
             id="js.has_functions",
             description="Defines reusable functions",
@@ -870,7 +863,7 @@ def _build_js_profile_specs() -> Dict[str, object]:
             severity="low",
             llm_guidance="Arrow functions are optional. Award if present.",
         ),
-        # === CONTROL FLOW (0.14 total) ===
+        # CONTROL FLOW (0.14 total).
         RequiredJSRule(
             id="js.has_conditionals",
             description="Uses conditional statements (if/else, switch)",
@@ -895,7 +888,7 @@ def _build_js_profile_specs() -> Dict[str, object]:
             severity="low",
             llm_guidance="Loop usage is optional. Award if present.",
         ),
-        # === VALIDATION (0.08 total) ===
+        # VALIDATION (0.08 total).
         RequiredJSRule(
             id="js.has_form_validation",
             description="Validates form input or user data",
@@ -908,7 +901,7 @@ def _build_js_profile_specs() -> Dict[str, object]:
             severity="medium",
             llm_guidance="Award partial based on validation coverage and robustness.",
         ),
-        # === ASYNC (0.08 total) ===
+        # ASYNC (0.08 total).
         RequiredJSRule(
             id="js.has_async_patterns",
             description="Uses async patterns (async/await, fetch, Promise)",
@@ -921,7 +914,7 @@ def _build_js_profile_specs() -> Dict[str, object]:
             severity="medium",
             llm_guidance="Award partial if callbacks are used instead of modern async/await.",
         ),
-        # === ERROR HANDLING (0.08 total) ===
+        # ERROR HANDLING (0.08 total).
         RequiredJSRule(
             id="js.has_error_handling",
             description="Includes error handling (try-catch)",
@@ -934,7 +927,7 @@ def _build_js_profile_specs() -> Dict[str, object]:
             severity="medium",
             llm_guidance="Error handling usage is optional. Award if present.",
         ),
-        # === MODERN JS (0.14 total) ===
+        # MODERN JS (0.14 total).
         RequiredJSRule(
             id="js.has_const_let",
             description="Uses modern variable declarations (const/let)",
@@ -1094,7 +1087,7 @@ def _build_php_profile_specs() -> Dict[str, object]:
     # Categories: Structure, input, output, database, sessions, functions, errors.
     """Build the php profile specs."""
     php_rules_fullstack = [
-        # === STRUCTURE (0.06 total) ===
+        # STRUCTURE (0.06 total).
         RequiredPHPRule(
             id="php.has_open_tag",
             description="PHP file contains opening tag",
@@ -1107,7 +1100,7 @@ def _build_php_profile_specs() -> Dict[str, object]:
             severity="high",
             llm_guidance="PHP opening tag is binary.",
         ),
-        # === INPUT HANDLING (0.20 total) ===
+        # INPUT HANDLING (0.20 total).
         RequiredPHPRule(
             id="php.uses_request",
             description="Uses request superglobals ($_GET, $_POST, $_REQUEST)",
@@ -1132,7 +1125,7 @@ def _build_php_profile_specs() -> Dict[str, object]:
             severity="high",
             llm_guidance="Award partial based on depth and coverage of validation logic.",
         ),
-        # === SECURITY (0.10 total) ===
+        # SECURITY (0.10 total).
         RequiredPHPRule(
             id="php.has_sanitisation",
             description="Sanitises output (htmlspecialchars, htmlentities, strip_tags)",
@@ -1145,7 +1138,7 @@ def _build_php_profile_specs() -> Dict[str, object]:
             severity="high",
             llm_guidance="Award partial if some but not all output is sanitised.",
         ),
-        # === OUTPUT (0.08 total) ===
+        # OUTPUT (0.08 total).
         RequiredPHPRule(
             id="php.outputs",
             description="Outputs content (echo, print)",
@@ -1158,7 +1151,7 @@ def _build_php_profile_specs() -> Dict[str, object]:
             severity="medium",
             llm_guidance="Output usage is binary.",
         ),
-        # === DATABASE (0.26 total) ===
+        # DATABASE (0.26 total).
         RequiredPHPRule(
             id="php.uses_database",
             description="Interacts with database (mysqli, PDO)",
@@ -1183,7 +1176,7 @@ def _build_php_profile_specs() -> Dict[str, object]:
             severity="high",
             llm_guidance="Award partial if some queries use prepared statements but not all.",
         ),
-        # === SESSIONS (0.08 total) ===
+        # SESSIONS (0.08 total).
         RequiredPHPRule(
             id="php.uses_sessions",
             description="Uses session handling (session_start, $_SESSION)",
@@ -1196,7 +1189,7 @@ def _build_php_profile_specs() -> Dict[str, object]:
             severity="medium",
             llm_guidance="Session usage is optional. Award if present.",
         ),
-        # === FUNCTIONS (0.06 total) ===
+        # FUNCTIONS (0.06 total).
         RequiredPHPRule(
             id="php.has_functions",
             description="Defines reusable functions",
@@ -1209,7 +1202,7 @@ def _build_php_profile_specs() -> Dict[str, object]:
             severity="low",
             llm_guidance="Function definition is optional. Award if present.",
         ),
-        # === CONTROL FLOW (0.10 total) ===
+        # CONTROL FLOW (0.10 total).
         RequiredPHPRule(
             id="php.has_conditionals",
             description="Uses conditional statements (if/else, switch)",
@@ -1234,7 +1227,7 @@ def _build_php_profile_specs() -> Dict[str, object]:
             severity="low",
             llm_guidance="Loop usage is optional. Award if present.",
         ),
-        # === ERROR HANDLING (0.06 total) ===
+        # ERROR HANDLING (0.06 total).
         RequiredPHPRule(
             id="php.has_error_handling",
             description="Includes error handling (try-catch, error_reporting)",
@@ -1247,7 +1240,7 @@ def _build_php_profile_specs() -> Dict[str, object]:
             severity="medium",
             llm_guidance="Error handling is optional. Award if present.",
         ),
-        # === RESPONSE PATH / ALIGNMENT (new generic checks) ===
+        # RESPONSE PATH / ALIGNMENT (new generic checks).
         RequiredPHPRule(
             id="php.response_path_complete",
             description="Script has a complete request-receive-process-output path",
@@ -1270,7 +1263,7 @@ def _build_sql_profile_specs() -> Dict[str, object]:
     # Categories: Schema, Constraints, CRUD, Queries, Advanced
     """Build the sql profile specs."""
     sql_rules_fullstack = [
-        # === SCHEMA (0.30 total) ===
+        # SCHEMA (0.30 total).
         RequiredSQLRule(
             id="sql.has_create_table",
             description="Defines tables (CREATE TABLE)",
@@ -1307,7 +1300,7 @@ def _build_sql_profile_specs() -> Dict[str, object]:
             severity="medium",
             llm_guidance="Foreign key is optional. Award if present.",
         ),
-        # === CONSTRAINTS (0.14 total) ===
+        # CONSTRAINTS (0.14 total).
         RequiredSQLRule(
             id="sql.has_constraints",
             description="Uses constraints (NOT NULL, UNIQUE, CHECK, DEFAULT)",
@@ -1332,7 +1325,7 @@ def _build_sql_profile_specs() -> Dict[str, object]:
             severity="medium",
             llm_guidance="Award partial based on appropriateness of data types for column data.",
         ),
-        # === CRUD (0.32 total) ===
+        # CRUD (0.32 total).
         RequiredSQLRule(
             id="sql.has_insert",
             description="Inserts data (INSERT INTO)",
@@ -1381,7 +1374,7 @@ def _build_sql_profile_specs() -> Dict[str, object]:
             severity="low",
             llm_guidance="DELETE is optional. Award if present.",
         ),
-        # === QUERIES (0.16 total) ===
+        # QUERIES (0.16 total).
         RequiredSQLRule(
             id="sql.has_where",
             description="Uses WHERE clauses for filtering",
@@ -1406,7 +1399,7 @@ def _build_sql_profile_specs() -> Dict[str, object]:
             severity="medium",
             llm_guidance="JOIN is optional. Award if present.",
         ),
-        # === ADVANCED (0.08 total) ===
+        # ADVANCED (0.08 total).
         RequiredSQLRule(
             id="sql.has_aggregate",
             description="Uses aggregate functions (COUNT, SUM, AVG, GROUP BY)",
@@ -1419,7 +1412,7 @@ def _build_sql_profile_specs() -> Dict[str, object]:
             severity="low",
             llm_guidance="Aggregate functions are optional. Award if present.",
         ),
-        # === QUALITY ===
+        # QUALITY.
         RequiredSQLRule(
             id="sql.parses_cleanly",
             description="SQL is syntactically valid with semicolons and balanced structure",
@@ -1434,7 +1427,7 @@ def _build_sql_profile_specs() -> Dict[str, object]:
         ),
     ]
 
-    # Behavioral Rules - Dynamic runtime testing criteria
+    # Behavioural Rules - Dynamic runtime testing criteria
     # Weights are normalised so that the total = 1.0 for the behavioural component.
     behavioral_rules_frontend = [
         BehavioralRule(
@@ -1597,7 +1590,7 @@ def _build_api_profile_specs() -> Dict[str, object]:
         ),
     ]
 
-    # Calculator-specific behavioral rules
+    # Calculator-specific behavioural rules
     behavioral_rules_calculator = [
         BehavioralRule(
             id="behavior.calculator_sequence",
@@ -1901,7 +1894,7 @@ VISIBLE_PROFILE_SPECS = {
 
 
 def get_profile_spec(name: str) -> ProfileSpec:
-    """Return the profile spec."""
+    """Return profile spec."""
     canonical_name = PROFILE_ALIASES.get(name, name)
     try:
         return PROFILE_SPECS[canonical_name]
@@ -1910,17 +1903,17 @@ def get_profile_spec(name: str) -> ProfileSpec:
 
 
 def get_relevant_components(name: str) -> List[str]:
-    """Return the relevant components."""
+    """Return relevant components."""
     return get_profile_spec(name).relevant_artefacts
 
 
 def get_visible_profile_specs() -> Dict[str, ProfileSpec]:
-    """Return the visible profile specs."""
+    """Return visible profile specs."""
     return dict(VISIBLE_PROFILE_SPECS)
 
 
 def list_profile_names(*, include_aliases: bool = False, visible_only: bool = False) -> List[str]:
-    """Return the available profile names."""
+    """Return available profile names."""
     if visible_only:
         names = list(VISIBLE_PROFILE_SPECS.keys())
     else:
@@ -2026,7 +2019,7 @@ def _normalize_weight_map(
 
 
 def _static_aggregation_mode(component: str, rule: RequiredRule) -> str:
-    """Return the aggregation mode."""
+    """Return aggregation mode."""
     strict_ids = {
         "html.has_doctype",
         "html.has_html_tag",
@@ -2050,7 +2043,7 @@ def _static_aggregation_mode(component: str, rule: RequiredRule) -> str:
 
 
 def _behavioural_aggregation_mode(rule: BehavioralRule) -> str:
-    """Return the aggregation mode."""
+    """Return aggregation mode."""
     if rule.test_type in {"form_submit", "db_persist", "api_exec",
                           "calculator_sequence", "calculator_display", "calculator_operator"}:
         return AggregationMode.EXPECTED_SET.value
@@ -2058,7 +2051,7 @@ def _behavioural_aggregation_mode(rule: BehavioralRule) -> str:
 
 
 def _expected_roles_for_component(component: str) -> tuple[str, ...]:
-    """Return the roles for component."""
+    """Return roles for component."""
     mapping = {
         "html": ("primary_page", "secondary_page"),
         "css": ("stylesheet_set",),
@@ -2071,7 +2064,7 @@ def _expected_roles_for_component(component: str) -> tuple[str, ...]:
 
 
 def _default_profile_level_requirements(profile: ProfileSpec) -> List[RequirementDefinition]:
-    """Return the profile level requirements."""
+    """Return profile level requirements."""
     definitions: List[RequirementDefinition] = []
     if profile.is_component_required("api"):
         definitions.append(

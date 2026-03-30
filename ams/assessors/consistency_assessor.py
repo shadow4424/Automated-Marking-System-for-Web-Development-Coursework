@@ -23,41 +23,41 @@ class _HTMLElementExtractor(HTMLParser):
         super().__init__()
         self.ids: Set[str] = set()
         self.classes: Set[str] = set()
-        self.form_fields: Dict[str, str] = {}  # name -> form context
+        self.form_fields: Dict[str, str] = {}  # Name -> form context
         self.links: List[tuple[str, str]] = []  # (href, referring_file)
         self.form_actions: List[tuple[str, str]] = []  # (action, referring_file)
         self.current_form_context: str | None = None
 
     def handle_starttag(self, tag: str, attrs: List[tuple[str, str | None]]) -> None:
         attrs_dict = dict(attrs)
-        
+
         # Extract IDs
         if "id" in attrs_dict and attrs_dict["id"]:
             self.ids.add(attrs_dict["id"])
-        
+
         # Extract classes
         if "class" in attrs_dict and attrs_dict["class"]:
             for cls in attrs_dict["class"].split():
                 if cls:
                     self.classes.add(cls)
-        
+
         # Extract form fields
         if tag in ("input", "select", "textarea"):
             if "name" in attrs_dict and attrs_dict["name"]:
                 field_name = attrs_dict["name"]
                 form_context = self.current_form_context or "unknown"
                 self.form_fields[field_name] = form_context
-        
+
         # Track form context
         if tag == "form":
             self.current_form_context = attrs_dict.get("action", "default")
-        
+
         # Extract links
         if tag == "a" and "href" in attrs_dict:
             href = attrs_dict["href"]
             if href and not href.startswith(("http://", "https://", "mailto:", "#")):
                 self.links.append((href, ""))
-        
+
         # Extract form actions
         if tag == "form" and "action" in attrs_dict:
             action = attrs_dict["action"]
@@ -138,20 +138,20 @@ class ConsistencyAssessor(Assessor):
         all_form_fields: Dict[str, str] = {}
         all_links: List[tuple[str, str]] = []
         all_form_actions: List[tuple[str, str]] = []
-        
+
         # Get submission root for resolving relative paths
         submission_root = Path(context.metadata.get("resolved_root", context.workspace_path / "submission"))
-        
+
         for html_file in html_files:
             try:
                 content = html_file.read_text(encoding="utf-8", errors="replace")
                 parser = _HTMLElementExtractor()
                 parser.feed(content)
-                
+
                 all_ids.update(parser.ids)
                 all_classes.update(parser.classes)
                 all_form_fields.update(parser.form_fields)
-                
+
                 # Store file context for links/actions
                 html_file_str = str(html_file)
                 for href, _ in parser.links:
@@ -160,7 +160,7 @@ class ConsistencyAssessor(Assessor):
                     all_form_actions.append((action, html_file_str))
             except Exception as e:
                 logger.debug("Failed to parse HTML file %s: %s", html_file, e)
-        
+
         return {
             "ids": all_ids,
             "classes": all_classes,
@@ -178,7 +178,7 @@ class ConsistencyAssessor(Assessor):
         js_files = sorted(context.files_for("js", relevant_only=True))
         html_ids: Set[str] = html_data.get("ids", set())
         html_classes: Set[str] = html_data.get("classes", set())
-        
+
         # Patterns for JS DOM selector calls
         id_patterns = [
             r'getElementById\s*\(\s*["\']([^"\']+)["\']',
@@ -189,11 +189,11 @@ class ConsistencyAssessor(Assessor):
             r'querySelector\s*\(\s*["\']\.([^"\']+)["\']',
             r'querySelectorAll\s*\(\s*["\']\.([^"\']+)["\']',
         ]
-        
+
         for js_file in js_files:
             try:
                 content = js_file.read_text(encoding="utf-8", errors="replace")
-                
+
                 # Check IDs
                 for pattern in id_patterns:
                     for match in re.finditer(pattern, content, re.IGNORECASE):
@@ -203,7 +203,7 @@ class ConsistencyAssessor(Assessor):
                             start = max(0, match.start() - 20)
                             end = min(len(content), match.end() + 20)
                             snippet = content[start:end].replace("\n", " ").strip()
-                            
+
                             findings.append(
                                 Finding(
                                     id=COID.JS_MISSING_HTML_ID,
@@ -221,7 +221,7 @@ class ConsistencyAssessor(Assessor):
                                     profile=profile_name,
                                 )
                             )
-                
+
                 # Check classes
                 for pattern in class_patterns:
                     for match in re.finditer(pattern, content, re.IGNORECASE):
@@ -231,7 +231,7 @@ class ConsistencyAssessor(Assessor):
                             start = max(0, match.start() - 20)
                             end = min(len(content), match.end() + 20)
                             snippet = content[start:end].replace("\n", " ").strip()
-                            
+
                             findings.append(
                                 Finding(
                                     id=COID.JS_MISSING_HTML_CLASS,
@@ -251,7 +251,7 @@ class ConsistencyAssessor(Assessor):
                             )
             except Exception as e:
                 logger.debug("Error checking JS-HTML consistency for %s: %s", js_file, e)
-        
+
         return findings
 
     def _check_css_html_consistency(
@@ -262,17 +262,17 @@ class ConsistencyAssessor(Assessor):
         css_files = sorted(context.files_for("css", relevant_only=True))
         html_ids: Set[str] = html_data.get("ids", set())
         html_classes: Set[str] = html_data.get("classes", set())
-        
-        # Simple patterns: #id and .class (at start of selector or after space/comma)
+
+        # Simple patterns: #id and.class (at start of selector or after space/comma)
         id_pattern = r'(?:^|[\s,])#([a-zA-Z_][a-zA-Z0-9_-]*)'
         class_pattern = r'(?:^|[\s,])\.([a-zA-Z_][a-zA-Z0-9_-]*)'
         # Hex colour codes look like valid IDs but aren't selectors (e.g. #fff, #f4f4f4)
         _HEX_COLOR = re.compile(r'^[0-9a-fA-F]{3,8}$')
-        
+
         for css_file in css_files:
             try:
                 content = css_file.read_text(encoding="utf-8", errors="replace")
-                
+
                 # Check IDs
                 for match in re.finditer(id_pattern, content):
                     selector_value = match.group(1)
@@ -283,7 +283,7 @@ class ConsistencyAssessor(Assessor):
                         continue
                     # Count occurrences
                     count = content.count(f"#{selector_value}")
-                    
+
                     findings.append(
                         Finding(
                             id=COID.CSS_MISSING_HTML_ID,
@@ -300,14 +300,14 @@ class ConsistencyAssessor(Assessor):
                             profile=profile_name,
                         )
                     )
-                
+
                 # Check classes
                 for match in re.finditer(class_pattern, content):
                     selector_value = match.group(1)
                     if selector_value and selector_value not in html_classes:
                         # Count occurrences
                         count = content.count(f".{selector_value}")
-                        
+
                         findings.append(
                             Finding(
                                 id=COID.CSS_MISSING_HTML_CLASS,
@@ -326,7 +326,7 @@ class ConsistencyAssessor(Assessor):
                         )
             except Exception as e:
                 logger.debug("Error checking CSS-HTML consistency for %s: %s", css_file, e)
-        
+
         return findings
 
     def _check_php_form_consistency(
@@ -336,19 +336,19 @@ class ConsistencyAssessor(Assessor):
         findings: List[Finding] = []
         php_files = sorted(context.files_for("php", relevant_only=True))
         html_form_fields: Set[str] = set(html_data.get("form_fields", {}).keys())
-        
+
         # Patterns for PHP form variable access
         post_pattern = r'\$_POST\s*\[\s*["\']([^"\']+)["\']'
         get_pattern = r'\$_GET\s*\[\s*["\']([^"\']+)["\']'
         request_pattern = r'\$_REQUEST\s*\[\s*["\']([^"\']+)["\']'
-        
+
         php_accessed_keys: Set[str] = set()
-        php_file_map: Dict[str, str] = {}  # key -> file
-        
+        php_file_map: Dict[str, str] = {}  # Key -> file
+
         for php_file in php_files:
             try:
                 content = php_file.read_text(encoding="utf-8", errors="replace")
-                
+
                 for pattern in [post_pattern, get_pattern, request_pattern]:
                     for match in re.finditer(pattern, content, re.IGNORECASE):
                         key = match.group(1)
@@ -357,7 +357,7 @@ class ConsistencyAssessor(Assessor):
                             php_file_map[key] = str(php_file)
             except Exception as e:
                 logger.debug("Error reading PHP file %s: %s", php_file, e)
-        
+
         # Check: PHP expects key that doesn't exist in HTML
         for key in php_accessed_keys:
             if key not in html_form_fields:
@@ -376,7 +376,7 @@ class ConsistencyAssessor(Assessor):
                         profile=profile_name,
                     )
                 )
-        
+
         # Check: HTML form field not used in PHP (lower priority)
         for field_name in html_form_fields:
             if field_name not in php_accessed_keys:
@@ -395,7 +395,7 @@ class ConsistencyAssessor(Assessor):
                         profile=profile_name,
                     )
                 )
-        
+
         return findings
 
     def _compute_php_form_alignment(
@@ -493,14 +493,14 @@ class ConsistencyAssessor(Assessor):
     ) -> List[Finding]:
         """Check that link and form action targets exist."""
         findings: List[Finding] = []
-        
+
         # Get submission root from html_data or context
         submission_root = html_data.get("submission_root")
         if not submission_root:
             submission_root = Path(context.metadata.get("resolved_root", context.workspace_path / "submission"))
         if isinstance(submission_root, str):
             submission_root = Path(submission_root)
-        
+
         # Check links
         links = html_data.get("links", [])
         for href, referring_file in links:
@@ -508,16 +508,16 @@ class ConsistencyAssessor(Assessor):
             target = href.split("#")[0]
             if not target:
                 continue
-            
+
             # Resolve relative path
             if referring_file:
                 base_dir = Path(referring_file).parent
             else:
                 base_dir = submission_root
-            
+
             target_path = (base_dir / target).resolve()
-            
-            # Check if file exists within submission
+
+            # Check whether file exists within submission
             try:
                 if not target_path.exists() or not str(target_path).startswith(str(submission_root.resolve())):
                     findings.append(
@@ -552,7 +552,7 @@ class ConsistencyAssessor(Assessor):
                         profile=profile_name,
                     )
                 )
-        
+
         # Check form actions
         form_actions = html_data.get("form_actions", [])
         for action, referring_file in form_actions:
@@ -560,16 +560,16 @@ class ConsistencyAssessor(Assessor):
             target = action.split("#")[0]
             if not target:
                 continue
-            
+
             # Resolve relative path
             if referring_file:
                 base_dir = Path(referring_file).parent
             else:
                 base_dir = submission_root
-            
+
             target_path = (base_dir / target).resolve()
-            
-            # Check if file exists within submission
+
+            # Check whether file exists within submission
             try:
                 if not target_path.exists() or not str(target_path).startswith(str(submission_root.resolve())):
                     findings.append(
@@ -604,5 +604,5 @@ class ConsistencyAssessor(Assessor):
                         profile=profile_name,
                     )
                 )
-        
+
         return findings

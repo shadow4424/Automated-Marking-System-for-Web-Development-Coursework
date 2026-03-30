@@ -1,12 +1,4 @@
-"""Vision Analysis Module for Screenshot-Based Grading.
-
-This module provides the VisionAnalyst class which uses Vision-capable LLMs
-(e.g., Qwen2-VL) to analyse screenshots and detect layout/visual issues.
-
-Phase C: Updated with Pydantic schemas for reliability.
-Phase D: Added hash-based caching for performance.
-Phase E: Deterministic gating — blank-image detection & static-context injection.
-"""
+"""Vision Analysis Module for Screenshot-Based Grading."""
 from __future__ import annotations
 
 import hashlib
@@ -40,30 +32,17 @@ from ams.llm.utils import parse_detect_layout_issues_response, parse_review_ux_r
 logger = logging.getLogger(__name__)
 
 
-# =============================================================================
 # Vision Analyst
-# =============================================================================
 
-# ─── Blank-image detection thresholds ────────────────────────────────────────
-_WHITE_PIXEL_THRESHOLD = 0.985  # fraction of near-white pixels to count as blank
-_NEAR_WHITE_VALUE      = 245    # pixel channel value considered "near-white"
-_VARIANCE_THRESHOLD    = 20.0   # whole-image variance below which → solid colour
+
+# Blank-image detection thresholds.
+_WHITE_PIXEL_THRESHOLD = 0.985  # Fraction of near-white pixels to count as blank
+_NEAR_WHITE_VALUE      = 245    # Pixel channel value considered "near-white"
+_VARIANCE_THRESHOLD    = 20.0   # Whole-image variance below which → solid colour
 
 
 def is_visually_empty(image_path: Path) -> bool:
-    """Return *True* if the screenshot is blank / solid-colour / mostly white.
-
-    BOTH heuristics must agree (AND logic) to reduce false positives on
-    unstyled-but-visible pages (e.g. plain HTML with text content):
-
-    1. **Low variance** – the whole image has almost no colour variation,
-       meaning it is a solid-colour rectangle (regardless of which colour).
-    2. **Near-white dominance** – ≥98.5 % of pixels have *all three* RGB
-       channels above 245, i.e. the page is essentially an empty white page.
-
-    Uses PIL + numpy for efficiency.  If the image cannot be opened the
-    function returns *False* so the LLM path is still attempted.
-    """
+    """Return *True* if the screenshot is blank / solid-colour / mostly white."""
     try:
         from PIL import Image
         img = Image.open(image_path).convert("RGB")
@@ -74,7 +53,7 @@ def is_visually_empty(image_path: Path) -> bool:
         low_variance = variance < _VARIANCE_THRESHOLD
 
         # Heuristic 2 – near-white pixel ratio
-        white_mask = np.all(arr >= _NEAR_WHITE_VALUE, axis=-1)   # per-pixel
+        white_mask = np.all(arr >= _NEAR_WHITE_VALUE, axis=-1)   # Per-pixel
         white_ratio = white_mask.mean()
         high_white = white_ratio >= _WHITE_PIXEL_THRESHOLD
 
@@ -101,67 +80,29 @@ def is_visually_empty(image_path: Path) -> bool:
 
 
 class VisionAnalyst:
-    """High-level interface for visual grading using Vision LLMs.
-    
-    This class provides methods to analyse screenshots against
-    specific requirements and return structured VisionResult objects.
-    
-    Phase C Guarantees:
-    - Never raises exceptions to callers
-    - Always returns a valid VisionResult
-    - Missing screenshots return NOT_EVALUATED
-    - LLM errors return NOT_EVALUATED
-    
-    Phase E Additions:
-    - ``is_visually_empty`` pre-check short-circuits blank pages
-    - ``review_ux`` accepts an optional ``context_note`` from static analysis
-    
-    Example:
-        >>> analyst = VisionAnalyst()
-        >>> result = analyst.detect_layout_issues(
-        ...     "screenshot.png",
-        ...     "The page should have a blue header"
-        ... )
-        >>> print(result.status)  # "PASS", "FAIL", or "NOT_EVALUATED"
-    """
-    
+    """High-level interface for visual grading using Vision LLMs."""
+
     SYSTEM_PROMPT = VISION_SYSTEM_PROMPT
 
     def __init__(self, provider=None, cache_enabled: bool = None):
-        """Initialise the VisionAnalyst.
-        
-        Args:
-            provider: Optional LLMProvider instance. If None, uses factory.
-            cache_enabled: Whether to cache results. Defaults to LLM_CACHE_ENABLED.
-        """
+        """Initialise the VisionAnalyst."""
         self._provider = provider
         self._cache_enabled = cache_enabled if cache_enabled is not None else LLM_CACHE_ENABLED
         self._cache = RequestCache() if self._cache_enabled else None
-    
+
     @property
     def provider(self):
         """Lazy-load the provider to avoid import issues."""
         if self._provider is None:
             self._provider = get_llm_provider()
         return self._provider
-    
+
     def detect_layout_issues(
-        self, 
-        screenshot_path: str, 
+        self,
+        screenshot_path: str,
         requirement_context: str
     ) -> VisionResult:
-        """Analyse a screenshot against a specific visual requirement.
-        
-        This method NEVER raises exceptions. All errors result in
-        a VisionResult with status=NOT_EVALUATED.
-        
-        Args:
-            screenshot_path: Path to the screenshot image file.
-            requirement_context: The requirement to check against.
-            
-        Returns:
-            VisionResult with status PASS, FAIL, or NOT_EVALUATED.
-        """
+        """Analyse a screenshot against a specific visual requirement."""
         try:
             return self._detect_internal(screenshot_path, requirement_context)
         except Exception as e:
@@ -170,7 +111,7 @@ class VisionAnalyst:
                 reason=f"Unexpected error: {e}",
                 screenshot_found=False,
             )
-    
+
     def _detect_internal(
         self,
         screenshot_path: str,
@@ -178,8 +119,8 @@ class VisionAnalyst:
     ) -> VisionResult:
         """Internal detection logic that may raise exceptions."""
         path = Path(screenshot_path)
-        
-        # Handle missing screenshot
+
+        # Stop early if the screenshot file is missing.
         if not path.exists():
             logger.warning(f"Screenshot not found: {screenshot_path}")
             return create_not_evaluated(
@@ -187,13 +128,13 @@ class VisionAnalyst:
                 screenshot_path=str(screenshot_path),
                 screenshot_found=False,
             )
-        
+
         # Generate cache key from image hash + requirement
         cache_key = None
         if self._cache:
             image_hash = hashlib.md5(path.read_bytes()).hexdigest()
             cache_key = f"vision:{image_hash}:{requirement_context[:100]}"
-            
+
             cached = self._cache.get(cache_key, system_prompt=self.SYSTEM_PROMPT, model="vision")
             if cached:
                 logger.info(f"Vision cache HIT for {path.name}")
@@ -201,20 +142,20 @@ class VisionAnalyst:
                     return self._parse_response(cached["content"], str(path))
                 except ValueError:
                     pass  # Cache corrupted, proceed with LLM call
-        
+
         user_prompt = build_detect_layout_issues_prompt(requirement_context)
 
         logger.info(f"Analyzing screenshot: {path.name}")
         logger.debug(f"Requirement: {requirement_context}")
-        
+
         response = self.provider.complete(
             prompt=user_prompt,
             system_prompt=self.SYSTEM_PROMPT,
             image_path=str(path),
             json_mode=True,
         )
-        
-        # Handle LLM errors
+
+        # Return a not-evaluated result when the LLM call fails.
         if response.error:
             logger.error(f"Vision analysis LLM error: {response.error}")
             return create_not_evaluated(
@@ -222,7 +163,7 @@ class VisionAnalyst:
                 error=response.error,
                 screenshot_found=True,
             )
-        
+
         # Cache the response
         if self._cache and cache_key:
             self._cache.set(
@@ -231,7 +172,7 @@ class VisionAnalyst:
                 model="vision",
                 response=response.content,
             )
-        
+
         # Parse the JSON response
         try:
             result = parse_detect_layout_issues_response(
@@ -250,21 +191,13 @@ class VisionAnalyst:
                 raw_response=response.content[:200],
                 screenshot_found=True,
             )
-    
+
     def check_responsiveness(
         self,
         desktop_screenshot: str,
         mobile_screenshot: str,
     ) -> VisionResult:
-        """Compare desktop and mobile screenshots for responsive design.
-        
-        Args:
-            desktop_screenshot: Path to desktop viewport screenshot.
-            mobile_screenshot: Path to mobile viewport screenshot.
-            
-        Returns:
-            VisionResult with responsiveness assessment.
-        """
+        """Compare desktop and mobile screenshots for responsive design."""
         # For now, analyse the mobile screenshot against the responsiveness requirement
         return self.detect_layout_issues(
             mobile_screenshot,
@@ -273,9 +206,9 @@ class VisionAnalyst:
             "and navigation should be accessible."
         )
 
-    # ------------------------------------------------------------------
+
     # UX Review (qualitative, non-scoring)
-    # ------------------------------------------------------------------
+
 
     def review_ux(
         self,
@@ -283,24 +216,9 @@ class VisionAnalyst:
         page_name: str,
         context_note: Optional[str] = None,
     ) -> "UXReviewResult":
-        """Provide qualitative UX/UI feedback for a single page screenshot.
-
-        This is a non-scoring, advisory evaluation.  The returned
-        :class:`UXReviewResult` is **never** fed into the scoring engine.
-
-        Args:
-            screenshot_path: Absolute path to the page screenshot.
-            page_name: The HTML filename (e.g. ``index.html``).
-            context_note: Optional factual note from static analysis
-                (e.g. ``"No CSS files found"``).  When provided this is
-                injected at the top of the system prompt so the model
-                has deterministic grounding before it looks at the image.
-
-        Returns:
-            A :class:`UXReviewResult` with status and feedback text.
-        """
+        """Provide qualitative UX/UI feedback for a single page screenshot."""
         try:
-            # ── Phase E: blank-image gate ────────────────────────────────
+            # Phase E: blank-image gate.
             path = Path(screenshot_path)
             if path.exists() and is_visually_empty(path):
                 logger.info(
@@ -355,15 +273,15 @@ class VisionAnalyst:
             )
 
         # UX reviews are NOT cached — each student submission must receive
-        # its own fresh evaluation to avoid cross-student feedback bleed in
-        # batch runs (the global cache.db is content-addressed so identical
-        # screenshots from different students would collide).
+        # Its own fresh evaluation to avoid cross-student feedback bleed in
+        # Batch runs (the global cache.db is content-addressed so identical
+        # Screenshots from different students would collide).
 
         user_prompt = build_review_ux_prompt(page_name)
 
-        # ── Phase E: inject static-analysis context into the system prompt ──
+        # Phase E: inject static-analysis context into the system prompt.
         # The system prompt has a {context_note} placeholder that gets filled
-        # with per-page factual grounding from static analysis.
+        # With per-page factual grounding from static analysis.
         note = context_note if context_note else "No additional context."
         system_prompt = UX_REVIEW_SYSTEM_PROMPT.format(context_note=note)
 
@@ -444,22 +362,11 @@ class VisionAnalyst:
             )
 
         raise ValueError(f"Could not parse UX review response: {content[:200]}")
-    
+
     def _parse_response(self, content: str, screenshot_path: str) -> VisionResult:
-        """Parse the LLM response into a VisionResult.
-        
-        Args:
-            content: Raw LLM response string.
-            screenshot_path: Path to the screenshot for metadata.
-            
-        Returns:
-            VisionResult with PASS or FAIL status.
-            
-        Raises:
-            ValueError: If parsing fails.
-        """
+        """Parse the LLM response into a VisionResult."""
         content = content.strip()
-        
+
         # Try direct JSON parse
         data = None
         try:
@@ -473,20 +380,20 @@ class VisionAnalyst:
                         data = json.loads(json_match.group(1).strip())
                     except json.JSONDecodeError:
                         pass
-        
+
         if data and "result" in data and "reason" in data:
             result_str = str(data["result"]).upper()
             reason = str(data["reason"])
 
             # Contradiction guard: if the reason text indicates a failure
-            # but the model hallucinated "PASS", override to FAIL.
+            # But the model hallucinated "PASS", override to FAIL.
             if result_str == "PASS" and self._reason_contradicts_pass(reason):
                 logger.warning(
                     "Vision status/reason contradiction detected — "
                     "overriding PASS → FAIL  (reason: %s)", reason,
                 )
                 result_str = "FAIL"
-            
+
             if result_str == "PASS":
                 return create_pass(
                     reason=reason,
@@ -500,12 +407,12 @@ class VisionAnalyst:
                     screenshot=screenshot_path,
                     model=type(self.provider).__name__,
                 )
-        
+
         raise ValueError(f"Could not parse response: {content[:200]}")
 
-    # ------------------------------------------------------------------
+
     # Contradiction detection
-    # ------------------------------------------------------------------
+
     _NEGATIVE_PATTERNS = re.compile(
         r"\b(?:"
         r"(?:does\s+not|doesn'?t|do\s+not|don'?t|is\s+not|isn'?t|are\s+not|aren'?t)"
@@ -518,18 +425,11 @@ class VisionAnalyst:
 
     @classmethod
     def _reason_contradicts_pass(cls, reason: str) -> bool:
-        """Return *True* if the reason text contains negative language that
-        contradicts a PASS verdict.
-
-        This is a safety net: even with a hardened prompt, small local
-        models sometimes output PASS alongside a reason that clearly
-        describes a missing or broken feature.
-        """
+        """Return *True* if the reason text contains negative language that contradicts a PASS verdict."""
         return bool(cls._NEGATIVE_PATTERNS.search(reason))
 
 
-# =============================================================================
 # Module Export
-# =============================================================================
+
 
 __all__ = ["VisionAnalyst", "VisionResult", "VisionIssue", "UXReviewResult", "is_visually_empty"]

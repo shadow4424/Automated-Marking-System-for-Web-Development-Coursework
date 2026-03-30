@@ -21,22 +21,21 @@ def _run_pipeline(submission_dir: Path, profile: str = "frontend") -> dict:
 
 class TestJSHTMLConsistency:
     """Test B1: HTML ↔ JS DOM selector consistency."""
-
     def test_js_references_missing_html_id(self, tmp_path: Path):
         """JS getElementById references non-existent HTML ID."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><div id="existing">Hello</div></body></html>', encoding="utf-8"
         )
         (submission_dir / "app.js").write_text(
             'document.getElementById("missing-id");', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         missing_id_findings = [f for f in findings if f["id"] == "CONSISTENCY.JS_MISSING_HTML_ID"]
         assert len(missing_id_findings) > 0
         assert missing_id_findings[0]["severity"] == "WARN"
@@ -47,17 +46,17 @@ class TestJSHTMLConsistency:
         """JS querySelector references non-existent HTML class."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><div class="existing">Hello</div></body></html>', encoding="utf-8"
         )
         (submission_dir / "app.js").write_text(
             'document.querySelector(".missing-class");', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         missing_class_findings = [f for f in findings if f["id"] == "CONSISTENCY.JS_MISSING_HTML_CLASS"]
         assert len(missing_class_findings) > 0
         assert missing_class_findings[0]["severity"] == "WARN"
@@ -67,17 +66,17 @@ class TestJSHTMLConsistency:
         """JS querySelectorAll references non-existent HTML ID."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body></body></html>', encoding="utf-8"
         )
         (submission_dir / "app.js").write_text(
             'document.querySelectorAll("#nonexistent");', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         missing_findings = [f for f in findings if f["id"] == "CONSISTENCY.JS_MISSING_HTML_ID"]
         assert len(missing_findings) > 0
 
@@ -85,39 +84,38 @@ class TestJSHTMLConsistency:
         """JS references existing HTML elements - no findings."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><div id="myid" class="myclass">Hello</div></body></html>', encoding="utf-8"
         )
         (submission_dir / "app.js").write_text(
             'document.getElementById("myid"); document.querySelector(".myclass");', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         consistency_findings = [f for f in findings if f["id"].startswith("CONSISTENCY.JS_MISSING")]
         assert len(consistency_findings) == 0
 
 
 class TestCSSHTMLConsistency:
     """Test B2: HTML ↔ CSS selector consistency."""
-
     def test_css_references_missing_html_id(self, tmp_path: Path):
         """CSS references non-existent HTML ID."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><div id="existing">Hello</div></body></html>', encoding="utf-8"
         )
         (submission_dir / "style.css").write_text(
             '#missing-id { colour: red; }', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         missing_id_findings = [f for f in findings if f["id"] == "CONSISTENCY.CSS_MISSING_HTML_ID"]
         assert len(missing_id_findings) > 0
         assert missing_id_findings[0]["severity"] == "WARN"
@@ -127,17 +125,17 @@ class TestCSSHTMLConsistency:
         """CSS references non-existent HTML class."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><div class="existing">Hello</div></body></html>', encoding="utf-8"
         )
         (submission_dir / "style.css").write_text(
             '.missing-class { margin: 0; }', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         missing_class_findings = [f for f in findings if f["id"] == "CONSISTENCY.CSS_MISSING_HTML_CLASS"]
         assert len(missing_class_findings) > 0
         assert missing_class_findings[0]["severity"] == "WARN"
@@ -146,39 +144,38 @@ class TestCSSHTMLConsistency:
         """CSS references existing HTML elements - no findings."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><div id="myid" class="myclass">Hello</div></body></html>', encoding="utf-8"
         )
         (submission_dir / "style.css").write_text(
             '#myid { colour: red; } .myclass { margin: 0; }', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         consistency_findings = [f for f in findings if f["id"].startswith("CONSISTENCY.CSS_MISSING")]
         assert len(consistency_findings) == 0
 
 
 class TestPHPFormConsistency:
     """Test B3: Form field ↔ PHP variable consistency (fullstack only)."""
-
     def test_php_expects_missing_form_field(self, tmp_path: Path):
         """PHP accesses form field that doesn't exist in HTML."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><form><input name="username" /></form></body></html>', encoding="utf-8"
         )
         (submission_dir / "process.php").write_text(
             '<?php $email = $_POST["email"]; ?>', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="fullstack")
         findings = report.get("findings", [])
-        
+
         missing_field_findings = [f for f in findings if f["id"] == "CONSISTENCY.PHP_EXPECTS_MISSING_FORM_FIELD"]
         assert len(missing_field_findings) > 0
         assert missing_field_findings[0]["severity"] == "WARN"
@@ -188,17 +185,17 @@ class TestPHPFormConsistency:
         """HTML form field not accessed in PHP."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><form><input name="username" /><input name="unused" /></form></body></html>', encoding="utf-8"
         )
         (submission_dir / "process.php").write_text(
             '<?php $user = $_POST["username"]; ?>', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="fullstack")
         findings = report.get("findings", [])
-        
+
         unused_field_findings = [f for f in findings if f["id"] == "CONSISTENCY.FORM_FIELD_UNUSED_IN_PHP"]
         assert len(unused_field_findings) > 0
         assert unused_field_findings[0]["severity"] == "INFO"
@@ -208,17 +205,17 @@ class TestPHPFormConsistency:
         """PHP form consistency checks should not run for frontend profile."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><form><input name="username" /></form></body></html>', encoding="utf-8"
         )
         (submission_dir / "process.php").write_text(
             '<?php $email = $_POST["email"]; ?>', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         # PHP form consistency checks should not run for frontend
         php_consistency_findings = [f for f in findings if f["id"].startswith("CONSISTENCY.PHP") or f["id"].startswith("CONSISTENCY.FORM_FIELD")]
         assert len(php_consistency_findings) == 0
@@ -227,17 +224,17 @@ class TestPHPFormConsistency:
         """PHP accesses form fields that exist in HTML - no missing field findings."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><form><input name="username" /><input name="email" /></form></body></html>', encoding="utf-8"
         )
         (submission_dir / "process.php").write_text(
             '<?php $user = $_POST["username"]; $email = $_GET["email"]; ?>', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="fullstack")
         findings = report.get("findings", [])
-        
+
         missing_field_findings = [f for f in findings if f["id"] == "CONSISTENCY.PHP_EXPECTS_MISSING_FORM_FIELD"]
         assert len(missing_field_findings) == 0
 
@@ -249,14 +246,14 @@ class TestLinkTargets:
         """Link points to non-existent file."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><a href="missing.html">Link</a></body></html>', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         missing_link_findings = [f for f in findings if f["id"] == "CONSISTENCY.MISSING_LINK_TARGET"]
         assert len(missing_link_findings) > 0
         assert missing_link_findings[0]["severity"] == "WARN"
@@ -266,14 +263,14 @@ class TestLinkTargets:
         """Form action points to non-existent file."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><form action="nonexistent.php"><input name="x" /></form></body></html>', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         missing_action_findings = [f for f in findings if f["id"] == "CONSISTENCY.MISSING_FORM_ACTION_TARGET"]
         assert len(missing_action_findings) > 0
         assert missing_action_findings[0]["severity"] == "WARN"
@@ -282,17 +279,17 @@ class TestLinkTargets:
         """Link points to existing file - no finding."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><a href="about.html">About</a></body></html>', encoding="utf-8"
         )
         (submission_dir / "about.html").write_text(
             '<html><body>About page</body></html>', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         missing_link_findings = [f for f in findings if f["id"] == "CONSISTENCY.MISSING_LINK_TARGET"]
         assert len(missing_link_findings) == 0
 
@@ -300,14 +297,14 @@ class TestLinkTargets:
         """External links (http/https/mailto) should be ignored."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><a href="https://example.com">External</a><a href="mailto:test@example.com">Email</a></body></html>', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         missing_link_findings = [f for f in findings if f["id"] == "CONSISTENCY.MISSING_LINK_TARGET"]
         assert len(missing_link_findings) == 0
 
@@ -315,14 +312,14 @@ class TestLinkTargets:
         """Anchor links (#) should be ignored."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><a href="#section1">Section</a></body></html>', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         missing_link_findings = [f for f in findings if f["id"] == "CONSISTENCY.MISSING_LINK_TARGET"]
         assert len(missing_link_findings) == 0
 
@@ -334,20 +331,20 @@ class TestConsistencyFindingsInReports:
         """Consistency findings should appear in report.json."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body><div id="existing"></div></body></html>', encoding="utf-8"
         )
         (submission_dir / "app.js").write_text(
             'document.getElementById("missing");', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         consistency_findings = [f for f in findings if f["id"].startswith("CONSISTENCY.")]
         assert len(consistency_findings) > 0
-        
+
         # Check finding schema
         for finding in consistency_findings:
             assert "id" in finding
@@ -363,21 +360,19 @@ class TestConsistencyFindingsInReports:
         """Consistency findings should include profile information."""
         submission_dir = tmp_path / "submission"
         submission_dir.mkdir()
-        
+
         (submission_dir / "index.html").write_text(
             '<html><body></body></html>', encoding="utf-8"
         )
         (submission_dir / "app.js").write_text(
             'document.getElementById("missing");', encoding="utf-8"
         )
-        
+
         report = _run_pipeline(submission_dir, profile="frontend")
         findings = report.get("findings", [])
-        
+
         consistency_findings = [f for f in findings if f["id"].startswith("CONSISTENCY.")]
         for finding in consistency_findings:
             assert finding.get("profile") == "frontend"
-
-
 
 

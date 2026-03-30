@@ -7,15 +7,15 @@ import zipfile
 from dataclasses import dataclass, asdict
 from typing import Any
 
-# ---------------------------------------------------------------------------
+
 # Schema version
-# ---------------------------------------------------------------------------
+
 
 EXPORT_SCHEMA_VERSION = "2.0"
 
-# ---------------------------------------------------------------------------
-# Status constants  (strings, not enums, for JSON serialisability)
-# ---------------------------------------------------------------------------
+
+# Status constants (strings, not enums, for JSON serialisability)
+
 
 STATUS_PASS = "PASS"
 STATUS_PARTIAL = "PARTIAL"
@@ -27,30 +27,29 @@ STATUS_ENVIRONMENT_UNAVAILABLE = "ENVIRONMENT_UNAVAILABLE"
 STATUS_ERROR_DURING_ANALYSIS = "ERROR_DURING_ANALYSIS"
 STATUS_NO_RELEVANT_FILES = "NO_RELEVANT_FILES"
 
-# ---------------------------------------------------------------------------
+
 # Dataclasses
-# ---------------------------------------------------------------------------
 
 
 @dataclass
 class ExportFinding:
-    finding_id: str        # e.g. "HTML.MISSING_DOCTYPE"
+    finding_id: str        # E.g. "HTML.MISSING_DOCTYPE"
     component: str         # "html", "css", "js", etc.
     severity: str          # FAIL, WARN, INFO, THREAT, SKIPPED
     message: str
-    finding_category: str  # missing, syntax, structure, behavioral, etc.
-    evidence_summary: str  # truncated repr of evidence dict, max 300 chars
+    finding_category: str  # Missing, syntax, structure, behavioural, etc.
+    evidence_summary: str  # Truncated repr of evidence dict, max 300 chars
 
 
 @dataclass
 class RuleOutcome:
-    requirement_id: str   # e.g. "HTML.VALID_DOCTYPE"
+    requirement_id: str   # E.g. "HTML.VALID_DOCTYPE"
     component: str
     description: str
     stage: str            # "static", "runtime", "browser", "quality", "layout"
-    status: str           # one of STATUS_* constants
+    status: str           # One of STATUS_* constants
     score: Any            # 0.0, 0.5, 1.0, or "SKIPPED"
-    score_label: str      # human explanation of 1/0.5/0, empty if SKIPPED
+    score_label: str      # Human explanation of 1/0.5/0, empty if SKIPPED
     weight: float
     skipped_reason: str   # "" if not skipped
 
@@ -58,7 +57,7 @@ class RuleOutcome:
 @dataclass
 class ComponentResult:
     name: str             # "html", "css", "js", "php", "sql", "api"
-    score: Any            # numeric 0.0–1.0 or "SKIPPED"
+    score: Any            # Numeric 0.0–1.0 or "SKIPPED"
     score_pct: str        # "80.00%" or "SKIPPED"
     required: bool
     met: int
@@ -74,8 +73,8 @@ class ExecutionEvidence:
     browser_available: bool
     behavioural_tests_run: bool
     browser_tests_run: bool
-    behavioural_results: list  # list of dicts: {test_id, status, diagnostic}
-    browser_results: list      # list of dicts: {test_id, status, diagnostic}
+    behavioural_results: list  # List of dicts: {test_id, status, diagnostic}
+    browser_results: list      # List of dicts: {test_id, status, diagnostic}
 
 
 @dataclass
@@ -94,27 +93,25 @@ class ExportReport:
     scoring_mode: str
     pipeline_version: str
     # Overall result
-    overall_score: Any         # float | None
+    overall_score: Any         # Float | None
     overall_pct: str
     overall_label: str
     confidence_level: str
-    confidence_reasons: list   # list[str]
-    confidence_flags: list     # list[str]
+    confidence_reasons: list   # List[str]
+    confidence_flags: list     # List[str]
     manual_review: bool
-    manual_review_reasons: list  # list[str]
+    manual_review_reasons: list  # List[str]
     # Breakdown
-    components: list           # list[ComponentResult]
-    findings: list             # list[ExportFinding]
-    rule_outcomes: list        # list[RuleOutcome]
+    components: list           # List[ComponentResult]
+    findings: list             # List[ExportFinding]
+    rule_outcomes: list        # List[RuleOutcome]
     # Execution
     execution: ExecutionEvidence
     # Policy
-    policy_notes: list         # list[str]
+    policy_notes: list         # List[str]
 
 
-# ---------------------------------------------------------------------------
 # Private helpers
-# ---------------------------------------------------------------------------
 
 
 def _map_requirement_status(status: str, skipped_reason: str | None) -> str:
@@ -129,7 +126,7 @@ def _map_requirement_status(status: str, skipped_reason: str | None) -> str:
             return STATUS_NOT_RUN
         if sr == "environment_unavailable":
             return STATUS_ENVIRONMENT_UNAVAILABLE
-        # anything else skipped
+        # Anything else skipped
         return STATUS_SKIPPED_BY_PROFILE
 
     # FAIL / not_met with special skipped_reason overrides
@@ -181,9 +178,7 @@ def _overall_label(score: Any) -> str:
     return "Unknown"
 
 
-# ---------------------------------------------------------------------------
 # Main builder
-# ---------------------------------------------------------------------------
 
 
 def build_export_report(report_json: dict, run_id: str = "") -> ExportReport:
@@ -347,9 +342,7 @@ def build_export_report(report_json: dict, run_id: str = "") -> ExportReport:
     )
 
 
-# ---------------------------------------------------------------------------
 # Validation
-# ---------------------------------------------------------------------------
 
 
 def validate_export_report(report: ExportReport) -> None:
@@ -379,9 +372,7 @@ def validate_export_report(report: ExportReport) -> None:
         )
 
 
-# =============================================================================
 # JSON Export
-# =============================================================================
 
 
 def export_json(report: ExportReport) -> str:
@@ -390,9 +381,8 @@ def export_json(report: ExportReport) -> str:
     return json.dumps(data, indent=2, default=str)
 
 
-# ---------------------------------------------------------------------------
 # Export: TXT
-# ---------------------------------------------------------------------------
+
 
 _SEP_MAJOR = "=" * 80
 _SEP_MINOR = "-" * 40
@@ -590,9 +580,7 @@ def export_txt(report: ExportReport) -> str:
     return "\n".join(lines)
 
 
-# =============================================================================
 # CSV Export
-# =============================================================================
 
 
 def _build_csv_summary_headers() -> list[str]:
@@ -719,9 +707,7 @@ def export_csv_rules(report: ExportReport) -> str:
     return buf.getvalue()
 
 
-# =============================================================================
 # ZIP / Bundle Export
-# =============================================================================
 
 
 def export_csv_zip(report: ExportReport) -> bytes:
@@ -743,20 +729,17 @@ def export_csv_zip(report: ExportReport) -> bytes:
     return buf.read()
 
 
-# =============================================================================
 # PDF Export
-# =============================================================================
 
 
 def export_pdf(report: ExportReport) -> bytes:
     """Generate a rich PDF report from the canonical ExportReport."""
-    from ams.pdf_exports import build_rich_submission_pdf  # lazy import to avoid circular deps
+    from ams.pdf_exports import build_rich_submission_pdf  # Lazy import to avoid circular deps
     return build_rich_submission_pdf(report)
 
 
-# ---------------------------------------------------------------------------
 # Public API
-# ---------------------------------------------------------------------------
+
 
 __all__ = [
     "EXPORT_SCHEMA_VERSION",

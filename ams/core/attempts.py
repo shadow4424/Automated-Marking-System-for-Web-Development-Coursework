@@ -12,7 +12,7 @@ from ams.io.metadata import MetadataValidator
 
 
 def utc_now_iso() -> str:
-    """Return the current UTC timestamp in ISO format."""
+    """Return current UTC timestamp in ISO format."""
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
@@ -476,13 +476,7 @@ def _extract_manual_review_required(report: dict[str, Any], context: dict[str, A
 
 
 def _report_has_system_assessment_failure(report: Mapping[str, Any] | None) -> bool:
-    """Return True when the report shows a grading-system failure.
-
-    This is intentionally limited to infrastructure or assessor failures that
-    make the attempt unsuitable for active-selection fallback. Student-facing
-    rubric outcomes such as syntax mistakes, missing requirements, low scores,
-    or failed tests must remain valid when the report is otherwise usable.
-    """
+    """Return True when the report shows a grading-system failure."""
     if not isinstance(report, Mapping):
         return False
 
@@ -1013,7 +1007,7 @@ def _mark_descriptor(
 
 
 def _descriptor_ref(descriptor: Mapping[str, Any]) -> tuple[str, str]:
-    """Return the stable reference for an attempt descriptor."""
+    """Return stable reference for an attempt descriptor."""
     return (
         str(descriptor.get("run_id") or ""),
         str(descriptor.get("batch_submission_id") or ""),
@@ -1021,7 +1015,7 @@ def _descriptor_ref(descriptor: Mapping[str, Any]) -> tuple[str, str]:
 
 
 def _descriptor_sort_key(descriptor: Mapping[str, Any]) -> tuple[str, str, str]:
-    """Return the sort key for ordering attempt descriptors."""
+    """Return sort key for ordering attempt descriptors."""
     return (
         str(descriptor.get("created_at") or ""),
         str(descriptor.get("run_id") or ""),
@@ -1330,7 +1324,6 @@ def sync_attempts_from_storage(runs_root: Path) -> None:
     for assignment_id, student_id in summaries.union(touched):
         recompute_active_attempt(runs_root, assignment_id, student_id)
     return
-
 
 
 __all__ = [

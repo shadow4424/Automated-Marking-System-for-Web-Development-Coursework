@@ -56,14 +56,7 @@ class BrowserRunner:
 
 
 class PlaywrightRunner(BrowserRunner):
-    """Direct host-based Playwright runner (dev/test only).
-
-    .. deprecated:: 2.0
-        Production execution uses :class:`~ams.sandbox.playwright_docker.DockerPlaywrightRunner`.
-        This class is retained only for local development and unit tests that
-        inject it explicitly via the *runner* parameter of
-        :class:`PlaywrightAssessor`.
-    """
+    """Direct host-based Playwright runner (dev/test only)..."""
 
     def __init__(self, timeout_ms: int = 5000, output_cap: int = 10_000) -> None:
         self.timeout_ms = timeout_ms
@@ -275,26 +268,12 @@ class PlaywrightAssessor(Assessor):
             self.runner = get_browser_runner()
         self.output_cap = output_cap
 
-    # ------------------------------------------------------------------
+
     # Multi-page screenshot capture for UX Review
-    # ------------------------------------------------------------------
+
 
     def capture_all_pages(self, context: SubmissionContext) -> List[dict]:
-        """Render every .html file in the submission and capture a
-        full-page screenshot for each one.
-
-        Returns a list of dicts::
-
-            [{"page": "index.html", "screenshot": Path("…/index_html.png")}, …]
-
-        The screenshots are saved under ``artifacts/browser/<filename>.png``.
-        This method is intentionally separated from the scoring pipeline so
-        it can be called independently for the UX Review feature.
-
-        Execution goes through ``self.runner`` (a :class:`BrowserRunner`),
-        which respects the active sandbox mode.  When Docker sandboxing is
-        enabled, screenshots are captured inside the container.
-        """
+        """Render every.html file in the submission and capture a full-page screenshot for each one."""
         import logging as _logging
         _logger = _logging.getLogger(__name__)
 
@@ -307,8 +286,8 @@ class PlaywrightAssessor(Assessor):
         shot_dir.mkdir(parents=True, exist_ok=True)
 
         for idx, html_path in enumerate(html_files):
-            page_name = html_path.name  # e.g. "index.html"
-            safe_stem = page_name.replace(".", "_")  # e.g. "index_html"
+            page_name = html_path.name  # E.g. "index.html"
+            safe_stem = page_name.replace(".", "_")  # E.g. "index_html"
             shot_path = shot_dir / f"{safe_stem}.png"
 
             _logger.debug(
@@ -318,12 +297,12 @@ class PlaywrightAssessor(Assessor):
 
             try:
                 # Run through the sandbox-aware BrowserRunner (interaction
-                # disabled — we only need the screenshot, not DOM diffs).
+                # Disabled — we only need the screenshot, not DOM diffs).
                 result = self.runner.run(
                     html_path, context.workspace_path, interaction=False,
                 )
                 # The runner may produce its own screenshots; copy the
-                # first one to our canonical path if present.
+                # First one to our canonical path if present.
                 if result.screenshot_paths:
                     import shutil
                     src = Path(result.screenshot_paths[0])
@@ -338,8 +317,8 @@ class PlaywrightAssessor(Assessor):
                         continue
 
                 # Runner didn't produce a usable screenshot — record the
-                # page with screenshot=None so the pipeline can still emit
-                # a NOT_EVALUATED finding instead of silently dropping it.
+                # Page with screenshot=None so the pipeline can still emit
+                # A NOT_EVALUATED finding instead of silently dropping it.
                 _logger.warning(
                     "UX: failed %s error=no screenshot returned "
                     "(runner status=%s, notes=%s)",
@@ -533,7 +512,7 @@ class PlaywrightAssessor(Assessor):
             and profile_spec.is_component_required("php")
             and context.files_for("php", relevant_only=True)
         ):
-            # warn or skip if PHP present and we cannot serve dynamically
+            # Warn or skip if PHP present and we cannot serve dynamically
             findings.append(
                 self._finding(
                     "BROWSER.PHP_BACKEND_LIMITATION",

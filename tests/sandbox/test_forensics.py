@@ -15,9 +15,8 @@ from ams.sandbox.forensics import (
 )
 
 
-# ---------------------------------------------------------------------------
-# list_retained_containers
-# ---------------------------------------------------------------------------
+# List_retained_containers
+
 class TestListRetainedContainers:
     @patch("ams.sandbox.forensics.subprocess.run")
     def test_returns_containers(self, mock_run: MagicMock):
@@ -62,9 +61,8 @@ class TestListRetainedContainers:
         assert list_retained_containers() == []
 
 
-# ---------------------------------------------------------------------------
-# inspect_container
-# ---------------------------------------------------------------------------
+# Inspect_container
+
 class TestInspectContainer:
     @patch("ams.sandbox.forensics.subprocess.run")
     def test_returns_diff_and_logs(self, mock_run: MagicMock):
@@ -101,9 +99,8 @@ class TestInspectContainer:
         assert result is None
 
 
-# ---------------------------------------------------------------------------
-# cleanup_container
-# ---------------------------------------------------------------------------
+# Cleanup_container
+
 class TestCleanupContainer:
     @patch("ams.sandbox.forensics.subprocess.run")
     def test_successful_removal(self, mock_run: MagicMock):
@@ -129,9 +126,8 @@ class TestCleanupContainer:
         assert cleanup_container("ams-threat-err") is False
 
 
-# ---------------------------------------------------------------------------
-# cleanup_all_retained
-# ---------------------------------------------------------------------------
+# Cleanup_all_retained
+
 class TestCleanupAllRetained:
     @patch("ams.sandbox.forensics.cleanup_container")
     @patch("ams.sandbox.forensics.list_retained_containers")

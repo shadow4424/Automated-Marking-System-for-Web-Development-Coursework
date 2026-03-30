@@ -58,7 +58,7 @@ class RequirementEvaluationEngine:
         context: SubmissionContext,
         findings: Iterable[Finding],
     ) -> tuple[List[RequirementEvaluationResult], List[Finding]]:
-        """Return the evaluate."""
+        """Return evaluate."""
         resolved = context.resolved_config
         if resolved is None:
             raise ValueError("SubmissionContext.resolved_config must be populated before evaluating requirements")
@@ -290,7 +290,7 @@ class RequirementEvaluationEngine:
         rule: BehavioralRule,
         context: SubmissionContext,
     ) -> tuple[List[str], List[Mapping[str, object]]]:
-        """Prepare the behavioral context."""
+        """Prepare the behavioural context."""
         statuses = []
         evidence_rows: List[Mapping[str, object]] = []
         for item in context.behavioural_evidence:
@@ -321,7 +321,7 @@ class RequirementEvaluationEngine:
         statuses: Sequence[str],
         evidence_rows: Sequence[Mapping[str, object]],
     ) -> RequirementEvaluationResult:
-        """Run the behavioral check."""
+        """Run the behavioural check."""
         if not statuses:
             return _build_evaluation_result(
                 requirement_id=definition.id,
@@ -376,7 +376,7 @@ class RequirementEvaluationEngine:
         definition: RequirementDefinition,
         context: SubmissionContext,
     ) -> RequirementEvaluationResult:
-        """Evaluate the behavioral rule."""
+        """Evaluate the behavioural rule."""
         rule = definition.rule
         assert isinstance(rule, BehavioralRule)
         if rule.test_type == "page_load":
@@ -830,7 +830,7 @@ class RequirementEvaluationEngine:
             )
         browser = context.browser_evidence[0]
         dom_structure = getattr(browser, "dom_structure", None) or {}
-        has_body = bool(dom_structure.get("has_body", True))  # default True if not checked
+        has_body = bool(dom_structure.get("has_body", True))  # Default True if not checked
         element_count = dom_structure.get("element_count", 0)
         if browser.status == "pass" and has_body and element_count > 0:
             score, status = 1.0, "PASS"
@@ -929,7 +929,7 @@ class RequirementEvaluationEngine:
         *,
         profile_name: str,
     ) -> Finding:
-        """Return the from requirement."""
+        """Return from requirement."""
         component = result.component
         mapping = {
             "html": (HID.REQ_PASS, HID.REQ_FAIL, HID.REQ_SKIPPED, HID.REQ_MISSING_FILES),
@@ -978,7 +978,7 @@ class RequirementEvaluationEngine:
         )
 
     def _has_complete_html_shell(self, context: SubmissionContext) -> bool:
-        """Return the complete html shell."""
+        """Return complete html shell."""
         html_files = context.files_for("html", relevant_only=True)
         if not html_files:
             return False
@@ -990,7 +990,7 @@ class RequirementEvaluationEngine:
         return all(token in content for token in required_tokens)
 
     def _html_files_have_images(self, files: Sequence[Path]) -> bool:
-        """Return the files have images."""
+        """Return files have images."""
         for path in files:
             try:
                 content = path.read_text(encoding="utf-8", errors="replace").lower()
@@ -1002,7 +1002,7 @@ class RequirementEvaluationEngine:
 
 
 def _aggregate_file_results(aggregation_mode: str, file_results: Sequence[_RuleFileResult]) -> tuple[float, str]:
-    """Return the file results."""
+    """Return file results."""
     if not file_results:
         return 0.0, "FAIL"
 
@@ -1054,7 +1054,7 @@ def _extract_snippet(component: str, content: str, pattern: str) -> str:
             return "\n".join(f"{line_no + 1:>4} | {lines[line_no]}" for line_no in range(start, end))
 
     # No direct token match: provide both start and end context to avoid
-    # hiding late-file implementation attempts (for example legacy handlers).
+    # Hiding late-file implementation attempts (for example legacy handlers).
     if len(lines) <= 20:
         return "\n".join(
             f"{line_no + 1:>4} | {lines[line_no]}"

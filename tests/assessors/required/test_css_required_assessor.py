@@ -50,7 +50,7 @@ def test_css_parses_cleanly_fail(build_submission, run_pipeline):
 
 
 def test_css_universal_reset_pass(build_submission, run_pipeline):
-    """box-sizing reset strategy → css.has_universal_reset passes."""
+    """Box-sizing reset strategy → css.has_universal_reset passes."""
     css = "* { box-sizing: border-box; } body { color: red; }"
     submission = build_submission({"style.css": css})
     data = run_pipeline(submission, profile="frontend")
@@ -75,7 +75,7 @@ def test_css_body_card_layout_pass(build_submission, run_pipeline):
 
 
 def test_css_link_hover_style_pass(build_submission, run_pipeline):
-    """a:hover rule → css.link_hover_style passes in frontend_css_lab profile."""
+    """A:hover rule → css.link_hover_style passes in frontend_css_lab profile."""
     css = (
         "body { color: #333; } a { text-decoration: none; } "
         "a:hover { text-decoration: underline; color: blue; }"

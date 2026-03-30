@@ -66,7 +66,7 @@ ARTIFACT_ROOTS = ("artifacts/", "runs/", "reports/", "evaluation/", "submission/
 
 
 def clean_path(value: object) -> str:
-    """Jinja filter: shorten absolute file paths to ``submission/file.ext``."""
+    """Jinja filter: shorten absolute file paths to submission/file.ext."""
     s = str(value).replace("\\", "/")
     for marker in ("submission/", "artifacts/", "test_coursework/"):
         idx = s.find(marker)
@@ -112,7 +112,7 @@ def ensure_check_stats(report: dict) -> dict:
 
 
 def to_rel(raw: str) -> str:
-    """Convert a file reference to a path relative to ``submission/``."""
+    """Convert a file reference to a path relative to submission/."""
     s = str(raw).replace("\\", "/")
     if "submission/" in s:
         idx = s.rfind("submission/")
@@ -179,7 +179,7 @@ def coerce_float(value: object) -> float | None:
 
 
 def first_non_empty(values: Sequence[object]) -> str:
-    """Return the first non-empty value as text."""
+    """Return first non-empty value as text."""
     for value in values:
         text = str(value or "").strip()
         if text:
@@ -206,12 +206,12 @@ def normalize_status(value: object, *, fallback: str = "UNKNOWN") -> str:
 
 
 def status_tone(status: object) -> str:
-    """Return the badge tone for a status value."""
+    """Return badge tone for a status value."""
     return DETAIL_TONE_BY_STATUS.get(normalize_status(status), "muted")
 
 
 def stage_label(stage: object) -> str:
-    """Return the display label for a stage value."""
+    """Return display label for a stage value."""
     key = str(stage or "").strip().lower()
     if not key:
         return "General"
@@ -219,7 +219,7 @@ def stage_label(stage: object) -> str:
 
 
 def component_label(component: object) -> str:
-    """Return the display label for a component value."""
+    """Return display label for a component value."""
     key = str(component or "").strip().lower()
     if not key:
         return "General"
@@ -227,7 +227,7 @@ def component_label(component: object) -> str:
 
 
 def component_filter_value(component: object, *, stage: object = None) -> str:
-    """Return the filter value for a component and stage."""
+    """Return filter value for a component and stage."""
     comp = str(component or "").strip().lower()
     stage_key = str(stage or "").strip().lower()
     if comp in {"html", "css", "js", "php", "sql", "api", "browser", "behavioral", "behavioural"}:
@@ -261,7 +261,7 @@ def describe_identifier(identifier: object) -> str:
 
 
 def to_relative_artifact_path(path: str) -> str:
-    """Strip any absolute prefix from an artifact path."""
+    """Strip any absolute prefix from an artefact path."""
     normalised = path.replace("\\", "/")
     for root in ARTIFACT_ROOTS:
         idx = normalised.find(root)
@@ -304,7 +304,7 @@ def gather_screenshots(evidence: object) -> list[str]:
 
 
 def finding_stage(finding: Mapping[str, object]) -> str:
-    """Return the inferred stage for a finding."""
+    """Return inferred stage for a finding."""
     evidence = dict(finding.get("evidence", {}) or {})
     explicit = str(evidence.get("stage") or "").strip().lower()
     if explicit:
@@ -319,7 +319,7 @@ def finding_stage(finding: Mapping[str, object]) -> str:
 
 
 def finding_group_key(finding: Mapping[str, object]) -> str:
-    """Return the grouping key for a finding."""
+    """Return grouping key for a finding."""
     evidence = dict(finding.get("evidence", {}) or {})
     rule_id = str(evidence.get("rule_id") or "").strip()
     if rule_id:

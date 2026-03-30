@@ -5,11 +5,7 @@ from enum import Enum
 
 
 class ScoringMode(str, Enum):
-    """Scoring mode for the AMS marking pipeline.
-    
-    This controls how static assessors and LLM feedback interact.
-    Currently defaults to STATIC_ONLY - no LLM integration yet.
-    """
+    """Scoring mode for the AMS marking pipeline."""
     STATIC_ONLY = "static_only"
     STATIC_PLUS_LLM = "static_plus_llm"
 
@@ -22,9 +18,8 @@ class LLMProviderType(str, Enum):
     # Future: AZURE = "azure", ANTHROPIC = "anthropic"
 
 
-# =============================================================================
 # Scoring Configuration
-# =============================================================================
+
 
 # Default scoring mode - static assessors only, no LLM integration yet
 SCORING_MODE = ScoringMode.STATIC_ONLY
@@ -41,9 +36,8 @@ FINDING_SCORE_WARN = 0.5
 PASS_THRESHOLD = 0.40
 
 
-# =============================================================================
 # LLM Configuration (Phase 0-3)
-# =============================================================================
+
 
 # Which LLM provider to use (default to local for demo)
 LLM_PROVIDER = LLMProviderType.LOCAL
@@ -73,9 +67,8 @@ LLM_CACHE_ENABLED = True
 LLM_SANITIZE_PII = True
 
 
-# =============================================================================
 # Path Configuration
-# =============================================================================
+
 
 from pathlib import Path as _Path
 
@@ -96,22 +89,20 @@ CACHE_DIR = PACKAGE_ROOT / "cache"
 WORKSPACE_MAX_AGE_HOURS = 24
 
 
-# =============================================================================
 # Sandbox Configuration (imported from ams.sandbox.config for convenience)
-# =============================================================================
-# Sandbox behaviour is controlled entirely via environment variables:
-#   AMS_SANDBOX_MODE=docker|subprocess   (default: docker)
-#   AMS_SANDBOX_IMAGE=ams-sandbox:latest
-#   AMS_SANDBOX_CPU_LIMIT=1.0
-#   AMS_SANDBOX_MEMORY_LIMIT=512m
-#   AMS_SANDBOX_PIDS_LIMIT=64
-#   AMS_SANDBOX_NETWORK_MODE=none
+
+# Sandbox behaviour is controlled entirely via environment variables
+# AMS_SANDBOX_MODE=docker|subprocess (default: docker)
+# AMS_SANDBOX_IMAGE=ams-sandbox:latest
+# AMS_SANDBOX_CPU_LIMIT=1.0
+# AMS_SANDBOX_MEMORY_LIMIT=512m
+# AMS_SANDBOX_PIDS_LIMIT=64
+# AMS_SANDBOX_NETWORK_MODE=none
 # See ams.sandbox.config.SandboxConfig for full listing.
 
 
-# =============================================================================
 # GitHub OAuth Configuration
-# =============================================================================
+
 import os as _os
 
 GITHUB_CLIENT_ID: str = _os.environ.get("AMS_GITHUB_CLIENT_ID", "")

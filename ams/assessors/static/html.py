@@ -17,7 +17,7 @@ class HTMLStaticAssessor(Assessor):
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
         html_files = sorted(context.files_for("html", relevant_only=True))
-        
+
         # Determine if HTML is required for this profile
         profile_name = context.metadata.get("profile")
         is_required = False
@@ -183,7 +183,7 @@ class HTMLStaticAssessor(Assessor):
             for tag_pattern, tag_name in deprecated_tags.items():
                 if tag_pattern.lower() in lowered:
                     found_deprecated.append(tag_name)
-            
+
             if found_deprecated:
                 findings.append(
                     Finding(

@@ -1,18 +1,9 @@
-"""LLM System Prompts and Templates — Phases 1, 2, C, D.
-
-Centralized storage for all system prompts and prompt templates used by:
-- FeedbackGenerator (Phase 1)
-- HybridScoring / PartialCredit (Phase 2)
-- VisionAnalyst (Phase C)
-
-Decouples prompt content from business logic for easier A/B testing and
-maintenance. Single source of truth for all LLM instructions.
-"""
+"""LLM System Prompts and Templates — Phases 1, 2, C, D."""
 from __future__ import annotations
 
-# ============================================================================
+
 # Feedback Generation
-# ============================================================================
+
 
 FEEDBACK_SYSTEM_PROMPT = (
     "You are a backend service in an automated marking system. Follow formatting rules exactly. "
@@ -22,9 +13,9 @@ FEEDBACK_SYSTEM_PROMPT = (
     "No markdown, no code fences, no explanations. Use only the keys shown."
 )
 
-# ============================================================================
+
 # Partial Credit / Hybrid Scoring
-# ============================================================================
+
 
 PARTIAL_CREDIT_SYSTEM_PROMPT = (
     "You are a scoring engine. You receive student code that FAILED a check. "
@@ -57,9 +48,9 @@ Respond with a JSON object containing exactly three keys:
   "reasoning" — one sentence describing what code the student wrote
   "suggested_score" — a number between 0.0 and 0.5"""
 
-# ============================================================================
+
 # Batch Feedback Generation (Prompt Consolidation)
-# ============================================================================
+
 
 BATCH_FEEDBACK_SYSTEM_PROMPT = (
     "You are a backend service in an automated marking system. "
@@ -80,9 +71,9 @@ BATCH_FEEDBACK_USER_TEMPLATE = """The student failed the following {count} autom
 Respond with a JSON object containing a "results" array with one entry per rule:
 {{"results": [{{"rule_id": "...", "summary": "...", "items": [{{"severity": "FAIL|WARN|INFO", "message": "...", "evidence_refs": []}}]}}]}}"""
 
-# ============================================================================
+
 # Batch Partial Credit (Prompt Consolidation)
-# ============================================================================
+
 
 BATCH_PARTIAL_CREDIT_SYSTEM_PROMPT = (
     "You are a scoring engine. You receive student code that FAILED multiple checks. "
@@ -110,9 +101,9 @@ Scoring guide (apply per rule):
 Respond with a JSON object:
 {{"results": [{{"rule_id": "...", "intent": "yes|no", "reasoning": "...", "suggested_score": 0.0}}]}}"""
 
-# ============================================================================
+
 # Vision Analysis (legacy rule-based)
-# ============================================================================
+
 
 VISION_SYSTEM_PROMPT = """You are a strict web-design grading assistant.
 Your ONLY job is to verify whether ONE specific visual requirement is met in the provided screenshot.
@@ -128,9 +119,9 @@ Response format — valid JSON, nothing else:
 
 Do NOT include any text outside the JSON object."""
 
-# ============================================================================
+
 # UX Review (qualitative, non-scoring)
-# ============================================================================
+
 
 UX_REVIEW_SYSTEM_PROMPT = """You are a RIGOROUS UI/UX Evaluator with high standards. Your job is to identify specific usability problems, visual defects, and design weaknesses. Be thorough and critical.
 
@@ -208,9 +199,9 @@ def build_review_ux_prompt(page_name: str) -> str:
     """Build the user prompt for a UX screenshot review."""
     return UX_REVIEW_USER_PROMPT_TEMPLATE.format(page_name=page_name)
 
-# ============================================================================
+
 # Threat Analysis (Security Warning Generation)
-# ============================================================================
+
 
 THREAT_ANALYSIS_SYSTEM_PROMPT = (
     "You are a security analyst in an automated marking system. "
@@ -242,9 +233,9 @@ Respond with a JSON object containing exactly three keys:
   "explanation" — one or two sentences describing what the code does and why it was flagged
   "recommendation" — what the instructor should do (e.g. "Review manually", "Safe to ignore", "Investigate further")"""
 
-# ============================================================================
+
 # Module exports
-# ============================================================================
+
 
 __all__ = [
     "FEEDBACK_SYSTEM_PROMPT",

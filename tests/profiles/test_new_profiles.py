@@ -65,7 +65,7 @@ def test_new_profiles_in_profile_list():
     names = list_profile_names(include_aliases=True)
     assert "frontend_css_lab" in names
     assert "frontend_calculator" in names
-    assert "css_lab" in names  # alias
+    assert "css_lab" in names  # Alias
 
 
 def test_frontend_css_lab_relevant_artefacts():

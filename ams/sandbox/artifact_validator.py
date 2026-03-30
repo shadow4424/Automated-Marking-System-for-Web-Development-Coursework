@@ -1,9 +1,4 @@
-"""Post-execution artifact integrity verification.
-
-Verifies that expected artifacts (screenshots, output files) physically
-exist and are well-formed after sandbox execution, before the pipeline
-hands them to downstream consumers (LLM vision, report generation).
-"""
+"""Post-execution artefact integrity verification."""
 from __future__ import annotations
 
 import logging
@@ -23,16 +18,7 @@ def validate_screenshot(
     workspace_path: Path,
     source: str = "artifact_validator",
 ) -> tuple[Optional[Path], List[Finding]]:
-    """Verify that a browser screenshot exists and is usable.
-
-    Searches the standard artifact locations for a screenshot PNG.
-
-    Returns:
-        ``(screenshot_path_or_None, list_of_findings)``
-        If the screenshot is valid, path is returned and findings is empty.
-        If missing or corrupt, path is ``None`` and a ``BROWSER.CAPTURE_FAIL``
-        finding is emitted.
-    """
+    """Verify that a browser screenshot exists and is usable."""
     findings: List[Finding] = []
 
     # Standard locations for browser screenshots

@@ -1,8 +1,4 @@
-"""Shared utility functions for LLM modules.
-
-Consolidates common helpers that were previously duplicated across
-providers.py, feedback.py, and generators.py.
-"""
+"""Shared utility functions for LLM modules."""
 from __future__ import annotations
 
 import json
@@ -17,21 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def clean_json_response(text: str) -> str:
-    """Extract valid JSON from a potentially wrapped LLM response.
-
-    Handles common LLM quirks:
-    - Markdown code fences (```json ... ```)
-    - Preambles like "Here is the JSON:"
-    - Trailing text after JSON
-    - Trailing commas (common LLM error)
-
-    Args:
-        text: Raw LLM output that may contain wrapped JSON.
-
-    Returns:
-        Clean JSON string ready for parsing, or the original text if
-        cleaning would break the content.
-    """
+    """Extract valid JSON from a potentially wrapped LLM response."""
     if not text:
         return text
 

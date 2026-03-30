@@ -89,7 +89,7 @@ def test_api_accepts_method_fail(build_submission, run_pipeline):
 
 
 def test_api_valid_json_shape_pass(build_submission, run_pipeline):
-    """json_encode with array literal → api.valid_json_shape passes."""
+    """Json_encode with array literal → api.valid_json_shape passes."""
     php = (
         "<?php\n"
         "header('Content-Type: application/json');\n"
@@ -103,7 +103,7 @@ def test_api_valid_json_shape_pass(build_submission, run_pipeline):
 
 
 def test_api_http_status_codes_pass(build_submission, run_pipeline):
-    """http_response_code() call → api.http_status_codes passes."""
+    """Http_response_code() call → api.http_status_codes passes."""
     php = (
         "<?php\n"
         "header('Content-Type: application/json');\n"
@@ -118,7 +118,7 @@ def test_api_http_status_codes_pass(build_submission, run_pipeline):
 
 
 def test_api_error_response_path_pass(build_submission, run_pipeline):
-    """json_encode + error key + conditional → api.error_response_path passes."""
+    """Json_encode + error key + conditional → api.error_response_path passes."""
     php = (
         "<?php\n"
         "header('Content-Type: application/json');\n"

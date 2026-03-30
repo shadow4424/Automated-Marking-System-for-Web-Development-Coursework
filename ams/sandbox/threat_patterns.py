@@ -1,9 +1,4 @@
-"""Configurable threat pattern definitions for pre-execution scanning.
-
-Each pattern is a compiled regex paired with metadata (category, severity,
-human-readable description).  Patterns are separated from scanner logic so
-they can be maintained, extended, and unit-tested independently.
-"""
+"""Configurable threat pattern definitions for pre-execution scanning."""
 from __future__ import annotations
 
 import re
@@ -47,7 +42,7 @@ def _compile(pattern: str, flags: int = re.IGNORECASE) -> re.Pattern[str]:
     return re.compile(pattern, flags)
 
 
-# ── PHP Threat Patterns ─────────────────────────────────────────────────
+# PHP Threat Patterns.
 
 _PHP_SHELL = [
     ThreatPattern(
@@ -128,7 +123,7 @@ _PHP_NETWORK = [
     ),
 ]
 
-# ── JavaScript / Node.js Threat Patterns ─────────────────────────────────
+# JavaScript / Node.js Threat Patterns.
 
 _JS_DANGEROUS = [
     ThreatPattern(
@@ -165,7 +160,7 @@ _JS_DANGEROUS = [
     ),
 ]
 
-# ── Filesystem Escape Patterns (all file types) ─────────────────────────
+# Filesystem Escape Patterns (all file types.
 
 _FILESYSTEM_ESCAPE = [
     ThreatPattern(
@@ -184,7 +179,7 @@ _FILESYSTEM_ESCAPE = [
     ),
 ]
 
-# ── Binary Injection ────────────────────────────────────────────────────
+# Binary Injection.
 
 _BINARY_PATTERNS = [
     ThreatPattern(
@@ -197,7 +192,7 @@ _BINARY_PATTERNS = [
     ),
 ]
 
-# ── Shell Script Patterns ───────────────────────────────────────────────
+# Shell Script Patterns.
 
 _SHELL_PATTERNS = [
     ThreatPattern(
@@ -210,7 +205,7 @@ _SHELL_PATTERNS = [
     ),
 ]
 
-# ── SQL Patterns ────────────────────────────────────────────────────────
+# SQL Patterns.
 
 _SQL_PATTERNS = [
     ThreatPattern(
@@ -224,10 +219,10 @@ _SQL_PATTERNS = [
 ]
 
 
-# ── Public API ──────────────────────────────────────────────────────────
+# Public API.
 
 def get_all_patterns() -> List[ThreatPattern]:
-    """Return the complete list of threat patterns."""
+    """Return complete list of threat patterns."""
     return [
         *_PHP_SHELL,
         *_PHP_PROCESS,
@@ -243,10 +238,7 @@ def get_all_patterns() -> List[ThreatPattern]:
 
 
 def get_patterns_for_extension(ext: str) -> List[ThreatPattern]:
-    """Return patterns applicable to a given file extension.
-
-    Patterns with empty *file_extensions* match all files.
-    """
+    """Return patterns applicable to a given file extension. Patterns with empty *file_extensions* match all files."""
     ext = ext.lower()
     return [
         p for p in get_all_patterns()
@@ -265,8 +257,8 @@ SCANNABLE_EXTENSIONS: frozenset[str] = frozenset({
 BINARY_SIGNATURES: dict[str, bytes] = {
     "ELF": b"\x7fELF",         # Linux executables
     "PE": b"MZ",               # Windows executables
-    "Mach-O_32": b"\xfe\xed\xfa\xce",   # macOS 32-bit
-    "Mach-O_64": b"\xfe\xed\xfa\xcf",   # macOS 64-bit
+    "Mach-O_32": b"\xfe\xed\xfa\xce",   # MacOS 32-bit
+    "Mach-O_64": b"\xfe\xed\xfa\xcf",   # MacOS 64-bit
 }
 
 

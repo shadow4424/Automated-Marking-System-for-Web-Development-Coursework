@@ -7,7 +7,7 @@ from pathlib import Path
 from ams.web.validators import validate_is_zipfile
 
 
-# ── validate_is_zipfile ─────────────────────────────────────────────
+# Validate_is_zipfile.
 
 
 class TestValidateIsZipfile:
@@ -21,7 +21,7 @@ class TestValidateIsZipfile:
         assert validate_is_zipfile(zip_path) is True
 
     def test_fake_zip_extension(self, tmp_path: Path) -> None:
-        """A plain text file renamed to .zip must be rejected."""
+        """A plain text file renamed to.zip must be rejected."""
         fake = tmp_path / "fake.zip"
         fake.write_text("this is not a zip file")
         assert validate_is_zipfile(fake) is False
@@ -43,4 +43,4 @@ class TestValidateIsZipfile:
         assert validate_is_zipfile(garbage) is False
 
 
-# ── validate_submission_archive (ingestion fail-safe) ───────────────
+# Validate_submission_archive (ingestion fail-safe.

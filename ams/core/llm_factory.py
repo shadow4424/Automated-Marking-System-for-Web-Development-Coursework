@@ -1,9 +1,4 @@
-"""Factory for LLM Provider instantiation.
-
-Provides a centralized function to get the correctly configured LLM provider
-based on settings in `ams.core.config`. This avoids circular imports and
-duplication across modules that need LLM access.
-"""
+"""Factory for LLM Provider instantiation."""
 from __future__ import annotations
 
 from ams.core.config import LLM_PROVIDER, LLMProviderType, LLM_BASE_URL, LLM_MODEL_NAME, LLM_TIMEOUT
@@ -11,14 +6,7 @@ from ams.llm.providers import LLMProvider, LocalLMStudioProvider, OpenAIProvider
 
 
 def get_llm_provider() -> LLMProvider:
-    """Get an LLM provider instance based on current configuration.
-    
-    Returns:
-        An instance of `LLMProvider` configured according to `config.py`.
-    
-    Raises:
-        ValueError: If the configured provider type is not supported.
-    """
+    """Get an LLM provider instance based on current configuration."""
     if LLM_PROVIDER == LLMProviderType.LOCAL:
         return LocalLMStudioProvider(
             base_url=LLM_BASE_URL,

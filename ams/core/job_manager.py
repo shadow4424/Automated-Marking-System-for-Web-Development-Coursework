@@ -1,16 +1,4 @@
-"""Background job manager for the AMS web interface.
-
-Uses :class:`concurrent.futures.ThreadPoolExecutor` to run heavy marking
-pipelines off the Flask request thread, preventing UI freezes and HTTP
-timeouts.
-
-Usage::
-
-    from ams.core.job_manager import job_manager
-
-    job_id = job_manager.submit_job("single_mark", pipeline.run, path, ...)
-    status = job_manager.get_job_status(job_id)
-"""
+"""Background job manager for the AMS web interface."""
 from __future__ import annotations
 
 import logging
@@ -26,15 +14,10 @@ _MAX_WORKERS = 4
 
 
 class JobManager:
-    """Thread-safe in-memory job scheduler backed by a thread pool.
-
-    A global semaphore ensures only one submission runs at a time so
-    its batch-parallel LLM calls get full throughput from the model
-    server (no slot contention with other submissions).
-    """
+    """Thread-safe in-memory job scheduler backed by a thread pool."""
 
     def __init__(self, max_workers: int = _MAX_WORKERS) -> None:
-        """Return the ."""
+        """Return the."""
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="ams-job",
@@ -44,9 +27,9 @@ class JobManager:
         # Only one submission may use the LLM at a time.
         self._llm_gate = threading.Semaphore(1)
 
-    # ------------------------------------------------------------------
+
     # Public API
-    # ------------------------------------------------------------------
+
 
     def submit_job(
         self,
@@ -55,10 +38,7 @@ class JobManager:
         *args: Any,
         **kwargs: Any,
     ) -> str:
-        """Submit *func* for background execution.
-
-        Returns the generated ``job_id`` immediately.
-        """
+        """Submit *func* for background execution. Returns the generated job_id immediately."""
         job_id = uuid.uuid4().hex
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -79,7 +59,7 @@ class JobManager:
         return job_id
 
     def get_job_status(self, job_id: str) -> Optional[Dict[str, Any]]:
-        """Return a *snapshot* of the job state, or ``None`` if unknown."""
+        """Return a *snapshot* of the job state, or None if unknown."""
         with self._lock:
             job = self._jobs.get(job_id)
             return dict(job) if job is not None else None
@@ -91,9 +71,9 @@ class JobManager:
             if job is not None:
                 job["progress"] = min(max(progress, 0.0), 1.0)
 
-    # ------------------------------------------------------------------
+
     # Internal
-    # ------------------------------------------------------------------
+
 
     def _run_job(
         self,
@@ -102,11 +82,7 @@ class JobManager:
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        """Execute *func* inside the thread pool and record the outcome.
-
-        Acquires ``_llm_gate`` so only one submission uses the LLM at a
-        time, giving it full access to all model-server slots.
-        """
+        """Execute *func* inside the thread pool and record the outcome."""
         self._llm_gate.acquire()
         try:
             result = func(*args, **kwargs)
@@ -125,7 +101,7 @@ class JobManager:
         result: Any = None,
         error: Optional[str] = None,
     ) -> None:
-        """Return the finish."""
+        """Return finish."""
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         with self._lock:
             job = self._jobs.get(job_id)

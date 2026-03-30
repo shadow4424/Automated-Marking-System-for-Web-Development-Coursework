@@ -1,14 +1,4 @@
-"""Docker-based sandboxed command execution.
-
-Implements the ``CommandRunner`` interface by wrapping each call in a Docker
-container with:
-  • CPU, memory, PID and disk limits
-  • Read-only root filesystem (writable /tmp via tmpfs)
-  • Student submission mounted read-only
-  • No network access (``--network none``)
-  • All Linux capabilities dropped
-  • Optional seccomp profile
-"""
+"""Docker-based sandboxed command execution."""
 from __future__ import annotations
 
 import logging
@@ -41,9 +31,9 @@ class DockerCommandRunner(CommandRunner):
         self.run_id = run_id
         self._validate_prerequisites()
 
-    # ------------------------------------------------------------------
+
     # Validation
-    # ------------------------------------------------------------------
+
 
     def _validate_prerequisites(self) -> None:
         """Ensure Docker CLI is available and the sandbox image exists."""
@@ -65,9 +55,9 @@ class DockerCommandRunner(CommandRunner):
                 "-t ams-sandbox:latest docker/"
             )
 
-    # ------------------------------------------------------------------
+
     # CommandRunner interface
-    # ------------------------------------------------------------------
+
 
     def run(
         self,
@@ -75,13 +65,7 @@ class DockerCommandRunner(CommandRunner):
         timeout: float,
         cwd: Path | None = None,
     ) -> RunResult:
-        """Run *args* inside a Docker container.
-
-        The directory pointed to by *cwd* (or its nearest parent named
-        ``submission``) is mounted read-only at ``/submission`` inside the
-        container.  The working directory of the command is set to the
-        corresponding sub-path inside ``/submission``.
-        """
+        """Run *args* inside a Docker container."""
         start = time.time()
 
         if cwd is None:
@@ -90,7 +74,7 @@ class DockerCommandRunner(CommandRunner):
         submission_root, inner_cwd = self._resolve_mount(cwd)
 
         # Rewrite any arguments that reference the host submission path so
-        # they resolve under /submission inside the container.
+        # They resolve under /submission inside the container.
         rewritten_args = self._rewrite_args(args, submission_root)
 
         docker_cmd = self._build_docker_cmd(
@@ -144,9 +128,9 @@ class DockerCommandRunner(CommandRunner):
                 timed_out=False,
             )
 
-    # ------------------------------------------------------------------
+
     # Helpers
-    # ------------------------------------------------------------------
+
 
     def _build_docker_cmd(
         self,
@@ -155,7 +139,7 @@ class DockerCommandRunner(CommandRunner):
         submission_root: Path,
         inner_cwd: str,
     ) -> list[str]:
-        """Assemble the ``docker run …`` CLI invocation."""
+        """Assemble the docker run … CLI invocation."""
         cfg = self.config
 
         cmd: list[str] = [
@@ -222,13 +206,7 @@ class DockerCommandRunner(CommandRunner):
 
     @staticmethod
     def _resolve_mount(cwd: Path) -> tuple[Path, str]:
-        """Find the submission root and the container-internal cwd.
-
-        Walk upwards from *cwd* until we find a directory called
-        ``submission``.  If none is found, use *cwd* itself.
-
-        Returns ``(host_mount_path, container_cwd_path)``
-        """
+        """Find the submission root and the container-internal cwd."""
         resolved = cwd.resolve()
         current = resolved
         while current != current.parent:
@@ -250,11 +228,7 @@ class DockerCommandRunner(CommandRunner):
         args: Sequence[str],
         submission_root: Path,
     ) -> list[str]:
-        """Replace host paths with container paths in arguments.
-
-        Any argument that is a path under *submission_root* gets rewritten
-        to the equivalent ``/submission/…`` path.
-        """
+        """Replace host paths with container paths in arguments."""
         root_str = str(submission_root.resolve())
         root_posix = submission_root.resolve().as_posix()
         rewritten: list[str] = []

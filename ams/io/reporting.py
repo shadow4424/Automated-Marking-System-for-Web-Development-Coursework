@@ -32,16 +32,16 @@ class ReportWriter:
     ) -> Path:
         profile = str(context.metadata.get("profile", "unknown"))  # Ensure string
         scoring_mode = str(context.metadata.get("scoring_mode", "unknown"))
-        
+
         behavioural = [self._serialize_behavioural(e) for e in getattr(context, "behavioural_evidence", [])]
         browser = [self._serialize_browser(e) for e in getattr(context, "browser_evidence", [])]
         environment = self._environment_summary(context, behavioural, browser, score_evidence)
-        
+
         # Merge metadata
         merged_metadata = dict(context.metadata)
         if metadata:
-            merged_metadata.update(metadata) # flatten
-            # context.metadata might already have submission_metadata if passed in pipeline.run
+            merged_metadata.update(metadata) # Flatten
+            # Context.metadata might already have submission_metadata if passed in pipeline.run
 
         # Create Report Metadata
         try:
@@ -55,7 +55,7 @@ class ReportWriter:
             scoring_mode=scoring_mode,
             profile=profile,
             provider=merged_metadata.get("llm_provider"),
-            submission_metadata=metadata, 
+            submission_metadata=metadata,
         )
 
         # Create Report
@@ -72,7 +72,7 @@ class ReportWriter:
             marking_policy=self._policy_notes(profile),
             generated_at=report_meta.timestamp,
         )
-        
+
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
         self.output_path.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
         self._write_summary(
@@ -132,14 +132,14 @@ class ReportWriter:
         }
 
     def _merge_score_evidence(
-        self, 
-        score_evidence: Optional[ScoreEvidenceBundle], 
+        self,
+        score_evidence: Optional[ScoreEvidenceBundle],
         llm_evidence: Optional[dict]
     ) -> Optional[dict]:
         """Merge ScoreEvidenceBundle with LLM evidence into a single dict."""
         if score_evidence is None:
             return {"llm_analysis": llm_evidence} if llm_evidence else None
-        
+
         result = score_evidence.to_dict()
         if llm_evidence:
             result["llm_analysis"] = llm_evidence
@@ -177,7 +177,7 @@ class ReportWriter:
             for tf in threat_findings:
                 lines.append(f"  - {tf.id}: {tf.message}")
             lines.append("=" * 60)
-        
+
         # Add metadata if available
         if metadata:
             lines.append("")
@@ -190,7 +190,7 @@ class ReportWriter:
                 lines.append(f"  Original Filename: {metadata.get('original_filename')}")
             if metadata.get("timestamp"):
                 lines.append(f"  Upload Timestamp: {metadata.get('timestamp')}")
-        
+
         lines.append("")
         overall_score = scores.get("overall") if isinstance(scores, dict) else None
         if overall_score is not None:

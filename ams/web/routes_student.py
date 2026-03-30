@@ -31,19 +31,13 @@ from ams.web.auth import get_current_user, login_required
 student_bp = Blueprint("student", __name__, url_prefix="/student")
 
 
-# ---------------------------------------------------------------------------
-#  Helpers
-# ---------------------------------------------------------------------------
+# Helpers
 
-# --- Submission View Helpers ---
+
+# Build the student submission view.
 
 def _resolve_student_id() -> tuple[str | None, dict | None]:
-    """Return (student_id, preview_info) for the student dashboard.
-
-    - For real students: returns (their_id, None)
-    - For admin viewing as student: returns (PREVIEW_STUDENT_ID, preview_student_dict)
-      Uses a dedicated dummy account - no real student data is accessed.
-    """
+    """Return (student_id, preview_info) for the student dashboard."""
     user = get_current_user()
     if user["role"] == "student":
         return user["userID"], None
@@ -54,12 +48,7 @@ def _resolve_student_id() -> tuple[str | None, dict | None]:
 
 
 def _gather_student_runs(student_id: str) -> tuple[list[dict], set[str]]:
-    """Collect runs for *student_id*.
-
-    Returns ``(runs_list, submitted_assignment_ids)`` where
-    *submitted_assignment_ids* is the set of assignment IDs for which
-    the student has at least one submission.
-    """
+    """Collect runs for *student_id*."""
     runs_root = get_runs_root(current_app)
     all_runs = list_runs(runs_root, only_active=False)
     my_runs: list[dict] = []
@@ -98,7 +87,7 @@ def _gather_student_runs(student_id: str) -> tuple[list[dict], set[str]]:
 
 
 def _latest_runs_by_assignment(runs: list[dict]) -> dict[str, dict]:
-    """Return the latest run for each assignment ID."""
+    """Return latest run for each assignment ID."""
     latest: dict[str, dict] = {}
 
     for run in runs:
@@ -134,6 +123,7 @@ def _latest_runs_by_assignment(runs: list[dict]) -> dict[str, dict]:
     return latest
 
 
+# Build the latest submission cards and attempt counts.
 def _student_submission_cards(runs: list[dict]) -> tuple[list[dict], dict[str, int]]:
     latest_runs = _latest_runs_by_assignment(runs)
     attempt_counts: dict[str, int] = {}
@@ -159,12 +149,7 @@ def _split_assignments(
     submitted_aids: set[str],
     latest_runs_by_assignment: dict[str, dict] | None = None,
 ) -> tuple[list[dict], list[dict]]:
-    """Split assignments into *todo* and *completed* lists.
-
-    - **todo**: due date is in the future (or unset)
-    - **completed**: due date has passed
-    Each assignment gets a ``_uploaded`` boolean flag.
-    """
+    """Split assignments into *todo* and *completed* lists."""
     now = datetime.now().strftime("%Y-%m-%dT%H:%M")
     todo: list[dict] = []
     completed: list[dict] = []
@@ -185,7 +170,7 @@ def _split_assignments(
     return todo, completed
 
 
-# --- Grade Visibility Helpers ---
+# Check grade and feedback visibility.
 
 def _student_can_access_assignment(assignment: dict | None, student_id: str | None) -> bool:
     if assignment is None or not student_id:
@@ -198,6 +183,7 @@ def _student_can_access_assignment(assignment: dict | None, student_id: str | No
     return str(student_id).strip() in assigned_students
 
 
+# Check whether student LLM feedback is enabled.
 def _student_llm_feedback_enabled() -> bool:
     if current_app.testing and "AMS_ENABLE_ANALYTICS_LLM_SUMMARY" not in current_app.config:
         return False
@@ -207,12 +193,13 @@ def _student_llm_feedback_enabled() -> bool:
     return value is not False
 
 
-# --- Analytics Helpers ---
+# Build student analytics responses.
 
 def _deterministic_student_feedback(analytics: dict) -> dict:
     feedback: list[dict[str, object]] = []
     seen_titles: set[str] = set()
 
+    # Keep feedback items short and avoid duplicate titles.
     def _append_item(feedback_type: str, title: str, text: str) -> None:
         clean_title = str(title or "").strip()
         clean_text = str(text or "").strip()
@@ -255,10 +242,12 @@ def _deterministic_student_feedback(analytics: dict) -> dict:
     }
 
 
+# Return a fallback response when the LLM output cannot be parsed.
 def _student_feedback_validation_failure(category: str, message: str) -> dict[str, str]:
     return {"category": str(category or "schema_error"), "message": str(message or "Validation failed.")}
 
 
+# Validate student feedback headline.
 def _validate_student_feedback_headline(
     candidate: dict,
     banned_markers: tuple[str, ...],
@@ -271,6 +260,7 @@ def _validate_student_feedback_headline(
     return headline, None
 
 
+# Validate student feedback item.
 def _validate_student_feedback_item(
     item: object,
     allowed_types: set[str],
@@ -308,6 +298,7 @@ def _validate_student_feedback_item(
     }, None
 
 
+# Validate student feedback.
 def _validate_student_feedback(candidate: object, context: dict) -> tuple[dict | None, dict | None]:
     allowed_types = {"strength", "weakness", "context", "action", "confidence"}
     banned_markers = (
@@ -354,6 +345,7 @@ def _validate_student_feedback(candidate: object, context: dict) -> tuple[dict |
     }, None
 
 
+# Build deterministic feedback when LLM feedback is unavailable.
 def _student_feedback_fallback(
     deterministic: dict,
     validation_status: str | None = None,
@@ -370,6 +362,7 @@ def _student_feedback_fallback(
     return payload
 
 
+# Build student feedback request.
 def _build_student_feedback_request(context: dict) -> tuple[str, str]:
     prompt_payload = {
         "student_assignment_analytics": context,
@@ -400,6 +393,7 @@ def _build_student_feedback_request(context: dict) -> tuple[str, str]:
     return json.dumps(prompt_payload, indent=2, sort_keys=True), system_prompt
 
 
+# Parse student feedback response.
 def _parse_student_feedback_response(response: object, context: dict, deterministic: dict) -> dict:
     if not getattr(response, "success", False):
         return _student_feedback_fallback(
@@ -434,6 +428,7 @@ def _parse_student_feedback_response(response: object, context: dict, determinis
     }
 
 
+# Build the final student feedback payload.
 def _student_feedback_payload(analytics: dict) -> dict:
     context = dict(analytics.get("feedback_context", {}) or {})
     deterministic = _deterministic_student_feedback(analytics)
@@ -463,9 +458,8 @@ def _student_feedback_payload(analytics: dict) -> dict:
         )
 
 
-# ---------------------------------------------------------------------------
-#  Routes
-# ---------------------------------------------------------------------------
+# Routes
+
 
 @student_bp.route("/")
 @login_required
@@ -508,6 +502,7 @@ def dashboard():
     )
 
 
+# Render the student coursework page.
 @student_bp.route("/coursework")
 @login_required
 def coursework():
@@ -548,6 +543,7 @@ def coursework():
     )
 
 
+# Return assignment analytics for the signed-in student.
 @student_bp.route("/assignment/<assignment_id>/analytics")
 @login_required
 def assignment_analytics(assignment_id: str):
@@ -582,6 +578,7 @@ def assignment_analytics(assignment_id: str):
     )
 
 
+# Return personalised feedback for the signed-in student.
 @student_bp.route("/assignment/<assignment_id>/analytics/personal-feedback.json")
 @login_required
 def personalised_feedback_json(assignment_id: str):
