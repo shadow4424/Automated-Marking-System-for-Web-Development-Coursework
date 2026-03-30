@@ -29,3 +29,22 @@ def test_webui_home_ok(tmp_path: Path):
     client, _ = _client(tmp_path)
     res = client.get("/")
     assert res.status_code == 302
+
+
+def test_login_page_uses_lightweight_assets(tmp_path: Path):
+    app = create_app({"TESTING": True, "AMS_RUNS_ROOT": tmp_path})
+    client = app.test_client()
+
+    res = client.get("/login")
+
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+    assert "css/main.css" in html
+    assert "css/components/cards.css" in html
+    assert "css/components/buttons.css" in html
+    assert "css/components/forms.css" in html
+    assert "css/components/alerts.css" in html
+    assert "css/components/auth.css" in html
+    assert "css/components.css" not in html
+    assert "css/pages/job-widget.css" not in html
+    assert "js/job-poller.js" not in html

@@ -30,8 +30,18 @@
         }());
     </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    {% if request.blueprint == 'auth' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/cards.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/buttons.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/forms.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/alerts.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components/auth.css') }}">
+    {% else %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    {% if is_authenticated %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/job-widget.css') }}">
+    {% endif %}
+    {% endif %}
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%234F46E5'/><text x='16' y='24' font-size='22' font-weight='bold' fill='white' text-anchor='middle' font-family='sans-serif'>A</text></svg>">
     {% block head %}{% endblock %}
 </head>
@@ -173,7 +183,9 @@
 
     <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
     <script>window.AMS_RELEASED_AIDS={{ released_assignment_ids|default([])|tojson }};</script>
+    {% if is_authenticated and request.blueprint != 'auth' %}
     <script src="{{ url_for('static', filename='js/job-poller.js') }}" defer></script>
+    {% endif %}
     {% block scripts %}{% endblock %}
 </body>
 
