@@ -8,7 +8,7 @@ from typing import Mapping
 from flask import Flask
 
 from ams.core.attempts import sync_attempts_from_storage
-from ams.core.db import init_db
+from ams.core.database import init_db
 from ams.io.web_storage import get_runs_root
 from ams.web.routes_batch import batch_bp
 from ams.web.routes_dashboard import dashboard_bp

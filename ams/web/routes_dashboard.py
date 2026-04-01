@@ -5,7 +5,7 @@ from typing import Any, Mapping
 
 from flask import Blueprint, current_app, flash, jsonify, redirect, session, url_for
 
-from ams.core.db import assignment_allows_teacher, get_assignment, list_assignments_for_student
+from ams.core.database import assignment_allows_teacher, get_assignment, list_assignments_for_student
 from ams.core.job_manager import job_manager
 from ams.io.web_storage import get_runs_root, list_runs
 from ams.web.auth import get_current_user

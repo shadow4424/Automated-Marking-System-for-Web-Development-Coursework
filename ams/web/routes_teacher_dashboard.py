@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from flask import Blueprint, render_template
 
-from ams.core.db import list_assignments, list_users
+from ams.core.database import list_assignments, list_users
 from ams.web.auth import get_current_user, teacher_or_admin_required
 
 teacher_dashboard_bp = Blueprint("teacher_dashboard", __name__, url_prefix="/teacher")

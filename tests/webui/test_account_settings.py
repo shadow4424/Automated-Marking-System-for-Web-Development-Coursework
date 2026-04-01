@@ -5,7 +5,7 @@ from pathlib import Path
 
 from werkzeug.security import check_password_hash
 
-from ams.core.db import create_user, get_user, init_db
+from ams.core.database import create_user, get_user, init_db
 from ams.webui import create_app
 
 
@@ -14,7 +14,7 @@ from ams.webui import create_app
 
 def _use_temp_db(monkeypatch, tmp_path: Path) -> None:
     db_path = tmp_path / "ams_users.db"
-    monkeypatch.setattr("ams.core.db._DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr("ams.core.database._DEFAULT_DB_PATH", db_path)
     init_db()
 
 

@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Mapping, Sequence
 
 from ams.core.attempts import filter_attempts_for_root, list_attempts, sync_attempts_from_storage
 from ams.core.aggregation import aggregate_findings_to_checks, compute_check_stats
-from ams.core.db import get_assignment
+from ams.core.database import get_assignment
 from ams.core.profiles import get_relevant_components
 from ams.io.metadata import MetadataValidator
 from ams.io.web_storage import get_runs_root

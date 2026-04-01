@@ -16,7 +16,7 @@ from ams.core.attempts import (
     sync_attempts_from_storage,
 )
 from ams.core.config import ScoringMode
-from ams.core.db import get_assignment
+from ams.core.database import get_assignment
 from ams.core.job_manager import job_manager
 from ams.core.pipeline import AssessmentPipeline
 from ams.io.web_storage import (

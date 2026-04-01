@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from ams.analytics.assignment_analytics import generate_assignment_analytics
-from ams.core.db import create_assignment, init_db
+from ams.core.database import create_assignment, init_db
 from ams.io.web_storage import list_runs, save_run_info
 from ams.webui import create_app
 from tests.webui.conftest import authenticate_client
@@ -12,7 +12,7 @@ from tests.webui.conftest import authenticate_client
 
 def _use_temp_db(monkeypatch, tmp_path: Path) -> Path:
     db_path = tmp_path / "ams_users.db"
-    monkeypatch.setattr("ams.core.db._DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr("ams.core.database._DEFAULT_DB_PATH", db_path)
     init_db()
     return db_path
 

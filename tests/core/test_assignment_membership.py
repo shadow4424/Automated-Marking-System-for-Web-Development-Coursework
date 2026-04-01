@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ams.core import db
+from ams.core import database as db
 
 
 def test_list_assignments_includes_additional_teachers(tmp_path: Path, monkeypatch) -> None:

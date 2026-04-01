@@ -6,7 +6,7 @@ from typing import Any, Mapping, Sequence
 
 from flask import Blueprint, current_app, url_for
 
-from ams.core.db import assignment_allows_teacher, get_user
+from ams.core.database import assignment_allows_teacher, get_user
 from ams.io.web_storage import get_runs_root, list_runs
 from ams.web.auth import get_current_user
 

@@ -6,7 +6,7 @@ import logging
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 
 from ams.analytics import generate_assignment_analytics
-from ams.core.db import (
+from ams.core.database import (
     assignment_teacher_ids,
     create_assignment,
     delete_assignment,

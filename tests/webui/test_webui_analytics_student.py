@@ -9,7 +9,7 @@ import pytest
 from flask import Flask
 
 from ams.analytics.assignment_analytics import generate_assignment_analytics, generate_student_assignment_analytics
-from ams.core.db import init_db
+from ams.core.database import init_db
 from ams.io.web_storage import save_run_info
 from ams.web.routes_student import _deterministic_student_feedback
 from ams.webui import create_app

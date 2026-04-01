@@ -5,7 +5,7 @@ from pathlib import Path
 
 from flask import Flask
 
-from ams.core.db import init_db
+from ams.core.database import init_db
 from ams.io.web_storage import list_runs, save_run_info
 from ams.web.routes_student import _gather_student_runs
 from ams.web.routes_batch import _write_run_index_batch
@@ -14,7 +14,7 @@ from ams.web.routes_marking import _replace_existing_submissions
 
 def _use_temp_db(monkeypatch, tmp_path: Path) -> None:
     db_path = tmp_path / "ams_users.db"
-    monkeypatch.setattr("ams.core.db._DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr("ams.core.database._DEFAULT_DB_PATH", db_path)
     init_db()
 
 

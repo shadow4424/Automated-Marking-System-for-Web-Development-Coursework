@@ -20,8 +20,8 @@ from ams.core.pipeline import AssessmentPipeline
 
 @pytest.fixture(autouse=True)
 def _isolate_database(tmp_path, monkeypatch):
-    """Redirect ams.core.db to a fresh per-test SQLite database."""
-    import ams.core.db as _db_module
+    """Redirect ams.core.database to a fresh per-test SQLite database."""
+    import ams.core.database as _db_module
 
     test_db = tmp_path / "test_ams.db"
     monkeypatch.setattr(_db_module, "_DEFAULT_DB_PATH", test_db)

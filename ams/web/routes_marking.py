@@ -20,7 +20,7 @@ from ams.core.attempts import (
     utc_now_iso,
 )
 from ams.core.config import ScoringMode
-from ams.core.db import PREVIEW_STUDENT_ID, list_assignments, list_assignments_for_student
+from ams.core.database import PREVIEW_STUDENT_ID, list_assignments, list_assignments_for_student
 from ams.core.job_manager import job_manager
 from ams.core.pipeline import AssessmentPipeline
 from ams.core.profiles import get_visible_profile_specs

@@ -17,7 +17,7 @@ from flask import (
     url_for,
 )
 
-from ams.core.db import authenticate_user, get_user
+from ams.core.database import authenticate_user, get_user
 
 logger = logging.getLogger(__name__)
 

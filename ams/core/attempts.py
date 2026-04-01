@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from ams.core.db import get_db
+from ams.core.database import get_db
 from ams.io.metadata import MetadataValidator
 
 
