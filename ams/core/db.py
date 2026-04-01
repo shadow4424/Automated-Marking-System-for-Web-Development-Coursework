@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 # Default database path — stored in project root (not inside package)
 _DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "ams_users.db"
 
+# Schema file — single source of truth for DDL
+_SCHEMA_FILE = Path(__file__).resolve().parent / "schema.sql"
+
 # Root admin defaults
 _ROOT_ADMIN_ID = "admin123"
 _ROOT_ADMIN_PASSWORD = "Pass123"
@@ -24,72 +27,9 @@ PREVIEW_STUDENT_ID = "_preview_student_"
 _PREVIEW_STUDENT_EMAIL = "preview@ams.local"
 
 
-# Schema
-
-_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS users (
-    userID        TEXT PRIMARY KEY,
-    firstName     TEXT NOT NULL DEFAULT '',
-    lastName      TEXT NOT NULL DEFAULT '',
-    email         TEXT NOT NULL DEFAULT '',
-    password_hash TEXT NOT NULL,
-    role          TEXT NOT NULL DEFAULT 'student'
-        CHECK(role IN ('admin', 'teacher', 'student'))
-);
-
-CREATE TABLE IF NOT EXISTS assignments (
-    assignmentID         TEXT PRIMARY KEY,
-    teacherID            TEXT NOT NULL,
-    title                TEXT NOT NULL DEFAULT '',
-    description          TEXT NOT NULL DEFAULT '',
-    profile              TEXT NOT NULL DEFAULT 'frontend',
-    marks_released       INTEGER NOT NULL DEFAULT 0,
-    assigned_students    TEXT NOT NULL DEFAULT '[]',
-    assigned_teachers    TEXT NOT NULL DEFAULT '[]',
-    due_date             TEXT NOT NULL DEFAULT '',
-    created_at           TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (teacherID) REFERENCES users(userID)
-);
-
-CREATE TABLE IF NOT EXISTS submission_attempts (
-    id                    TEXT PRIMARY KEY,
-    assignment_id         TEXT NOT NULL,
-    student_id            TEXT NOT NULL,
-    attempt_number        INTEGER NOT NULL,
-    source_type           TEXT NOT NULL DEFAULT '',
-    source_actor_user_id  TEXT NOT NULL DEFAULT '',
-    created_at            TEXT NOT NULL DEFAULT (datetime('now')),
-    submitted_at          TEXT NOT NULL DEFAULT '',
-    original_filename     TEXT NOT NULL DEFAULT '',
-    source_ref            TEXT NOT NULL DEFAULT '',
-    ingestion_status      TEXT NOT NULL DEFAULT 'pending',
-    pipeline_status       TEXT NOT NULL DEFAULT 'pending',
-    validity_status       TEXT NOT NULL DEFAULT 'pending',
-    run_id                TEXT NOT NULL DEFAULT '',
-    run_dir               TEXT NOT NULL DEFAULT '',
-    report_path           TEXT NOT NULL DEFAULT '',
-    batch_run_id          TEXT NOT NULL DEFAULT '',
-    batch_submission_id   TEXT NOT NULL DEFAULT '',
-    overall_score         REAL,
-    confidence            TEXT NOT NULL DEFAULT '',
-    manual_review_required INTEGER NOT NULL DEFAULT 0,
-    error_message         TEXT NOT NULL DEFAULT '',
-    is_active             INTEGER NOT NULL DEFAULT 0,
-    selection_reason      TEXT NOT NULL DEFAULT '',
-    updated_at            TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE (assignment_id, student_id, attempt_number)
-);
-
-CREATE TABLE IF NOT EXISTS student_assignment_summary (
-    assignment_id      TEXT NOT NULL,
-    student_id         TEXT NOT NULL,
-    latest_attempt_id  TEXT NOT NULL DEFAULT '',
-    active_attempt_id  TEXT NOT NULL DEFAULT '',
-    selection_reason   TEXT NOT NULL DEFAULT '',
-    updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (assignment_id, student_id)
-);
-"""
+def _load_schema() -> str:
+    """Read and return the DDL from schema.sql."""
+    return _SCHEMA_FILE.read_text(encoding="utf-8")
 
 
 def _table_columns(conn: sqlite3.Connection, table_name: str) -> set[str]:
@@ -151,7 +91,7 @@ def init_db() -> None:
     """Create tables if they don't exist and ensure system accounts are present."""
     conn = get_db()
     try:
-        conn.executescript(_SCHEMA_SQL)
+        conn.executescript(_load_schema())
 
         # Migrate: add due_date column if missing (existing DBs)
         cols = [r[1] for r in conn.execute("PRAGMA table_info(assignments)").fetchall()]
