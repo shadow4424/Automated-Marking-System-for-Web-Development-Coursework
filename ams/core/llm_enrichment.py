@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import List, Mapping, Sequence
 
 from ams.core.config import ScoringMode
+from ams.core.finding_ids import CSS as CID, HTML as HID, JS as JID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import ProfileSpec
 
@@ -197,7 +198,7 @@ def prepare_llm_enrichment_batches(
 
         is_required_assessor = any(
             finding.id.upper().startswith(prefix)
-            for prefix in ["HTML.REQ", "CSS.REQ", "JS.REQ", "PHP.REQ", "SQL.REQ"]
+            for prefix in ("HTML.REQ", "CSS.REQ", "JS.REQ", "PHP.REQ", "SQL.REQ")
         )
         if not code_snippet.strip() and is_required_assessor:
             logger.warning(
@@ -449,16 +450,16 @@ def build_ux_context_note(findings: List[Finding]) -> str | None:
     ids = {f.id for f in findings}
     warnings: list[str] = []
 
-    if "HTML.MISSING_FILES" in ids or "HTML.REQ.MISSING_FILES" in ids:
+    if HID.MISSING_FILES in ids or HID.REQ_MISSING_FILES in ids:
         warnings.append("- No HTML files were found in the submission.")
-    if "CSS.MISSING_FILES" in ids or "CSS.REQ.MISSING_FILES" in ids:
+    if CID.MISSING_FILES in ids or CID.REQ_MISSING_FILES in ids:
         warnings.append("- No CSS files were found.  The page has NO external stylesheet.")
-    elif "CSS.NO_RULES" in ids:
+    elif CID.NO_RULES in ids:
         warnings.append(
             "- A CSS file exists but contains zero valid rules. "
             "The page is effectively unstyled."
         )
-    if "JS.MISSING_FILES" in ids or "JS.REQ.MISSING_FILES" in ids:
+    if JID.MISSING_FILES in ids or JID.REQ_MISSING_FILES in ids:
         warnings.append("- No JavaScript files were found in the submission.")
 
     if not warnings:

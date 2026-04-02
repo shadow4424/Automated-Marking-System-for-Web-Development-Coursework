@@ -7,6 +7,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from ams.core.finding_ids import CSS as CID, HTML as HID, JS as JID, PHP as PID, SQL as SID
+
 # Sources whose findings are diagnostic by default (not rubric checks).
 _DIAGNOSTIC_SOURCES: frozenset[str] = frozenset(
     {
@@ -29,29 +31,29 @@ _ENRICHMENT_ID_PREFIXES: tuple[str, ...] = (
 # Finding IDs that are evidence collectors (static assessors), not checks.
 _EVIDENCE_IDS: frozenset[str] = frozenset(
     {
-        "HTML.ELEMENT_EVIDENCE",
-        "CSS.EVIDENCE",
-        "JS.EVIDENCE",
-        "PHP.EVIDENCE",
-        "SQL.EVIDENCE",
+        HID.ELEMENT_EVIDENCE,
+        CID.EVIDENCE,
+        JID.EVIDENCE,
+        PID.EVIDENCE,
+        SID.EVIDENCE,
     }
 )
 
 # Static assessor structural findings – informational, not rubric checks.
 _STATIC_DIAGNOSTIC_IDS: frozenset[str] = frozenset(
     {
-        "HTML.PARSE_OK",
-        "HTML.PARSE_SUSPECT",
-        "CSS.BRACES_BALANCED",
-        "CSS.BRACES_UNBALANCED",
-        "JS.SYNTAX_OK",
-        "JS.SYNTAX_SUSPECT",
-        "PHP.TAG_OK",
-        "PHP.TAG_MISSING",
-        "PHP.SYNTAX_OK",
-        "PHP.SYNTAX_SUSPECT",
-        "SQL.STRUCTURE_OK",
-        "SQL.STRUCTURE_SUSPECT",
+        HID.PARSE_OK,
+        HID.PARSE_SUSPECT,
+        CID.BRACES_BALANCED,
+        CID.BRACES_UNBALANCED,
+        JID.SYNTAX_OK,
+        JID.SYNTAX_SUSPECT,
+        PID.TAG_OK,
+        PID.TAG_MISSING,
+        PID.SYNTAX_OK,
+        PID.SYNTAX_SUSPECT,
+        SID.STRUCTURE_OK,
+        SID.STRUCTURE_SUSPECT,
     }
 )
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Mapping, Sequence, Tuple
 
+from ams.core.finding_ids import API as AID, CSS as CID, HTML as HID, JS as JID, PHP as PID, SQL as SID
 from ams.core.models import (
     BehaviouralEvidence,
     BrowserEvidence,
@@ -228,17 +229,17 @@ def analyse_html(
     summaries: Dict[str, object] = {}
     summaries["static_summary"] = static_summary("html", findings)
     ids = {f.id for f in findings}
-    if "HTML.SKIPPED" in ids:
-        rationale.append({"rule": "html_skipped", "finding_ids": ["HTML.SKIPPED"], "note": "HTML not required for this profile"})
+    if HID.SKIPPED in ids:
+        rationale.append({"rule": "html_skipped", "finding_ids": [HID.SKIPPED], "note": "HTML not required for this profile"})
         return {"score": 0.0, "rationale": rationale, "summaries": summaries}
-    if "HTML.MISSING_FILES" in ids or "HTML.REQ.MISSING_FILES" in ids:
+    if HID.MISSING_FILES in ids or HID.REQ_MISSING_FILES in ids:
         missing_ids = [fid for fid in ids if "MISSING_FILES" in fid]
         rationale.append({"rule": "html_missing", "finding_ids": missing_ids, "note": "HTML required but files missing"})
         return {"score": 0.0, "rationale": rationale, "summaries": summaries}
 
-    parse_ok = "HTML.PARSE_OK" in ids
-    parse_suspect = "HTML.PARSE_SUSPECT" in ids
-    evidence_findings = [f for f in findings if f.id == "HTML.ELEMENT_EVIDENCE"]
+    parse_ok = HID.PARSE_OK in ids
+    parse_suspect = HID.PARSE_SUSPECT in ids
+    evidence_findings = [f for f in findings if f.id == HID.ELEMENT_EVIDENCE]
 
     bview = browser_view(browser_evidence_list)
     summaries["browser_summary"] = bview
@@ -253,7 +254,7 @@ def analyse_html(
         rationale.append(
             {
                 "rule": "html_structure_ok",
-                "finding_ids": ["HTML.PARSE_OK"],
+                "finding_ids": [HID.PARSE_OK],
                 "evidence": evidence_findings[0].evidence if evidence_findings else {},
             }
         )
@@ -315,18 +316,18 @@ def analyse_css(
     summaries: Dict[str, object] = {}
     summaries["static_summary"] = static_summary("css", findings)
     ids = {f.id for f in findings}
-    if "CSS.SKIPPED" in ids:
-        rationale.append({"rule": "css_skipped", "finding_ids": ["CSS.SKIPPED"], "note": "CSS not required for this profile"})
+    if CID.SKIPPED in ids:
+        rationale.append({"rule": "css_skipped", "finding_ids": [CID.SKIPPED], "note": "CSS not required for this profile"})
         return {"score": 0.0, "rationale": rationale, "summaries": summaries}
-    if "CSS.MISSING_FILES" in ids or "CSS.REQ.MISSING_FILES" in ids:
+    if CID.MISSING_FILES in ids or CID.REQ_MISSING_FILES in ids:
         missing_ids = [fid for fid in ids if "MISSING_FILES" in fid]
         rationale.append({"rule": "css_missing", "finding_ids": missing_ids, "note": "CSS required but files missing"})
         return {"score": 0.0, "rationale": rationale, "summaries": summaries}
 
-    balanced = "CSS.BRACES_BALANCED" in ids
-    unbalanced = "CSS.BRACES_UNBALANCED" in ids
-    no_rules = "CSS.NO_RULES" in ids
-    selectors_approx = sum(int(f.evidence.get("selectors_approx", 0)) for f in findings if f.id == "CSS.EVIDENCE")
+    balanced = CID.BRACES_BALANCED in ids
+    unbalanced = CID.BRACES_UNBALANCED in ids
+    no_rules = CID.NO_RULES in ids
+    selectors_approx = sum(int(f.evidence.get("selectors_approx", 0)) for f in findings if f.id == CID.EVIDENCE)
 
     weighted_rule_score, rule_details = calculate_weighted_rule_score(findings, "css")
     if rule_details:
@@ -338,7 +339,7 @@ def analyse_css(
         rationale.append(
             {
                 "rule": "css_balanced_with_selectors",
-                "finding_ids": ["CSS.BRACES_BALANCED", "CSS.EVIDENCE"],
+                "finding_ids": [CID.BRACES_BALANCED, CID.EVIDENCE],
                 "evidence": {"selectors_approx": selectors_approx},
             }
         )
@@ -380,17 +381,17 @@ def analyse_js(
     summaries: Dict[str, object] = {}
     summaries["static_summary"] = static_summary("js", findings)
     ids = {f.id for f in findings}
-    if "JS.SKIPPED" in ids:
-        rationale.append({"rule": "js_skipped", "finding_ids": ["JS.SKIPPED"], "note": "JS not required for this profile"})
+    if JID.SKIPPED in ids:
+        rationale.append({"rule": "js_skipped", "finding_ids": [JID.SKIPPED], "note": "JS not required for this profile"})
         return {"score": 0.0, "rationale": rationale, "summaries": summaries}
-    if "JS.MISSING_FILES" in ids or "JS.REQ.MISSING_FILES" in ids:
+    if JID.MISSING_FILES in ids or JID.REQ_MISSING_FILES in ids:
         missing_ids = [fid for fid in ids if "MISSING_FILES" in fid]
         rationale.append({"rule": "js_missing", "finding_ids": missing_ids, "note": "JS required but files missing"})
         return {"score": 0.0, "rationale": rationale, "summaries": summaries}
 
-    syntax_ok = "JS.SYNTAX_OK" in ids
-    syntax_suspect = "JS.SYNTAX_SUSPECT" in ids or "JS.NO_CODE" in ids
-    evidence_entries = [f for f in findings if f.id == "JS.EVIDENCE"]
+    syntax_ok = JID.SYNTAX_OK in ids
+    syntax_suspect = JID.SYNTAX_SUSPECT in ids or JID.NO_CODE in ids
+    evidence_entries = [f for f in findings if f.id == JID.EVIDENCE]
     evidence_totals = {
         "dom_calls": 0,
         "query_calls": 0,
@@ -417,7 +418,7 @@ def analyse_js(
         rationale.append(
             {
                 "rule": "js_syntax_ok_with_activity",
-                "finding_ids": ["JS.SYNTAX_OK", "JS.EVIDENCE"],
+                "finding_ids": [JID.SYNTAX_OK, JID.EVIDENCE],
                 "evidence": evidence_totals,
             }
         )
@@ -533,19 +534,19 @@ def analyse_php(
     summaries: Dict[str, object] = {}
     summaries["static_summary"] = static_summary("php", findings)
     ids = {f.id for f in findings}
-    if "PHP.SKIPPED" in ids:
-        rationale.append({"rule": "php_skipped", "finding_ids": ["PHP.SKIPPED"], "note": "PHP not required for this profile"})
+    if PID.SKIPPED in ids:
+        rationale.append({"rule": "php_skipped", "finding_ids": [PID.SKIPPED], "note": "PHP not required for this profile"})
         return {"score": 0.0, "rationale": rationale, "summaries": summaries}
-    if "PHP.MISSING_FILES" in ids or "PHP.REQ.MISSING_FILES" in ids:
+    if PID.MISSING_FILES in ids or PID.REQ_MISSING_FILES in ids:
         missing_ids = [fid for fid in ids if "MISSING_FILES" in fid]
         rationale.append({"rule": "php_missing", "finding_ids": missing_ids, "note": "PHP required but files missing"})
         return {"score": 0.0, "rationale": rationale, "summaries": summaries}
 
-    tag_ok = "PHP.TAG_OK" in ids
-    tag_missing = "PHP.TAG_MISSING" in ids
-    syntax_ok = "PHP.SYNTAX_OK" in ids
-    syntax_partial = "PHP.SYNTAX_SUSPECT" in ids or "PHP.NO_CODE" in ids
-    evidence_entries = [f for f in findings if f.id == "PHP.EVIDENCE"]
+    tag_ok = PID.TAG_OK in ids
+    tag_missing = PID.TAG_MISSING in ids
+    syntax_ok = PID.SYNTAX_OK in ids
+    syntax_partial = PID.SYNTAX_SUSPECT in ids or PID.NO_CODE in ids
+    evidence_entries = [f for f in findings if f.id == PID.EVIDENCE]
     evidence_totals = {"echo_usage": 0, "request_usage": 0, "db_usage": 0}
     for entry in evidence_entries:
         for key in list(evidence_totals.keys()):
@@ -637,18 +638,18 @@ def analyse_sql(
     summaries: Dict[str, object] = {}
     summaries["static_summary"] = static_summary("sql", findings)
     ids = {f.id for f in findings}
-    if "SQL.SKIPPED" in ids:
-        rationale.append({"rule": "sql_skipped", "finding_ids": ["SQL.SKIPPED"], "note": "SQL not required for this profile"})
+    if SID.SKIPPED in ids:
+        rationale.append({"rule": "sql_skipped", "finding_ids": [SID.SKIPPED], "note": "SQL not required for this profile"})
         return {"score": 0.0, "rationale": rationale, "summaries": summaries}
-    if "SQL.MISSING_FILES" in ids or "SQL.REQ.MISSING_FILES" in ids:
+    if SID.MISSING_FILES in ids or SID.REQ_MISSING_FILES in ids:
         missing_ids = [fid for fid in ids if "MISSING_FILES" in fid]
         rationale.append({"rule": "sql_missing", "finding_ids": missing_ids, "note": "SQL required but files missing"})
         return {"score": 0.0, "rationale": rationale, "summaries": summaries}
 
-    structure_ok = "SQL.STRUCTURE_OK" in ids
-    no_semicolons = "SQL.NO_SEMICOLONS" in ids
-    empty = "SQL.EMPTY" in ids
-    evidence_entries = [f for f in findings if f.id == "SQL.EVIDENCE"]
+    structure_ok = SID.STRUCTURE_OK in ids
+    no_semicolons = SID.NO_SEMICOLONS in ids
+    empty = SID.EMPTY in ids
+    evidence_entries = [f for f in findings if f.id == SID.EVIDENCE]
     evidence_totals = {"create_table": 0, "insert_into": 0, "select": 0}
     for entry in evidence_entries:
         for key in list(evidence_totals.keys()):
@@ -667,7 +668,7 @@ def analyse_sql(
         rationale.append(
             {
                 "rule": "sql_structure_ok_with_activity",
-                "finding_ids": ["SQL.STRUCTURE_OK", "SQL.EVIDENCE"],
+                "finding_ids": [SID.STRUCTURE_OK, SID.EVIDENCE],
                 "evidence": evidence_totals,
             }
         )
@@ -729,11 +730,11 @@ def analyse_api(
     summaries["static_summary"] = static_summary("api", findings)
     ids = {f.id for f in findings}
 
-    if "API.SKIPPED" in ids:
-        rationale.append({"rule": "api_skipped", "finding_ids": ["API.SKIPPED"], "note": "API not required for this profile"})
+    if AID.SKIPPED in ids:
+        rationale.append({"rule": "api_skipped", "finding_ids": [AID.SKIPPED], "note": "API not required for this profile"})
         return {"score": 0.0, "rationale": rationale, "summaries": summaries}
 
-    if "API.MISSING_FILES" in ids or "API.REQ.MISSING_FILES" in ids:
+    if AID.MISSING_FILES in ids or AID.REQ_MISSING_FILES in ids:
         missing_ids = [fid for fid in ids if "MISSING_FILES" in fid]
         rationale.append({"rule": "api_missing", "finding_ids": missing_ids, "note": "API required but no server-side or client-side files found"})
         return {"score": 0.0, "rationale": rationale, "summaries": summaries}

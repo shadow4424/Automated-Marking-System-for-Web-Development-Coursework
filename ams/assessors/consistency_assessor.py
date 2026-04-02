@@ -539,7 +539,7 @@ class ConsistencyAssessor(Assessor):
                 # Path resolution failed, emit warning
                 findings.append(
                     Finding(
-                        id="CONSISTENCY.MISSING_LINK_TARGET",
+                        id=COID.MISSING_LINK_TARGET,
                         category="consistency",
                         message=f"Link target '{href}' could not be resolved.",
                         severity=Severity.WARN,
@@ -591,7 +591,7 @@ class ConsistencyAssessor(Assessor):
                 # Path resolution failed
                 findings.append(
                     Finding(
-                        id="CONSISTENCY.MISSING_FORM_ACTION_TARGET",
+                        id=COID.MISSING_FORM_ACTION_TARGET,
                         category="consistency",
                         message=f"Form action target '{action}' could not be resolved.",
                         severity=Severity.WARN,
