@@ -8,12 +8,6 @@ from ams.assessors.html_parser import TagCountingParser
 from ams.core.finding_ids import API as AID, CSS as CID, HTML as HID, JS as JID, PHP as PID, SQL as SID
 from ams.core.models import Finding, FindingCategory, RequirementEvaluationResult, Severity, SubmissionContext
 from ams.core.profiles import AggregationMode, BehavioralRule, ProfileSpec, RequirementDefinition, RequiredRule
-from ams.core.requirement_results import (
-    build_requirement_result,
-    build_skipped_requirement_result,
-)
-
-
 @dataclass(frozen=True)
 class _RuleFileResult:
     path: str
@@ -22,50 +16,73 @@ class _RuleFileResult:
     snippet: str
 
 
-def _build_evaluation_result(
+def build_requirement_result(
     definition: RequirementDefinition | None = None,
     *,
-    requirement_id: str | None = None,
-    component: str | None = None,
-    description: str | None = None,
-    stage: str | None = None,
-    aggregation_mode: str | None = None,
     score: float | str,
     status: str,
-    weight: float | None = None,
-    required: bool | None = None,
     evidence: Mapping[str, object],
+    component: str | None = None,
+    required: bool | None = None,
     contributing_paths: Sequence[str] | None = None,
     skipped_reason: str | None = None,
     confidence_flags: Sequence[str] | None = None,
+    # Legacy kwargs accepted for backward-compat (used when definition is None)
+    requirement_id: str | None = None,
+    description: str | None = None,
+    stage: str | None = None,
+    aggregation_mode: str | None = None,
+    weight: float | None = None,
 ) -> RequirementEvaluationResult:
-    """Backward-compatible wrapper around the shared requirement result builder."""
+    """Build a requirement result using values from the definition by default."""
     if definition is None:
-        assert requirement_id is not None
-        assert component is not None
-        assert description is not None
-        assert stage is not None
-        assert aggregation_mode is not None
-        assert weight is not None
-        assert required is not None
         definition = RequirementDefinition(
             id=requirement_id,
-            component=component,
-            description=description,
-            stage=stage,
-            aggregation_mode=aggregation_mode,
-            weight=weight,
-            required=required,
+            component=component or "",
+            description=description or "",
+            stage=stage or "",
+            aggregation_mode=aggregation_mode or "",
+            weight=weight if weight is not None else 1.0,
+            required=required if required is not None else True,
         )
-    return build_requirement_result(
-        definition,
+    return RequirementEvaluationResult(
+        requirement_id=definition.id,
+        component=component or definition.component,
+        description=definition.description,
+        stage=definition.stage,
+        aggregation_mode=definition.aggregation_mode,
         score=score,
         status=status,
-        evidence=evidence,
-        contributing_paths=contributing_paths,
-        skipped_reason=skipped_reason,
-        confidence_flags=confidence_flags,
+        weight=weight if weight is not None else definition.weight,
         required=definition.required if required is None else required,
+        evidence=evidence,
+        contributing_paths=list(contributing_paths or []),
+        skipped_reason=skipped_reason,
+        confidence_flags=list(confidence_flags or []),
+    )
+
+
+def build_skipped_requirement_result(
+    definition: RequirementDefinition,
+    *,
+    reason: str,
+    component: str | None = None,
+    required: bool | None = None,
+    confidence_flags: Sequence[str] | None = None,
+    evidence: Mapping[str, object] | None = None,
+) -> RequirementEvaluationResult:
+    """Build a standard skipped result."""
+    skipped_evidence = dict(evidence or {})
+    skipped_evidence.setdefault("reason", reason)
+    return build_requirement_result(
+        definition,
+        component=component,
+        score="SKIPPED",
+        status="SKIPPED",
+        required=required,
+        evidence=skipped_evidence,
+        skipped_reason=reason,
+        confidence_flags=confidence_flags,
     )
 
 
@@ -225,7 +242,7 @@ class RequirementEvaluationEngine:
         count = max((item.count for item in file_results), default=0)
         snippets = [item.snippet for item in file_results if item.snippet]
         contributing_paths = [item.path for item in file_results]
-        return _build_evaluation_result(
+        return build_requirement_result(
             definition,
             component=component,
             score=score,
@@ -266,7 +283,7 @@ class RequirementEvaluationEngine:
                 },
             )
         if not files:
-            return _build_evaluation_result(
+            return build_requirement_result(
                 definition,
                 component=component,
                 score=0.0,
@@ -340,7 +357,7 @@ class RequirementEvaluationEngine:
             confidence_flags.append("runtime_skipped")
         if any(state in {"fail", "timeout", "error"} for state in statuses):
             confidence_flags.append("runtime_failure")
-        return _build_evaluation_result(
+        return build_requirement_result(
             definition,
             score=score,
             status=status,
@@ -401,7 +418,7 @@ class RequirementEvaluationEngine:
             confidence_flags.append("browser_failure")
         if status == "skipped":
             confidence_flags.append("browser_skipped")
-        return _build_evaluation_result(
+        return build_requirement_result(
             definition,
             score=score,
             status=result_status,
@@ -423,7 +440,7 @@ class RequirementEvaluationEngine:
             return self._skip_without_browser_evidence(definition)
 
         if not context.files_for("js", relevant_only=True):
-            return _build_evaluation_result(
+            return build_requirement_result(
                 requirement_id=definition.id,
                 component=definition.component,
                 description=definition.description,
@@ -460,7 +477,7 @@ class RequirementEvaluationEngine:
             confidence_flags.append("browser_failure")
         if browser.status == "skipped":
             confidence_flags.append("browser_skipped")
-        return _build_evaluation_result(
+        return build_requirement_result(
             requirement_id=definition.id,
             component=definition.component,
             description=definition.description,
@@ -487,7 +504,7 @@ class RequirementEvaluationEngine:
         """Evaluate the layout requirement."""
         relevant_files = context.files_for(definition.component, relevant_only=True)
         if definition.required and not relevant_files:
-            return _build_evaluation_result(
+            return build_requirement_result(
                 requirement_id=definition.id,
                 component=definition.component,
                 description=definition.description,
@@ -524,7 +541,7 @@ class RequirementEvaluationEngine:
         confidence_flags = []
         if score == "SKIPPED":
             confidence_flags.append("layout_skipped")
-        return _build_evaluation_result(
+        return build_requirement_result(
             requirement_id=definition.id,
             component=definition.component,
             description=definition.description,
@@ -577,7 +594,7 @@ class RequirementEvaluationEngine:
         else:
             score = 0.0
             status = "FAIL"
-        return _build_evaluation_result(
+        return build_requirement_result(
             requirement_id=definition.id,
             component=definition.component,
             description=definition.description,
@@ -615,7 +632,7 @@ class RequirementEvaluationEngine:
         else:
             score = "SKIPPED"
             status = "SKIPPED"
-        return _build_evaluation_result(
+        return build_requirement_result(
             requirement_id=definition.id,
             component=definition.component,
             description=definition.description,
@@ -644,7 +661,7 @@ class RequirementEvaluationEngine:
         cross_file_results: dict = context.metadata.get("cross_file_results", {})  # type: ignore[assignment]
         result = cross_file_results.get(result_key) if cross_file_results else None
         if result is None:
-            return _build_evaluation_result(
+            return build_requirement_result(
                 requirement_id=definition.id,
                 component=definition.component,
                 description=definition.description,
@@ -660,7 +677,7 @@ class RequirementEvaluationEngine:
             )
         score = result.get("score", 0.0)
         status = result.get("status", "FAIL")
-        return _build_evaluation_result(
+        return build_requirement_result(
             requirement_id=definition.id,
             component=definition.component,
             description=definition.description,
@@ -692,7 +709,7 @@ class RequirementEvaluationEngine:
             score, status = 0.5, "PARTIAL"
         else:
             score, status = 0.0, "FAIL"
-        return _build_evaluation_result(
+        return build_requirement_result(
             definition,
             score=score,
             status=status,
@@ -719,7 +736,7 @@ class RequirementEvaluationEngine:
             score, status = 0.5, "PARTIAL"
         else:
             score, status = 0.0, "FAIL"
-        return _build_evaluation_result(
+        return build_requirement_result(
             definition,
             score=score,
             status=status,
@@ -744,7 +761,7 @@ class RequirementEvaluationEngine:
             score, status = 0.5, "PARTIAL"
         else:
             score, status = 0.0, "FAIL"
-        return _build_evaluation_result(
+        return build_requirement_result(
             requirement_id=definition.id,
             component=definition.component,
             description=definition.component,
@@ -783,7 +800,7 @@ class RequirementEvaluationEngine:
             score, status = 0.5, "PARTIAL"
         else:
             score, status = 0.0, "FAIL"
-        return _build_evaluation_result(
+        return build_requirement_result(
             requirement_id=definition.id,
             component=definition.component,
             description=definition.description,

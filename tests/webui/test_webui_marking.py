@@ -181,7 +181,7 @@ def test_student_mark_form_hides_released_assignments(tmp_path: Path, monkeypatc
                 "assignmentID": "assignment_open",
                 "title": "Open Assignment",
                 "profile": "frontend_interactive",
-                "due_date": "2026-04-01T12:00",
+                "due_date": "2027-04-01T12:00",
                 "marks_released": False,
                 "assigned_students": ["student1"],
             },
@@ -189,7 +189,7 @@ def test_student_mark_form_hides_released_assignments(tmp_path: Path, monkeypatc
                 "assignmentID": "assignment_released",
                 "title": "Released Assignment",
                 "profile": "frontend_interactive",
-                "due_date": "2026-04-01T12:00",
+                "due_date": "2027-04-01T12:00",
                 "marks_released": True,
                 "assigned_students": ["student1"],
             },
@@ -199,8 +199,8 @@ def test_student_mark_form_hides_released_assignments(tmp_path: Path, monkeypatc
     response = client.get("/mark")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Open Assignment - Due 2026-04-01 12:00" in body
-    assert "Released Assignment - Due 2026-04-01 12:00" not in body
+    assert "Open Assignment - Due 2027-04-01 12:00" in body
+    assert "Released Assignment - Due 2027-04-01 12:00" not in body
 
 def test_mark_route_resolves_profile_from_selected_assignment(tmp_path: Path, monkeypatch) -> None:
     client, _ = _client(tmp_path)
