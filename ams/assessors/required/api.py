@@ -1,51 +1,22 @@
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import Tuple
 
 from ams.assessors.required.base_required_assessor import BaseRequiredAssessor
 from ams.core.finding_ids import API as AID
-from ams.core.profiles import ProfileSpec, RequiredAPIRule
+from ams.core.profiles import RequiredAPIRule
 
 
 class APIRequiredFeaturesAssessor(BaseRequiredAssessor):
     """Checks required API features based on profile spec."""
 
-    name = "api_required"
-
-    # Initialise the API required assessor.
-    def __init__(self, profile: str | ProfileSpec = "api_backed_web") -> None:
-        super().__init__(profile)
-
-    # Return the component name.
-    @property
-    def component_name(self) -> str:
-        return "api"
-
-    # Return the required rules for this component.
-    @property
-    def required_rules(self) -> List[RequiredAPIRule]:
-        return list(self.profile_spec.required_api)
-
-    # Return the pass finding id.
-    def _get_finding_id_pass(self) -> str:
-        return AID.REQ_PASS
-
-    # Return the fail finding id.
-    def _get_finding_id_fail(self) -> str:
-        return AID.REQ_FAIL
-
-    # Return the skipped finding id.
-    def _get_finding_id_skipped(self) -> str:
-        return AID.REQ_SKIPPED
-
-    # Return the missing-files finding id.
-    def _get_finding_id_missing_files(self) -> str:
-        return AID.REQ_MISSING_FILES
+    _component = "api"
+    _finding_ids_class = AID
+    _default_profile = "api_backed_web"
 
     def _evaluate_rule_impl(
         self, rule: RequiredAPIRule, content: str
     ) -> Tuple[int, bool]:
-        """Evaluate a single API rule against content."""
         content_lower = content.lower()
         return self._evaluate_rule(rule, content_lower)
 
@@ -121,11 +92,5 @@ class APIRequiredFeaturesAssessor(BaseRequiredAssessor):
         # STANDARD NEEDLE COUNTING.
         count = content_lower.count(needle)
         return count, count >= rule.min_count
-
-    def _build_message(self, rule: RequiredAPIRule, passed: bool, count: int) -> str:
-        """Build a human-readable message for rule evaluation result."""
-        status = "PASS" if passed else "FAIL"
-        return f"Rule {rule.id} {status}: found {count}, required {rule.min_count}"
-
 
 __all__ = ["APIRequiredFeaturesAssessor"]

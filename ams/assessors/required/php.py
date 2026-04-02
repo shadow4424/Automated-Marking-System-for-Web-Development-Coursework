@@ -1,51 +1,21 @@
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import Tuple
 
 from ams.assessors.required.base_required_assessor import BaseRequiredAssessor
 from ams.core.finding_ids import PHP as PID
-from ams.core.profiles import ProfileSpec, RequiredPHPRule
+from ams.core.profiles import RequiredPHPRule
 
 
 class PHPRequiredFeaturesAssessor(BaseRequiredAssessor):
     """Checks required PHP features based on profile spec."""
 
-    name = "php_required"
-
-    # Initialise the PHP required assessor.
-    def __init__(self, profile: str | ProfileSpec = "frontend") -> None:
-        super().__init__(profile)
-
-    # Return the component name.
-    @property
-    def component_name(self) -> str:
-        return "php"
-
-    # Return the required rules for this component.
-    @property
-    def required_rules(self) -> List[RequiredPHPRule]:
-        return list(self.profile_spec.required_php)
-
-    # Return the pass finding id.
-    def _get_finding_id_pass(self) -> str:
-        return PID.REQ_PASS
-
-    # Return the fail finding id.
-    def _get_finding_id_fail(self) -> str:
-        return PID.REQ_FAIL
-
-    # Return the skipped finding id.
-    def _get_finding_id_skipped(self) -> str:
-        return PID.REQ_SKIPPED
-
-    # Return the missing-files finding id.
-    def _get_finding_id_missing_files(self) -> str:
-        return PID.REQ_MISSING_FILES
+    _component = "php"
+    _finding_ids_class = PID
 
     def _evaluate_rule_impl(
         self, rule: RequiredPHPRule, content: str
     ) -> Tuple[int, bool]:
-        """Evaluate a single PHP rule against content."""
         content_lower = content.lower()
         return self._evaluate_rule(rule, content_lower)
 
@@ -122,11 +92,5 @@ class PHPRequiredFeaturesAssessor(BaseRequiredAssessor):
         # STANDARD NEEDLE COUNTING.
         count = content_lower.count(needle)
         return count, count >= rule.min_count
-
-    def _build_message(self, rule: RequiredPHPRule, passed: bool, count: int) -> str:
-        """Build a human-readable message for rule evaluation result."""
-        status = "PASS" if passed else "FAIL"
-        return f"Rule {rule.id} {status}: found {count}, required {rule.min_count}"
-
 
 __all__ = ["PHPRequiredFeaturesAssessor"]

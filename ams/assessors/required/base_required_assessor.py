@@ -1,9 +1,13 @@
-"""Base class for language-specific required rule assessors (Phase 3: DRY)."""
+"""Base class for language-specific required rule assessors (Phase 3: DRY).
+
+Subclasses set a handful of class attributes and implement
+``_evaluate_rule_impl``; all boilerplate lives here.
+"""
 from __future__ import annotations
 
 from abc import abstractmethod
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 from ams.assessors import Assessor
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
@@ -11,54 +15,67 @@ from ams.core.profiles import ProfileSpec, RequiredRule, get_profile_spec
 
 
 class BaseRequiredAssessor(Assessor):
-    """Abstract base for all required rule assessors (HTML, CSS, JS, PHP, SQL)."""
+    """Abstract base for all required rule assessors.
 
-    def __init__(self, profile: str | ProfileSpec = "frontend") -> None:
+    Subclasses **must** define the following class attributes:
+
+    * ``_component``          – e.g. ``"html"``, ``"css"``
+    * ``_finding_ids_class``  – the finding-ID namespace class (e.g. ``HTML``)
+    * ``_default_profile``    – default profile name (default ``"frontend"``)
+
+    The ``name`` attribute is auto-derived as ``"{_component}_required"``
+    unless the subclass overrides it.
+    """
+
+    _component: str
+    _finding_ids_class: Any          # e.g. finding_ids.HTML
+    _default_profile: str = "frontend"
+
+    def __init_subclass__(cls, **kw: Any) -> None:
+        super().__init_subclass__(**kw)
+        # Auto-derive ``name`` when the subclass declares ``_component``.
+        if "_component" in cls.__dict__ and "name" not in cls.__dict__:
+            cls.name = f"{cls._component}_required"
+
+    def __init__(self, profile: str | ProfileSpec | None = None) -> None:
+        if profile is None:
+            profile = self._default_profile
         if isinstance(profile, str):
             self.profile_spec = get_profile_spec(profile)
         else:
             self.profile_spec = profile
 
-    @property
-    @abstractmethod
-    def component_name(self) -> str:
-        """E.g., "html", "css", "js", "php", "sql"."""
-        pass
+    # -- derived properties (no override needed) -------------------------
 
     @property
-    @abstractmethod
+    def component_name(self) -> str:
+        return self._component
+
+    @property
     def required_rules(self) -> List[RequiredRule]:
-        """Return list of required rules for this component from profile_spec."""
-        pass
+        return list(getattr(self.profile_spec, f"required_{self._component}"))
+
+    def _get_finding_id_pass(self) -> str:
+        return self._finding_ids_class.REQ_PASS
+
+    def _get_finding_id_fail(self) -> str:
+        return self._finding_ids_class.REQ_FAIL
+
+    def _get_finding_id_skipped(self) -> str:
+        return self._finding_ids_class.REQ_SKIPPED
+
+    def _get_finding_id_missing_files(self) -> str:
+        return self._finding_ids_class.REQ_MISSING_FILES
+
+    def _build_message(self, rule: RequiredRule, passed: bool, count: int) -> str:
+        status = "PASS" if passed else "FAIL"
+        return f"Rule {rule.id} {status}: found {count}, required {rule.min_count}"
+
+    # -- abstract (subclass must implement) ------------------------------
 
     @abstractmethod
     def _evaluate_rule_impl(self, rule: RequiredRule, content: str) -> Tuple[int, bool]:
         """Evaluate single rule. Return (occurrence_count, passed: bool)."""
-        pass
-
-    @abstractmethod
-    def _build_message(self, rule: RequiredRule, passed: bool, count: int) -> str:
-        """Build human-readable message for this rule outcome."""
-        pass
-
-    @abstractmethod
-    def _get_finding_id_pass(self) -> str:
-        """Return finding ID for passing rule (e.g., 'HTML.REQ_PASS')."""
-        pass
-
-    @abstractmethod
-    def _get_finding_id_fail(self) -> str:
-        """Return finding ID for failing rule (e.g., 'HTML.REQ_FAIL')."""
-        pass
-
-    @abstractmethod
-    def _get_finding_id_skipped(self) -> str:
-        """Return finding ID for skipped rule."""
-        pass
-
-    @abstractmethod
-    def _get_finding_id_missing_files(self) -> str:
-        """Return finding ID when required files are missing."""
         pass
 
     def run(self, context: SubmissionContext) -> List[Finding]:

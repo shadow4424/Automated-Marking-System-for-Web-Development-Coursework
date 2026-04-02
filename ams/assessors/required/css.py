@@ -1,51 +1,21 @@
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import Tuple
 
 from ams.assessors.required.base_required_assessor import BaseRequiredAssessor
 from ams.core.finding_ids import CSS as CID
-from ams.core.profiles import ProfileSpec, RequiredCSSRule
+from ams.core.profiles import RequiredCSSRule
 
 
 class CSSRequiredRulesAssessor(BaseRequiredAssessor):
     """Checks required CSS rules based on profile spec."""
 
-    name = "css_required"
-
-    # Initialise the CSS required assessor.
-    def __init__(self, profile: str | ProfileSpec = "frontend") -> None:
-        super().__init__(profile)
-
-    # Return the component name.
-    @property
-    def component_name(self) -> str:
-        return "css"
-
-    # Return the required rules for this component.
-    @property
-    def required_rules(self) -> List[RequiredCSSRule]:
-        return list(self.profile_spec.required_css)
-
-    # Return the pass finding id.
-    def _get_finding_id_pass(self) -> str:
-        return CID.REQ_PASS
-
-    # Return the fail finding id.
-    def _get_finding_id_fail(self) -> str:
-        return CID.REQ_FAIL
-
-    # Return the skipped finding id.
-    def _get_finding_id_skipped(self) -> str:
-        return CID.REQ_SKIPPED
-
-    # Return the missing-files finding id.
-    def _get_finding_id_missing_files(self) -> str:
-        return CID.REQ_MISSING_FILES
+    _component = "css"
+    _finding_ids_class = CID
 
     def _evaluate_rule_impl(
         self, rule: RequiredCSSRule, content: str
     ) -> Tuple[int, bool]:
-        """Evaluate a single CSS rule against content."""
         brace_count = content.count("{")
         content_lower = content.lower()
         return self._evaluate_rule(rule, content, content_lower, brace_count)
@@ -197,11 +167,5 @@ class CSSRequiredRulesAssessor(BaseRequiredAssessor):
         # For simple needles like ".", "#", "@media", "colour:"
         count = content.count(rule.needle)
         return count, count >= rule.min_count
-
-    def _build_message(self, rule: RequiredCSSRule, passed: bool, count: int) -> str:
-        """Build a human-readable message for rule evaluation result."""
-        status = "PASS" if passed else "FAIL"
-        return f"Rule {rule.id} {status}: found {count}, required {rule.min_count}"
-
 
 __all__ = ["CSSRequiredRulesAssessor"]

@@ -1,53 +1,23 @@
 """HTML Required Elements Assessor — checks for required HTML structure and semantics."""
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import Tuple
 
 from ams.assessors.required.base_required_assessor import BaseRequiredAssessor
 from ams.assessors.html_parser import TagCountingParser
 from ams.core.finding_ids import HTML as HID
-from ams.core.profiles import ProfileSpec, RequiredRule
+from ams.core.profiles import RequiredRule
 
 
 class HTMLRequiredElementsAssessor(BaseRequiredAssessor):
     """Checks required HTML elements based on profile spec using a real HTML parser."""
 
-    name = "html_required"
-
-    # Initialise the HTML required assessor.
-    def __init__(self, profile: str | ProfileSpec = "frontend") -> None:
-        super().__init__(profile)
-
-    # Return the component name.
-    @property
-    def component_name(self) -> str:
-        return "html"
-
-    # Return the required rules for this component.
-    @property
-    def required_rules(self) -> List[RequiredRule]:
-        return list(self.profile_spec.required_html)
-
-    # Return the pass finding id.
-    def _get_finding_id_pass(self) -> str:
-        return HID.REQ_PASS
-
-    # Return the fail finding id.
-    def _get_finding_id_fail(self) -> str:
-        return HID.REQ_FAIL
-
-    # Return the skipped finding id.
-    def _get_finding_id_skipped(self) -> str:
-        return HID.REQ_SKIPPED
-
-    # Return the missing-files finding id.
-    def _get_finding_id_missing_files(self) -> str:
-        return HID.REQ_MISSING_FILES
+    _component = "html"
+    _finding_ids_class = HID
 
     def _evaluate_rule_impl(
         self, rule: RequiredRule, content: str
     ) -> Tuple[int, bool]:
-        """Evaluate a single HTML rule against content."""
         parser = TagCountingParser()
         parser.feed(content)
         return self._evaluate_rule(rule, parser)
@@ -128,7 +98,6 @@ class HTMLRequiredElementsAssessor(BaseRequiredAssessor):
         return count, count >= rule.min_count
 
     def _build_message(self, rule: RequiredRule, passed: bool, count: int) -> str:
-        """Build a human-readable message for rule evaluation result."""
         status = "PASS" if passed else "FAIL"
         return f"Rule {rule.id} ({rule.description}) {status}: found {count}, required {rule.min_count}"
 
