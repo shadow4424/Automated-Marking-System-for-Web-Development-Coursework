@@ -1,62 +1,26 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import List
 
-from ams.assessors import Assessor
-from ams.assessors.static.common import (
-    missing_component_finding,
-    read_component_text,
-    resolve_component_requirement,
-    skipped_component_finding,
-)
+from ams.assessors.static.common import BaseStaticAssessor
 from ams.core.finding_ids import CSS as CID
-from ams.core.models import Finding, Severity, SubmissionContext
+from ams.core.models import Finding, FindingCategory, Severity
 
 
-class CSSStaticAssessor(Assessor):
+class CSSStaticAssessor(BaseStaticAssessor):
     """Deterministic CSS static checks."""
 
-    name = "css_static"
+    _component = "css"
+    _finding_ids_class = CID
+    _extensions = [".css"]
 
-    def run(self, context: SubmissionContext) -> List[Finding]:
+    def _analyse_loaded_files(
+        self, loaded_files: list[tuple[Path, str]],
+    ) -> List[Finding]:
         findings: List[Finding] = []
-        css_files = sorted(context.files_for("css", relevant_only=True))
-        profile_name, is_required = resolve_component_requirement(context, "css")
-
-        if not css_files:
-            findings.append(
-                missing_component_finding(
-                    finding_id=CID.MISSING_FILES,
-                    category="css",
-                    message="No CSS files found; CSS is required for this profile.",
-                    source=self.name,
-                    profile_name=profile_name,
-                    expected_extensions=[".css"],
-                )
-                if is_required
-                else skipped_component_finding(
-                    finding_id=CID.SKIPPED,
-                    category="css",
-                    message="No CSS files found; CSS is not required for this profile.",
-                    source=self.name,
-                    profile_name=profile_name,
-                    expected_extensions=[".css"],
-                )
-            )
-            return findings
-
-        for path in css_files:
-            content, read_error = read_component_text(
-                path,
-                finding_id=CID.READ_ERROR,
-                category="css",
-                source=self.name,
-                message="Failed to read CSS file.",
-            )
-            if read_error is not None:
-                findings.append(read_error)
-                continue
+        for path, content in loaded_files:
 
             open_braces = content.count("{")
             close_braces = content.count("}")

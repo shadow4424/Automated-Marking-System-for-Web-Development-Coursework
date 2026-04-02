@@ -1,23 +1,20 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import List
 
-from ams.assessors import Assessor
-from ams.assessors.static.common import (
-    missing_component_finding,
-    read_component_text,
-    resolve_component_requirement,
-    skipped_component_finding,
-)
+from ams.assessors.static.common import BaseStaticAssessor
 from ams.core.finding_ids import JS as JID
-from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
+from ams.core.models import Finding, FindingCategory, Severity
 
 
-class JSStaticAssessor(Assessor):
+class JSStaticAssessor(BaseStaticAssessor):
     """Deterministic JavaScript static checks using simple heuristics."""
 
-    name = "js_static"
+    _component = "js"
+    _finding_ids_class = JID
+    _extensions = [".js"]
 
     # Check js syntax.
     def _check_js_syntax(self, files: list[tuple[object, str]]) -> List[Finding]:
@@ -262,48 +259,10 @@ class JSStaticAssessor(Assessor):
             )
         return findings
 
-    # Run the JavaScript static checks.
-    def run(self, context: SubmissionContext) -> List[Finding]:
+    def _analyse_loaded_files(
+        self, loaded_files: list[tuple[Path, str]],
+    ) -> List[Finding]:
         findings: List[Finding] = []
-        js_files = sorted(context.files_for("js", relevant_only=True))
-        profile_name, is_required = resolve_component_requirement(context, "js")
-
-        if not js_files:
-            findings.append(
-                missing_component_finding(
-                    finding_id=JID.MISSING_FILES,
-                    category="js",
-                    message="No JavaScript files found; JS is required for this profile.",
-                    source=self.name,
-                    profile_name=profile_name,
-                    expected_extensions=[".js"],
-                )
-                if is_required
-                else skipped_component_finding(
-                    finding_id=JID.SKIPPED,
-                    category="js",
-                    message="No JavaScript files found; JS is not required for this profile.",
-                    source=self.name,
-                    profile_name=profile_name,
-                    expected_extensions=[".js"],
-                )
-            )
-            return findings
-
-        loaded_files: list[tuple[object, str]] = []
-        for path in js_files:
-            content, read_error = read_component_text(
-                path,
-                finding_id=JID.READ_ERROR,
-                category="js",
-                source=self.name,
-                message="Failed to read JS file.",
-            )
-            if read_error is not None:
-                findings.append(read_error)
-                continue
-            loaded_files.append((path, content))
-
         findings.extend(self._check_js_syntax(loaded_files))
         findings.extend(self._check_js_patterns(loaded_files))
         findings.extend(self._check_js_dependencies(loaded_files))

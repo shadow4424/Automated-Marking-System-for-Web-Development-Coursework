@@ -1,62 +1,25 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import List
 
-from ams.assessors import Assessor
-from ams.assessors.static.common import (
-    missing_component_finding,
-    read_component_text,
-    resolve_component_requirement,
-    skipped_component_finding,
-)
+from ams.assessors.static.common import BaseStaticAssessor
 from ams.core.finding_ids import SQL as SID
-from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
+from ams.core.models import Finding, FindingCategory, Severity
 
 
-class SQLStaticAssessor(Assessor):
+class SQLStaticAssessor(BaseStaticAssessor):
     """Deterministic SQL static checks focused on file presence and basic heuristics."""
 
-    name = "sql_static"
+    _component = "sql"
+    _finding_ids_class = SID
+    _extensions = [".sql"]
 
-    def run(self, context: SubmissionContext) -> List[Finding]:
+    def _analyse_loaded_files(self, loaded_files: list[tuple[Path, str]]) -> List[Finding]:
         findings: List[Finding] = []
-        sql_files = sorted(context.files_for("sql", relevant_only=True))
-        profile_name, is_required = resolve_component_requirement(context, "sql")
 
-        if not sql_files:
-            findings.append(
-                missing_component_finding(
-                    finding_id=SID.MISSING_FILES,
-                    category="sql",
-                    message="No SQL files found; SQL is required for this profile.",
-                    source=self.name,
-                    profile_name=profile_name,
-                    expected_extensions=[".sql"],
-                )
-                if is_required
-                else skipped_component_finding(
-                    finding_id=SID.SKIPPED,
-                    category="sql",
-                    message="No SQL files found; SQL is not required for this profile.",
-                    source=self.name,
-                    profile_name=profile_name,
-                    expected_extensions=[".sql"],
-                )
-            )
-            return findings
-
-        for path in sql_files:
-            content, read_error = read_component_text(
-                path,
-                finding_id=SID.READ_ERROR,
-                category="sql",
-                source=self.name,
-                message="Failed to read SQL file.",
-            )
-            if read_error is not None:
-                findings.append(read_error)
-                continue
+        for path, content in loaded_files:
 
             lowered = content.lower()
             # For SQL evidence, show the first 500 chars as a snippet

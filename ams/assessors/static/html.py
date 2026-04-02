@@ -1,62 +1,26 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import List
 
-from ams.assessors import Assessor
-from ams.assessors.static.common import (
-    missing_component_finding,
-    read_component_text,
-    resolve_component_requirement,
-    skipped_component_finding,
-)
+from ams.assessors.static.common import BaseStaticAssessor
 from ams.assessors.html_parser import TagCountingParser
 from ams.core.finding_ids import HTML as HID
-from ams.core.models import Finding, Severity, SubmissionContext
+from ams.core.models import Finding, FindingCategory, Severity
 
 
-class HTMLStaticAssessor(Assessor):
+class HTMLStaticAssessor(BaseStaticAssessor):
     """Deterministic HTML static checks."""
 
-    name = "html_static"
+    _component = "html"
+    _finding_ids_class = HID
+    _extensions = [".html"]
 
-    def run(self, context: SubmissionContext) -> List[Finding]:
+    def _analyse_loaded_files(
+        self, loaded_files: list[tuple[Path, str]],
+    ) -> List[Finding]:
         findings: List[Finding] = []
-        html_files = sorted(context.files_for("html", relevant_only=True))
-        profile_name, is_required = resolve_component_requirement(context, "html")
-
-        if not html_files:
-            findings.append(
-                missing_component_finding(
-                    finding_id=HID.MISSING_FILES,
-                    category="html",
-                    message="No HTML files found; HTML is required for this profile.",
-                    source=self.name,
-                    profile_name=profile_name,
-                    expected_extensions=[".html"],
-                )
-                if is_required
-                else skipped_component_finding(
-                    finding_id=HID.SKIPPED,
-                    category="html",
-                    message="No HTML files found; HTML is not required for this profile.",
-                    source=self.name,
-                    profile_name=profile_name,
-                    expected_extensions=[".html"],
-                )
-            )
-            return findings
-
-        for path in html_files:
-            content, read_error = read_component_text(
-                path,
-                finding_id=HID.READ_ERROR,
-                category="html",
-                source=self.name,
-                message="Failed to read HTML file.",
-            )
-            if read_error is not None:
-                findings.append(read_error)
-                continue
+        for path, content in loaded_files:
 
             lowered = content.lower()
 
