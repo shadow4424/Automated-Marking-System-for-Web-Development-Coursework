@@ -5,27 +5,29 @@ from typing import Dict, List, Mapping
 
 from ams.core.profiles import ProfileSpec, RequirementDefinition, resolve_profile_spec
 
-
+# This config is the result of resolving the profile and any associated config, 
+# and is what is used for the actual assignment.
 @dataclass(frozen=True)
 class ResolvedAssignmentConfig:
-    requested_profile: str
-    profile_name: str
-    profile: ProfileSpec
-    expected_layers: List[str]
-    required_components: List[str]
-    optional_components: List[str]
-    enabled_static_checks: List[str]
-    enabled_behavioural_checks: List[str]
-    enabled_browser_checks: List[str]
-    enabled_layout_checks: List[str]
-    expected_entrypoint_types: List[str]
-    component_weights: Dict[str, float]
-    missing_component_treatment: Dict[str, str]
-    role_expectations: Dict[str, str]
-    requirement_definitions: List[RequirementDefinition]
-    frontend_only: bool
-    config_source: str
+    requested_profile: str  # Profile name requested
+    profile_name: str   # Actual profile name used
+    profile: ProfileSpec    # The resolved profile spec
+    expected_layers: List[str]  # The layers that are expected to be present in the submission
+    required_components: List[str]  # The components that are required to be present in the submission
+    optional_components: List[str]  # The components that are optional to be present in the submission
+    enabled_static_checks: List[str]    # The static checks that are enabled for this assignment
+    enabled_behavioural_checks: List[str]   # The behavioural checks that are enabled for this assignment
+    enabled_browser_checks: List[str]   # The browser checks that are enabled for this assignment
+    enabled_layout_checks: List[str]    # The layout checks that are enabled for this assignment
+    expected_entrypoint_types: List[str]    # The entrypoint types that are expected to be present in the submission
+    component_weights: Dict[str, float] # The weights for each component, used for grading
+    missing_component_treatment: Dict[str, str] # How to treat missing components
+    role_expectations: Dict[str, str]   # The expectations for each role
+    requirement_definitions: List[RequirementDefinition]    # The requirement definitions that apply to this assignment
+    frontend_only: bool # Whether this assignment is frontend-only
+    config_source: str  # The source of the config
 
+    # Convert to a dictionary (For JSON Serialisation)
     def to_dict(self) -> Dict[str, object]:
         """Return this assignment config as a dictionary."""
         return {
@@ -47,7 +49,7 @@ class ResolvedAssignmentConfig:
             "config_source": self.config_source,
         }
 
-
+# Function to resolve the assignment config for a given profile name and optional metadata
 def resolve_assignment_config(
     profile_name: str,
     *,
@@ -58,6 +60,8 @@ def resolve_assignment_config(
     config_path = metadata.get("profile_config_path") or metadata.get("assignment_profile_config")
     profile = resolve_profile_spec(profile_name, config_path=config_path)
     component_weights = _normalize_weights(profile)
+
+    # Returns the resolved assignment config.
     return ResolvedAssignmentConfig(
         requested_profile=profile_name,
         profile_name=profile.name,
@@ -78,7 +82,7 @@ def resolve_assignment_config(
         config_source=str(config_path) if config_path else "builtin",
     )
 
-
+# Helper function to normalise the component weights.
 def _normalize_weights(profile: ProfileSpec) -> Dict[str, float]:
     """Normalise the weights."""
     if profile.component_weights:

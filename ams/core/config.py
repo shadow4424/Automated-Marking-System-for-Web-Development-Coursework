@@ -3,23 +3,19 @@ from __future__ import annotations
 
 from enum import Enum
 
-
+# Enums for configuration options
 class ScoringMode(str, Enum):
     """Scoring mode for the AMS marking pipeline."""
     STATIC_ONLY = "static_only"
     STATIC_PLUS_LLM = "static_plus_llm"
 
-
+# LLM Provider options
 class LLMProviderType(str, Enum):
     """Available LLM providers."""
     MOCK = "mock"
     LOCAL = "local"  # LM Studio / Ollama at localhost
     OPENAI = "openai"
     # Future: AZURE = "azure", ANTHROPIC = "anthropic"
-
-
-# Scoring Configuration
-
 
 # Default scoring mode - static assessors only, no LLM integration yet
 SCORING_MODE = ScoringMode.STATIC_ONLY
@@ -35,32 +31,28 @@ FINDING_SCORE_WARN = 0.5
 # Pass threshold for overall assessment (40%)
 PASS_THRESHOLD = 0.40
 
-
-# LLM Configuration (Phase 0-3)
-
-
-# Which LLM provider to use (default to local for demo)
+# Which LLM provider to use (default to local)
 LLM_PROVIDER = LLMProviderType.LOCAL
 
 # Local LM Studio settings
 LLM_BASE_URL = "http://localhost:1234/v1"
-LLM_MODEL_NAME = "qwen2.5-vl-7b-instruct"  # Phase 3: Vision model for multimodal
+LLM_MODEL_NAME = "qwen2.5-vl-7b-instruct"
 LLM_TIMEOUT = 120  # Seconds to wait for response
 
-# Phase 3: Vision Capabilities
+# Vision Capabilities
 VISION_ENABLED = True  # Enable multimodal image+text requests
 VISION_MAX_IMAGE_SIZE = 768  # Max dimension for image resizing (pixels)
 VISION_MAX_TOKENS = 2048  # Min context window for vision responses
 VISION_TIMEOUT = 180  # Seconds to wait for vision response (longer than text)
-VISION_DELAY_BETWEEN_PAGES = 0.0  # Optional cooldown (seconds) between UX reviews
+VISION_DELAY_BETWEEN_PAGES = 0.0  # Optional cooldown (seconds)
 
 # OpenAI settings (for cloud fallback)
 LLM_OPENAI_MODEL = "gpt-4o-mini"
 
-# Daily budget limit in USD (circuit breaker for cloud)
+# Daily budget limit in USD
 LLM_DAILY_BUDGET_USD = 1.00
 
-# Whether to cache LLM requests (speeds up demo re-runs)
+# Whether to cache LLM requests
 LLM_CACHE_ENABLED = True
 
 # Whether to sanitize PII before sending to LLM
@@ -68,8 +60,6 @@ LLM_SANITIZE_PII = True
 
 
 # Path Configuration
-
-
 from pathlib import Path as _Path
 
 # Package root directory
@@ -102,7 +92,6 @@ WORKSPACE_MAX_AGE_HOURS = 24
 
 
 # GitHub OAuth Configuration
-
 import os as _os
 
 GITHUB_CLIENT_ID: str = _os.environ.get("AMS_GITHUB_CLIENT_ID", "")

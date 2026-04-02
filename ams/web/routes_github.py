@@ -15,6 +15,7 @@ github_bp = Blueprint("github", __name__)
 
 @github_bp.route("/threats")
 @teacher_or_admin_required
+# Show the current threat review page.
 def threats():
     from ams.sandbox.forensics import list_retained_containers
 
@@ -24,6 +25,7 @@ def threats():
 
 @github_bp.route("/threats/<container_name>/inspect")
 @teacher_or_admin_required
+# Show details for one threat container.
 def threat_inspect(container_name: str):
     from ams.sandbox.forensics import inspect_container
 
@@ -36,6 +38,7 @@ def threat_inspect(container_name: str):
 
 @github_bp.route("/threats/<container_name>/cleanup", methods=["POST"])
 @teacher_or_admin_required
+# Clean up a threat container.
 def threat_cleanup(container_name: str):
     from ams.sandbox.forensics import cleanup_container
 
@@ -48,6 +51,7 @@ def threat_cleanup(container_name: str):
 
 
 @github_bp.route("/api/github/login")
+# Start the GitHub OAuth flow.
 def github_login():
     if not GITHUB_CLIENT_ID:
         flash("GitHub integration is not configured (missing Client ID).")
@@ -65,6 +69,7 @@ def github_login():
 
 
 @github_bp.route("/api/github/callback")
+# Handle the GitHub OAuth callback.
 def github_callback():
     code = request.args.get("code", "")
     state = request.args.get("state", "")
@@ -118,6 +123,7 @@ def github_callback():
 
 
 @github_bp.route("/api/github/disconnect", methods=["POST"])
+# Disconnect the linked GitHub account.
 def github_disconnect():
     session.pop("github_token", None)
     session.pop("github_user", None)
@@ -126,6 +132,7 @@ def github_disconnect():
 
 
 @github_bp.route("/api/github/repos")
+# List GitHub repositories for the linked account.
 def github_repos():
     token = session.get("github_token")
     if not token:
@@ -159,6 +166,7 @@ def github_repos():
 
 
 @github_bp.route("/api/github/repos/<owner>/<repo>/branches")
+# List branches for a selected GitHub repository.
 def github_branches(owner: str, repo: str):
     token = session.get("github_token")
     if not token:

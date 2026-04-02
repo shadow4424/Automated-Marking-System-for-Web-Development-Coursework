@@ -9,14 +9,10 @@ from typing import Any
 
 
 # Schema version
-
-
 EXPORT_SCHEMA_VERSION = "2.0"
 
 
 # Status constants (strings, not enums, for JSON serialisability)
-
-
 STATUS_PASS = "PASS"
 STATUS_PARTIAL = "PARTIAL"
 STATUS_FAIL = "FAIL"
@@ -28,9 +24,7 @@ STATUS_ERROR_DURING_ANALYSIS = "ERROR_DURING_ANALYSIS"
 STATUS_NO_RELEVANT_FILES = "NO_RELEVANT_FILES"
 
 
-# Dataclasses
-
-
+# Dataclasses for the export report structure
 @dataclass
 class ExportFinding:
     finding_id: str        # E.g. "HTML.MISSING_DOCTYPE"
@@ -110,10 +104,7 @@ class ExportReport:
     # Policy
     policy_notes: list         # List[str]
 
-
-# Private helpers
-
-
+# Map a requirement status into export text.
 def _map_requirement_status(status: str, skipped_reason: str | None) -> str:
     """Map pipeline status/skipped_reason pair to an export STATUS_* constant."""
     sr = (skipped_reason or "").lower()
@@ -146,7 +137,7 @@ def _map_requirement_status(status: str, skipped_reason: str | None) -> str:
     # Fallback: upper-case the raw status
     return status.upper()
 
-
+# Convert a score into a short display label.
 def _score_label(score: Any) -> str:
     """Return a human-readable explanation of a numeric score."""
     if not isinstance(score, (int, float)):
@@ -157,14 +148,14 @@ def _score_label(score: Any) -> str:
         return "Evident attempt, but important issues, incomplete integration, or major faults."
     return "Absent, unrelated, or too broken to demonstrate the intended requirement."
 
-
+# Convert a score into a percentage string.
 def _score_pct(score: Any) -> str:
     """Format a score as a percentage string, or return str(score) for non-numerics."""
     if isinstance(score, (int, float)):
         return f"{float(score) * 100:.2f}%"
     return str(score)
 
-
+# Convert the overall score into a result label.
 def _overall_label(score: Any) -> str:
     """Return a grade label based on overall numeric score."""
     if score is None:
@@ -177,10 +168,7 @@ def _overall_label(score: Any) -> str:
         return "Fail"
     return "Unknown"
 
-
-# Main builder
-
-
+# Build the export report model from raw report JSON.
 def build_export_report(report_json: dict, run_id: str = "") -> ExportReport:
     """Map from the actual report.json structure to a canonical ExportReport."""
     meta = report_json.get("metadata") or {}
@@ -341,10 +329,7 @@ def build_export_report(report_json: dict, run_id: str = "") -> ExportReport:
         policy_notes=policy_notes_list,
     )
 
-
-# Validation
-
-
+# Validate the export report before serialisation.
 def validate_export_report(report: ExportReport) -> None:
     """Raise ValueError if the report is too empty to export meaningfully."""
     if (
@@ -371,41 +356,39 @@ def validate_export_report(report: ExportReport) -> None:
             "Report contains no assessment data (no components, rule outcomes, or findings)"
         )
 
-
-# JSON Export
-
-
+# Export the report as formatted JSON.
 def export_json(report: ExportReport) -> str:
     """Serialize ExportReport to a rich structured JSON string."""
     data = asdict(report)
     return json.dumps(data, indent=2, default=str)
 
-
-# Export: TXT
-
-
+# Text Export
 _SEP_MAJOR = "=" * 80
 _SEP_MINOR = "-" * 40
 
 
+# Append a top-level section heading to the text export.
 def _append_txt_section(lines: list[str], title: str) -> None:
     lines.append(_SEP_MAJOR)
     lines.append(title)
     lines.append(_SEP_MAJOR)
 
 
+# Append a subsection heading to the text export.
 def _append_txt_subsection(lines: list[str], title: str) -> None:
     lines.append(_SEP_MINOR)
     lines.append(title)
     lines.append(_SEP_MINOR)
 
 
+# Wrap text for the plain-text export.
 def _wrap_txt(text: str) -> str:
     return textwrap.fill(
         text, width=76, initial_indent="    ", subsequent_indent="    "
     )
 
 
+# Build the text export header section.
 def _build_txt_header_section(report: ExportReport) -> list[str]:
     lines: list[str] = []
     _append_txt_section(lines, "SUBMISSION ASSESSMENT REPORT")
@@ -415,6 +398,7 @@ def _build_txt_header_section(report: ExportReport) -> list[str]:
     return lines
 
 
+# Build the text export submission-details section.
 def _build_txt_submission_details_section(report: ExportReport) -> list[str]:
     lines: list[str] = []
     _append_txt_section(lines, "SUBMISSION DETAILS")
@@ -429,6 +413,7 @@ def _build_txt_submission_details_section(report: ExportReport) -> list[str]:
     return lines
 
 
+# Build the text export overall-result section.
 def _build_txt_overall_result_section(report: ExportReport) -> list[str]:
     lines: list[str] = []
     _append_txt_section(lines, "OVERALL RESULT")
@@ -447,6 +432,7 @@ def _build_txt_overall_result_section(report: ExportReport) -> list[str]:
     return lines
 
 
+# Build the text export component-scores section.
 def _build_txt_component_scores_section(report: ExportReport) -> list[str]:
     lines: list[str] = []
     _append_txt_section(lines, "COMPONENT SCORES")
@@ -464,6 +450,7 @@ def _build_txt_component_scores_section(report: ExportReport) -> list[str]:
     return lines
 
 
+# Build the text export findings section.
 def _build_txt_findings_section(report: ExportReport) -> list[str]:
     if not report.findings:
         return []
@@ -494,6 +481,7 @@ def _build_txt_findings_section(report: ExportReport) -> list[str]:
     return lines
 
 
+# Build the text export rule-outcomes section.
 def _build_txt_rule_outcomes_section(report: ExportReport) -> list[str]:
     if not report.rule_outcomes:
         return []
@@ -523,6 +511,7 @@ def _build_txt_rule_outcomes_section(report: ExportReport) -> list[str]:
     return lines
 
 
+# Build the text export execution section.
 def _build_txt_execution_section(report: ExportReport) -> list[str]:
     lines: list[str] = []
     _append_txt_section(lines, "EXECUTION SUMMARY")
@@ -557,6 +546,7 @@ def _build_txt_execution_section(report: ExportReport) -> list[str]:
     return lines
 
 
+# Build the text export policy-notes section.
 def _build_txt_policy_notes_section(report: ExportReport) -> list[str]:
     lines: list[str] = []
     _append_txt_section(lines, "MARKING POLICY NOTES")
@@ -566,6 +556,7 @@ def _build_txt_policy_notes_section(report: ExportReport) -> list[str]:
     return lines
 
 
+# Export the report as plain text.
 def export_txt(report: ExportReport) -> str:
     """Render an 80-char-wide human-readable text report."""
     lines: list[str] = []
@@ -579,10 +570,7 @@ def export_txt(report: ExportReport) -> str:
     lines.extend(_build_txt_policy_notes_section(report))
     return "\n".join(lines)
 
-
-# CSV Export
-
-
+# Build the CSV headers for the summary export.
 def _build_csv_summary_headers() -> list[str]:
     return [
         "run_id", "student_id", "assignment_id", "profile", "scoring_mode", "generated_at",
@@ -594,6 +582,7 @@ def _build_csv_summary_headers() -> list[str]:
     ]
 
 
+# Build the CSV summary row for one report.
 def _build_csv_summary_row(report: ExportReport) -> list[Any]:
     comp_by_name = {component.name.lower(): component for component in report.components}
 
@@ -646,6 +635,7 @@ def _build_csv_summary_row(report: ExportReport) -> list[Any]:
     ]
 
 
+# Export the report as a one-row CSV summary.
 def export_csv_summary(report: ExportReport) -> str:
     """One-row CSV with overall scores and component breakdown."""
     buf = io.StringIO()
@@ -655,6 +645,7 @@ def export_csv_summary(report: ExportReport) -> str:
     return buf.getvalue()
 
 
+# Export the findings list as CSV.
 def export_csv_findings(report: ExportReport) -> str:
     """One row per finding."""
     buf = io.StringIO()
@@ -679,6 +670,7 @@ def export_csv_findings(report: ExportReport) -> str:
     return buf.getvalue()
 
 
+# Export the rule outcomes as CSV.
 def export_csv_rules(report: ExportReport) -> str:
     """One row per rule outcome."""
     buf = io.StringIO()
@@ -706,10 +698,7 @@ def export_csv_rules(report: ExportReport) -> str:
         ])
     return buf.getvalue()
 
-
-# ZIP / Bundle Export
-
-
+# Export all text-based report formats into a zip file.
 def export_csv_zip(report: ExportReport) -> bytes:
     """Create an in-memory ZIP containing three CSVs: summary, findings, rules."""
     buf = io.BytesIO()
@@ -728,18 +717,11 @@ def export_csv_zip(report: ExportReport) -> bytes:
     buf.seek(0)
     return buf.read()
 
-
-# PDF Export
-
-
+# Export the report as a PDF document.
 def export_pdf(report: ExportReport) -> bytes:
     """Generate a rich PDF report from the canonical ExportReport."""
     from ams.pdf_exports import build_rich_submission_pdf  # Lazy import to avoid circular deps
     return build_rich_submission_pdf(report)
-
-
-# Public API
-
 
 __all__ = [
     "EXPORT_SCHEMA_VERSION",

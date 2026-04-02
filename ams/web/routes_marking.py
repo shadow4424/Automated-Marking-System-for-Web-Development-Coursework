@@ -582,6 +582,7 @@ def _build_submission_detail_view(
 # Process the main marking upload flow.
 @marking_bp.route("/mark", methods=["GET", "POST"])
 @login_required
+# Handle the main manual marking flow.
 def mark():
     if request.method == "GET":
         return _render_mark_page(selected_assignment_id=request.args.get("assignment_id", "").strip())

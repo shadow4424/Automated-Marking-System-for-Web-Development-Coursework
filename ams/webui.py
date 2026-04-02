@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 MAX_UPLOAD_MB = 25
 
 
+# Create and configure the Flask application.
 def create_app(config: Mapping[str, object] | None = None) -> Flask:
     app = Flask(__name__, template_folder="templates")
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024

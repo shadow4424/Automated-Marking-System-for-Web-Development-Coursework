@@ -82,6 +82,7 @@ SEMANTIC_CLAIM_EVIDENCE_KEYS = {
 }
 
 
+# Build a CSV download response.
 def _csv_response(filename: str, fieldnames: list[str], rows: list[dict]) -> Response:
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -95,6 +96,7 @@ def _csv_response(filename: str, fieldnames: list[str], rows: list[dict]) -> Res
     )
 
 
+# Build a JSON download response.
 def _json_response(filename: str, rows: list[dict]) -> Response:
     return Response(
         json.dumps(rows, indent=2),
@@ -103,6 +105,7 @@ def _json_response(filename: str, rows: list[dict]) -> Response:
     )
 
 
+# Build a plain-text download response.
 def _txt_response(filename: str, title: str, fieldnames: list[str], rows: list[dict]) -> Response:
     lines = []
     lines.append("=" * 70)
@@ -126,6 +129,7 @@ def _txt_response(filename: str, title: str, fieldnames: list[str], rows: list[d
     )
 
 
+# Build a PDF download response.
 def _pdf_response(filename: str, title: str, fieldnames: list[str], rows: list[dict]) -> Response:
     """Generate a PDF report as a direct file download."""
     pdf = build_records_pdf(title, fieldnames, rows, record_label="Row")
@@ -136,6 +140,7 @@ def _pdf_response(filename: str, title: str, fieldnames: list[str], rows: list[d
     )
 
 
+# Filter top failing rule rows for export or display.
 def _filtered_top_rule_rows(analytics: Mapping[str, object], args) -> list[dict]:
     rows = list(analytics.get("top_failing_rules", []) or [])
     severity = str(args.get("severity", "")).strip().upper()
@@ -150,6 +155,7 @@ def _filtered_top_rule_rows(analytics: Mapping[str, object], args) -> list[dict]
     ]
 
 
+# Normalise teaching insights into a consistent structure.
 def _normalize_teaching_insights(insights: Sequence[object] | None) -> list[dict]:
     normalized: list[dict] = []
     for index, insight in enumerate(list(insights or []), start=1):
@@ -192,6 +198,7 @@ def _normalize_teaching_insights(insights: Sequence[object] | None) -> list[dict
     return normalized
 
 
+# Build a structured validation failure payload.
 def _validation_failure(
     category: str,
     message: str,
@@ -213,6 +220,7 @@ def _validation_failure(
     return failure
 
 
+# Walk nested context data and yield numeric values with paths.
 def _iter_numeric_context_values(value: object, path: str = ""):
     if isinstance(value, Mapping):
         for key, child in value.items():
@@ -230,6 +238,7 @@ def _iter_numeric_context_values(value: object, path: str = ""):
         yield path, float(value)
 
 
+# Decide whether a numeric path should be treated like a percentage.
 def _is_percentlike_numeric_path(path: str, value: float) -> bool:
     path_lower = str(path or "").lower()
     if any(token in path_lower for token in PERCENTLIKE_PATH_HINTS):
@@ -239,6 +248,7 @@ def _is_percentlike_numeric_path(path: str, value: float) -> bool:
     return not float(value).is_integer()
 
 
+# Build the numeric grounding set used for claim validation.
 def _build_numeric_grounding(context: Mapping[str, object]) -> dict[str, Any]:
     active_in_scope = int(context.get("active_in_scope") or 0)
     assigned_students = int(context.get("assigned_students") or 0)
@@ -265,6 +275,7 @@ def _build_numeric_grounding(context: Mapping[str, object]) -> dict[str, Any]:
     }
 
 
+# Extract numeric mentions from generated text.
 def _extract_numeric_mentions(text: str) -> list[dict[str, Any]]:
     mentions: list[dict[str, Any]] = []
     source = str(text or "")
@@ -305,6 +316,7 @@ def _extract_numeric_mentions(text: str) -> list[dict[str, Any]]:
     return mentions
 
 
+# Choose the tolerance used for numeric grounding checks.
 def _numeric_tolerance(raw: str, kind: str) -> float:
     if kind == "count":
         return 0.0
@@ -317,6 +329,7 @@ def _numeric_tolerance(raw: str, kind: str) -> float:
     return 0.02
 
 
+# Validate numeric claims against the available context.
 def _validate_numeric_grounding(text: str, context: Mapping[str, object], field: str) -> dict[str, Any] | None:
     grounding = _build_numeric_grounding(context)
     allowed_counts = grounding["counts"]
@@ -342,6 +355,7 @@ def _validate_numeric_grounding(text: str, context: Mapping[str, object], field:
     return None
 
 
+# Check whether a value supports a majority claim.
 def is_majority(value: object, active_in_scope: int) -> bool:
     try:
         return float(value or 0) > (active_in_scope / 2)
@@ -349,6 +363,7 @@ def is_majority(value: object, active_in_scope: int) -> bool:
         return False
 
 
+# Check whether the evidence keys support a majority claim.
 def _supports_majority_claim(evidence_keys: Sequence[str], context: Mapping[str, object]) -> bool:
     active_in_scope = int(context.get("active_in_scope") or 0)
     if active_in_scope <= 0:
@@ -400,6 +415,7 @@ def _supports_majority_claim(evidence_keys: Sequence[str], context: Mapping[str,
     return False
 
 
+# Validate confidence-scope claims in generated text.
 def _validate_confidence_scope_claim(
     text: str,
     context: Mapping[str, object],
@@ -456,6 +472,7 @@ def _validate_confidence_scope_claim(
     return None
 
 
+# Validate manual-review claims in generated text.
 def _validate_manual_review_claim(
     text: str,
     context: Mapping[str, object],
@@ -491,6 +508,7 @@ def _validate_manual_review_claim(
     return None
 
 
+# Validate higher-level semantic claims in generated text.
 def _validate_semantic_claims(
     text: str,
     evidence_keys: Sequence[str],
@@ -569,6 +587,7 @@ def _validate_semantic_claims(
     return None
 
 
+# Build a deterministic teaching-summary fallback.
 def _user_facing_teaching_summary_fallback(
     reason: Mapping[str, object] | None,
     *,
@@ -596,6 +615,7 @@ def _user_facing_teaching_summary_fallback(
     )
 
 
+# Validate the enhanced teaching summary payload.
 def _validate_enhanced_teaching_summary(
     candidate: object,
     context: Mapping[str, object],
@@ -772,6 +792,7 @@ def _validate_enhanced_teaching_summary(
     )
 
 
+# Check whether the LLM teaching summary is enabled.
 def _llm_summary_enabled() -> bool:
     if current_app.testing and "AMS_ENABLE_ANALYTICS_LLM_SUMMARY" not in current_app.config:
         return False
@@ -781,6 +802,7 @@ def _llm_summary_enabled() -> bool:
     return value is not False
 
 
+# Optionally enhance teaching insights with an LLM summary.
 def _maybe_enhance_teaching_insights(analytics: Mapping[str, Any]) -> tuple[dict[str, Any], str, dict[str, Any]]:
     baseline = _normalize_teaching_insights(analytics.get("teaching_insights"))
     context = dict(analytics.get("teaching_insight_context", {}) or {})

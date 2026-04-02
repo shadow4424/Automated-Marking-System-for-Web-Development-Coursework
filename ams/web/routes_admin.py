@@ -19,6 +19,7 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 @admin_bp.route("/")
 @admin_required
+# Show the admin dashboard.
 def dashboard():
     users = list_users()
     teachers = [u for u in users if u["role"] == "teacher"]
@@ -37,12 +38,14 @@ def dashboard():
 
 @admin_bp.route("/create-account")
 @admin_required
+# Show the teacher account creation page.
 def create_account_page():
     return render_template("admin/create_account.html")
 
 
 @admin_bp.route("/users")
 @admin_required
+# Show the user management page.
 def users_page():
     users = list_users()
     return render_template("admin/users.html", users=users)
@@ -50,6 +53,7 @@ def users_page():
 
 @admin_bp.route("/assignments")
 @admin_required
+# Show the assignment management page.
 def assignments_page():
     assignments = list_assignments()
     teaching_team_ids = set()
@@ -63,6 +67,7 @@ def assignments_page():
 
 @admin_bp.route("/create-teacher", methods=["POST"])
 @admin_required
+# Create a teacher account.
 def create_teacher():
     user_id = request.form.get("user_id", "").strip()
     first_name = request.form.get("first_name", "").strip()
@@ -91,6 +96,7 @@ def create_teacher():
 
 @admin_bp.route("/create-student", methods=["POST"])
 @admin_required
+# Create a student account.
 def create_student():
     user_id = request.form.get("user_id", "").strip()
     first_name = request.form.get("first_name", "").strip()
@@ -119,6 +125,7 @@ def create_student():
 
 @admin_bp.route("/delete-user/<user_id>", methods=["POST"])
 @admin_required
+# Remove a user account.
 def remove_user(user_id: str):
     if delete_user(user_id):
         flash(f"User '{user_id}' deleted.", "success")
@@ -129,6 +136,7 @@ def remove_user(user_id: str):
 
 @admin_bp.route("/view-as/<role>")
 @admin_required
+# Switch into a temporary view-as session.
 def view_as(role: str):
     """Let the admin toggle their view to see the teacher or student dashboard."""
     if role not in ("admin", "teacher", "student"):

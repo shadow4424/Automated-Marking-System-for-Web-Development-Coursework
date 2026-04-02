@@ -10,9 +10,11 @@ from zipfile import ZipFile
 
 from ams.core.attempts import attempt_maps, sync_attempts_from_storage
 from ams.io.fs_utils import _prune_empty_parents, _remove_path_within
+from ams.io.json_utils import read_json_file, try_read_json, write_json_file
 from ams.io.metadata import MetadataValidator, SubmissionMetadata
 
 
+# Return the configured runs root and create it if needed.
 def get_runs_root(app) -> Path:
     root = app.config.get("AMS_RUNS_ROOT") or "ams_web_runs"
     root_path = Path(root)
@@ -20,6 +22,7 @@ def get_runs_root(app) -> Path:
     return root_path
 
 
+# Create a run directory for a new submission.
 def create_run_dir(
     runs_root: Path,
     mode: str,
@@ -53,6 +56,7 @@ def create_run_dir(
     return run_id, run_dir
 
 
+# Extract a zip file after validating size and paths.
 def safe_extract_zip(zip_path: Path, dest_dir: Path, max_size_mb: int = 100) -> None:
     """Safely extract ZIP file with size and path validation."""
     max_size_bytes = max_size_mb * 1024 * 1024
@@ -93,11 +97,13 @@ def safe_extract_zip(zip_path: Path, dest_dir: Path, max_size_mb: int = 100) -> 
                     dst.write(src.read())
 
 
+# Reject zip entries that would escape the extraction root.
 def _validate_zip_entry(member_path: PurePosixPath) -> None:
     if member_path.is_absolute() or ".." in member_path.parts:
         raise ValueError("Zip entry would escape extraction directory")
 
 
+# Find the real submission root inside an extracted archive.
 def find_submission_root(extracted_dir: Path) -> Path:
     """Resolve the actual submission root within an extracted zip."""
     junk = {"__MACOSX", ".DS_Store", "Thumbs.db"}
@@ -109,22 +115,23 @@ def find_submission_root(extracted_dir: Path) -> Path:
     return extracted_dir
 
 
+# Write run metadata to disk.
 def save_run_info(run_dir: Path, info: Mapping[str, object]) -> None:
     """Save run info with tamper-resistant JSON formatting."""
-    info_path = run_dir / "run_info.json"
-    # Use consistent formatting for tamper detection
-    info_path.write_text(json.dumps(info, indent=2, sort_keys=True), encoding="utf-8")
+    write_json_file(run_dir / "run_info.json", info, indent=2, sort_keys=True)
 
 
+# Write submission metadata to disk with an integrity marker.
 def save_metadata(run_dir: Path, metadata: SubmissionMetadata) -> None:
     """Save submission metadata in a tamper-resistant format."""
     metadata_path = run_dir / "metadata.json"
     metadata_dict = metadata.to_dict()
     # Add integrity check
     metadata_dict["_integrity"] = _compute_metadata_hash(metadata_dict)
-    metadata_path.write_text(json.dumps(metadata_dict, indent=2, sort_keys=True), encoding="utf-8")
+    write_json_file(metadata_path, metadata_dict, indent=2, sort_keys=True)
 
 
+# Load submission metadata and reject tampered files.
 def load_metadata(run_dir: Path) -> Optional[SubmissionMetadata]:
     """Load submission metadata and verify integrity."""
     metadata_path = run_dir / "metadata.json"
@@ -132,7 +139,7 @@ def load_metadata(run_dir: Path) -> Optional[SubmissionMetadata]:
         return None
 
     try:
-        data = json.loads(metadata_path.read_text(encoding="utf-8"))
+        data = read_json_file(metadata_path)
         stored_hash = data.pop("_integrity", None)
 
         # Verify integrity
@@ -146,6 +153,7 @@ def load_metadata(run_dir: Path) -> Optional[SubmissionMetadata]:
         return None
 
 
+# Build the metadata integrity hash.
 def _compute_metadata_hash(metadata_dict: dict) -> str:
     """Compute hash for metadata integrity checking."""
     import hashlib
@@ -154,14 +162,16 @@ def _compute_metadata_hash(metadata_dict: dict) -> str:
     return hashlib.sha256(metadata_str.encode('utf-8')).hexdigest()[:16]
 
 
+# Load stored run metadata from disk.
 def load_run_info(run_dir: Path):
     """Load run metadata from run_info.json file."""
     info_path = run_dir / "run_info.json"
     if not info_path.exists():
         return None
-    return json.loads(info_path.read_text(encoding="utf-8"))
+    return try_read_json(info_path, default=None)
 
 
+# Build the assignment and student identity for a submission.
 def _submission_identity(run: Mapping[str, object], submission: Mapping[str, object] | None = None) -> tuple[str, str] | None:
     submission = submission or {}
     student_id = str(submission.get("student_id") or run.get("student_id") or "").strip()
@@ -171,6 +181,7 @@ def _submission_identity(run: Mapping[str, object], submission: Mapping[str, obj
     return assignment_id, student_id
 
 
+# Build the stable reference used for one submission record.
 def _submission_ref(run: Mapping[str, object], submission: Mapping[str, object] | None = None) -> tuple[str, str | None]:
     submission = submission or {}
     submission_id = submission.get("submission_id")
@@ -179,6 +190,7 @@ def _submission_ref(run: Mapping[str, object], submission: Mapping[str, object] 
     return str(run.get("id") or ""), None
 
 
+# Build the sort key used for submission records.
 def _submission_sort_key(run: Mapping[str, object], submission: Mapping[str, object] | None = None) -> tuple[str, str, str]:
     run_id, submission_id = _submission_ref(run, submission)
     return (
@@ -188,6 +200,7 @@ def _submission_sort_key(run: Mapping[str, object], submission: Mapping[str, obj
     )
 
 
+# Normalise run status values into a smaller set.
 def _normalize_status(value: object) -> str:
     status = str(value or "").strip().lower()
     if status in {"", "ok", "success", "succeeded", "completed", "complete"}:
@@ -195,6 +208,7 @@ def _normalize_status(value: object) -> str:
     return status
 
 
+# Clean and prefix a review message when needed.
 def _build_review_message(value: object, *, prefix: str = "") -> str | None:
     text = str(value or "").strip()
     if not text:
@@ -204,10 +218,12 @@ def _build_review_message(value: object, *, prefix: str = "") -> str | None:
     return text
 
 
+# Read the status field from a nested metadata block.
 def _get_run_status(meta: Mapping[str, Any]) -> object:
     return meta.get("status", "unknown")
 
 
+# Extract threat and LLM review flags from a report.
 def _parse_review_flag_data(report: Mapping[str, Any]) -> tuple[int, bool, list[str]]:
     metadata = report.get("metadata", {}) or {}
     findings = list(report.get("findings", []) or [])
@@ -310,6 +326,7 @@ def _parse_review_flag_data(report: Mapping[str, Any]) -> tuple[int, bool, list[
     return threat_count, threat_override, raw_messages
 
 
+# Remove duplicate review flags while preserving order.
 def _deduplicate_review_flags(flags: list[str]) -> list[str]:
     deduplicated: list[str] = []
     for flag in flags:
@@ -319,6 +336,7 @@ def _deduplicate_review_flags(flags: list[str]) -> list[str]:
     return deduplicated
 
 
+# Build the public review-flag summary for a report.
 def extract_review_flags_from_report(report: Mapping[str, Any]) -> dict[str, object]:
     threat_count, threat_override, raw_messages = _parse_review_flag_data(report)
     llm_messages = _deduplicate_review_flags(raw_messages)
@@ -332,6 +350,7 @@ def extract_review_flags_from_report(report: Mapping[str, Any]) -> dict[str, obj
     }
 
 
+# Check whether a run or submission should count as active.
 def _submission_is_active_candidate(run: Mapping[str, object], submission: Mapping[str, object] | None = None) -> bool:
     if submission is not None and (
         "attempt_id" in submission or "is_active" in submission or "validity_status" in submission
@@ -356,6 +375,7 @@ def _submission_is_active_candidate(run: Mapping[str, object], submission: Mappi
     return not _normalize_status(run.get("status")).startswith("invalid")
 
 
+# Collect assignment ids referenced by batch submissions.
 def _assignment_ids_from_submissions(run: Mapping[str, object]) -> list[str]:
     return sorted(
         {
@@ -367,6 +387,7 @@ def _assignment_ids_from_submissions(run: Mapping[str, object]) -> list[str]:
     )
 
 
+# Copy attempt metadata onto a run or submission record.
 def _apply_attempt_metadata(target: dict[str, object], attempt: Mapping[str, object]) -> None:
     target["attempt_id"] = attempt.get("id")
     target["attempt_number"] = attempt.get("attempt_number")
@@ -390,6 +411,7 @@ def _apply_attempt_metadata(target: dict[str, object], attempt: Mapping[str, obj
         target["batch_submission_id"] = attempt.get("batch_submission_id")
 
 
+# Keep only the latest submission for each identity.
 def _filter_latest_submissions(
     runs: list[dict],
     *,
@@ -470,6 +492,7 @@ def _filter_latest_submissions(
     return filtered_runs
 
 
+# Traverse run directories and build run records.
 def _traverse_run_directories(runs_root: Path, *, only_active: bool) -> list[dict]:
     runs: list[dict] = []
     sync_attempts_from_storage(runs_root)
@@ -645,10 +668,12 @@ def _traverse_run_directories(runs_root: Path, *, only_active: bool) -> list[dic
     return runs
 
 
+# Filter runs by active state.
 def _filter_runs(runs: list[dict], *, only_active: bool) -> list[dict]:
     return _filter_latest_submissions(runs, only_active=only_active)
 
 
+# Sort runs into the expected display order.
 def _sort_and_paginate_runs(runs: list[dict], *, only_active: bool) -> list[dict]:
     if not only_active:
         runs.sort(
@@ -664,6 +689,7 @@ def _sort_and_paginate_runs(runs: list[dict], *, only_active: bool) -> list[dict
     return runs
 
 
+# List stored runs under the runs root.
 def list_runs(runs_root: Path, only_active: bool = True) -> list[dict]:
     """List all runs, searching recursively through the nested directory structure."""
     if not runs_root.exists():
@@ -673,6 +699,7 @@ def list_runs(runs_root: Path, only_active: bool = True) -> list[dict]:
     return _sort_and_paginate_runs(runs, only_active=only_active)
 
 
+# Find the directory for one run id.
 def find_run_by_id(runs_root: Path, run_id: str) -> Optional[Path]:
     """Find a run directory by its ID, searching recursively."""
     if not runs_root.exists():
@@ -698,11 +725,13 @@ def find_run_by_id(runs_root: Path, run_id: str) -> Optional[Path]:
     return None
 
 
+# Check whether a filename is allowed for download.
 def allowed_download(filename: str, allowed: Iterable[str]) -> bool:
     allowed_set = set(allowed)
     return filename in allowed_set or any(filename.startswith(prefix) for prefix in allowed_set)
 
 
+# Store an uploaded submission and its metadata.
 def store_submission_with_metadata(
     runs_root: Path,
     mode: str,
@@ -748,6 +777,7 @@ def store_submission_with_metadata(
     return run_id, run_dir
 
 
+# Check whether a filename has an allowed extension.
 def validate_file_type(filename: str, allowed_extensions: Iterable[str] = (".zip",)) -> bool:
     """Validate file type by extension."""
     if not filename:
@@ -756,6 +786,7 @@ def validate_file_type(filename: str, allowed_extensions: Iterable[str] = (".zip
     return any(filename_lower.endswith(ext.lower()) for ext in allowed_extensions)
 
 
+# Check whether a file stays within the size limit.
 def validate_file_size(file_path: Path, max_size_mb: int = 25) -> Tuple[bool, Optional[str]]:
     """Validate file size."""
     max_size_bytes = max_size_mb * 1024 * 1024
@@ -788,6 +819,7 @@ _TRANSIENT_SUBMISSION_DIRS = (
 )
 
 
+# Remove batch-run storage that is no longer needed.
 def cleanup_batch_run_storage(run_dir: Path, run_info: Mapping[str, object] | None = None) -> None:
     """Remove transient and legacy batch artefacts from a completed batch run."""
     root = run_dir.resolve()
@@ -819,6 +851,7 @@ def cleanup_batch_run_storage(run_dir: Path, run_info: Mapping[str, object] | No
                 _remove_path_within(root, submission_dir / dirname)
 
 
+# Remove stored files for one assignment.
 def purge_assignment_storage(runs_root: Path, assignment_id: str) -> int:
     """Remove filesystem artefacts associated with a deleted assignment."""
     assignment_value = str(assignment_id or "").strip()

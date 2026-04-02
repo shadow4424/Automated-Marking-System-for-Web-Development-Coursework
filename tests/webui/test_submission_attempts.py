@@ -302,6 +302,34 @@ def test_student_syntax_errors_do_not_trigger_fallback_when_report_is_usable(tmp
     assert syntax_run["is_active"] is True
 
 
+def test_attempt_sync_repairs_malformed_submission_metadata_in_report(tmp_path: Path, monkeypatch) -> None:
+    _use_temp_db(monkeypatch, tmp_path)
+    run_dir = _make_attempt_run(
+        tmp_path,
+        run_id="attempt_bad_meta",
+        attempt_number=1,
+        created_at="2026-03-22T09:00:00Z",
+        student_id="student1",
+        assignment_id="assignment1",
+        score=0.67,
+    )
+    report_path = run_dir / "report.json"
+    report_data = json.loads(report_path.read_text(encoding="utf-8"))
+    report_data["metadata"] = "broken"
+    report_path.write_text(json.dumps(report_data, indent=2), encoding="utf-8")
+
+    runs = list_runs(tmp_path, only_active=False)
+
+    assert any(run["id"] == "attempt_bad_meta" for run in runs)
+
+    repaired = json.loads(report_path.read_text(encoding="utf-8"))
+    submission_meta = repaired["metadata"]["submission_metadata"]
+    assert submission_meta["attempt_id"] == "attempt_bad_meta"
+    assert submission_meta["attempt_number"] == 1
+    assert submission_meta["is_active"] is True
+    assert submission_meta["active_attempt_id"] == "attempt_bad_meta"
+
+
 def test_assignment_analytics_count_each_student_once_using_active_attempt(tmp_path: Path, monkeypatch) -> None:
     _use_temp_db(monkeypatch, tmp_path)
     create_assignment(

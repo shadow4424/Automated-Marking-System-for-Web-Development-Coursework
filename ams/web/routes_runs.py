@@ -19,6 +19,8 @@ from ams.core.config import ScoringMode
 from ams.core.db import get_assignment
 from ams.core.job_manager import job_manager
 from ams.core.pipeline import AssessmentPipeline
+from ams.io.json_utils import write_json_file
+from ams.io.report_utils import load_report_if_present
 from ams.io.web_storage import (
     extract_review_flags_from_report,
     find_run_by_id,
@@ -44,6 +46,7 @@ runs_bp = Blueprint("runs", __name__)
 MAX_UPLOAD_MB = 25
 
 
+# Match a value against a search term.
 def _match(
     run: dict[str, Any],
     *,
@@ -73,6 +76,7 @@ def _match(
 
 @runs_bp.route("/runs")
 @login_required
+# Show the run list page.
 def runs():
     runs_root = get_runs_root(current_app)
     all_runs = list_runs(runs_root, only_active=False)
@@ -100,6 +104,7 @@ def runs():
 
 @runs_bp.route("/runs/<run_id>/delete", methods=["POST"])
 @teacher_or_admin_required
+# Delete one stored run.
 def delete_run(run_id: str):
     runs_root = get_runs_root(current_app)
     run_dir = find_run_by_id(runs_root, run_id)
@@ -113,6 +118,7 @@ def delete_run(run_id: str):
 
 @runs_bp.route("/teacher/assignment/<assignment_id>/threats/delete", methods=["POST"])
 @teacher_or_admin_required
+# Delete threat runs for one assignment.
 def assignment_threat_delete(assignment_id: str):
     if not _user_can_access_assignment(assignment_id):
         flash("You do not have access to this assignment.", "error")
@@ -167,6 +173,7 @@ def assignment_threat_delete(assignment_id: str):
 
 @runs_bp.route("/runs/<run_id>")
 @login_required
+# Show the detail page for one run.
 def run_detail(run_id: str):
     runs_root = get_runs_root(current_app)
     sync_attempts_from_storage(runs_root)
@@ -241,27 +248,27 @@ def run_detail(run_id: str):
         report_path = run_dir / run_info.get("report", "report.json")
         run_status = str(run_info.get("status") or "").strip().lower()
         if run_status not in {"pending", "failed", "error"} and report_path.exists():
-            context["report"] = ensure_check_stats(
-                json.loads(report_path.read_text(encoding="utf-8"))
-            )
-            review_flags = extract_review_flags_from_report(context["report"])
-            context["run"] = dict(
-                run_info,
-                threat_flagged=bool(review_flags.get("threat_flagged")),
-                threat_count=int(review_flags.get("threat_count") or 0),
-                llm_error_flagged=bool(review_flags.get("llm_error_flagged")),
-                llm_error_message=review_flags.get("llm_error_message"),
-                llm_error_messages=list(review_flags.get("llm_error_messages") or []),
-                status=(
-                    "llm_error"
-                    if review_flags.get("llm_error_flagged")
-                    and run_status in {"", "ok", "completed", "complete", "success", "succeeded"}
-                    else run_info.get("status")
-                ),
-            )
-            context["threat_file_contents"] = load_threat_file_contents(
-                context["report"].get("findings", []), run_dir
-            )
+            report = load_report_if_present(report_path)
+            if report is not None:
+                context["report"] = ensure_check_stats(report)
+                review_flags = extract_review_flags_from_report(context["report"])
+                context["run"] = dict(
+                    run_info,
+                    threat_flagged=bool(review_flags.get("threat_flagged")),
+                    threat_count=int(review_flags.get("threat_count") or 0),
+                    llm_error_flagged=bool(review_flags.get("llm_error_flagged")),
+                    llm_error_message=review_flags.get("llm_error_message"),
+                    llm_error_messages=list(review_flags.get("llm_error_messages") or []),
+                    status=(
+                        "llm_error"
+                        if review_flags.get("llm_error_flagged")
+                        and run_status in {"", "ok", "completed", "complete", "success", "succeeded"}
+                        else run_info.get("status")
+                    ),
+                )
+                context["threat_file_contents"] = load_threat_file_contents(
+                    context["report"].get("findings", []), run_dir
+                )
         context["detail_view"] = _build_submission_detail_view(context["run"], context.get("report"))
         return render_template("marking/run_detail.html", **context)
 
@@ -273,6 +280,7 @@ def run_detail(run_id: str):
 
 @runs_bp.route("/runs/<run_id>/rerun", methods=["POST"])
 @teacher_or_admin_required
+# Queue a rerun for one submission run.
 def run_submission_rerun(run_id: str):
     runs_root = get_runs_root(current_app)
     run_dir = find_run_by_id(runs_root, run_id)
@@ -306,6 +314,7 @@ def run_submission_rerun(run_id: str):
         return redirect(url_for("runs.run_detail", run_id=run_id))
 
 
+# Re-run a submission with override settings.
 def _run_override_job(
     *,
     run_id: str,
@@ -336,6 +345,7 @@ def _run_override_job(
 
 @runs_bp.route("/runs/<run_id>/override-threat", methods=["POST"])
 @teacher_or_admin_required
+# Apply a threat override to one run.
 def override_threat(run_id: str):
     runs_root = get_runs_root(current_app)
     run_dir = find_run_by_id(runs_root, run_id)
@@ -382,6 +392,7 @@ def override_threat(run_id: str):
 
 @runs_bp.route("/runs/<run_id>/artifacts/<path:relpath>")
 @login_required
+# Download a stored run artefact.
 def run_artifact(run_id: str, relpath: str):
     runs_root = get_runs_root(current_app)
     run_dir = find_run_by_id(runs_root, run_id)
@@ -403,10 +414,10 @@ def run_artifact(run_id: str, relpath: str):
     return send_file(candidate, as_attachment=as_download, download_name=candidate.name)
 
 
+# Write the index files for an individual marking run.
 def _write_run_index_mark(run_dir: Path, run_info: dict, report_path: Path) -> None:
-    try:
-        report = json.loads(report_path.read_text(encoding="utf-8"))
-    except Exception:
+    report = load_report_if_present(report_path)
+    if report is None:
         return
 
     meta = report.get("metadata", {}) or {}
@@ -451,4 +462,4 @@ def _write_run_index_mark(run_dir: Path, run_info: dict, report_path: Path) -> N
         "is_active": run_info.get("is_active"),
         "submissions": [sub_entry],
     }
-    (run_dir / "run_index.json").write_text(json.dumps(index, indent=2), encoding="utf-8")
+    write_json_file(run_dir / "run_index.json", index, indent=2)

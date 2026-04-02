@@ -8,6 +8,7 @@ from pathlib import Path
 from ams.core.pipeline import AssessmentPipeline
 
 
+# Print the sandbox warning shown before CLI execution.
 def _print_sandbox_banner() -> None:
     """Print the sandbox status to stderr so it is always visible."""
     from ams.sandbox.config import SandboxMode, get_sandbox_config, get_sandbox_status
@@ -36,6 +37,7 @@ def _print_sandbox_banner() -> None:
         )
 
 
+# Build the command-line parser for the AMS CLI.
 def _create_parser() -> argparse.ArgumentParser:
     from ams.core.profiles import list_profile_names
 
@@ -80,6 +82,7 @@ def _create_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# Run the CLI entrypoint.
 def main(argv: list[str] | None = None) -> None:
     parser = _create_parser()
     args = parser.parse_args(argv)

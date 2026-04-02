@@ -7,6 +7,7 @@ from typing import List, Mapping, Sequence
 from ams.analytics.assignment_analytics import FUNCTIONAL_ANALYTICS_STAGES, STATIC_ANALYTICS_STAGES
 from ams.analytics.insights import _coerce_float, _first_non_empty
 
+# Imported function to be used in analytics computations, but not directly exposed by this module
 def _interactive_graphs(
     *,
     records: List[Mapping[str, object]],
@@ -22,8 +23,10 @@ def _interactive_graphs(
         for record in records
         if str(record.get("student_id") or "").strip()
     }
+    # Build histogram data for overall mark distribution
     histogram = _build_mark_distribution_histogram(records)
 
+    # Build component performance distribution data
     component_rows: List[dict] = []
     for component_summary in components:
         component = str(component_summary.get("component") or "")
@@ -36,6 +39,8 @@ def _interactive_graphs(
             "other": [],
             "not_scored": [],
         }
+
+        # Track related rule IDs that contributed to this component's performance for potential drill-downs or insights
         related_rule_ids: set[str] = set()
         for record in records:
             student_id = str(record.get("student_id") or "").strip()
@@ -52,9 +57,13 @@ def _interactive_graphs(
                 state_students["other"].append(student_id)
             else:
                 state_students["not_scored"].append(student_id)
+
+            # Finds rules that had negative outcomes related to this component for the student, which may indicate common issues or areas for improvement
             for outcome in record.get("problem_outcomes", []) or []:
                 if str(outcome.get("component") or "").lower() == component and str(outcome.get("status") or "") in {"FAIL", "WARN"}:
                     related_rule_ids.add(str(outcome.get("id") or ""))
+        
+        #Component performance summary
         component_rows.append(
             {
                 "component": component,
@@ -64,6 +73,7 @@ def _interactive_graphs(
                 else None,
                 "total_evaluable": int(component_summary.get("total_evaluable", 0) or 0),
                 "segments": [
+                    # This segment shows students who scored 0 on this component 
                     _graph_segment(
                         segment_id=f"{component}_zero",
                         label="Score 0",
@@ -71,6 +81,7 @@ def _interactive_graphs(
                         total=len(records),
                         student_ids=state_students["zero"],
                     ),
+                    # This segment shows students who scored 0.5 on this component
                     _graph_segment(
                         segment_id=f"{component}_half",
                         label="Score 0.5",
@@ -78,6 +89,7 @@ def _interactive_graphs(
                         total=len(records),
                         student_ids=state_students["half"],
                     ),
+                    # This segment shows students who scored 1 on this component
                     _graph_segment(
                         segment_id=f"{component}_full",
                         label="Score 1",
@@ -85,6 +97,7 @@ def _interactive_graphs(
                         total=len(records),
                         student_ids=state_students["full"],
                     ),
+                    # This segment captures any students who had partal credit
                     _graph_segment(
                         segment_id=f"{component}_other",
                         label="Other scored states",
@@ -92,6 +105,7 @@ def _interactive_graphs(
                         total=len(records),
                         student_ids=state_students["other"],
                     ),
+                    # This segment captures students who were not scored on this component
                     _graph_segment(
                         segment_id=f"{component}_not_scored",
                         label="Not scored",
@@ -104,6 +118,7 @@ def _interactive_graphs(
             }
         )
 
+    # Build requirement coverage matrix data
     requirement_rows: List[dict] = []
     for row in requirement_coverage:
         component = str(row.get("component") or "")
@@ -115,6 +130,7 @@ def _interactive_graphs(
                 "title": str(row.get("title") or component.upper()),
                 "rule_count": int(row.get("rule_count", 0) or 0),
                 "cells": [
+                    # This segment shows students who fully met the requirement
                     _graph_segment(
                         segment_id=f"{component}_met",
                         label="Met",
@@ -122,6 +138,7 @@ def _interactive_graphs(
                         total=len(records),
                         student_ids=list(row.get("met_students", []) or []),
                     ),
+                    # This segment shows students who partially met the requirement
                     _graph_segment(
                         segment_id=f"{component}_partial",
                         label="Partial",
@@ -129,6 +146,7 @@ def _interactive_graphs(
                         total=len(records),
                         student_ids=list(row.get("partial_students", []) or []),
                     ),
+                    # This segment shows students who did not meet the requirement at all
                     _graph_segment(
                         segment_id=f"{component}_unmet",
                         label="Unmet",
@@ -136,6 +154,7 @@ def _interactive_graphs(
                         total=len(records),
                         student_ids=list(row.get("unmet_students", []) or []),
                     ),
+                    # This segment captures students whose requirement status was not evaluated
                     _graph_segment(
                         segment_id=f"{component}_not_evaluable",
                         label="Not evaluable",
@@ -147,11 +166,13 @@ def _interactive_graphs(
             }
         )
 
+    # Holds breakdowns of evaluation states and confidence levels
     reliability_groups = [
         {
             "id": "evaluation_state",
             "label": "Evaluation state",
             "segments": [
+                # This segment shows students whose submissions were fully evaluated without major issues
                 _graph_segment(
                     segment_id="fully_evaluated",
                     label="Fully evaluated",
@@ -163,6 +184,7 @@ def _interactive_graphs(
                         if record.get("evaluation_state") == "fully_evaluated" and str(record.get("student_id") or "").strip()
                     ],
                 ),
+                # This segment shows students whose submissions were only partially evaluated
                 _graph_segment(
                     segment_id="partially_evaluated",
                     label="Partially evaluated",
@@ -174,6 +196,7 @@ def _interactive_graphs(
                         if record.get("evaluation_state") == "partially_evaluated" and str(record.get("student_id") or "").strip()
                     ],
                 ),
+                # This segment captures students whose submissions could not be analysed at all
                 _graph_segment(
                     segment_id="not_analysable",
                     label="Not analysable",
@@ -187,10 +210,12 @@ def _interactive_graphs(
                 ),
             ],
         },
+        # This group breaks down the confidence levels assigned to each submission
         {
             "id": "confidence",
             "label": "Confidence level",
             "segments": [
+                # This segment shows students whose submissions were evaluated with high confidence
                 _graph_segment(
                     segment_id="confidence_high",
                     label="High confidence",
@@ -202,6 +227,7 @@ def _interactive_graphs(
                         if record.get("confidence") == "high" and str(record.get("student_id") or "").strip()
                     ],
                 ),
+                # This segment shows students whose submissions were evaluated with medium confidence
                 _graph_segment(
                     segment_id="confidence_medium",
                     label="Medium confidence",
@@ -213,6 +239,7 @@ def _interactive_graphs(
                         if record.get("confidence") == "medium" and str(record.get("student_id") or "").strip()
                     ],
                 ),
+                # This segment shows students whose submissions were evaluated with low confidence
                 _graph_segment(
                     segment_id="confidence_low",
                     label="Low confidence",
@@ -228,7 +255,9 @@ def _interactive_graphs(
         },
     ]
 
+    # This group captures specific limitations or issues that impacted the evaluation reliability
     limitation_rows = [
+        # This segment shows students whose submissions were flagged for manual review
         _graph_segment(
             segment_id="manual_review",
             label="Manual review recommended",
@@ -240,6 +269,7 @@ def _interactive_graphs(
                 if record.get("manual_review_recommended") and str(record.get("student_id") or "").strip()
             ],
         ),
+        # This segment shows students whose submissions had runtime checks skipped or unavailable
         _graph_segment(
             segment_id="runtime_skipped",
             label="Runtime checks skipped or unavailable",
@@ -251,6 +281,7 @@ def _interactive_graphs(
                 if (record.get("runtime_flags", {}) or {}).get("runtime_skipped") and str(record.get("student_id") or "").strip()
             ],
         ),
+        # This segment shows students whose submissions had browser checks skipped or unavailable
         _graph_segment(
             segment_id="browser_skipped",
             label="Browser checks skipped or unavailable",
@@ -262,6 +293,7 @@ def _interactive_graphs(
                 if (record.get("runtime_flags", {}) or {}).get("browser_skipped") and str(record.get("student_id") or "").strip()
             ],
         ),
+        # This segment captures students whose submissions had runtime issues that may have impacted evaluation reliability
         _graph_segment(
             segment_id="runtime_issue",
             label="Runtime failures or timeouts",
@@ -273,6 +305,7 @@ def _interactive_graphs(
                 if (record.get("runtime_flags", {}) or {}).get("runtime_issue") and str(record.get("student_id") or "").strip()
             ],
         ),
+        # This segment captures students whose submissions had browser issues that may have impacted evaluation reliability
         _graph_segment(
             segment_id="browser_issue",
             label="Browser failures, timeouts, or console errors",
@@ -286,12 +319,15 @@ def _interactive_graphs(
         ),
     ]
 
+    # Plotting data points for static vs behavioural scores scatter plot
     scatter_points: List[dict] = []
     plotted_static_scores: List[float] = []
     plotted_functional_scores: List[float] = []
     static_requirement_support = 0
     functional_requirement_support = 0
     behavioural_evaluable_students = 0
+    
+    # Iterate through each student record to extract scores and requirement
     for record in records:
         student_id = str(record.get("student_id") or "").strip()
         if not student_id:
@@ -300,11 +336,13 @@ def _interactive_graphs(
         score_percent = round(float(overall) * 100, 2) if isinstance(overall, (int, float)) else None
         static_axis = _requirement_axis_score(record, STATIC_ANALYTICS_STAGES)
         functional_axis = _requirement_axis_score(record, FUNCTIONAL_ANALYTICS_STAGES)
+        # Convert the axis scores to percentage format for plotting
         static_score_percent = (
             round(float(static_axis["score"]) * 100, 2)
             if isinstance(static_axis.get("score"), (int, float))
             else None
         )
+        # Convert the axis scores to percentage format for plotting
         behavioural_score_percent = (
             round(float(functional_axis["score"]) * 100, 2)
             if isinstance(functional_axis.get("score"), (int, float))
@@ -318,6 +356,8 @@ def _interactive_graphs(
             plotted_static_scores.append(static_score_percent)
         if behavioural_score_percent is not None:
             plotted_functional_scores.append(behavioural_score_percent)
+        
+        # Each point on the scatter plot represents a student's performance, with additional metadata for filtering and insights
         scatter_points.append(
             {
                 "id": student_id,
@@ -347,6 +387,7 @@ def _interactive_graphs(
             }
         )
 
+    # The scatter plot is only supported if there are enough records and evidence
     scatter_supported = bool(
         records
         and static_requirement_support > 0
@@ -363,7 +404,9 @@ def _interactive_graphs(
     elif static_requirement_support == 0:
         scatter_reason = "Static and code-quality evidence is not available for the current assignment."
 
+    # Build coverage breakdown data for missing/incomplete submissions
     coverage_rows = [
+        # This segment captures the total number of students assigned to the assignment
         _graph_segment(
             segment_id="assigned_students",
             label="Assigned students",
@@ -371,6 +414,7 @@ def _interactive_graphs(
             total=int(coverage.get("assigned_students", 0) or 0),
             student_ids=list(coverage.get("assigned_student_ids", []) or []),
         ),
+        # This segment shows students who actively submitted work that was within the scope of evaluation
         _graph_segment(
             segment_id="active_in_scope",
             label="Active submissions in scope",
@@ -378,6 +422,7 @@ def _interactive_graphs(
             total=int(coverage.get("assigned_students", 0) or 0),
             student_ids=list(coverage.get("active_student_ids", []) or []),
         ),
+        # This segment captures students who were assigned but did not submit any work or whose submissions were not captured for evaluation
         _graph_segment(
             segment_id="missing_assigned",
             label="Assigned but not submitted",
@@ -385,6 +430,7 @@ def _interactive_graphs(
             total=int(coverage.get("assigned_students", 0) or 0),
             student_ids=list(coverage.get("missing_students", []) or []),
         ),
+        # This segment captures students who submitted work but it could not be analysed due to issues
         _graph_segment(
             segment_id="submitted_not_analysable",
             label="Submitted but not analysable",
@@ -396,6 +442,7 @@ def _interactive_graphs(
                 if record.get("evaluation_state") == "not_analysable" and str(record.get("student_id") or "").strip()
             ],
         ),
+        # This segment captures students whose submissions were excluded from evaluation or superseded by later submissions
         _graph_segment(
             segment_id="excluded_or_superseded",
             label="Excluded or superseded",
@@ -403,6 +450,7 @@ def _interactive_graphs(
             total=int(coverage.get("assigned_students", 0) or 0),
             student_ids=list(coverage.get("inactive_or_superseded_students", []) or []),
         ),
+        # This segment shows students whose submissions were fully evaluated and contributed to the final marks
         _graph_segment(
             segment_id="fully_evaluated_coverage",
             label="Fully evaluated",
@@ -414,6 +462,7 @@ def _interactive_graphs(
                 if record.get("evaluation_state") == "fully_evaluated" and str(record.get("student_id") or "").strip()
             ],
         ),
+        # This segment shows students whose submissions were only partially evaluated
         _graph_segment(
             segment_id="partially_evaluated_coverage",
             label="Partially evaluated",
@@ -427,6 +476,7 @@ def _interactive_graphs(
         ),
     ]
 
+    # Compile all the graph data into a single structure to be consumed by the frontend for rendering interactive analytics dashboards
     return {
         "student_index": student_index,
         "mark_distribution_histogram": {
@@ -487,7 +537,7 @@ def _interactive_graphs(
             "stages": coverage_rows,
         },
     }
-
+# Function to build a histogram of mark distribution based on the overall scores of student records
 def _build_mark_distribution_histogram(records: Sequence[Mapping[str, object]]) -> dict:
     scored_records: List[dict[str, object]] = []
     for record in records:
@@ -498,10 +548,12 @@ def _build_mark_distribution_histogram(records: Sequence[Mapping[str, object]]) 
         student_id = str(record.get("student_id") or "").strip()
         scored_records.append({"student_id": student_id, "percent": percent})
 
+    # Sets width of histogram bins based on the number of scored records
     scored_count = len(scored_records)
     bin_width = 5 if scored_count >= 20 else 10
     bins: List[dict] = []
 
+    # Create width for the histogram and count how many students fall into each percentage range
     for start in range(0, 100, bin_width):
         end = min(start + bin_width, 100)
         student_ids = [
@@ -526,6 +578,7 @@ def _build_mark_distribution_histogram(records: Sequence[Mapping[str, object]]) 
             }
         )
 
+    # Extract the percentage marks for scored records to calculate mean and median for reference lines on the histogram
     scored_marks = [float(item["percent"]) for item in scored_records]
     return {
         "scored_students": scored_count,
@@ -536,6 +589,7 @@ def _build_mark_distribution_histogram(records: Sequence[Mapping[str, object]]) 
         "bins": bins,
     }
 
+# Creates a snapshot of a student's performance and evaluation details for use in interactive graphs and drill-downs, extracting key metrics and metadata from the record
 def _student_graph_snapshot(record: Mapping[str, object]) -> dict:
     overall = record.get("overall")
     static_axis = _requirement_axis_score(record, STATIC_ANALYTICS_STAGES)
@@ -576,6 +630,7 @@ def _student_graph_snapshot(record: Mapping[str, object]) -> dict:
         "source_mode": str(record.get("source_mode") or ""),
     }
 
+# Defining segments for the coverage breakdown chart
 def _graph_segment(
     *,
     segment_id: str,
@@ -593,6 +648,7 @@ def _graph_segment(
         "student_ids": clean_students,
     }
 
+# Calculates a score for the requirement axis
 def _requirement_axis_score(
     record: Mapping[str, object],
     stages: Sequence[str],
@@ -604,6 +660,7 @@ def _requirement_axis_score(
     evaluable_count = 0
     requirement_count = 0
 
+    # Iterate through each requirement in the student's score evidence to calculate a weighted score
     for requirement in requirements:
         if not isinstance(requirement, Mapping):
             continue
@@ -630,6 +687,7 @@ def _requirement_axis_score(
         "evaluable_count": evaluable_count,
     }
 
+# Converts various representations of requirement scores into a standardised numeric format
 def _requirement_numeric_score(requirement: Mapping[str, object]) -> float | None:
     raw_score = _coerce_float(requirement.get("score"))
     if raw_score is not None:
@@ -646,6 +704,7 @@ def _requirement_numeric_score(requirement: Mapping[str, object]) -> float | Non
         return None
     return None
 
+# Categorises rules into broader buckets based on their identifiers
 def _rule_category(rule_id: str) -> str:
     identifier = str(rule_id or "").upper()
     if identifier.startswith("BROWSER."):
@@ -664,8 +723,10 @@ def _rule_category(rule_id: str) -> str:
         return "confidence/runner limitation"
     return "other"
 
+# This function breaks down the composition of a student's score into different sources of evidence and issues
 def _score_composition(records: List[Mapping[str, object]], total: int) -> List[dict]:
     sources = [
+        # Source for static analysis evidence
         {
             "id": "static_analysis",
             "label": "Static analysis",
@@ -684,6 +745,7 @@ def _score_composition(records: List[Mapping[str, object]], total: int) -> List[
                 bool(record.get("required_rules")) or int((record.get("check_stats") or {}).get("total", 0)) > 0
             ),
         },
+        # Source for behavioural and runtime checks
         {
             "id": "runtime_checks",
             "label": "Behavioural and runtime checks",
@@ -702,6 +764,7 @@ def _score_composition(records: List[Mapping[str, object]], total: int) -> List[
                 or record.get("runtime_flags", {}).get("runtime_issue")
             ),
         },
+        # Source for browser-based checks and client-side evidence
         {
             "id": "browser_checks",
             "label": "Browser interaction checks",
@@ -720,6 +783,7 @@ def _score_composition(records: List[Mapping[str, object]], total: int) -> List[
                 or record.get("runtime_flags", {}).get("browser_issue")
             ),
         },
+        # Source for penalties and quality checks that may impact the score due to issues or inconsistencies
         {
             "id": "penalties",
             "label": "Penalties and quality checks",
@@ -740,6 +804,7 @@ def _score_composition(records: List[Mapping[str, object]], total: int) -> List[
             "skipped_incidents": lambda record: 0,
             "confidence_reduced": lambda record: bool(record.get("runtime_flags", {}).get("consistency_issue")),
         },
+        # Source for issues related to skipped checks or unavailable evidence that may have reduced confidence in the evaluation
         {
             "id": "skipped_logic",
             "label": "Skipped or unavailable checks",
@@ -756,6 +821,7 @@ def _score_composition(records: List[Mapping[str, object]], total: int) -> List[
         },
     ]
 
+    # Iterate through each source of evidence and calculate how many students were affected by issues in that category
     rows: List[dict] = []
     for source in sources:
         students: set[str] = set()

@@ -13,6 +13,7 @@ from ams.analytics.assignment_analytics import (
 )
 from ams.core.profiles import get_relevant_components
 
+# Build the teaching insights shown on the assignment analytics view.
 def _teaching_insights(
     *,
     context: Mapping[str, object],
@@ -32,6 +33,7 @@ def _teaching_insights(
     top_rule = dict(context.get("top_failing_rule", {}) or {})
     major_limitations = list(context.get("major_limitations", []) or [])
 
+    # Provide insights on the current coverage of active submissions in scope.
     if assigned_students:
         if active_in_scope == 0:
             coverage_text = "No assigned students currently have an active submission in scope."
@@ -59,6 +61,7 @@ def _teaching_insights(
             }
         )
 
+    # Provide insights on the strongest and weakest requirement areas by full attainment.
     if strongest and weakest:
         if strongest.get("title") == weakest.get("title"):
             requirement_text = f"{strongest.get('title', 'Requirement coverage')} is the only requirement area with enough evaluable evidence to summarise so far."
@@ -84,6 +87,7 @@ def _teaching_insights(
             }
         )
 
+    # Provide insights on the most common failing rule and how many active submissions it is affecting.
     if top_rule:
         affected = int(top_rule.get("submissions_affected", top_rule.get("students_affected", 0)) or 0)
         top_rule_text = (
@@ -106,6 +110,7 @@ def _teaching_insights(
             }
         )
 
+    # Provide insights on the current reliability of automated evaluation across the active submissions in scope.
     if manual_review or partially_evaluated or not_analysable or limitation_incidents:
         reliability_text = (
             f"Manual review is recommended for {manual_review} active submission{'s' if manual_review != 1 else ''}; "
@@ -128,6 +133,7 @@ def _teaching_insights(
             }
         )
     else:
+        # When there are no active submissions in scope with reliability issues, provide a positive insight to reflect this.
         insights.append(
             {
                 "insight_type": "reliability",
@@ -144,6 +150,7 @@ def _teaching_insights(
 
     return insights[:4]
 
+# Build the structured context used by teaching insights.
 def _teaching_insight_context(
     *,
     profile: str,
@@ -158,13 +165,17 @@ def _teaching_insight_context(
     total_records: int,
     small_cohort: Mapping[str, object],
 ) -> dict:
+    
+    # Identify the strongest and weakest requirement areas.
     strongest = None
     weakest = None
     if requirement_coverage:
+        # Sort by met_percent, then students_met, then title to ensure a stable pick of strongest and weakest when there are ties.
         strongest_row = max(
             requirement_coverage,
             key=lambda row: (float(row.get("met_percent", 0) or 0), int(row.get("students_met", 0) or 0), str(row.get("title") or "")),
         )
+        # Sort in the same way as strongest but in reverse to get the weakest.
         weakest_row = min(
             requirement_coverage,
             key=lambda row: (float(row.get("met_percent", 0) or 0), int(row.get("students_met", 0) or 0), str(row.get("title") or "")),
@@ -182,6 +193,7 @@ def _teaching_insight_context(
             "met_percent": round(float(weakest_row.get("met_percent", 0) or 0), 2),
         }
 
+    # Summarise the most common failing rule.
     top_rule = None
     if top_failing_rules:
         first_rule = dict(top_failing_rules[0])
@@ -194,6 +206,7 @@ def _teaching_insight_context(
             "percent": round(float(first_rule.get("percent", 0) or 0), 2),
         }
 
+    # Build the cohort score-band breakdown.
     score_band_distribution = [
         {
             "label": str(label),
@@ -204,12 +217,15 @@ def _teaching_insight_context(
     ]
     dominant_score_band = None
     non_zero_score_bands = [item for item in score_band_distribution if int(item.get("count", 0) or 0) > 0]
+    
+    # If there is a single score band that clearly dominates the distribution, identify it to enable targeted insights.
     if non_zero_score_bands:
         max_count = max(int(item.get("count", 0) or 0) for item in non_zero_score_bands)
         leaders = [item for item in non_zero_score_bands if int(item.get("count", 0) or 0) == max_count]
         if len(leaders) == 1:
             dominant_score_band = leaders[0]
 
+    # Flatten requirement coverage into a compact summary.
     requirement_summary = [
         {
             "component": row.get("component"),
@@ -224,6 +240,7 @@ def _teaching_insight_context(
         for row in list(requirement_coverage or [])
     ]
 
+    # Flatten component performance into a compact summary.
     component_summary = [
         {
             "component": row.get("component"),
@@ -239,6 +256,7 @@ def _teaching_insight_context(
         for row in list(components or [])
     ]
 
+    # Group top failing rules into broader issue categories.
     major_rule_categories_map: dict[str, dict[str, object]] = {}
     for rule in list(top_failing_rules or []):
         category = str(rule.get("category") or "other")
@@ -253,11 +271,14 @@ def _teaching_insight_context(
                 "warning_incidents": 0,
             },
         )
+        # This adds up the total number of distinct rules, students, and incidents affected within each major category
         entry["rules_affected"] = int(entry["rules_affected"]) + 1
         entry["students_affected_total"] = int(entry["students_affected_total"]) + int(rule.get("students_affected", 0) or 0)
         entry["incident_count_total"] = int(entry["incident_count_total"]) + int(rule.get("incident_count", 0) or 0)
         entry["fail_incidents"] = int(entry["fail_incidents"]) + int(rule.get("fail_incidents", 0) or 0)
         entry["warning_incidents"] = int(entry["warning_incidents"]) + int(rule.get("warning_incidents", 0) or 0)
+    
+    # Sort the major categories by total students affected, then total incidents, then category name
     major_rule_categories = sorted(
         major_rule_categories_map.values(),
         key=lambda item: (
@@ -267,12 +288,15 @@ def _teaching_insight_context(
         ),
     )[:4]
 
+    # Measure the largest gaps between static and behavioural scores.
     scatter = dict((interactive_graphs or {}).get("static_functional_scatter_plot", {}) or {})
     mismatch_examples: List[dict[str, object]] = []
     high_static_low_behavioural = 0
     high_behavioural_low_static = 0
     balanced_submissions = 0
     plotted_students = 0
+
+    # Loops through the scatter plot points to identify examples with large gaps between static and behavioural scores
     for point in list(scatter.get("points", []) or []):
         static_score = _coerce_float(point.get("static_score_percent"))
         behavioural_score = _coerce_float(point.get("behavioural_score_percent"))
@@ -299,6 +323,7 @@ def _teaching_insight_context(
         )
     mismatch_examples.sort(key=lambda item: abs(float(item.get("gap_percent", 0) or 0)), reverse=True)
 
+    # Keep a few flagged examples for quick review.
     flagged_examples = [
         {
             "student_id": item.get("student_id"),
@@ -311,6 +336,7 @@ def _teaching_insight_context(
         for item in list(needs_attention or [])[:4]
     ]
 
+    # Keep the top failing rules in a lighter summary format.
     top_rules_summary = [
         {
             "rule_id": item.get("rule_id"),
@@ -326,6 +352,7 @@ def _teaching_insight_context(
         for item in list(top_failing_rules or [])[:5]
     ]
 
+    # Build the structured context with all the metrics and insights needed to power the teaching insights and other analytics features.
     return {
         "profile": profile,
         "assigned_students": int(coverage.get("assigned_students", 0) or 0),
@@ -404,6 +431,7 @@ def _teaching_insight_context(
         "small_cohort_note": str(small_cohort.get("note") or ""),
     }
 
+# Build the student-facing analytics payload from the cohort data.
 def _build_student_assignment_analytics(
     *,
     assignment: Mapping[str, object],
@@ -421,6 +449,8 @@ def _build_student_assignment_analytics(
     top_rules = list(analytics.get("top_failing_rules", []) or [])
     component_rows = list(analytics.get("components", []) or [])
     requirement_rows = list(analytics.get("requirement_coverage", []) or [])
+
+    # Rebuild the student-specific comparisons and feedback blocks.
     graphs = _student_safe_graphs(records, student_record)
     component_comparison = _student_component_comparison(
         student_record=student_record,
@@ -428,21 +458,25 @@ def _build_student_assignment_analytics(
         records=records,
         relevant_components=relevant_components,
     )
+    # Gets top failing context to feed into multiple sections of the student insights
     top_failing_context = _student_top_failing_context(
         student_record=student_record,
         top_rules=top_rules,
     )
+    # Gets strengths and improvements to feed into multiple sections of the student insights
     strengths, improvements = _student_strengths_and_improvements(
         student_record=student_record,
         component_comparison=component_comparison,
         top_failing_context=top_failing_context,
     )
+    # Gets the key areas the student needs to pay attention to
     needs_attention = _student_needs_attention_items(
         student_record=student_record,
         overall=overall,
         component_comparison=component_comparison,
         top_failing_context=top_failing_context,
     )
+    # Gets detailed checks to feed into the detailed feedback section
     detailed_checks = _student_detailed_checks(student_record, top_rules)
     student_summary = _student_result_summary(
         assignment=assignment,
@@ -450,6 +484,7 @@ def _build_student_assignment_analytics(
         overall=overall,
         component_comparison=component_comparison,
     )
+    # Build the structured context with all the metrics and insights
     feedback_context = _student_personal_context(
         assignment=assignment,
         student_record=student_record,
@@ -463,12 +498,14 @@ def _build_student_assignment_analytics(
     )
     personal_insights = _student_personal_insights(feedback_context)
 
+    # Compare the student's requirement states with the cohort view.
     requirement_comparison = []
     for row in requirement_rows:
         component = str(row.get("component") or "").strip().lower()
         if component and component not in relevant_components:
             continue
         requirement_state = _student_requirement_state(student_record, component)
+        # For each requirement, we compare the student's status with the cohort's performance to provide context on how they are doing relative to their peers.
         requirement_comparison.append(
             {
                 "component": component,
@@ -487,6 +524,7 @@ def _build_student_assignment_analytics(
             }
         )
 
+    # Build the structured context with all the metrics and insights
     return {
         "assignment": {
             "id": str(assignment.get("assignmentID") or ""),
@@ -495,6 +533,7 @@ def _build_student_assignment_analytics(
             "marks_released": bool(assignment.get("marks_released")),
             "due_date": str(assignment.get("due_date") or ""),
         },
+        # The student summary block is built separately
         "student": student_summary,
         "cohort": {
             "submission_count": len(records),
@@ -521,6 +560,7 @@ def _build_student_assignment_analytics(
         "feedback_context": feedback_context,
     }
 
+# Build the summary block shown at the top of the student view.
 def _student_result_summary(
     *,
     assignment: Mapping[str, object],
@@ -571,12 +611,14 @@ def _student_result_summary(
         ),
     }
 
+# Build graph data that is safe to show on an individual student page.
 def _student_safe_graphs(
     records: Sequence[Mapping[str, object]],
     student_record: Mapping[str, object],
 ) -> dict:
     from ams.analytics.graphs import _build_mark_distribution_histogram, _requirement_axis_score
 
+    # Hide other student identities in the histogram.
     student_id = str(student_record.get("student_id") or "").strip()
     histogram = _build_mark_distribution_histogram(records)
     safe_bins = []
@@ -598,12 +640,14 @@ def _student_safe_graphs(
             }
         )
 
+    # Rebuild the scatter plot using anonymous points.
     scatter_points: list[dict] = []
     plotted_static_scores: list[float] = []
     plotted_behavioural_scores: list[float] = []
     behavioural_evaluable_students = 0
     static_requirement_support = 0
     behavioural_requirement_support = 0
+    # Loops through the records to build the scatter plot points while keeping student identities anonymous
     for record in records:
         current_student_id = str(record.get("student_id") or "").strip()
         if not current_student_id:
@@ -611,16 +655,20 @@ def _student_safe_graphs(
         overall_score = record.get("overall")
         static_axis = _requirement_axis_score(record, STATIC_ANALYTICS_STAGES)
         behavioural_axis = _requirement_axis_score(record, FUNCTIONAL_ANALYTICS_STAGES)
+        # Only show static scores for students with some evaluable static evidence
         static_score_percent = (
             round(float(static_axis.get("score", 0) or 0) * 100, 2)
             if isinstance(static_axis.get("score"), (int, float))
             else None
         )
+        # Only show behavioural scores for students with some evaluable behavioural evidence
         behavioural_score_percent = (
             round(float(behavioural_axis.get("score", 0) or 0) * 100, 2)
             if isinstance(behavioural_axis.get("score"), (int, float))
             else None
         )
+
+        # Tracks the total requirement support and evaluable evidence across the cohort
         static_requirement_support += int(static_axis.get("requirement_count", 0) or 0)
         behavioural_requirement_support += int(behavioural_axis.get("requirement_count", 0) or 0)
         if int(behavioural_axis.get("evaluable_count", 0) or 0) > 0:
@@ -629,6 +677,8 @@ def _student_safe_graphs(
             plotted_static_scores.append(static_score_percent)
         if behavioural_score_percent is not None:
             plotted_behavioural_scores.append(behavioural_score_percent)
+        
+        # Builds the scatter plot points with anonymous student IDs and includes flags for the current student and evidence support levels
         scatter_points.append(
             {
                 "static_score_percent": static_score_percent,
@@ -644,12 +694,15 @@ def _student_safe_graphs(
             }
         )
 
+    # Hide the scatter plot when there is not enough cohort evidence.
     scatter_supported = bool(
         records
         and static_requirement_support > 0
         and behavioural_requirement_support > 0
         and behavioural_evaluable_students >= 2
     )
+
+    # Provide clear reasons when the scatter plot is not supported
     scatter_reason = ""
     if not records:
         scatter_reason = "Cohort comparison will appear once assignment submissions are available."
@@ -660,6 +713,7 @@ def _student_safe_graphs(
     elif static_requirement_support == 0:
         scatter_reason = "Static and code-quality evidence is not available for this assignment."
 
+    # Build the structured context for the graphs section
     return {
         "histogram": {
             "unscored_submissions": int(histogram.get("unscored_submissions", 0) or 0),
@@ -694,6 +748,7 @@ def _student_safe_graphs(
         },
     }
 
+# Compare the student's component scores with the cohort.
 def _student_component_comparison(
     *,
     student_record: Mapping[str, object],
@@ -702,6 +757,8 @@ def _student_component_comparison(
     relevant_components: Sequence[str],
 ) -> list[dict]:
     rows: list[dict] = []
+
+    # For each component, we compare the student's score with the cohort's average and median
     for row in component_rows:
         component = str(row.get("component") or "").strip().lower()
         if component and component not in relevant_components:
@@ -732,6 +789,7 @@ def _student_component_comparison(
             }
         )
 
+    # Sorts the components by student performance, then cohort median, then component name
     rows.sort(
         key=lambda item: (
             -(float(item.get("student_percent")) if isinstance(item.get("student_percent"), (int, float)) else -1.0),
@@ -740,16 +798,19 @@ def _student_component_comparison(
     )
     return rows
 
+# Show how the student performed against the top failing cohort rules.
 def _student_top_failing_context(
     *,
     student_record: Mapping[str, object],
     top_rules: Sequence[Mapping[str, object]],
 ) -> list[dict]:
+    # We build an index of the student's outcomes by rule ID
     outcome_index = {
         str(outcome.get("id") or ""): dict(outcome)
         for outcome in list(student_record.get("problem_outcomes", []) or [])
         if str(outcome.get("id") or "").strip()
     }
+    # For each top failing rule in the cohort, checklist the student's status and provide context on how they did compared to the cohort
     rows: list[dict] = []
     for rule in list(top_rules or [])[:6]:
         rule_id = str(rule.get("rule_id") or "").strip()
@@ -785,6 +846,7 @@ def _student_top_failing_context(
         )
     return rows
 
+# Turn the comparison data into strengths and improvements.
 def _student_strengths_and_improvements(
     *,
     student_record: Mapping[str, object],
@@ -795,6 +857,7 @@ def _student_strengths_and_improvements(
     strengths: list[dict] = []
     improvements: list[dict] = []
 
+    # Surface the strongest assessed areas first.
     for component in list(component_comparison or [])[:2]:
         if not isinstance(component.get("student_percent"), (int, float)):
             continue
@@ -810,6 +873,7 @@ def _student_strengths_and_improvements(
             }
         )
 
+    # Turn missed common rules into improvement points.
     for rule in list(top_failing_context or []):
         if rule.get("student_status") not in {"FAIL", "PARTIAL"}:
             continue
@@ -826,6 +890,7 @@ def _student_strengths_and_improvements(
         if len(improvements) >= 3:
             break
 
+    # Fall back to low-scoring components if needed.
     for component in reversed(list(component_comparison or [])):
         if len(improvements) >= 3:
             break
@@ -847,6 +912,7 @@ def _student_strengths_and_improvements(
             }
         )
 
+    # Always return at least one strength when evidence exists.
     if not strengths and component_comparison:
         top_component = component_comparison[0]
         strengths.append(
@@ -861,6 +927,7 @@ def _student_strengths_and_improvements(
 
     return strengths[:3], improvements[:4]
 
+# Build the key items that need the student's attention.
 def _student_needs_attention_items(
     *,
     student_record: Mapping[str, object],
@@ -868,6 +935,7 @@ def _student_needs_attention_items(
     component_comparison: Sequence[Mapping[str, object]],
     top_failing_context: Sequence[Mapping[str, object]],
 ) -> list[dict]:
+    # Flag manual review and confidence issues first.
     items: list[dict] = []
     if bool(student_record.get("manual_review_recommended")):
         items.append(
@@ -878,6 +946,7 @@ def _student_needs_attention_items(
             }
         )
 
+    # Adds a general confidence flag when confidence is not high
     confidence = str(student_record.get("confidence") or "high").strip().lower()
     if confidence != "high":
         items.append(
@@ -888,6 +957,7 @@ def _student_needs_attention_items(
             }
         )
 
+    # Compare the overall result with the cohort median.
     student_percent = (
         round(float(student_record.get("overall", 0) or 0) * 100, 2)
         if isinstance(student_record.get("overall"), (int, float))
@@ -910,6 +980,7 @@ def _student_needs_attention_items(
             }
         )
 
+    # Surface the first component that sits below the cohort median.
     for component in list(component_comparison or []):
         if not isinstance(component.get("student_percent"), (int, float)):
             continue
@@ -926,6 +997,7 @@ def _student_needs_attention_items(
             )
             break
 
+    # Note when a common cohort issue also affected this student.
     for rule in list(top_failing_context or []):
         if rule.get("student_status") in {"FAIL", "PARTIAL"} and bool(rule.get("common_issue")):
             items.append(
@@ -942,10 +1014,12 @@ def _student_needs_attention_items(
 
     return items[:4]
 
+# Build the detailed check list for the student page.
 def _student_detailed_checks(
     student_record: Mapping[str, object],
     top_rules: Sequence[Mapping[str, object]],
 ) -> list[dict]:
+    # Map requirement and cohort rule context by id.
     requirement_index = {
         str(requirement.get("requirement_id") or "").strip(): dict(requirement)
         for requirement in list((student_record.get("score_evidence", {}) or {}).get("requirements", []) or [])
@@ -956,6 +1030,7 @@ def _student_detailed_checks(
         for rule in list(top_rules or [])
         if str(rule.get("rule_id") or "").strip()
     }
+    # Rebuild each recorded outcome with cohort context.
     rows: list[dict] = []
     for outcome in list(student_record.get("problem_outcomes", []) or []):
         rule_id = str(outcome.get("id") or "").strip()
@@ -964,6 +1039,7 @@ def _student_detailed_checks(
         requirement = requirement_index.get(rule_id, {})
         cohort_rule = top_rule_index.get(rule_id, {})
         status = str(outcome.get("status") or "").upper()
+        # We only show rules that are relevant to the student's attempt and have some cohort context to share.
         rows.append(
             {
                 "id": rule_id,
@@ -981,6 +1057,8 @@ def _student_detailed_checks(
                 ),
             }
         )
+
+    # Sorts the checks by severity, then component, then rule ID
     rows.sort(
         key=lambda item: (
             -SEVERITY_PRIORITY.get(str(item.get("status") or "PASS"), 0),
@@ -990,6 +1068,7 @@ def _student_detailed_checks(
     )
     return rows
 
+# Build the prompt context used for student-facing insights.
 def _student_personal_context(
     *,
     assignment: Mapping[str, object],
@@ -1016,23 +1095,29 @@ def _student_personal_context(
         "confidence": str(student_record.get("confidence") or "high").capitalize(),
         "confidence_explanation": _student_confidence_explanation(student_record),
         "manual_review_recommended": bool(student_record.get("manual_review_recommended")),
+        # We include the top strengths, improvements, and attention items
         "strengths": [
             str(item.get("detail") or item.get("title") or "")
             for item in list(strengths or [])[:3]
             if str(item.get("detail") or item.get("title") or "").strip()
         ],
+        # Shows areas for improvement with more detail than the attention items
         "improvements": [
             str(item.get("detail") or item.get("title") or "")
             for item in list(improvements or [])[:4]
             if str(item.get("detail") or item.get("title") or "").strip()
         ],
+        # The attention items are more concise and are used to feed the key flags shown in the student view
         "attention_items": [
             str(item.get("text") or item.get("title") or "")
             for item in list(attention_items or [])[:4]
             if str(item.get("text") or item.get("title") or "").strip()
         ],
+        # Shows strongest and weakest components for direct reference
         "strongest_component": dict(component_comparison[0]) if component_comparison else {},
         "weakest_component": dict(component_comparison[-1]) if component_comparison else {},
+
+        # Shows the top cohort issues with the student's status
         "common_cohort_issues": [
             {
                 "label": str(item.get("label") or ""),
@@ -1041,6 +1126,7 @@ def _student_personal_context(
             }
             for item in list(top_failing_context or [])[:4]
         ],
+        # Shows the confidence mix to provide context on the reliability of the cohort metrics
         "confidence_mix": {
             "high": int((reliability.get("confidence", {}) or {}).get("high", 0) or 0),
             "medium": int((reliability.get("confidence", {}) or {}).get("medium", 0) or 0),
@@ -1048,6 +1134,7 @@ def _student_personal_context(
         },
     }
 
+# Build short student-facing insights from the prompt context.
 def _student_personal_insights(context: Mapping[str, object]) -> list[dict]:
     insights: list[dict] = []
     overall_score = _coerce_float(context.get("overall_score_percent"))
@@ -1057,6 +1144,7 @@ def _student_personal_insights(context: Mapping[str, object]) -> list[dict]:
     common_issues = list(context.get("common_cohort_issues", []) or [])
     confidence_explanation = str(context.get("confidence_explanation") or "").strip()
 
+    # Start with the overall position in the cohort.
     if overall_score is not None and cohort_median is not None:
         insights.append(
             {
@@ -1068,6 +1156,7 @@ def _student_personal_insights(context: Mapping[str, object]) -> list[dict]:
             }
         )
 
+    # Highlight the student's strongest and weakest areas.
     if strongest:
         insights.append(
             {
@@ -1079,6 +1168,7 @@ def _student_personal_insights(context: Mapping[str, object]) -> list[dict]:
             }
         )
 
+    # Only call out the weakest area when it is different from the strongest to avoid redundancy.
     if weakest and strongest.get("component") != weakest.get("component"):
         insights.append(
             {
@@ -1090,9 +1180,11 @@ def _student_personal_insights(context: Mapping[str, object]) -> list[dict]:
             }
         )
 
+    # Explain any confidence limitations in plain language.
     if confidence_explanation:
         insights.append({"title": "Confidence", "text": confidence_explanation})
 
+    # Add one cohort-context note when a common issue applies.
     for issue in common_issues:
         if str(issue.get("student_status") or "") not in {"FAIL", "PARTIAL"}:
             continue
@@ -1109,6 +1201,7 @@ def _student_personal_insights(context: Mapping[str, object]) -> list[dict]:
 
     return insights[:5]
 
+# Convert the grade bucket into a student-facing result label.
 def _student_result_label(record: Mapping[str, object]) -> str:
     grade = str(record.get("grade") or "unknown").lower()
     return {
@@ -1120,16 +1213,20 @@ def _student_result_label(record: Mapping[str, object]) -> str:
         "unknown": "Result unavailable",
     }.get(grade, "Assignment result")
 
+# Build the one-line summary shown with the student result.
 def _student_summary_line(
     *,
     student_record: Mapping[str, object],
     component_comparison: Sequence[Mapping[str, object]],
     median_percent: float | None,
 ) -> str:
+    # Compare strongest and weakest components to highlight areas of strength and improvement
     strongest = component_comparison[0] if component_comparison else {}
     weakest = component_comparison[-1] if component_comparison else {}
     strongest_title = str(strongest.get("title") or "stronger assessed areas")
     weakest_title = str(weakest.get("title") or "weaker assessed areas")
+
+    # Overall score comparison
     overall_percent = (
         round(float(student_record.get("overall", 0) or 0) * 100, 2)
         if isinstance(student_record.get("overall"), (int, float))
@@ -1145,6 +1242,7 @@ def _student_summary_line(
         f"Your submission shows a partial attempt, with stronger evidence in {strongest_title.lower()} than in {weakest_title.lower()}."
     )
 
+# Explain why the student's confidence level was chosen.
 def _student_confidence_explanation(record: Mapping[str, object]) -> str:
     reasons = [str(reason).strip() for reason in list(record.get("confidence_reasons", []) or []) if str(reason).strip()]
     confidence = str(record.get("confidence") or "high").strip().lower()
@@ -1156,6 +1254,7 @@ def _student_confidence_explanation(record: Mapping[str, object]) -> str:
             return f"{confidence.capitalize()} confidence because {joined[0].lower() + joined[1:] if len(joined) > 1 else joined.lower()}"
     return f"{confidence.capitalize()} confidence because some automated evidence was incomplete or less reliable."
 
+# Describe the student's overall position against the cohort median.
 def _student_cohort_position_label(student_percent: float | None, cohort_median: float | None) -> str:
     if not isinstance(student_percent, (int, float)) or not isinstance(cohort_median, (int, float)):
         return "in the current cohort range"
@@ -1165,6 +1264,7 @@ def _student_cohort_position_label(student_percent: float | None, cohort_median:
         return "above the cohort median"
     return "below the cohort median"
 
+# Describe a component score against the cohort median.
 def _student_component_interpretation(student_percent: float | None, cohort_median: float | None) -> str:
     if not isinstance(student_percent, (int, float)):
         return "Not enough evidence to compare"
@@ -1176,6 +1276,7 @@ def _student_component_interpretation(student_percent: float | None, cohort_medi
         return "Above cohort median"
     return "Below cohort median"
 
+# Collapse required rule results into one component state.
 def _student_requirement_state(student_record: Mapping[str, object], component: str) -> str:
     rules = dict((student_record.get("required_rules", {}) or {}).get(component, {}) or {})
     if not rules:
@@ -1189,6 +1290,7 @@ def _student_requirement_state(student_record: Mapping[str, object], component: 
         return "SKIPPED"
     return "FAIL"
 
+# Convert a requirement state into display text.
 def _student_requirement_state_label(status: str) -> str:
     normalized = str(status or "").strip().upper()
     return {
@@ -1201,6 +1303,7 @@ def _student_requirement_state_label(status: str) -> str:
         "NOT_EVALUABLE": "Not evaluable",
     }.get(normalized, "Not evaluable")
 
+# Convert a numeric score into a simple band label.
 def _score_band_label(value: float | None) -> str:
     if not isinstance(value, (int, float)):
         return "Not scored"
@@ -1212,14 +1315,17 @@ def _score_band_label(value: float | None) -> str:
         return "Below secure partial"
     return "No score"
 
+# Look up a readable label for a finding id.
 def _label_for_identifier(identifier: str) -> str:
     label, _ = FINDING_LABELS.get(identifier, ("", ""))
     return label or identifier.replace(".", " / ").replace("_", " ").strip().title()
 
+# Look up a readable description for a finding id.
 def _description_for_identifier(identifier: str) -> str:
     _, description = FINDING_LABELS.get(identifier, ("", ""))
     return description
 
+# Return the first non-empty string value.
 def _first_non_empty(values: Sequence[object]) -> str:
     for value in values:
         text = str(value or "").strip()
@@ -1227,6 +1333,7 @@ def _first_non_empty(values: Sequence[object]) -> str:
             return text
     return ""
 
+# Convert a loose value into a float when possible.
 def _coerce_float(value: object) -> float | None:
     try:
         if value is None or value == "":

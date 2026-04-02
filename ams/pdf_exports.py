@@ -27,6 +27,7 @@ class _PdfLine:
     separator: bool = False
 
 
+# Estimate the maximum line width for a font size and indent.
 def _max_line_chars(font_size: int, indent: int = 0) -> int:
     """Calculate the maximum number of characters that will fit on a single line."""
     usable_width = CONTENT_WIDTH - indent
@@ -34,6 +35,7 @@ def _max_line_chars(font_size: int, indent: int = 0) -> int:
     return max(int(usable_width / avg_char_width), 30)
 
 
+# Build a PDF report for one submission.
 def build_submission_report_pdf(report: Mapping[str, Any], submission_id: str) -> bytes:
     """Constructs a PDF report for an individual student submission."""
     summary = report.get("summary") if isinstance(report.get("summary"), Mapping) else {}
@@ -90,6 +92,7 @@ def build_submission_report_pdf(report: Mapping[str, Any], submission_id: str) -
     return build_key_value_pdf("Submission Report", sections)
 
 
+# Build a simple key-value PDF document.
 def build_key_value_pdf(title: str, sections: Sequence[tuple[str, Sequence[tuple[str, Any]]]]) -> bytes:
     """Generates a PDF containing distinct sections of key-value pairs."""
     lines: list[_PdfLine] = [
@@ -108,6 +111,7 @@ def build_key_value_pdf(title: str, sections: Sequence[tuple[str, Sequence[tuple
     return _build_pdf(lines)
 
 
+# Build a tabular records PDF document.
 def build_records_pdf(title: str, fieldnames: Sequence[str], rows: Sequence[Mapping[str, Any]], record_label: str = "Entry") -> bytes:
     """Generates a PDF to display multiple records, such as an analytics export."""
     lines: list[_PdfLine] = [
@@ -136,6 +140,7 @@ def build_records_pdf(title: str, fieldnames: Sequence[str], rows: Sequence[Mapp
     return _build_pdf(lines)
 
 
+# Format one label-value field for PDF output.
 def _format_field(label: str, value: str) -> list[_PdfLine]:
     """Formats a single field, ensuring lengthy values are handled gracefully."""
     label_text = _normalize_text(label)
@@ -178,6 +183,7 @@ def _format_field(label: str, value: str) -> list[_PdfLine]:
     return result_lines
 
 
+# Build the final PDF bytes from formatted lines.
 def _build_pdf(lines: Sequence[_PdfLine]) -> bytes:
     """Converts a flat list of text lines into raw PDF page streams."""
     pages: list[list[str]] = []
@@ -223,6 +229,7 @@ def _build_pdf(lines: Sequence[_PdfLine]) -> bytes:
     return _assemble_pdf(pages)
 
 
+# Assemble the low-level PDF document structure.
 def _assemble_pdf(pages: Sequence[Sequence[str]]) -> bytes:
     """Assembles the PDF document structure by linking the page streams."""
     page_count = max(len(pages), 1)
@@ -268,6 +275,7 @@ def _assemble_pdf(pages: Sequence[Sequence[str]]) -> bytes:
     return b"".join(chunks)
 
 
+# Wrap one line of text for PDF output.
 def _wrap_line(text: str, size: int, indent: int = 0) -> list[_PdfLine]:
     """Wraps text into multiple lines ensuring it does not overflow the page boundaries."""
     normalized = _normalize_text(text)
@@ -284,6 +292,7 @@ def _wrap_line(text: str, size: int, indent: int = 0) -> list[_PdfLine]:
     return [_PdfLine(line, size=size, indent=indent) for line in wrapped]
 
 
+# Convert a value into printable text.
 def _stringify_value(value: Any) -> str:
     if isinstance(value, bool):
         return "yes" if value else "no"
@@ -296,6 +305,7 @@ def _stringify_value(value: Any) -> str:
     return _normalize_text(value)
 
 
+# Format a score value for PDF output.
 def _format_score(value: Any) -> str | None:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         if 0 <= float(value) <= 1:
@@ -306,12 +316,14 @@ def _format_score(value: Any) -> str | None:
     return _normalize_text(value)
 
 
+# Format a boolean value for PDF output.
 def _format_bool(value: Any) -> str | None:
     if value is None:
         return None
     return "yes" if bool(value) else "no"
 
 
+# Return the first non-empty value.
 def _first_non_empty(*values: Any) -> Any:
     for value in values:
         if value not in (None, ""):
@@ -319,6 +331,7 @@ def _first_non_empty(*values: Any) -> Any:
     return None
 
 
+# Normalise arbitrary text for PDF output.
 def _normalize_text(value: Any) -> str:
     text = str(value if value is not None else "")
     text = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -328,10 +341,12 @@ def _normalize_text(value: Any) -> str:
     return text.encode("latin-1", "replace").decode("latin-1")
 
 
+# Escape text so it is safe inside PDF commands.
 def _escape_pdf_text(text: str) -> str:
     return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
+# Build the richer PDF variant used for report downloads.
 def build_rich_submission_pdf(report: Any) -> bytes:
     """Produce a comprehensive assessment PDF from an ExportReport instance."""
     lines: list[_PdfLine] = []

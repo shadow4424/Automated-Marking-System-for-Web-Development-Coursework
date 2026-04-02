@@ -16,6 +16,7 @@ from ams.io.export_report import (
     export_txt,
     validate_export_report,
 )
+from ams.io.report_utils import get_submission_metadata, load_report_if_present
 from ams.io.web_storage import allowed_download, find_run_by_id, get_runs_root, load_run_info
 from ams.web.auth import get_current_user, login_required
 
@@ -29,6 +30,7 @@ ALLOWED_DOWNLOADS = {
 }
 
 
+# Build exported report content for the requested format.
 def _export_report_content(report: dict, run_id: str, fmt: str) -> tuple:
     er = build_export_report(report, run_id=run_id)
     validate_export_report(er)
@@ -45,6 +47,7 @@ def _export_report_content(report: dict, run_id: str, fmt: str) -> tuple:
 
 @export_bp.route("/run/<run_id>/export/<format>")
 @login_required
+# Export one submission report in the requested format.
 def individual_submission_export(run_id: str, format: str):
     if format not in ("csv", "txt", "pdf", "json"):
         return "Invalid format", 400
@@ -58,12 +61,11 @@ def individual_submission_export(run_id: str, format: str):
         return "Report not found", 404
 
     run_info = load_run_info(run_dir) or {}
-    try:
-        report = json.loads(report_path.read_text(encoding="utf-8"))
-    except Exception:
+    report = load_report_if_present(report_path)
+    if report is None:
         return "Report not found", 404
 
-    report_meta = report.get("metadata", {}).get("submission_metadata", {})
+    report_meta = get_submission_metadata(report)
     real_student_id = str(report_meta.get("student_id") or "")
     user = get_current_user()
     if user and user["role"] == "student" and real_student_id and real_student_id != user["userID"]:
@@ -87,6 +89,7 @@ def individual_submission_export(run_id: str, format: str):
 
 @export_bp.route("/run/<run_id>/bundle")
 @login_required
+# Download the stored bundle for one run.
 def download_bundle(run_id: str):
     runs_root = get_runs_root(current_app)
     run_dir = find_run_by_id(runs_root, run_id)
@@ -146,6 +149,7 @@ def download_bundle(run_id: str):
 
 @export_bp.route("/download/<run_id>/<filename>")
 @login_required
+# Download one file from a run directory.
 def download(run_id: str, filename: str):
     if not allowed_download(filename, allowed=ALLOWED_DOWNLOADS):
         return "Not allowed", 403
@@ -177,6 +181,7 @@ def download(run_id: str, filename: str):
     return send_file(target, as_attachment=True, download_name=dl_name)
 
 
+# Resolve a safe download path inside the run directory.
 def _resolve_download_path(run_dir: Path, filename: str) -> Path:
     candidate = run_dir / filename
     if candidate.exists():
@@ -195,6 +200,7 @@ def _resolve_download_path(run_dir: Path, filename: str) -> Path:
     return (run_dir / filename).resolve()
 
 
+# Build the batch readme text included in exports.
 def _build_batch_readme(run_id: str, profile: str, batch_summary: Mapping[str, object]) -> str:
     lines = [
         "Automated Marking System - Batch Reports",

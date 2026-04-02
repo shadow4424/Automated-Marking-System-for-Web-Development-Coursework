@@ -4,9 +4,13 @@ import re
 from typing import List
 
 from ams.assessors import Assessor
+from ams.assessors.static.common import (
+    missing_component_finding,
+    resolve_component_requirement,
+    skipped_component_finding,
+)
 from ams.core.finding_ids import API as AID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
-from ams.core.profiles import get_profile_spec
 
 
 class APIStaticAssessor(Assessor):
@@ -16,59 +20,32 @@ class APIStaticAssessor(Assessor):
     # Run the API static checks for PHP and JavaScript files.
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
-
-        profile_name = context.metadata.get("profile")
-        is_required = False
-        if profile_name:
-            try:
-                profile_spec = get_profile_spec(profile_name)
-                is_required = profile_spec.is_component_required("api")
-            except ValueError:
-                pass
+        profile_name, is_required = resolve_component_requirement(context, "api")
 
         php_files = sorted(context.files_for("php", relevant_only=True))
         js_files = sorted(context.files_for("js", relevant_only=True))
         candidate_files = php_files + js_files
 
         if not candidate_files:
-            if is_required:
-                findings.append(
-                    Finding(
-                        id=AID.MISSING_FILES,
-                        category="api",
-                        message="No PHP or JS files found; API component is required for this profile.",
-                        severity=Severity.FAIL,
-                        evidence={
-                            "expected_extensions": [".php", ".js"],
-                            "discovered_count": 0,
-                            "profile": profile_name,
-                            "required": True,
-                        },
-                        source=self.name,
-                        finding_category=FindingCategory.MISSING,
-                        profile=profile_name,
-                        required=True,
-                    )
+            findings.append(
+                missing_component_finding(
+                    finding_id=AID.MISSING_FILES,
+                    category="api",
+                    message="No PHP or JS files found; API component is required for this profile.",
+                    source=self.name,
+                    profile_name=profile_name,
+                    expected_extensions=[".php", ".js"],
                 )
-            else:
-                findings.append(
-                    Finding(
-                        id=AID.SKIPPED,
-                        category="api",
-                        message="No PHP or JS files found; API component is not required for this profile.",
-                        severity=Severity.SKIPPED,
-                        evidence={
-                            "expected_extensions": [".php", ".js"],
-                            "discovered_count": 0,
-                            "profile": profile_name,
-                            "required": False,
-                        },
-                        source=self.name,
-                        finding_category=FindingCategory.OTHER,
-                        profile=profile_name,
-                        required=False,
-                    )
+                if is_required
+                else skipped_component_finding(
+                    finding_id=AID.SKIPPED,
+                    category="api",
+                    message="No PHP or JS files found; API component is not required for this profile.",
+                    source=self.name,
+                    profile_name=profile_name,
+                    expected_extensions=[".php", ".js"],
                 )
+            )
             return findings
 
         for path in candidate_files:

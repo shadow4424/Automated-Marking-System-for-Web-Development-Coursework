@@ -12,6 +12,7 @@ from ams.core.models import BehaviouralEvidence, BrowserEvidence, Finding, Findi
 from ams.core.profiles import get_profile_spec
 
 
+# Cap long Playwright output so evidence stays manageable.
 def _cap(text: str, limit: int = 10_000) -> str:
     if len(text) <= limit:
         return text

@@ -7,6 +7,7 @@ import re
 import base64
 import io
 
+from ams.io.json_utils import parse_llm_json_block
 from ams.llm.schemas import UXReviewResult, VisionIssue, VisionResult, create_fail, create_pass
 
 logger = logging.getLogger(__name__)
@@ -108,18 +109,11 @@ def parse_detect_layout_issues_response(
 ) -> VisionResult:
     """Parse a vision layout-response payload into a VisionResult."""
     content = content.strip()
-
     data = None
     try:
-        data = json.loads(content)
-    except json.JSONDecodeError:
-        if "```" in content:
-            json_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
-            if json_match:
-                try:
-                    data = json.loads(json_match.group(1).strip())
-                except json.JSONDecodeError:
-                    pass
+        data = parse_llm_json_block(content)
+    except (ValueError, json.JSONDecodeError):
+        pass
 
     if data and "result" in data and "reason" in data:
         result_str = str(data["result"]).upper()
@@ -159,15 +153,9 @@ def parse_review_ux_response(
     content = content.strip()
     data = None
     try:
-        data = json.loads(content)
-    except json.JSONDecodeError:
-        if "```" in content:
-            json_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
-            if json_match:
-                try:
-                    data = json.loads(json_match.group(1).strip())
-                except json.JSONDecodeError:
-                    pass
+        data = parse_llm_json_block(content)
+    except (ValueError, json.JSONDecodeError):
+        pass
 
     if data and "feedback" in data:
         status = str(data.get("status", "NEEDS_IMPROVEMENT")).upper()

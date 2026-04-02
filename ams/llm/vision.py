@@ -12,6 +12,7 @@ import numpy as np
 
 from ams.core.config import LLM_CACHE_ENABLED, VISION_MAX_TOKENS
 from ams.core.llm_factory import get_llm_provider
+from ams.io.json_utils import parse_llm_json_block
 from ams.llm.cache import RequestCache
 from ams.llm.schemas import (
     VisionResult,
@@ -326,15 +327,9 @@ class VisionAnalyst:
         content = content.strip()
         data = None
         try:
-            data = json.loads(content)
-        except json.JSONDecodeError:
-            if "```" in content:
-                json_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
-                if json_match:
-                    try:
-                        data = json.loads(json_match.group(1).strip())
-                    except json.JSONDecodeError:
-                        pass
+            data = parse_llm_json_block(content)
+        except (ValueError, json.JSONDecodeError):
+            pass
 
         if data and "feedback" in data:
             status = str(data.get("status", "NEEDS_IMPROVEMENT")).upper()
@@ -370,16 +365,9 @@ class VisionAnalyst:
         # Try direct JSON parse
         data = None
         try:
-            data = json.loads(content)
-        except json.JSONDecodeError:
-            # Try to extract JSON from markdown code block
-            if "```" in content:
-                json_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
-                if json_match:
-                    try:
-                        data = json.loads(json_match.group(1).strip())
-                    except json.JSONDecodeError:
-                        pass
+            data = parse_llm_json_block(content)
+        except (ValueError, json.JSONDecodeError):
+            pass
 
         if data and "result" in data and "reason" in data:
             result_str = str(data["result"]).upper()

@@ -4,9 +4,14 @@ import re
 from typing import List
 
 from ams.assessors import Assessor
+from ams.assessors.static.common import (
+    missing_component_finding,
+    read_component_text,
+    resolve_component_requirement,
+    skipped_component_finding,
+)
 from ams.core.finding_ids import CSS as CID
-from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
-from ams.core.profiles import get_profile_spec
+from ams.core.models import Finding, Severity, SubmissionContext
 
 
 class CSSStaticAssessor(Assessor):
@@ -17,74 +22,40 @@ class CSSStaticAssessor(Assessor):
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
         css_files = sorted(context.files_for("css", relevant_only=True))
-
-        # Determine if CSS is required for this profile
-        profile_name = context.metadata.get("profile")
-        is_required = False
-        if profile_name:
-            try:
-                profile_spec = get_profile_spec(profile_name)
-                is_required = profile_spec.is_component_required("css")
-            except ValueError:
-                pass  # Unknown profile, treat as not required
+        profile_name, is_required = resolve_component_requirement(context, "css")
 
         if not css_files:
-            if is_required:
-                # Required for profile but missing
-                findings.append(
-                    Finding(
-                        id=CID.MISSING_FILES,
-                        category="css",
-                        message="No CSS files found; CSS is required for this profile.",
-                        severity=Severity.FAIL,
-                        evidence={
-                            "expected_extensions": [".css"],
-                            "discovered_count": 0,
-                            "profile": profile_name,
-                            "required": True,
-                        },
-                        source=self.name,
-                        finding_category=FindingCategory.MISSING,
-                        profile=profile_name,
-                        required=True,
-                    )
+            findings.append(
+                missing_component_finding(
+                    finding_id=CID.MISSING_FILES,
+                    category="css",
+                    message="No CSS files found; CSS is required for this profile.",
+                    source=self.name,
+                    profile_name=profile_name,
+                    expected_extensions=[".css"],
                 )
-            else:
-                # Not required for profile, skip
-                findings.append(
-                    Finding(
-                        id=CID.SKIPPED,
-                        category="css",
-                        message="No CSS files found; CSS is not required for this profile.",
-                        severity=Severity.SKIPPED,
-                        evidence={
-                            "expected_extensions": [".css"],
-                            "discovered_count": 0,
-                            "profile": profile_name,
-                            "required": False,
-                        },
-                        source=self.name,
-                        finding_category=FindingCategory.OTHER,
-                        profile=profile_name,
-                        required=False,
-                    )
+                if is_required
+                else skipped_component_finding(
+                    finding_id=CID.SKIPPED,
+                    category="css",
+                    message="No CSS files found; CSS is not required for this profile.",
+                    source=self.name,
+                    profile_name=profile_name,
+                    expected_extensions=[".css"],
                 )
+            )
             return findings
 
         for path in css_files:
-            try:
-                content = path.read_text(encoding="utf-8", errors="replace")
-            except OSError as exc:
-                findings.append(
-                    Finding(
-                        id=CID.READ_ERROR,
-                        category="css",
-                        message="Failed to read CSS file.",
-                        severity=Severity.FAIL,
-                        evidence={"path": str(path), "error": str(exc)},
-                        source=self.name,
-                    )
-                )
+            content, read_error = read_component_text(
+                path,
+                finding_id=CID.READ_ERROR,
+                category="css",
+                source=self.name,
+                message="Failed to read CSS file.",
+            )
+            if read_error is not None:
+                findings.append(read_error)
                 continue
 
             open_braces = content.count("{")

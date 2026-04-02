@@ -1,7 +1,7 @@
 """Centralised Finding ID constants."""
 from __future__ import annotations
 
-
+# IDs for HTML findings.
 class HTML:
     """Finding IDs emitted by HTML assessors."""
 
@@ -31,7 +31,7 @@ class HTML:
     BEHAVIORAL_READ_ERROR = "HTML.BEHAVIORAL.READ_ERROR"
     BEHAVIORAL_SKIPPED = "HTML.BEHAVIORAL.SKIPPED"
 
-
+# Ids for CSS findings.
 class CSS:
     """Finding IDs emitted by CSS assessors."""
 
@@ -52,7 +52,7 @@ class CSS:
     REQ_MISSING_FILES = "CSS.REQ.MISSING_FILES"
     REQ_READ_ERROR = "CSS.REQ.READ_ERROR"
 
-
+# IDs for JS findings.
 class JS:
     """Finding IDs emitted by JS assessors."""
 
@@ -78,7 +78,7 @@ class JS:
     REQ_MISSING_FILES = "JS.REQ.MISSING_FILES"
     REQ_READ_ERROR = "JS.REQ.READ_ERROR"
 
-
+# IDs for PHP findings.
 class PHP:
     """Finding IDs emitted by PHP assessors."""
 
@@ -114,7 +114,7 @@ class PHP:
     REQ_MISSING_FILES = "PHP.REQ.MISSING_FILES"
     REQ_READ_ERROR = "PHP.REQ.READ_ERROR"
 
-
+# IDs for SQL findings.
 class SQL:
     """Finding IDs emitted by SQL assessors."""
 
@@ -139,7 +139,7 @@ class SQL:
     REQ_MISSING_FILES = "SQL.REQ.MISSING_FILES"
     REQ_READ_ERROR = "SQL.REQ.READ_ERROR"
 
-
+# IDs for API findings.
 class API:
     """Finding IDs emitted by API assessors."""
 
@@ -154,7 +154,7 @@ class API:
     REQ_SKIPPED = "API.REQ.SKIPPED"
     REQ_MISSING_FILES = "API.REQ.MISSING_FILES"
 
-
+# IDs for consistency findings.
 class CONSISTENCY:
     """Finding IDs emitted by the consistency assessor."""
 
@@ -175,7 +175,7 @@ class CONSISTENCY:
     API_CLIENT_ALIGNED = "CONSISTENCY.API_CLIENT_ALIGNED"
     API_CLIENT_MISALIGNED = "CONSISTENCY.API_CLIENT_MISALIGNED"
 
-
+# IDs for browser findings.
 class BROWSER:
     """Finding IDs emitted by the browser assessor."""
 
@@ -197,7 +197,7 @@ class BROWSER:
     ACCESSIBLE_TARGETS_FAIL = "BROWSER.ACCESSIBLE_TARGETS_FAIL"
     SCREENSHOT_CONSISTENT = "BROWSER.SCREENSHOT_CONSISTENT"
 
-
+# IDs for behavioural findings.
 class BEHAVIOUR:
     """Finding IDs used in rationale strings for behavioural evidence."""
 
@@ -234,7 +234,7 @@ class BEHAVIOUR:
     VIEWPORT_FAIL = "BEHAVIOUR.VIEWPORT_FAIL"
     VIEWPORT_SKIPPED = "BEHAVIOUR.VIEWPORT_SKIPPED"
 
-
+# IDs for sandbox findings.
 class SANDBOX:
     """Finding IDs emitted by the threat scanner."""
 

@@ -29,7 +29,7 @@ from ams.core.config import SCORING_MODE, ScoringMode
 from ams.io.reporting import ReportWriter
 from ams.io.submission import SubmissionProcessor
 
-# LLM Integration (Phase 1 & 2)
+# LLM Integration
 from ams.llm.scoring import evaluate_partial_credit_batch, should_evaluate_partial_credit
 from ams.llm.generators import BatchFeedbackGenerator
 
@@ -38,15 +38,16 @@ from ams.core.config import VISION_ENABLED, VISION_DELAY_BETWEEN_PAGES
 from ams.llm.schemas import UXReviewResult
 import time
 
-# Phase D: Conflict Resolution
+# Conflict Resolution
 from ams.core.aggregation import resolve_conflicts
 
 logger = logging.getLogger(__name__)
 
-
+# Default assessor factory based on profile specification.
 class AssessmentPipeline:
     """Orchestrates assessors, scoring, and reporting."""
 
+    # Initialisation with optional custom components.
     def __init__(
         self,
         assessors: Optional[Iterable[Assessor]] = None,
@@ -59,13 +60,14 @@ class AssessmentPipeline:
         self.scoring_mode = scoring_mode
         self.requirement_engine = RequirementEvaluationEngine()
 
-        # Vision Integration: Lazy-load VisionAnalyst only if enabled
+        # Vision Integration
         self._vision_analyst = None
         self._vision_enabled = VISION_ENABLED
 
+    # Vision / UX Review
     @property
     def vision_analyst(self):
-        """Lazy-load VisionAnalyst to avoid import overhead if not used."""
+        """Load VisionAnalyst to avoid import overhead if not used."""
         if self._vision_analyst is None and self._vision_enabled:
             try:
                 from ams.llm.vision import VisionAnalyst
@@ -76,6 +78,7 @@ class AssessmentPipeline:
                 self._vision_enabled = False
         return self._vision_analyst
 
+    # Default assessor factory based on profile specification.
     def _setup_run(
         self,
         submission_path: Path,
@@ -91,6 +94,7 @@ class AssessmentPipeline:
             profile,
             resolved_config,
         )
+        # Build submission evidence for use in assessors and scoring.
         context.resolved_config = resolved_config
         context.metadata["profile"] = profile
         context.metadata["requested_profile"] = profile
@@ -99,6 +103,8 @@ class AssessmentPipeline:
         context.metadata["scoring_mode"] = self.scoring_mode.value
         context.metadata["llm_error_detected"] = False
         context.metadata["llm_error_messages"] = []
+        
+        # Build initial submission evidence bundle for assessors and scoring engine.
         try:
             from ams.sandbox.config import get_sandbox_status
 
@@ -119,6 +125,7 @@ class AssessmentPipeline:
         context.metadata["run_id"] = workspace_path.name
         return context, resolved_config
 
+    # Context preparation
     def _run_analysis(
         self,
         context: SubmissionContext,
@@ -127,6 +134,8 @@ class AssessmentPipeline:
     ) -> dict[str, object]:
         """Run the assessment analysis for a prepared context."""
         findings: List[Finding] = []
+
+        # Threat scanning and initial metadata setup
         if skip_threat_scan:
             logger.warning(
                 "Threat scan BYPASSED for run %s - instructor override active.",
@@ -151,14 +160,17 @@ class AssessmentPipeline:
                 context.metadata["threat_detected"] = False
                 context.metadata["container_retain"] = False
 
+        # Main assessment logic (skipped if threat detected)
         profile_spec = config.profile
-        llm_evidence: dict = {}
+        llm_evidence: dict = {} # LLM evidence to be collected and returned with findings
         if not context.metadata.get("threat_detected"):
+            # Assessors can be pre-initialised and passed in.
             assessors = self.assessors or _default_assessors(
                 profile_spec,
                 container_retain=context.metadata.get("container_retain", False),
                 run_id=context.metadata.get("run_id"),
             )
+            # Run each assessor and collect findings.
             for assessor in assessors:
                 findings.extend(assessor.run(context))
             _requirement_results, requirement_findings = self.requirement_engine.evaluate(
@@ -167,7 +179,9 @@ class AssessmentPipeline:
             )
             findings.extend(requirement_findings)
             findings.extend(self._check_config_warnings(profile_spec, context))
+            # Vision / UX review findings will be added to the report but do not affect scoring.
             if profile_spec.enabled_browser_checks:
+                # Delay to allow any asynchronous browser processes to complete before taking screenshots for LLM review.
                 try:
                     from ams.sandbox.artifact_validator import validate_screenshot
 
@@ -177,6 +191,7 @@ class AssessmentPipeline:
                         logger.warning("Artifact validation: screenshot missing or corrupt")
                 except Exception as exc:
                     logger.warning("Artifact validation failed: %s", exc)
+            # LLM enrichment for static findings (if enabled in scoring mode).
             if self._should_use_llm():
                 findings, llm_evidence = self._enrich_findings_with_llm(
                     findings, profile_spec, context,
@@ -190,6 +205,7 @@ class AssessmentPipeline:
             "metadata": context.metadata.get("submission_metadata"),
         }
 
+    # Report generation and post-run cleanup
     def _generate_report(
         self,
         findings: dict[str, object],
@@ -214,6 +230,7 @@ class AssessmentPipeline:
                 browser_evidence=context.browser_evidence,
             )
 
+        # Vision / UX review is run post-scoring to avoid impacting scores.
         ux_reviews: list = []
         if (
             not context.metadata.get("threat_detected")
@@ -228,9 +245,11 @@ class AssessmentPipeline:
                 llm_evidence["ux_reviews"] = []
             llm_evidence["ux_reviews"].extend(ux_reviews)
 
+        # If LLM errors were detected, add a review finding to the report to flag the issue.
         if context.metadata.get("llm_error_detected"):
             finding_items.append(self._build_llm_error_review_finding(context, profile))
 
+        # Write the report artefacts.
         report_path = context.workspace_path / "report.json"
         ReportWriter(report_path).write(
             context,
@@ -240,6 +259,7 @@ class AssessmentPipeline:
             metadata=metadata,
             llm_evidence=llm_evidence if llm_evidence else None,
         )
+        # Attempt to generate HTML report, but do not fail the run if this step encounters issues.
         try:
             from ams.io.html_reporter import HTMLReporter
             import json
@@ -261,6 +281,7 @@ class AssessmentPipeline:
         self._cleanup_uploaded_extract(context.workspace_path)
         return report_path
 
+    # Main pipeline method
     def run(
         self,
         submission_path: Path,
@@ -280,9 +301,7 @@ class AssessmentPipeline:
         return self._generate_report(findings, context, config)
 
 
-    # Post-run cleanup
-
-
+    # Post-run cleanup - save space.
     @staticmethod
     def _cleanup_uploaded_extract(workspace_path: Path) -> None:
         """Remove uploaded_extract/ once submission/ is confirmed."""
@@ -307,9 +326,7 @@ class AssessmentPipeline:
             logger.warning("Failed to remove uploaded_extract/: %s", exc)
 
 
-    # Threat Scanning
-
-
+    # Threat Scanning - returns findings and whether the container should be retained for manual review.
     @staticmethod
     def _run_threat_scan(
         context: SubmissionContext,
@@ -319,7 +336,7 @@ class AssessmentPipeline:
         from ams.sandbox.threat_patterns import ThreatCategory
         from ams.core.finding_ids import SANDBOX
 
-        # Category → finding-ID mapping
+        # Mapping from internal threat categories to standardised finding IDs for reporting.
         _CATEGORY_TO_ID = {
             ThreatCategory.SHELL_EXECUTION: SANDBOX.THREAT.SHELL_EXECUTION,
             ThreatCategory.PROCESS_CONTROL: SANDBOX.THREAT.PROCESS_CONTROL,
@@ -335,6 +352,8 @@ class AssessmentPipeline:
         findings: List[Finding] = []
         container_retain = False
 
+        # Run the threat scanner and convert results into findings.
+        # Any exceptions during scanning are caught and logged.
         try:
             scanner = ThreatScanner()
             scan_result = scanner.scan(context.submission_path)
@@ -344,12 +363,14 @@ class AssessmentPipeline:
 
             container_retain = scan_result.has_high_threats
 
+            # Convert each detected threat into a Finding with appropriate evidence for reporting.
             for threat in scan_result.threats:
                 finding_id = _CATEGORY_TO_ID.get(
                     threat.category,
                     SANDBOX.THREAT.SHELL_EXECUTION,  # Fallback
                 )
 
+                # For high severity threats, we flag the container for retention to allow manual review.
                 findings.append(Finding(
                     id=finding_id,
                     category="security",
@@ -383,6 +404,7 @@ class AssessmentPipeline:
 
         return findings, container_retain
 
+    # LLM feedback for findings
     @staticmethod
     def _enrich_threat_finding(finding: Finding, llm_evidence: dict) -> None:
         """Use LLM to generate a security analysis for a THREAT finding."""
@@ -394,6 +416,8 @@ class AssessmentPipeline:
         from ams.llm.utils import clean_json_response
         import json as _json
 
+        # We provide the LLM with the original threat evidence 
+        # and ask it to generate a risk analysis, explanation, and recommendation.
         evidence = finding.evidence if isinstance(finding.evidence, dict) else {}
         snippet = scrub_pii(evidence.get("snippet", "")[:500])
         prompt = THREAT_ANALYSIS_USER_PROMPT_TEMPLATE.format(
@@ -403,6 +427,8 @@ class AssessmentPipeline:
             snippet=snippet,
         )
 
+        # We attempt to get a structured analysis from the LLM.
+        # If the LLM call fails or returns invalid data, we catch the exception and log a warning,
         try:
             raw = ask_llama(prompt, system_prompt=THREAT_ANALYSIS_SYSTEM_PROMPT)
             cleaned = clean_json_response(raw)
@@ -421,6 +447,7 @@ class AssessmentPipeline:
                 "error": True,
             }
 
+    # LLM enrichment for static findings
     @staticmethod
     def _record_llm_issue(context: SubmissionContext, message: object) -> None:
         """Record an LLM issue on the submission context."""
@@ -435,6 +462,7 @@ class AssessmentPipeline:
             messages[0] if isinstance(messages, list) and messages else text
         )
 
+    # Build the review finding shown when LLM processing fails.
     @staticmethod
     def _build_llm_error_review_finding(
         context: SubmissionContext,
@@ -446,6 +474,7 @@ class AssessmentPipeline:
             for item in list(context.metadata.get("llm_error_messages", []) or [])
             if str(item).strip()
         ]
+        # We take the first message as a summary to display in the finding.
         summary = messages[0] if messages else "LLM-assisted marking failed and requires review."
         return Finding(
             id="LLM.ERROR.REQUIRES_REVIEW",
@@ -464,10 +493,12 @@ class AssessmentPipeline:
             tags=["llm_error", "requires_review"],
         )
 
+    # Check config for any warnings based on the profile and context.
     def _should_use_llm(self) -> bool:
         """Check whether LLM should be used based on scoring mode."""
         return self.scoring_mode == ScoringMode.STATIC_PLUS_LLM
 
+    # Prepare LLM enrichment batches for findings.
     def _prepare_llm_enrichment_batches(
         self,
         findings: List[Finding],
@@ -478,7 +509,7 @@ class AssessmentPipeline:
         enriched: List[Finding] = []
         llm_evidence: dict = {"feedback": [], "partial_credit": []}
         llm_candidates: list[dict] = []
-
+        # Loops through findings and prepares evidence for LLM enrichment.
         for finding in findings:
             if finding.severity == Severity.SKIPPED:
                 if finding.required:
@@ -493,27 +524,32 @@ class AssessmentPipeline:
                 enriched.append(finding)
                 continue
 
+            # THREAT findings are enriched with a security analysis.    
             if finding.severity == Severity.THREAT:
                 if self.scoring_mode == ScoringMode.STATIC_PLUS_LLM:
                     self._enrich_threat_finding(finding, llm_evidence)
                 enriched.append(finding)
                 continue
-
+            
+            # Only findings with FAIL or WARN severity are enriched with LLM feedback.
             if finding.severity not in (Severity.FAIL, Severity.WARN):
                 enriched.append(finding)
                 continue
-
+            
+            # Prepare the evidence and metadata needed.
             rule_id = finding.id
             if isinstance(finding.evidence, dict) and finding.evidence.get("rule_id"):
                 rule_id = finding.evidence["rule_id"]
             rule_metadata = self._get_rule_metadata(rule_id, profile_spec, finding)
 
+            # We look for a code snippet in the evidence to provide context to the LLM.
             code_snippet = ""
             if isinstance(finding.evidence, dict):
                 code_snippet = finding.evidence.get("snippet", "")
                 if not code_snippet:
                     code_snippet = finding.evidence.get("content", "")[:500]
 
+            # If no code snippet is found, we check if this is a finding type issue.
             is_required_assessor = any(
                 finding.id.upper().startswith(prefix)
                 for prefix in ["HTML.REQ", "CSS.REQ", "JS.REQ", "PHP.REQ", "SQL.REQ"]
@@ -524,10 +560,12 @@ class AssessmentPipeline:
                     finding.id,
                 )
 
+            # If there is no code snippet and this is not a required assessor, we skip LLM enrichment.
             if not code_snippet.strip() and not is_required_assessor:
                 enriched.append(finding)
                 continue
-
+            
+            # If there is no code snippet and this is a required assessor, we add fallback feedback to the evidence.
             if not code_snippet.strip() and is_required_assessor:
                 fallback_feedback = {
                     "summary": "No code was found for this check. Ensure you include the required files and format.",
@@ -546,6 +584,7 @@ class AssessmentPipeline:
                 "code_snippet": code_snippet,
             })
 
+        # We batch the LLM candidates to prepare for parallel processing.
         chunks = [
             llm_candidates[i:i + batch_size]
             for i in range(0, len(llm_candidates), batch_size)

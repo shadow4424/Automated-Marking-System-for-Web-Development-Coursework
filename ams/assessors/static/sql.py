@@ -4,9 +4,14 @@ import re
 from typing import List
 
 from ams.assessors import Assessor
+from ams.assessors.static.common import (
+    missing_component_finding,
+    read_component_text,
+    resolve_component_requirement,
+    skipped_component_finding,
+)
 from ams.core.finding_ids import SQL as SID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
-from ams.core.profiles import get_profile_spec
 
 
 class SQLStaticAssessor(Assessor):
@@ -17,74 +22,40 @@ class SQLStaticAssessor(Assessor):
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
         sql_files = sorted(context.files_for("sql", relevant_only=True))
-
-        # Determine if SQL is required for this profile
-        profile_name = context.metadata.get("profile")
-        is_required = False
-        if profile_name:
-            try:
-                profile_spec = get_profile_spec(profile_name)
-                is_required = profile_spec.is_component_required("sql")
-            except ValueError:
-                pass  # Unknown profile, treat as not required
+        profile_name, is_required = resolve_component_requirement(context, "sql")
 
         if not sql_files:
-            if is_required:
-                # Required for profile but missing
-                findings.append(
-                    Finding(
-                        id=SID.MISSING_FILES,
-                        category="sql",
-                        message="No SQL files found; SQL is required for this profile.",
-                        severity=Severity.FAIL,
-                        evidence={
-                            "expected_extensions": [".sql"],
-                            "discovered_count": 0,
-                            "profile": profile_name,
-                            "required": True,
-                        },
-                        source=self.name,
-                        finding_category=FindingCategory.MISSING,
-                        profile=profile_name,
-                        required=True,
-                    )
+            findings.append(
+                missing_component_finding(
+                    finding_id=SID.MISSING_FILES,
+                    category="sql",
+                    message="No SQL files found; SQL is required for this profile.",
+                    source=self.name,
+                    profile_name=profile_name,
+                    expected_extensions=[".sql"],
                 )
-            else:
-                # Not required for profile, skip
-                findings.append(
-                    Finding(
-                        id=SID.SKIPPED,
-                        category="sql",
-                        message="No SQL files found; SQL is not required for this profile.",
-                        severity=Severity.SKIPPED,
-                        evidence={
-                            "expected_extensions": [".sql"],
-                            "discovered_count": 0,
-                            "profile": profile_name,
-                            "required": False,
-                        },
-                        source=self.name,
-                        finding_category=FindingCategory.OTHER,
-                        profile=profile_name,
-                        required=False,
-                    )
+                if is_required
+                else skipped_component_finding(
+                    finding_id=SID.SKIPPED,
+                    category="sql",
+                    message="No SQL files found; SQL is not required for this profile.",
+                    source=self.name,
+                    profile_name=profile_name,
+                    expected_extensions=[".sql"],
                 )
+            )
             return findings
 
         for path in sql_files:
-            try:
-                content = path.read_text(encoding="utf-8", errors="replace")
-            except OSError as exc:
-                findings.append(
-                    Finding(
-                        id=SID.READ_ERROR,
-                        category="sql",
-                        message="Failed to read SQL file.",
-                        severity=Severity.FAIL,
-                        evidence={"path": str(path), "error": str(exc)},
-                        source=self.name,
-                    )
-                )
+            content, read_error = read_component_text(
+                path,
+                finding_id=SID.READ_ERROR,
+                category="sql",
+                source=self.name,
+                message="Failed to read SQL file.",
+            )
+            if read_error is not None:
+                findings.append(read_error)
                 continue
 
             lowered = content.lower()

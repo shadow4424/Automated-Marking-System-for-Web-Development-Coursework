@@ -4,9 +4,14 @@ import re
 from typing import List
 
 from ams.assessors import Assessor
+from ams.assessors.static.common import (
+    missing_component_finding,
+    read_component_text,
+    resolve_component_requirement,
+    skipped_component_finding,
+)
 from ams.core.finding_ids import JS as JID
 from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
-from ams.core.profiles import get_profile_spec
 
 
 class JSStaticAssessor(Assessor):
@@ -261,75 +266,41 @@ class JSStaticAssessor(Assessor):
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
         js_files = sorted(context.files_for("js", relevant_only=True))
-
-        # Determine if JS is required for this profile
-        profile_name = context.metadata.get("profile")
-        is_required = False
-        if profile_name:
-            try:
-                profile_spec = get_profile_spec(profile_name)
-                is_required = profile_spec.is_component_required("js")
-            except ValueError:
-                pass  # Unknown profile, treat as not required
+        profile_name, is_required = resolve_component_requirement(context, "js")
 
         if not js_files:
-            if is_required:
-                # Required for profile but missing
-                findings.append(
-                    Finding(
-                        id=JID.MISSING_FILES,
-                        category="js",
-                        message="No JavaScript files found; JS is required for this profile.",
-                        severity=Severity.FAIL,
-                        evidence={
-                            "expected_extensions": [".js"],
-                            "discovered_count": 0,
-                            "profile": profile_name,
-                            "required": True,
-                        },
-                        source=self.name,
-                        finding_category=FindingCategory.MISSING,
-                        profile=profile_name,
-                        required=True,
-                    )
+            findings.append(
+                missing_component_finding(
+                    finding_id=JID.MISSING_FILES,
+                    category="js",
+                    message="No JavaScript files found; JS is required for this profile.",
+                    source=self.name,
+                    profile_name=profile_name,
+                    expected_extensions=[".js"],
                 )
-            else:
-                # Not required for profile, skip
-                findings.append(
-                    Finding(
-                        id=JID.SKIPPED,
-                        category="js",
-                        message="No JavaScript files found; JS is not required for this profile.",
-                        severity=Severity.SKIPPED,
-                        evidence={
-                            "expected_extensions": [".js"],
-                            "discovered_count": 0,
-                            "profile": profile_name,
-                            "required": False,
-                        },
-                        source=self.name,
-                        finding_category=FindingCategory.OTHER,
-                        profile=profile_name,
-                        required=False,
-                    )
+                if is_required
+                else skipped_component_finding(
+                    finding_id=JID.SKIPPED,
+                    category="js",
+                    message="No JavaScript files found; JS is not required for this profile.",
+                    source=self.name,
+                    profile_name=profile_name,
+                    expected_extensions=[".js"],
                 )
+            )
             return findings
 
         loaded_files: list[tuple[object, str]] = []
         for path in js_files:
-            try:
-                content = path.read_text(encoding="utf-8", errors="replace")
-            except OSError as exc:
-                findings.append(
-                    Finding(
-                        id=JID.READ_ERROR,
-                        category="js",
-                        message="Failed to read JS file.",
-                        severity=Severity.FAIL,
-                        evidence={"path": str(path), "error": str(exc)},
-                        source=self.name,
-                    )
-                )
+            content, read_error = read_component_text(
+                path,
+                finding_id=JID.READ_ERROR,
+                category="js",
+                source=self.name,
+                message="Failed to read JS file.",
+            )
+            if read_error is not None:
+                findings.append(read_error)
                 continue
             loaded_files.append((path, content))
 

@@ -36,6 +36,7 @@ class HybridScore:
             "intent_detected": self.intent_detected,
         }
 
+# Build the prompt used for partial-credit scoring.
 def _build_partial_credit_prompt(
     rule_name: str,
     category: str,
@@ -333,6 +334,7 @@ def evaluate_partial_credit_batch(
     return results
 
 
+# Evaluate a batch of partial-credit requests in one pass.
 def _evaluate_batch_internal(
     items: list[dict],
     rule_names: list[str],

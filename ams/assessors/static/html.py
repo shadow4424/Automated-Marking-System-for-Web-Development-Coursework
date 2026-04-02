@@ -3,10 +3,15 @@ from __future__ import annotations
 from typing import List
 
 from ams.assessors import Assessor
+from ams.assessors.static.common import (
+    missing_component_finding,
+    read_component_text,
+    resolve_component_requirement,
+    skipped_component_finding,
+)
 from ams.assessors.html_parser import TagCountingParser
 from ams.core.finding_ids import HTML as HID
-from ams.core.models import Finding, FindingCategory, Severity, SubmissionContext
-from ams.core.profiles import get_profile_spec
+from ams.core.models import Finding, Severity, SubmissionContext
 
 
 class HTMLStaticAssessor(Assessor):
@@ -17,74 +22,40 @@ class HTMLStaticAssessor(Assessor):
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
         html_files = sorted(context.files_for("html", relevant_only=True))
-
-        # Determine if HTML is required for this profile
-        profile_name = context.metadata.get("profile")
-        is_required = False
-        if profile_name:
-            try:
-                profile_spec = get_profile_spec(profile_name)
-                is_required = profile_spec.is_component_required("html")
-            except ValueError:
-                pass  # Unknown profile, treat as not required
+        profile_name, is_required = resolve_component_requirement(context, "html")
 
         if not html_files:
-            if is_required:
-                # Required for profile but missing
-                findings.append(
-                    Finding(
-                        id=HID.MISSING_FILES,
-                        category="html",
-                        message="No HTML files found; HTML is required for this profile.",
-                        severity=Severity.FAIL,
-                        evidence={
-                            "expected_extensions": [".html"],
-                            "discovered_count": 0,
-                            "profile": profile_name,
-                            "required": True,
-                        },
-                        source=self.name,
-                        finding_category=FindingCategory.MISSING,
-                        profile=profile_name,
-                        required=True,
-                    )
+            findings.append(
+                missing_component_finding(
+                    finding_id=HID.MISSING_FILES,
+                    category="html",
+                    message="No HTML files found; HTML is required for this profile.",
+                    source=self.name,
+                    profile_name=profile_name,
+                    expected_extensions=[".html"],
                 )
-            else:
-                # Not required for profile, skip
-                findings.append(
-                    Finding(
-                        id=HID.SKIPPED,
-                        category="html",
-                        message="No HTML files found; HTML is not required for this profile.",
-                        severity=Severity.SKIPPED,
-                        evidence={
-                            "expected_extensions": [".html"],
-                            "discovered_count": 0,
-                            "profile": profile_name,
-                            "required": False,
-                        },
-                        source=self.name,
-                        finding_category=FindingCategory.OTHER,
-                        profile=profile_name,
-                        required=False,
-                    )
+                if is_required
+                else skipped_component_finding(
+                    finding_id=HID.SKIPPED,
+                    category="html",
+                    message="No HTML files found; HTML is not required for this profile.",
+                    source=self.name,
+                    profile_name=profile_name,
+                    expected_extensions=[".html"],
                 )
+            )
             return findings
 
         for path in html_files:
-            try:
-                content = path.read_text(encoding="utf-8", errors="replace")
-            except OSError as exc:
-                findings.append(
-                    Finding(
-                        id=HID.READ_ERROR,
-                        category="html",
-                        message="Failed to read HTML file.",
-                        severity=Severity.FAIL,
-                        evidence={"path": str(path), "error": str(exc)},
-                        source=self.name,
-                    )
-                )
+            content, read_error = read_component_text(
+                path,
+                finding_id=HID.READ_ERROR,
+                category="html",
+                source=self.name,
+                message="Failed to read HTML file.",
+            )
+            if read_error is not None:
+                findings.append(read_error)
                 continue
 
             lowered = content.lower()

@@ -7,10 +7,11 @@ from ams.assessors import Assessor
 from ams.core.finding_ids import HTML as HID
 from ams.core.models import Finding, Severity, SubmissionContext
 
-
+# Class to check HTML structure and presence of forms, inputs, and links.
 class FormChecker(HTMLParser):
     """Simple HTML parser to check for forms and basic structure."""
 
+    # pylint: disable=too-many-instance-attributes
     def __init__(self) -> None:
         super().__init__()
         self.has_form = False
@@ -21,7 +22,8 @@ class FormChecker(HTMLParser):
         self.link_count = 0
         self.has_body = False
         self.parse_errors: List[str] = []
-
+    
+    # Override to track tags of interest
     def handle_starttag(self, tag: str, attrs: List[tuple[str, str | None]]) -> None:
         if tag == "form":
             self.has_form = True
@@ -35,19 +37,22 @@ class FormChecker(HTMLParser):
         elif tag == "body":
             self.has_body = True
 
+    # Override to track parsing errors
     def error(self, message: str) -> None:
         self.parse_errors.append(message)
 
-
+# Class to perform behavioral checks on HTML files.
 class HTMLBehavioralAssessor(Assessor):
     """Behavioural checks: verifies HTML can be parsed and forms exist."""
 
     name = "html_behavioral"
 
+    # Function to run the assessor on the given submission context, returning findings.
     def run(self, context: SubmissionContext) -> List[Finding]:
         findings: List[Finding] = []
         html_files = sorted(context.files_for("html", relevant_only=True))
 
+        # If no HTML files are found, skip behavioral checks and log a finding.
         if not html_files:
             findings.append(
                 Finding(
@@ -61,10 +66,12 @@ class HTMLBehavioralAssessor(Assessor):
             )
             return findings
 
+        # Iterate over each HTML file and perform checks on its content and structure.
         for path in html_files:
             try:
                 content = path.read_text(encoding="utf-8", errors="replace")
             except OSError as exc:
+                # If the file cannot be read, log a finding and skip to the next file.
                 findings.append(
                     Finding(
                         id=HID.BEHAVIORAL_READ_ERROR,
@@ -83,6 +90,7 @@ class HTMLBehavioralAssessor(Assessor):
                 parser.feed(content)
             except Exception as exc:
                 findings.append(
+                    # If parsing fails, log a finding with the error details and skip to the next file.
                     Finding(
                         id=HID.BEHAVIORAL_PARSE_ERROR,
                         category="html",
@@ -106,6 +114,7 @@ class HTMLBehavioralAssessor(Assessor):
                         source=self.name,
                     )
                 )
+            # If no body tag is found, log a warning finding indicating the page may not load properly.
             else:
                 findings.append(
                     Finding(
@@ -134,6 +143,7 @@ class HTMLBehavioralAssessor(Assessor):
                         source=self.name,
                     )
                 )
+            # If no form is found, log a warning finding indicating that no form element was found in the HTML.
             else:
                 findings.append(
                     Finding(
@@ -150,5 +160,3 @@ class HTMLBehavioralAssessor(Assessor):
 
 
 __all__ = ["HTMLBehavioralAssessor"]
-
-

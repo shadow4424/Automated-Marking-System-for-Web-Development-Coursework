@@ -8,6 +8,10 @@ from ams.assessors.html_parser import TagCountingParser
 from ams.core.finding_ids import API as AID, CSS as CID, HTML as HID, JS as JID, PHP as PID, SQL as SID
 from ams.core.models import Finding, FindingCategory, RequirementEvaluationResult, Severity, SubmissionContext
 from ams.core.profiles import AggregationMode, BehavioralRule, ProfileSpec, RequirementDefinition, RequiredRule
+from ams.core.requirement_results import (
+    build_requirement_result,
+    build_skipped_requirement_result,
+)
 
 
 @dataclass(frozen=True)
@@ -19,36 +23,49 @@ class _RuleFileResult:
 
 
 def _build_evaluation_result(
+    definition: RequirementDefinition | None = None,
     *,
-    requirement_id: str,
-    component: str,
-    description: str,
-    stage: str,
-    aggregation_mode: str,
+    requirement_id: str | None = None,
+    component: str | None = None,
+    description: str | None = None,
+    stage: str | None = None,
+    aggregation_mode: str | None = None,
     score: float | str,
     status: str,
-    weight: float,
-    required: bool,
+    weight: float | None = None,
+    required: bool | None = None,
     evidence: Mapping[str, object],
     contributing_paths: Sequence[str] | None = None,
     skipped_reason: str | None = None,
     confidence_flags: Sequence[str] | None = None,
 ) -> RequirementEvaluationResult:
-    """Build the evaluation result."""
-    return RequirementEvaluationResult(
-        requirement_id=requirement_id,
-        component=component,
-        description=description,
-        stage=stage,
-        aggregation_mode=aggregation_mode,
+    """Backward-compatible wrapper around the shared requirement result builder."""
+    if definition is None:
+        assert requirement_id is not None
+        assert component is not None
+        assert description is not None
+        assert stage is not None
+        assert aggregation_mode is not None
+        assert weight is not None
+        assert required is not None
+        definition = RequirementDefinition(
+            id=requirement_id,
+            component=component,
+            description=description,
+            stage=stage,
+            aggregation_mode=aggregation_mode,
+            weight=weight,
+            required=required,
+        )
+    return build_requirement_result(
+        definition,
         score=score,
         status=status,
-        weight=weight,
-        required=required,
         evidence=evidence,
-        contributing_paths=list(contributing_paths or []),
+        contributing_paths=contributing_paths,
         skipped_reason=skipped_reason,
-        confidence_flags=list(confidence_flags or []),
+        confidence_flags=confidence_flags,
+        required=definition.required if required is None else required,
     )
 
 
@@ -187,23 +204,17 @@ class RequirementEvaluationEngine:
             and definition.rule.id == "html.has_alt_attributes"
             and not self._html_files_have_images(files)
         ):
-            return _build_evaluation_result(
-                requirement_id=definition.id,
+            return build_skipped_requirement_result(
+                definition,
                 component=component,
-                description=definition.description,
-                stage=definition.stage,
-                aggregation_mode=definition.aggregation_mode,
-                score="SKIPPED",
-                status="SKIPPED",
-                weight=definition.weight,
                 required=True,
+                reason="not_applicable",
                 evidence={
                     "rule_id": definition.id,
                     "skip_reason": "not_applicable",
                     "discovered_count": discovered_count,
                     "relevant_count": relevant_count,
                 },
-                skipped_reason="not_applicable",
             )
 
         file_results = [
@@ -215,14 +226,10 @@ class RequirementEvaluationEngine:
         snippets = [item.snippet for item in file_results if item.snippet]
         contributing_paths = [item.path for item in file_results]
         return _build_evaluation_result(
-            requirement_id=definition.id,
+            definition,
             component=component,
-            description=definition.description,
-            stage=definition.stage,
-            aggregation_mode=definition.aggregation_mode,
             score=score,
             status=status,
-            weight=definition.weight,
             required=True,
             evidence={
                 "rule_id": definition.id,
@@ -246,34 +253,24 @@ class RequirementEvaluationEngine:
         required = profile.is_component_required(component)
         files, discovered_count, relevant_count = self._load_files_for_rule(definition, context)
         if not required:
-            return _build_evaluation_result(
-                requirement_id=definition.id,
+            return build_skipped_requirement_result(
+                definition,
                 component=component,
-                description=definition.description,
-                stage=definition.stage,
-                aggregation_mode=definition.aggregation_mode,
-                score="SKIPPED",
-                status="SKIPPED",
-                weight=definition.weight,
                 required=False,
+                reason="component_not_required",
                 evidence={
                     "rule_id": definition.id,
                     "skip_reason": "component_not_required",
                     "discovered_count": discovered_count,
                     "relevant_count": relevant_count,
                 },
-                skipped_reason="component_not_required",
             )
         if not files:
             return _build_evaluation_result(
-                requirement_id=definition.id,
+                definition,
                 component=component,
-                description=definition.description,
-                stage=definition.stage,
-                aggregation_mode=definition.aggregation_mode,
                 score=0.0,
                 status="FAIL",
-                weight=definition.weight,
                 required=True,
                 evidence={
                     "rule_id": definition.id,
@@ -285,7 +282,7 @@ class RequirementEvaluationEngine:
             )
         return self._analyse_static_rule(definition, files, discovered_count, relevant_count)
 
-    def _prepare_behavioral_context(
+    def _collect_behavioral_evidence(
         self,
         rule: BehavioralRule,
         context: SubmissionContext,
@@ -293,24 +290,20 @@ class RequirementEvaluationEngine:
         """Prepare the behavioural context."""
         statuses = []
         evidence_rows: List[Mapping[str, object]] = []
+        prefix_map: dict[str, tuple[str, ...]] = {
+            "form_submit": ("PHP.FORM", "PHP.SMOKE"),
+            "db_persist": ("SQL.SQLITE_EXEC",),
+            "api_exec": ("API.EXEC",),
+            "hover_check": ("BEHAVIOUR.HOVER",),
+            "viewport_resize": ("BEHAVIOUR.VIEWPORT",),
+        }
+        if rule.test_type in {"calculator_sequence", "calculator_display", "calculator_operator"}:
+            prefixes = ("BEHAVIOUR.CALCULATOR",)
+        else:
+            prefixes = prefix_map.get(rule.test_type, ())
         for item in context.behavioural_evidence:
             test_id = item.test_id.upper()
-            if rule.test_type == "form_submit" and test_id.startswith(("PHP.FORM", "PHP.SMOKE")):
-                statuses.append(item.status.lower())
-                evidence_rows.append(item.to_dict())
-            elif rule.test_type == "db_persist" and test_id.startswith("SQL.SQLITE_EXEC"):
-                statuses.append(item.status.lower())
-                evidence_rows.append(item.to_dict())
-            elif rule.test_type == "api_exec" and test_id.startswith("API.EXEC"):
-                statuses.append(item.status.lower())
-                evidence_rows.append(item.to_dict())
-            elif rule.test_type in {"calculator_sequence", "calculator_display", "calculator_operator"} and test_id.startswith("BEHAVIOUR.CALCULATOR"):
-                statuses.append(item.status.lower())
-                evidence_rows.append(item.to_dict())
-            elif rule.test_type == "hover_check" and test_id.startswith("BEHAVIOUR.HOVER"):
-                statuses.append(item.status.lower())
-                evidence_rows.append(item.to_dict())
-            elif rule.test_type == "viewport_resize" and test_id.startswith("BEHAVIOUR.VIEWPORT"):
+            if prefixes and test_id.startswith(prefixes):
                 statuses.append(item.status.lower())
                 evidence_rows.append(item.to_dict())
         return statuses, evidence_rows
@@ -323,18 +316,9 @@ class RequirementEvaluationEngine:
     ) -> RequirementEvaluationResult:
         """Run the behavioural check."""
         if not statuses:
-            return _build_evaluation_result(
-                requirement_id=definition.id,
-                component=definition.component,
-                description=definition.description,
-                stage=definition.stage,
-                aggregation_mode=definition.aggregation_mode,
-                score="SKIPPED",
-                status="SKIPPED",
-                weight=definition.weight,
-                required=definition.required,
-                evidence={"reason": "no_runtime_evidence"},
-                skipped_reason="no_runtime_evidence",
+            return build_skipped_requirement_result(
+                definition,
+                reason="no_runtime_evidence",
                 confidence_flags=["runtime_skipped"],
             )
 
@@ -357,15 +341,9 @@ class RequirementEvaluationEngine:
         if any(state in {"fail", "timeout", "error"} for state in statuses):
             confidence_flags.append("runtime_failure")
         return _build_evaluation_result(
-            requirement_id=definition.id,
-            component=definition.component,
-            description=definition.description,
-            stage=definition.stage,
-            aggregation_mode=definition.aggregation_mode,
+            definition,
             score=score,
             status=status,
-            weight=definition.weight,
-            required=definition.required,
             evidence={"statuses": statuses, "evidence": evidence_rows[:3]},
             confidence_flags=confidence_flags,
             skipped_reason="runtime_skipped" if score == "SKIPPED" else None,
@@ -383,8 +361,19 @@ class RequirementEvaluationEngine:
             return self._evaluate_browser_page_load(definition, context)
         if rule.test_type == "js_interaction":
             return self._evaluate_browser_interaction(definition, context)
-        statuses, evidence_rows = self._prepare_behavioral_context(rule, context)
+        statuses, evidence_rows = self._collect_behavioral_evidence(rule, context)
         return self._run_behavioral_check(definition, statuses, evidence_rows)
+
+    def _skip_without_browser_evidence(
+        self,
+        definition: RequirementDefinition,
+    ) -> RequirementEvaluationResult:
+        """Return the standard skipped result for missing browser evidence."""
+        return build_skipped_requirement_result(
+            definition,
+            reason="no_browser_evidence",
+            confidence_flags=["browser_skipped"],
+        )
 
     def _evaluate_browser_page_load(
         self,
@@ -393,20 +382,7 @@ class RequirementEvaluationEngine:
     ) -> RequirementEvaluationResult:
         """Evaluate the browser page load."""
         if not context.browser_evidence:
-            return _build_evaluation_result(
-                requirement_id=definition.id,
-                component=definition.component,
-                description=definition.description,
-                stage=definition.stage,
-                aggregation_mode=definition.aggregation_mode,
-                score="SKIPPED",
-                status="SKIPPED",
-                weight=definition.weight,
-                required=definition.required,
-                evidence={"reason": "no_browser_evidence"},
-                skipped_reason="no_browser_evidence",
-                confidence_flags=["browser_skipped"],
-            )
+            return self._skip_without_browser_evidence(definition)
 
         browser = context.browser_evidence[0]
         status = (browser.status or "").lower()
@@ -426,15 +402,9 @@ class RequirementEvaluationEngine:
         if status == "skipped":
             confidence_flags.append("browser_skipped")
         return _build_evaluation_result(
-            requirement_id=definition.id,
-            component=definition.component,
-            description=definition.description,
-            stage=definition.stage,
-            aggregation_mode=definition.aggregation_mode,
+            definition,
             score=score,
             status=result_status,
-            weight=definition.weight,
-            required=definition.required,
             evidence=browser.to_dict(),
             contributing_paths=[
                 str(path) for path in context.files_for("html", relevant_only=True)[:2]
@@ -450,20 +420,7 @@ class RequirementEvaluationEngine:
     ) -> RequirementEvaluationResult:
         """Evaluate the browser interaction."""
         if not context.browser_evidence:
-            return _build_evaluation_result(
-                requirement_id=definition.id,
-                component=definition.component,
-                description=definition.description,
-                stage=definition.stage,
-                aggregation_mode=definition.aggregation_mode,
-                score="SKIPPED",
-                status="SKIPPED",
-                weight=definition.weight,
-                required=definition.required,
-                evidence={"reason": "no_browser_evidence"},
-                skipped_reason="no_browser_evidence",
-                confidence_flags=["browser_skipped"],
-            )
+            return self._skip_without_browser_evidence(definition)
 
         if not context.files_for("js", relevant_only=True):
             return _build_evaluation_result(
@@ -723,20 +680,7 @@ class RequirementEvaluationEngine:
     ) -> RequirementEvaluationResult:
         """Evaluate whether the browser console is free of fatal errors."""
         if not context.browser_evidence:
-            return _build_evaluation_result(
-                requirement_id=definition.id,
-                component=definition.component,
-                description=definition.description,
-                stage=definition.stage,
-                aggregation_mode=definition.aggregation_mode,
-                score="SKIPPED",
-                status="SKIPPED",
-                weight=definition.weight,
-                required=definition.required,
-                evidence={"reason": "no_browser_evidence"},
-                skipped_reason="no_browser_evidence",
-                confidence_flags=["browser_skipped"],
-            )
+            return self._skip_without_browser_evidence(definition)
         browser = context.browser_evidence[0]
         errors = browser.console_errors or []
         fatal_errors = [e for e in errors if isinstance(e, str) and any(
@@ -749,15 +693,9 @@ class RequirementEvaluationEngine:
         else:
             score, status = 0.0, "FAIL"
         return _build_evaluation_result(
-            requirement_id=definition.id,
-            component=definition.component,
-            description=definition.description,
-            stage=definition.stage,
-            aggregation_mode=definition.aggregation_mode,
+            definition,
             score=score,
             status=status,
-            weight=definition.weight,
-            required=definition.required,
             evidence={"fatal_error_count": len(fatal_errors), "console_errors": errors[:5]},
             confidence_flags=["browser_console"] if fatal_errors else [],
         )
@@ -769,20 +707,7 @@ class RequirementEvaluationEngine:
     ) -> RequirementEvaluationResult:
         """Evaluate whether all linked network assets resolved successfully."""
         if not context.browser_evidence:
-            return _build_evaluation_result(
-                requirement_id=definition.id,
-                component=definition.component,
-                description=definition.description,
-                stage=definition.stage,
-                aggregation_mode=definition.aggregation_mode,
-                score="SKIPPED",
-                status="SKIPPED",
-                weight=definition.weight,
-                required=definition.required,
-                evidence={"reason": "no_browser_evidence"},
-                skipped_reason="no_browser_evidence",
-                confidence_flags=["browser_skipped"],
-            )
+            return self._skip_without_browser_evidence(definition)
         browser = context.browser_evidence[0]
         network_errors = getattr(browser, "network_errors", []) or []
         asset_errors = [e for e in network_errors if isinstance(e, str) and any(
@@ -795,15 +720,9 @@ class RequirementEvaluationEngine:
         else:
             score, status = 0.0, "FAIL"
         return _build_evaluation_result(
-            requirement_id=definition.id,
-            component=definition.component,
-            description=definition.description,
-            stage=definition.stage,
-            aggregation_mode=definition.aggregation_mode,
+            definition,
             score=score,
             status=status,
-            weight=definition.weight,
-            required=definition.required,
             evidence={"asset_error_count": len(asset_errors), "network_errors": network_errors[:5]},
         )
 
@@ -814,20 +733,7 @@ class RequirementEvaluationEngine:
     ) -> RequirementEvaluationResult:
         """Evaluate DOM structure from browser evidence."""
         if not context.browser_evidence:
-            return _build_evaluation_result(
-                requirement_id=definition.id,
-                component=definition.component,
-                description=definition.description,
-                stage=definition.stage,
-                aggregation_mode=definition.aggregation_mode,
-                score="SKIPPED",
-                status="SKIPPED",
-                weight=definition.weight,
-                required=definition.required,
-                evidence={"reason": "no_browser_evidence"},
-                skipped_reason="no_browser_evidence",
-                confidence_flags=["browser_skipped"],
-            )
+            return self._skip_without_browser_evidence(definition)
         browser = context.browser_evidence[0]
         dom_structure = getattr(browser, "dom_structure", None) or {}
         has_body = bool(dom_structure.get("has_body", True))  # Default True if not checked
@@ -858,20 +764,7 @@ class RequirementEvaluationEngine:
     ) -> RequirementEvaluationResult:
         """Evaluate whether interactive elements are accessible (have labels/aria)."""
         if not context.browser_evidence:
-            return _build_evaluation_result(
-                requirement_id=definition.id,
-                component=definition.component,
-                description=definition.description,
-                stage=definition.stage,
-                aggregation_mode=definition.aggregation_mode,
-                score="SKIPPED",
-                status="SKIPPED",
-                weight=definition.weight,
-                required=definition.required,
-                evidence={"reason": "no_browser_evidence"},
-                skipped_reason="no_browser_evidence",
-                confidence_flags=["browser_skipped"],
-            )
+            return self._skip_without_browser_evidence(definition)
         browser = context.browser_evidence[0]
         # Check via static HTML analysis if browser check not available
         html_files = context.files_for("html", relevant_only=True)

@@ -22,6 +22,7 @@ _MIN_PASSWORD_LENGTH = 8
 
 @account_bp.route("/settings", methods=["GET"])
 @login_required
+# Show the account settings page.
 def settings():
     user = get_user(session["user_id"])
     return render_template("account_settings.html", user=user)
@@ -29,6 +30,7 @@ def settings():
 
 @account_bp.route("/settings/email", methods=["POST"])
 @login_required
+# Update the current user's email address.
 def update_email():
     user = get_user(session["user_id"])
     new_email = request.form.get("email", "").strip()
@@ -60,6 +62,7 @@ def update_email():
 
 @account_bp.route("/settings/password", methods=["POST"])
 @login_required
+# Update the current user's password.
 def update_password():
     user = get_user(session["user_id"])
     current_password = request.form.get("current_password", "").strip()

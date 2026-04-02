@@ -13,6 +13,7 @@ from ams.web.auth import get_current_user
 teacher_bp = Blueprint("teacher", __name__, url_prefix="/teacher")
 
 
+# Check whether the current user can access this assignment.
 def _user_can_access_assignment(assignment: Mapping[str, Any] | None) -> bool:
     user = get_current_user()
     if user is None:
@@ -20,6 +21,7 @@ def _user_can_access_assignment(assignment: Mapping[str, Any] | None) -> bool:
     return assignment_allows_teacher(dict(assignment) if assignment is not None else None, user["userID"], user["role"])
 
 
+# Look up a teacher user record by id.
 def _teacher_user_lookup(user_id: str) -> dict[str, Any]:
     user = get_user(user_id)
     if user:
@@ -27,6 +29,7 @@ def _teacher_user_lookup(user_id: str) -> dict[str, Any]:
     return {"userID": user_id, "firstName": user_id, "lastName": "", "email": ""}
 
 
+# Parse an ISO datetime string when one is available.
 def _parse_iso_datetime(value: str | None) -> datetime | None:
     text = str(value or "").strip()
     if not text:
@@ -37,6 +40,7 @@ def _parse_iso_datetime(value: str | None) -> datetime | None:
         return None
 
 
+# Build a freshness label for the last analytics update time.
 def _format_freshness_label(value: str | None) -> tuple[str, str]:
     dt = _parse_iso_datetime(value)
     if dt is None:
@@ -54,10 +58,12 @@ def _format_freshness_label(value: str | None) -> tuple[str, str]:
     return f"Updated {exact}", exact
 
 
+# Check whether a submission belongs to the selected assignment.
 def _submission_matches_assignment(submission: Mapping[str, Any], assignment_id: str) -> bool:
     return str(submission.get("assignment_id") or "").strip() == assignment_id
 
 
+# Convert batch submission state into display text.
 def _batch_submission_display_status(submission: Mapping[str, Any]) -> str:
     if submission.get("threat_flagged") or submission.get("threat_count"):
         return "threat"
@@ -71,6 +77,7 @@ def _batch_submission_display_status(submission: Mapping[str, Any]) -> str:
     return "completed"
 
 
+# Build the run rows shown on the teacher assignment page.
 def _build_assignment_run_rows(assignment_id: str) -> list[dict]:
     runs_root = get_runs_root(current_app)
     all_runs = list_runs(runs_root, only_active=False)
@@ -174,12 +181,14 @@ def _build_assignment_run_rows(assignment_id: str) -> list[dict]:
     return assignment_runs
 
 
+# Build the detail URL for one assignment submission row.
 def _assignment_submission_detail_url(row: Mapping[str, Any]) -> str:
     if row.get("mode") == "batch" and row.get("_batch_submission_id"):
         return url_for("batch.batch_submission_view", run_id=row.get("id"), submission_id=row.get("_batch_submission_id"))
     return url_for("runs.run_detail", run_id=row.get("id"))
 
 
+# Build the grouping key for assignment submissions.
 def _assignment_submission_row_key(row: Mapping[str, Any]) -> tuple[str, str]:
     return (
         str(row.get("attempt_id") or row.get("id") or ""),
@@ -187,6 +196,7 @@ def _assignment_submission_row_key(row: Mapping[str, Any]) -> tuple[str, str]:
     )
 
 
+# Group assignment submissions by student and submission source.
 def _build_assignment_submission_groups(assignment_runs: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[str, list[dict[str, Any]]] = {}
     for row in assignment_runs:
@@ -248,6 +258,7 @@ def _build_assignment_submission_groups(assignment_runs: Sequence[Mapping[str, A
     return groups
 
 
+# Build rows for threat-resolution actions.
 def _build_threat_resolution_rows(assignment_runs: Sequence[Mapping[str, Any]]) -> list[dict]:
     threat_rows: list[dict] = []
     for row in assignment_runs:
@@ -276,6 +287,7 @@ def _build_threat_resolution_rows(assignment_runs: Sequence[Mapping[str, Any]]) 
     return threat_rows
 
 
+# Build rows for LLM-error resolution actions.
 def _build_llm_error_resolution_rows(assignment_runs: Sequence[Mapping[str, Any]]) -> list[dict]:
     llm_rows: list[dict] = []
     for row in assignment_runs:
@@ -317,6 +329,7 @@ def _build_llm_error_resolution_rows(assignment_runs: Sequence[Mapping[str, Any]
     return llm_rows
 
 
+# Match a row value against a filter term.
 def _matches(
     row: dict,
     *,
@@ -362,6 +375,7 @@ def _matches(
     )
 
 
+# Filter the needs-attention rows using the current query parameters.
 def _filtered_needs_attention_rows(analytics: dict, args) -> list[dict]:
     rows = list(analytics.get("needs_attention", []) or [])
     severity = str(args.get("severity", "")).strip().lower()

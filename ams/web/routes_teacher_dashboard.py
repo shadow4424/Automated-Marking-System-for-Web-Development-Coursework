@@ -11,6 +11,7 @@ teacher_dashboard_bp = Blueprint("teacher_dashboard", __name__, url_prefix="/tea
 
 @teacher_dashboard_bp.route("/")
 @teacher_or_admin_required
+# Show the teacher dashboard.
 def dashboard():
     user = get_current_user()
     if user["role"] == "admin":

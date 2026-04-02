@@ -1,0 +1,1 @@
+function a(){const el=document.querySelector('body');el.addEventListener('click',()=>{});}

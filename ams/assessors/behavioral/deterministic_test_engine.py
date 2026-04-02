@@ -16,7 +16,7 @@ from ams.core.finding_ids import BEHAVIOUR as BID
 from ams.core.models import BehaviouralEvidence, Finding, FindingCategory, Severity, SubmissionContext
 from ams.core.profiles import get_profile_spec
 
-
+# Data class to capture command execution results in a structured way.
 @dataclass
 class RunResult:
     """Captured result of one subprocess-style behavioural test run."""
@@ -26,7 +26,7 @@ class RunResult:
     duration_ms: int
     timed_out: bool = False
 
-
+# Classes for running commands, abstracted for testability.
 class CommandRunner:
     """Abstraction over subprocess for dependency injection in tests."""
 
@@ -34,13 +34,15 @@ class CommandRunner:
         """Execute a command and return its captured run result."""
         raise NotImplementedError
 
-
+# A simple CommandRunner implementation that runs commands directly on the host.
 class SubprocessRunner(CommandRunner):
     """Direct host-process runner (dev/test only)..."""
 
+    # Function to execute a command with timeout and capture outputs, returning a structured RunResult.
     def run(self, args: Sequence[str], timeout: float, cwd: Path | None = None) -> RunResult:
         """Execute a command on the host and capture its outputs."""
         start = time.time()
+        # Tries to run the command and captures stdout, stderr, exit code, and duration. 
         try:
             completed = subprocess.run(
                 list(args),
@@ -57,6 +59,7 @@ class SubprocessRunner(CommandRunner):
                 duration_ms=duration_ms,
                 timed_out=False,
             )
+        # Handles timeout separately to capture partial outputs and indicate timeout status.
         except subprocess.TimeoutExpired as exc:
             duration_ms = int((time.time() - start) * 1000)
             return RunResult(
@@ -66,11 +69,12 @@ class SubprocessRunner(CommandRunner):
                 duration_ms=duration_ms,
                 timed_out=True,
             )
+        # Catches any other exceptions that may occur during command execution and captures the error message in stderr.
         except Exception as exc:  # pragma: no cover - defensive
             duration_ms = int((time.time() - start) * 1000)
             return RunResult(exit_code=None, stdout="", stderr=str(exc), duration_ms=duration_ms, timed_out=False)
 
-
+# HTML parser to extract form actions and field names for form injection tests.
 class FormDetector(HTMLParser):
     """Extract form actions and field names from HTML."""
 
@@ -80,6 +84,7 @@ class FormDetector(HTMLParser):
         self.actions: List[str] = []
         self.field_names: List[str] = []
 
+    # Override method to handle start tags and collect form actions and field names.
     def handle_starttag(self, tag: str, attrs: List[tuple[str, str | None]]) -> None:
         """Collect form actions and field names while parsing HTML."""
         attrs_dict = {k.lower(): (v or "") for k, v in attrs}
@@ -92,7 +97,7 @@ class FormDetector(HTMLParser):
             if name:
                 self.field_names.append(name.strip())
 
-
+# Main assessor class that runs deterministic behavioural checks.
 class DeterministicTestEngine(Assessor):
     """Runs deterministic backend/database behavioural checks."""
 
@@ -116,6 +121,7 @@ class DeterministicTestEngine(Assessor):
         self.output_cap = output_cap
         self._fatal_error_tokens = ("fatal error", "parse error")
 
+    # Helper to check if output contains fatal error indicators.
     def _is_php_available(self) -> bool:
         """Check whether the PHP binary is reachable by the active runner."""
         try:
@@ -126,6 +132,7 @@ class DeterministicTestEngine(Assessor):
             pass
         return bool(shutil.which("php"))
 
+    # Helper to check if output contains fatal error indicators.
     def run(self, context: SubmissionContext) -> List[Finding]:
         """Run the enabled deterministic behavioural checks for a submission."""
         profile = context.metadata.get("profile", "unknown")
@@ -139,6 +146,7 @@ class DeterministicTestEngine(Assessor):
         findings: List[Finding] = []
         start = time.time()
 
+        # Determine which behavioural checks are enabled for this profile.
         enabled = set(getattr(profile_spec, "enabled_behavioural_checks", []) or [])
         if not profile_spec or not enabled:
             findings.append(
@@ -153,6 +161,7 @@ class DeterministicTestEngine(Assessor):
             )
             return findings
 
+        # Timeout Checks
         try:
             if "form_submit" in enabled or "api_exec" in enabled:
                 findings.extend(self._php_smoke(context, profile, start))
@@ -180,6 +189,7 @@ class DeterministicTestEngine(Assessor):
         php_available = self._is_php_available()
         component_required = False
 
+        # If no PHP files or entrypoint discovered, skip with evidence.
         if not target:
             evidence = BehaviouralEvidence(
                 test_id="PHP.SMOKE",
@@ -205,6 +215,7 @@ class DeterministicTestEngine(Assessor):
                 )
             ]
 
+        # If PHP binary not available, skip with evidence.
         if not php_available:
             evidence = BehaviouralEvidence(
                 test_id="PHP.SMOKE",
@@ -229,7 +240,8 @@ class DeterministicTestEngine(Assessor):
                     finding_evidence={"target": str(target), "php_available": False},
                 )
             ]
-
+        
+        # If overall timeout already reached, skip with evidence.
         if self._timed_out(started_at):
             evidence = BehaviouralEvidence(
                 test_id="PHP.SMOKE",
@@ -255,11 +267,14 @@ class DeterministicTestEngine(Assessor):
                 )
             ]
 
+        # Execute the PHP file directly and capture results.
         result = self.runner.run(
             ["php", "-d", "display_errors=1", "-f", str(target)],
             timeout=self.per_test_timeout,
             cwd=target.parent,
         )
+
+        # Check for fatal errors in output to determine pass/fail status.
         fatal_seen = self._contains_fatal(result.stderr) or self._contains_fatal(result.stdout)
         evidence = BehaviouralEvidence(
             test_id="PHP.SMOKE",
@@ -273,6 +288,7 @@ class DeterministicTestEngine(Assessor):
             outputs={"timed_out": result.timed_out},
         )
 
+        # Record evidence and return findings based on the result of execution.
         if result.timed_out:
             return [
                 self._record_finding(
@@ -286,6 +302,8 @@ class DeterministicTestEngine(Assessor):
                     finding_evidence={"target": str(target), "duration_ms": result.duration_ms},
                 )
             ]
+        
+        # If exit code is 0 and no fatal errors seen, consider it a pass; otherwise, it's a fail.
         if result.exit_code == 0:
             return [
                 self._record_finding(
@@ -303,6 +321,8 @@ class DeterministicTestEngine(Assessor):
                     },
                 )
             ]
+        
+        # Returns a fail finding
         return [
             self._record_finding(
                 context,
@@ -326,6 +346,7 @@ class DeterministicTestEngine(Assessor):
         php_available = self._is_php_available()
         component_required = False
 
+        # If no PHP files or entrypoint discovered, skip with evidence.
         if not target or not php_available:
             evidence = BehaviouralEvidence(
                 test_id="PHP.FORM_INJECTION",
@@ -338,6 +359,7 @@ class DeterministicTestEngine(Assessor):
                 inputs={"target": str(target) if target else None},
                 outputs={},
             )
+            # Returns a skipped finding - no target or PHP binary not available
             return [
                 self._record_finding(
                     context,
@@ -351,6 +373,7 @@ class DeterministicTestEngine(Assessor):
                 )
             ]
 
+        # If overall timeout already reached, skip with evidence.
         if self._timed_out(started_at):
             evidence = BehaviouralEvidence(
                 test_id="PHP.FORM_INJECTION",
@@ -363,6 +386,8 @@ class DeterministicTestEngine(Assessor):
                 inputs={"target": str(target)},
                 outputs={},
             )
+
+            # Returns a fail finding - overall timeout reached before test could run
             return [
                 self._record_finding(
                     context,
@@ -376,6 +401,7 @@ class DeterministicTestEngine(Assessor):
                 )
             ]
 
+        # Build a PHP wrapper that injects form inputs and executes the target, then run it and capture results.
         inputs = self._discover_form_inputs(context) or {"name": "test", "email": "a@b.com"}
         wrapper_content = self._php_wrapper(inputs, target)
         with tempfile.TemporaryDirectory(prefix="ams-php-wrapper-", dir=str(target.parent)) as tmpdir:
@@ -387,12 +413,15 @@ class DeterministicTestEngine(Assessor):
                 cwd=target.parent,
             )
 
+        # Check for fatal errors in output to determine pass/fail status.
         fatal_seen = self._contains_fatal(result.stderr) or self._contains_fatal(result.stdout)
         passed = (
             result.exit_code == 0
             and not fatal_seen
             and (self._has_content(result.stdout) or not self._has_content(result.stderr))
         )
+
+        # Determine status for evidence based on timeout and pass/fail result, then record evidence and return findings.
         status = "timeout" if result.timed_out else ("pass" if passed else "fail")
         evidence = BehaviouralEvidence(
             test_id="PHP.FORM_INJECTION",
@@ -406,6 +435,7 @@ class DeterministicTestEngine(Assessor):
             outputs={"timed_out": result.timed_out},
         )
 
+        # Record evidence and return findings based on the result of execution.
         if result.timed_out:
             return [
                 self._record_finding(
@@ -419,6 +449,8 @@ class DeterministicTestEngine(Assessor):
                     finding_evidence={"target": str(target), "duration_ms": result.duration_ms},
                 )
             ]
+        
+        # Returns a pass
         if passed:
             return [
                 self._record_finding(
@@ -432,6 +464,8 @@ class DeterministicTestEngine(Assessor):
                     finding_evidence={"target": str(target), "exit_code": result.exit_code},
                 )
             ]
+        
+        # Returns a fail finding
         return [
             self._record_finding(
                 context,
@@ -465,6 +499,8 @@ class DeterministicTestEngine(Assessor):
                 inputs={"discovered_sql_files": 0},
                 outputs={},
             )
+
+            # Returns a skipped finding - no SQL files found
             return [
                 self._record_finding(
                     context,
@@ -478,6 +514,7 @@ class DeterministicTestEngine(Assessor):
                 )
             ]
 
+        # If overall timeout already reached, skip with evidence.
         if self._timed_out(started_at):
             evidence = BehaviouralEvidence(
                 test_id="SQL.SQLITE_EXEC",
@@ -490,6 +527,8 @@ class DeterministicTestEngine(Assessor):
                 inputs={"files": [str(p) for p in sql_files]},
                 outputs={},
             )
+
+            # Returns a fail finding - overall timeout reached before test could run
             return [
                 self._record_finding(
                     context,
@@ -503,6 +542,7 @@ class DeterministicTestEngine(Assessor):
                 )
             ]
 
+        # Execute SQL files and capture results, then determine pass/fail status based on execution results.
         start = time.time()
         try:
             exec_result = self._execute_sql_files(sql_files)
@@ -526,6 +566,8 @@ class DeterministicTestEngine(Assessor):
                 artifacts={"database": exec_result.get("database_path")},
             )
             self._record_evidence(context, evidence)
+        
+        # Catches any exceptions during SQL execution and records them as evidence with a fail finding.
         except Exception as exc:
             duration_ms = int((time.time() - start) * 1000)
             evidence = BehaviouralEvidence(
@@ -539,6 +581,7 @@ class DeterministicTestEngine(Assessor):
                 inputs={"files": [str(p) for p in sql_files]},
                 outputs={},
             )
+            # Returns a fail finding - exception occurred during SQL execution
             return [
                 self._record_finding(
                     context,
@@ -552,6 +595,7 @@ class DeterministicTestEngine(Assessor):
                 )
             ]
 
+        # Determine findings based on whether execution was successful or not, using the captured evidence.
         if evidence.status == "fail":
             if evidence.stderr:
                 message = f"SQLite execution failed: {self._first_line(evidence.stderr)}"
@@ -567,6 +611,8 @@ class DeterministicTestEngine(Assessor):
                     evidence=evidence.outputs,
                 )
             ]
+        
+        # Returns a pass finding
         return [
             self._finding(
                 code=BID.SQL_EXEC_PASS,
@@ -588,6 +634,7 @@ class DeterministicTestEngine(Assessor):
         # Discovery: find files that look like API endpoints.
         api_endpoint = self._discover_api_endpoint(context)
 
+        # If no API endpoint discovered, skip with evidence.
         if not api_endpoint:
             evidence = BehaviouralEvidence(
                 test_id="API.EXEC",
@@ -600,6 +647,7 @@ class DeterministicTestEngine(Assessor):
                 inputs={"reason": "no_api_endpoint"},
                 outputs={},
             )
+            # Returns a skipped finding - no API endpoint discovered
             return [
                 self._record_finding(
                     context,
@@ -613,6 +661,7 @@ class DeterministicTestEngine(Assessor):
                 )
             ]
 
+        # If PHP binary not available, skip with evidence.
         if not self._is_php_available():
             evidence = BehaviouralEvidence(
                 test_id="API.EXEC",
@@ -625,6 +674,7 @@ class DeterministicTestEngine(Assessor):
                 inputs={"target": str(api_endpoint)},
                 outputs={},
             )
+            # Returns a skipped finding - PHP binary not available to run the API endpoint
             return [
                 self._record_finding(
                     context,
@@ -638,6 +688,7 @@ class DeterministicTestEngine(Assessor):
                 )
             ]
 
+        # If overall timeout already reached, skip with evidence.
         if self._timed_out(started_at):
             evidence = BehaviouralEvidence(
                 test_id="API.EXEC",
@@ -650,6 +701,7 @@ class DeterministicTestEngine(Assessor):
                 inputs={"target": str(api_endpoint)},
                 outputs={},
             )
+            # Returns a fail finding - overall timeout reached before test could run
             return [
                 self._record_finding(
                     context,
@@ -681,8 +733,10 @@ class DeterministicTestEngine(Assessor):
                 cwd=api_endpoint.parent,
             )
 
+        # Calculate duration and check for fatal errors in output to determine pass/fail status.
         duration_ms = int((time.time() - test_start) * 1000)
 
+        # If the test timed out, record evidence and return a fail finding immediately without further checks.
         if result.timed_out:
             evidence = BehaviouralEvidence(
                 test_id="API.EXEC",
@@ -695,6 +749,8 @@ class DeterministicTestEngine(Assessor):
                 inputs={"target": str(api_endpoint)},
                 outputs={"timed_out": True},
             )
+
+            # Record evidence for the timeout and return a fail finding indicating that the API execution test timed out.
             return [
                 self._record_finding(
                     context,
@@ -714,6 +770,7 @@ class DeterministicTestEngine(Assessor):
             result.stdout
         )
 
+        # Check if output is valid JSON to determine if the API endpoint is functioning as expected.
         json_valid = False
         parsed_json = None
         if output:
@@ -723,11 +780,13 @@ class DeterministicTestEngine(Assessor):
             except (json.JSONDecodeError, ValueError):
                 json_valid = False
 
+        # Determine pass/fail status.
         api_passed = (
             result.exit_code == 0 and not fatal_seen and json_valid
         )
         status = "pass" if api_passed else "fail"
 
+        # Record evidence for the API execution test.
         evidence = BehaviouralEvidence(
             test_id="API.EXEC",
             component="api",
@@ -759,6 +818,8 @@ class DeterministicTestEngine(Assessor):
                     },
                 )
             )
+        
+        # If output exists but is not valid JSON.
         elif output:
             findings.append(
                 self._finding(
@@ -790,6 +851,7 @@ class DeterministicTestEngine(Assessor):
                     },
                 )
             )
+        # Returns fail if execution did not pass.
         else:
             findings.append(
                 self._finding(
@@ -807,7 +869,6 @@ class DeterministicTestEngine(Assessor):
                     },
                 )
             )
-
         return findings
 
     # Run SQL statements in an in-memory SQLite database.
@@ -823,6 +884,7 @@ class DeterministicTestEngine(Assessor):
                 if stmt:
                     statements.append((path, stmt))
 
+        # If no statements found across all SQL files, return early with an appropriate result.
         if not statements:
             return {
                 "executed_ok": False,
@@ -834,12 +896,15 @@ class DeterministicTestEngine(Assessor):
                 "errors": ["No executable statements found"],
             }
 
+        # Initialise flags and counters.
         schema_ok = False
         insert_ok = False
         select_ok = False
         row_count: int | None = None
         executed_count = 0
         errors: List[str] = []
+
+        # Execute statements in an in-memory SQLite database and track results to determine if basic SQL operations are functioning correctly.
         with sqlite3.connect(":memory:") as conn:
             for path, stmt in statements:
                 stmt_lower = stmt.lower()
@@ -854,9 +919,10 @@ class DeterministicTestEngine(Assessor):
                         rows = cursor.fetchall()
                         row_count = len(rows)
                         select_ok = True
-                except Exception as exc:  # pragma: no cover - handled in tests via assertions
+                except Exception as exc:  # Catch any exceptions during statement execution and record them as errors.
                     errors.append(f"{path.name}: {exc}")
         executed_ok = executed_count > 0 and (schema_ok or insert_ok or select_ok)
+        # Return a summary of the SQL execution results.
         return {
             "executed_ok": executed_ok,
             "executed_count": executed_count,
@@ -864,9 +930,10 @@ class DeterministicTestEngine(Assessor):
             "insert_ok": insert_ok,
             "select_ok": select_ok,
             "row_count": row_count,
-            "errors": errors[:20],  # Guard runaway error lists
+            "errors": errors[:20],  # Cap the number of errors returned.
         }
 
+    # Generate a PHP wrapper that sets $_POST and $_GET variables.
     def _php_wrapper(self, inputs: Mapping[str, str], target: Path) -> str:
         """Generate a minimal PHP wrapper that injects form inputs."""
         php_array = ", ".join(f"'{k}' => '{v}'" for k, v in inputs.items())
@@ -877,6 +944,7 @@ class DeterministicTestEngine(Assessor):
     def _discover_form_inputs(self, context: SubmissionContext) -> Mapping[str, str]:
         html_files = sorted(context.files_for("html", relevant_only=True))
         inputs: dict[str, str] = {}
+        # Iterate through HTML files and use FormDetector.
         for path in html_files:
             try:
                 content = path.read_text(encoding="utf-8", errors="replace")
@@ -897,9 +965,11 @@ class DeterministicTestEngine(Assessor):
         if not php_files:
             return None
 
+        # First try to match form actions from HTML files to PHP files.
         actions = self._extract_form_actions(context)
         resolved_root = Path(context.metadata.get("resolved_root", context.workspace_path))
 
+        # Attempt to find a PHP file that matches any form action from the HTML files.
         for action in actions:
             action_name = Path(action).name.lower()
             for php_path in php_files:
@@ -907,6 +977,7 @@ class DeterministicTestEngine(Assessor):
                 if php_path.name.lower() == action_name or rel.as_posix().lower().endswith(action_name):
                     return php_path
 
+        # If no matches from form actions, apply heuristics based on common entrypoint names.
         preferred = ["index.php", "submit.php", "form.php", "process.php", "handler.php"]
         for name in preferred:
             for php_path in php_files:
@@ -919,6 +990,7 @@ class DeterministicTestEngine(Assessor):
     def _extract_form_actions(self, context: SubmissionContext) -> List[str]:
         actions: List[str] = []
         html_files = sorted(context.files_for("html", relevant_only=True))
+        # Iterate through HTML files and use FormDetector to extract form actions.
         for path in html_files:
             try:
                 content = path.read_text(encoding="utf-8", errors="replace")
@@ -932,10 +1004,12 @@ class DeterministicTestEngine(Assessor):
                 continue
         return actions
 
+    # Identify potential API endpoints.
     def _discover_api_endpoint(self, context: SubmissionContext) -> Path | None:
         """Find PHP files that appear to be API endpoints (return JSON)."""
         import re as _re
 
+        # Search for PHP files that look like API endpoints.
         php_files = sorted(context.files_for("php", relevant_only=True))
         if not php_files:
             return None
@@ -946,6 +1020,7 @@ class DeterministicTestEngine(Assessor):
                 content = path.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
+            # Check for both a JSON content-type header and usage of json_encode.
             lowered = content.lower()
             has_json_header = bool(_re.search(
                 r"""header\s*\(\s*['"]Content-Type\s*:\s*application/json""",
@@ -962,6 +1037,7 @@ class DeterministicTestEngine(Assessor):
                 content = path.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
+            # Check for usage of json_encode and routing based on request method.
             lowered = content.lower()
             has_json_encode = "json_encode(" in lowered
             has_method_routing = bool(_re.search(
@@ -980,6 +1056,7 @@ class DeterministicTestEngine(Assessor):
 
         return None
 
+    # Generate a PHP wrapper that simulates a GET request to an API endpoint.
     def _api_wrapper(self, target: Path) -> str:
         """Generate a PHP wrapper that simulates a GET request to an API endpoint."""
         # Use relative path from the wrapper's temp dir up to the target's parent
@@ -1016,7 +1093,7 @@ class DeterministicTestEngine(Assessor):
         profile: str,
         required: bool | None = None,
         finding_evidence: Mapping[str, object] | None = None,
-    ) -> Finding:
+    ) -> Finding:   # Returns evidence and findings
         self._record_evidence(context, evidence)
         return self._finding(
             code=code,
@@ -1036,7 +1113,7 @@ class DeterministicTestEngine(Assessor):
         profile: str,
         evidence: Mapping[str, object] | None = None,
         required: bool | None = None,
-    ) -> Finding:
+    ) -> Finding: # Returns a finding with standard behavioural metadata
         evidence_data = dict(evidence or {})
         if profile is not None and "profile" not in evidence_data:
             evidence_data["profile"] = profile

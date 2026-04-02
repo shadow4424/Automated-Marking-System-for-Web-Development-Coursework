@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 
 
+# Remove a path only when it stays inside the expected root.
 def _remove_path_within(root_dir: Path, candidate: Path) -> bool:
     root = root_dir.resolve()
     path = candidate.resolve()
@@ -24,6 +25,7 @@ def _remove_path_within(root_dir: Path, candidate: Path) -> bool:
     return False
 
 
+# Remove empty parent directories until the stop path is reached.
 def _prune_empty_parents(path: Path, *, stop_at: Path) -> None:
     stop = stop_at.resolve()
     current = path.resolve()

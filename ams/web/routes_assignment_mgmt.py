@@ -40,6 +40,7 @@ from ams.web.routes_teacher_helpers import (
     _pdf_response,
     _txt_response,
 )
+from ams.web.route_helpers import load_accessible_assignment_or_json, load_accessible_assignment_or_redirect
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ assignment_mgmt_bp = Blueprint("assignment_mgmt", __name__, url_prefix="/teacher
 
 @assignment_mgmt_bp.route("/create-assignment", methods=["GET", "POST"])
 @teacher_or_admin_required
+# Create a new assignment.
 def create_assignment_route():
     if request.method == "GET":
         students = list_users(role="student")
@@ -91,14 +93,15 @@ def create_assignment_route():
 
 @assignment_mgmt_bp.route("/assignment/<assignment_id>/students", methods=["POST"])
 @teacher_or_admin_required
+# Update the student list for one assignment.
 def update_students(assignment_id: str):
-    assignment = get_assignment(assignment_id)
-    if assignment is None:
-        flash("Assignment not found.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
-    if not _user_can_access_assignment(assignment):
-        flash("You do not have access to this assignment.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
+    assignment, error_response = load_accessible_assignment_or_redirect(
+        assignment_id,
+        access_checker=_user_can_access_assignment,
+        loader=get_assignment,
+    )
+    if error_response is not None:
+        return error_response
 
     selected = request.form.getlist("students")
     update_assignment_students(assignment_id, selected)
@@ -108,14 +111,15 @@ def update_students(assignment_id: str):
 
 @assignment_mgmt_bp.route("/assignment/<assignment_id>/teachers", methods=["POST"])
 @teacher_or_admin_required
+# Update the teacher list for one assignment.
 def update_teachers(assignment_id: str):
-    assignment = get_assignment(assignment_id)
-    if assignment is None:
-        flash("Assignment not found.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
-    if not _user_can_access_assignment(assignment):
-        flash("You do not have access to this assignment.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
+    assignment, error_response = load_accessible_assignment_or_redirect(
+        assignment_id,
+        access_checker=_user_can_access_assignment,
+        loader=get_assignment,
+    )
+    if error_response is not None:
+        return error_response
 
     valid_teacher_ids = {teacher["userID"] for teacher in list_users(role="teacher")}
     selected_teachers = [
@@ -130,14 +134,15 @@ def update_teachers(assignment_id: str):
 
 @assignment_mgmt_bp.route("/assignment/<assignment_id>")
 @teacher_or_admin_required
+# Show the detail page for one assignment.
 def assignment_detail(assignment_id: str):
-    assignment = get_assignment(assignment_id)
-    if assignment is None:
-        flash("Assignment not found.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
-    if not _user_can_access_assignment(assignment):
-        flash("You do not have access to this assignment.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
+    assignment, error_response = load_accessible_assignment_or_redirect(
+        assignment_id,
+        access_checker=_user_can_access_assignment,
+        loader=get_assignment,
+    )
+    if error_response is not None:
+        return error_response
 
     student_details = []
     for sid in assignment.get("assigned_students", []):
@@ -178,14 +183,15 @@ def assignment_detail(assignment_id: str):
 
 @assignment_mgmt_bp.route("/assignment/<assignment_id>/release", methods=["POST"])
 @teacher_or_admin_required
+# Release marks for one assignment.
 def release(assignment_id: str):
-    assignment = get_assignment(assignment_id)
-    if assignment is None:
-        flash("Assignment not found.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
-    if not _user_can_access_assignment(assignment):
-        flash("You do not have access to this assignment.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
+    assignment, error_response = load_accessible_assignment_or_redirect(
+        assignment_id,
+        access_checker=_user_can_access_assignment,
+        loader=get_assignment,
+    )
+    if error_response is not None:
+        return error_response
 
     assignment_runs = _build_assignment_run_rows(assignment_id)
     threat_rows = _build_threat_resolution_rows(assignment_runs)
@@ -204,14 +210,15 @@ def release(assignment_id: str):
 
 @assignment_mgmt_bp.route("/assignment/<assignment_id>/withhold", methods=["POST"])
 @teacher_or_admin_required
+# Withhold marks for one assignment.
 def withhold(assignment_id: str):
-    assignment = get_assignment(assignment_id)
-    if assignment is None:
-        flash("Assignment not found.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
-    if not _user_can_access_assignment(assignment):
-        flash("You do not have access to this assignment.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
+    assignment, error_response = load_accessible_assignment_or_redirect(
+        assignment_id,
+        access_checker=_user_can_access_assignment,
+        loader=get_assignment,
+    )
+    if error_response is not None:
+        return error_response
 
     withhold_marks(assignment_id)
     flash(f"Marks withheld for '{assignment_id}'.", "info")
@@ -220,15 +227,16 @@ def withhold(assignment_id: str):
 
 @assignment_mgmt_bp.route("/assignment/<assignment_id>/analytics")
 @teacher_or_admin_required
+# Show the assignment analytics page.
 def view_analytics(assignment_id: str):
     """Render fresh analytics for a single assignment."""
-    assignment = get_assignment(assignment_id)
-    if assignment is None:
-        flash("Assignment not found.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
-    if not _user_can_access_assignment(assignment):
-        flash("You do not have access to this assignment.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
+    assignment, error_response = load_accessible_assignment_or_redirect(
+        assignment_id,
+        access_checker=_user_can_access_assignment,
+        loader=get_assignment,
+    )
+    if error_response is not None:
+        return error_response
 
     try:
         analytics = generate_assignment_analytics(assignment_id, app=current_app)
@@ -271,12 +279,15 @@ def view_analytics(assignment_id: str):
 
 @assignment_mgmt_bp.route("/assignment/<assignment_id>/analytics/teaching-insights.json")
 @teacher_or_admin_required
+# Return the teaching insights JSON payload.
 def teaching_insights_json(assignment_id: str):
-    assignment = get_assignment(assignment_id)
-    if assignment is None:
-        return jsonify({"error": "Assignment not found."}), 404
-    if not _user_can_access_assignment(assignment):
-        return jsonify({"error": "You do not have access to this assignment."}), 403
+    assignment, error_response = load_accessible_assignment_or_json(
+        assignment_id,
+        access_checker=_user_can_access_assignment,
+        loader=get_assignment,
+    )
+    if error_response is not None:
+        return error_response
 
     try:
         analytics = generate_assignment_analytics(assignment_id, app=current_app)
@@ -298,14 +309,15 @@ def teaching_insights_json(assignment_id: str):
 
 @assignment_mgmt_bp.route("/assignment/<assignment_id>/analytics/export/<export_kind>.csv")
 @teacher_or_admin_required
+# Export assignment analytics rows as CSV.
 def export_analytics_csv(assignment_id: str, export_kind: str):
-    assignment = get_assignment(assignment_id)
-    if assignment is None:
-        flash("Assignment not found.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
-    if not _user_can_access_assignment(assignment):
-        flash("You do not have access to this assignment.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
+    assignment, error_response = load_accessible_assignment_or_redirect(
+        assignment_id,
+        access_checker=_user_can_access_assignment,
+        loader=get_assignment,
+    )
+    if error_response is not None:
+        return error_response
 
     try:
         analytics = generate_assignment_analytics(assignment_id, app=current_app)
@@ -404,19 +416,20 @@ def export_analytics_csv(assignment_id: str, export_kind: str):
 
 @assignment_mgmt_bp.route("/assignment/<assignment_id>/analytics/export/<export_kind>/<format>")
 @teacher_or_admin_required
+# Export assignment analytics in the requested format.
 def export_analytics(assignment_id: str, export_kind: str, format: str):
     """Export analytics in various formats (csv, json, txt, pdf)."""
     if format not in ("csv", "json", "txt", "pdf"):
         flash("Invalid export format.", "error")
         return redirect(url_for("assignment_mgmt.view_analytics", assignment_id=assignment_id))
 
-    assignment = get_assignment(assignment_id)
-    if assignment is None:
-        flash("Assignment not found.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
-    if not _user_can_access_assignment(assignment):
-        flash("You do not have access to this assignment.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
+    assignment, error_response = load_accessible_assignment_or_redirect(
+        assignment_id,
+        access_checker=_user_can_access_assignment,
+        loader=get_assignment,
+    )
+    if error_response is not None:
+        return error_response
 
     try:
         analytics = generate_assignment_analytics(assignment_id, app=current_app)
@@ -522,14 +535,15 @@ def export_analytics(assignment_id: str, export_kind: str, format: str):
 
 @assignment_mgmt_bp.route("/assignment/<assignment_id>/delete", methods=["POST"])
 @teacher_or_admin_required
+# Delete one assignment.
 def delete_assignment_route(assignment_id: str):
-    assignment = get_assignment(assignment_id)
-    if assignment is None:
-        flash("Assignment not found.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
-    if not _user_can_access_assignment(assignment):
-        flash("You do not have access to this assignment.", "error")
-        return redirect(url_for("teacher_dashboard.dashboard"))
+    assignment, error_response = load_accessible_assignment_or_redirect(
+        assignment_id,
+        access_checker=_user_can_access_assignment,
+        loader=get_assignment,
+    )
+    if error_response is not None:
+        return error_response
 
     if delete_assignment(assignment_id):
         removed_count = purge_assignment_storage(get_runs_root(current_app), assignment_id)

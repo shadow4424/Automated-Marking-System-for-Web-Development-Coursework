@@ -38,6 +38,7 @@ class ThreatPattern:
     file_extensions: tuple[str, ...] = ()  # Empty = all files
 
 
+# Compile a threat pattern with the default flags.
 def _compile(pattern: str, flags: int = re.IGNORECASE) -> re.Pattern[str]:
     return re.compile(pattern, flags)
 

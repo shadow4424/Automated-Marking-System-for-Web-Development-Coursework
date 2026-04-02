@@ -7,10 +7,6 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-
-# Constants
-
-
 # Sources whose findings are diagnostic by default (not rubric checks).
 _DIAGNOSTIC_SOURCES: frozenset[str] = frozenset(
     {
@@ -59,23 +55,21 @@ _STATIC_DIAGNOSTIC_IDS: frozenset[str] = frozenset(
     }
 )
 
-
-# CheckResult data class
-
-
+# Logger that debugs the aggregation process, especially conflict resolution.
 @dataclass
 class CheckResult:
     """Aggregated result for a single logical rubric check."""
 
-    check_id: str
+    check_id: str           # Stable identifier for the check (e.g., rule ID or finding ID)
     component: str          # Html / css / js / php / sql / consistency / behavioural
     status: str             # PASS / WARN / FAIL / SKIPPED
-    occurrences: int = 1
-    weight: Optional[float] = None
-    messages: List[str] = field(default_factory=list)
-    evidence: List[Dict[str, Any]] = field(default_factory=list)
-    sources: List[str] = field(default_factory=list)
+    occurrences: int = 1    # Number of findings that contributed to this check
+    weight: Optional[float] = None  # Optional weight for scoring, if provided by evidence
+    messages: List[str] = field(default_factory=list)   # Unique messages from contributing findings
+    evidence: List[Dict[str, Any]] = field(default_factory=list)    # Collected evidence dicts from findings
+    sources: List[str] = field(default_factory=list)    # Unique sources (assessors) that contributed findings to this check
 
+    # Method to convert this CheckResult into a dictionary format
     def to_dict(self) -> Dict[str, Any]:
         """Return this check result as a dictionary."""
         return {
@@ -89,10 +83,7 @@ class CheckResult:
             "sources": self.sources,
         }
 
-
-# Classification helpers
-
-
+# Function to map a Finding severity string to a CheckResult status.
 def _severity_to_status(severity: str) -> str:
     """Map a Finding severity string to a CheckResult status."""
     s = severity.upper()
@@ -102,7 +93,7 @@ def _severity_to_status(severity: str) -> str:
         return s
     return "PASS"
 
-
+# Function to classify findings and deriving check keys for aggregation.
 def is_diagnostic(finding: dict) -> bool:
     """Return True if *finding* is a diagnostic/infrastructure event."""
     fid: str = finding.get("id", "")
@@ -134,7 +125,7 @@ def is_diagnostic(finding: dict) -> bool:
 
     return False
 
-
+# Function to derive a stable, unique check key for aggregation.
 def get_check_key(finding: dict) -> str:
     """Derive a stable, unique check key for aggregation."""
     fid: str = finding.get("id", "")
@@ -147,21 +138,17 @@ def get_check_key(finding: dict) -> str:
 
     return fid
 
-
-# Status merging
-
-
+# Status merging logic: 
+# when multiple findings contribute to the same check, 
+# the most severe status should win. Priority: FAIL > WARN > PASS > SKIPPED.
 _STATUS_PRIORITY = {"SKIPPED": 0, "PASS": 1, "WARN": 2, "FAIL": 3}
 
-
+# Function to merge two statuses based on severity priority.
 def _merge_status(existing: str, incoming: str) -> str:
     """Merge two statuses; the more severe one wins. Priority: FAIL > WARN > PASS > SKIPPED."""
     return existing if _STATUS_PRIORITY.get(existing, 0) >= _STATUS_PRIORITY.get(incoming, 0) else incoming
 
-
-# Main aggregation function
-
-
+# Main aggregation function: takes raw findings and produces aggregated checks and diagnostics.
 def aggregate_findings_to_checks(
     findings: List[dict],
 ) -> tuple[List[CheckResult], List[dict]]:
@@ -169,11 +156,13 @@ def aggregate_findings_to_checks(
     checks_map: Dict[str, CheckResult] = {}
     diagnostics: List[dict] = []
 
+    # Classify each finding as diagnostic or check.
     for f in findings:
         if is_diagnostic(f):
             diagnostics.append(f)
             continue
-
+        
+        # For check findings, derive the check key and aggregate results.
         key = get_check_key(f)
         severity = f.get("severity", "INFO")
         status = _severity_to_status(severity)
@@ -182,12 +171,14 @@ def aggregate_findings_to_checks(
         message = f.get("message", "")
         source = f.get("source", "")
         weight = evidence.get("weight")
+        # Normalise weight to a float if possible, otherwise ignore it
         if weight is not None:
             try:
                 weight = float(weight)
             except (TypeError, ValueError):
                 weight = None
 
+        # Aggregate into checks_map
         if key in checks_map:
             cr = checks_map[key]
             cr.occurrences += 1
@@ -200,6 +191,7 @@ def aggregate_findings_to_checks(
             # Keep highest weight
             if weight is not None and (cr.weight is None or weight > cr.weight):
                 cr.weight = weight
+        # If this is the first time we see this check key, create a new CheckResult
         else:
             checks_map[key] = CheckResult(
                 check_id=key,
@@ -214,7 +206,7 @@ def aggregate_findings_to_checks(
 
     return list(checks_map.values()), diagnostics
 
-
+# Function to compute summary statistics from aggregated checks.
 def compute_check_stats(checks: List[CheckResult]) -> Dict[str, int]:
     """Compute summary statistics from aggregated checks. Returns a dict with keys: total, passed, failed, warnings, skipped."""
     stats: Dict[str, int] = {
@@ -236,7 +228,7 @@ def compute_check_stats(checks: List[CheckResult]) -> Dict[str, int]:
             stats["skipped"] += 1
     return stats
 
-
+# Defines the public API of this module.
 __all__ = [
     "CheckResult",
     "aggregate_findings_to_checks",
@@ -246,24 +238,23 @@ __all__ = [
     "resolve_conflicts",
 ]
 
+# Import here to avoid circular imports
+from ams.core.models import Finding, FindingCategory, Severity 
 
-# Conflict resolution (formerly ams.core.arbitration)
+_conflict_logger = logging.getLogger(__name__ + ".arbitration") # Logger for conflict resolution
 
-
-from ams.core.models import Finding, FindingCategory, Severity  # noqa: E402
-
-_conflict_logger = logging.getLogger(__name__ + ".arbitration")
-
-
+# Function to resolve conflicts between Static and Visual findings.
 def resolve_conflicts(findings: List[Finding]) -> List[Finding]:
     """Resolve conflicts between Static and Visual findings."""
     if not findings:
         return []
 
+    # Classify findings into visual, static, and other categories for conflict resolution.
     visual_findings: Dict[str, List[Finding]] = defaultdict(list)
     static_findings: List[Finding] = []
     other_findings: List[Finding] = []
-
+    
+    # Characterise findings by source and ID patterns
     for finding in findings:
         if finding.id.startswith("VISUAL."):
             base_rule_id = finding.id[len("VISUAL."):]
@@ -282,9 +273,12 @@ def resolve_conflicts(findings: List[Finding]) -> List[Finding]:
     resolved: List[Finding] = []
     overridden_static_ids: set = set()
 
+    # For each visual finding, check for corresponding static findings and apply conflict resolution logic.
     for base_rule_id, v_findings in visual_findings.items():
         matching_static = [f for f in static_findings if f.id == base_rule_id]
 
+        # If there is a matching static finding that passed but the visual finding failed, 
+        # we consider the visual finding to override the static one.
         if matching_static:
             for static_finding in matching_static:
                 static_passed = static_finding.severity == Severity.INFO
@@ -301,10 +295,12 @@ def resolve_conflicts(findings: List[Finding]) -> List[Finding]:
         else:
             resolved.extend(v_findings)
 
+    # Add back static findings that were not overridden by visual findings.
     for static_finding in static_findings:
         if id(static_finding) not in overridden_static_ids:
             resolved.append(static_finding)
 
+    # Add any other findings that were not classified as visual or static.
     resolved.extend(other_findings)
     _conflict_logger.debug(
         f"Conflict resolution: {len(findings)} input → {len(resolved)} output, "

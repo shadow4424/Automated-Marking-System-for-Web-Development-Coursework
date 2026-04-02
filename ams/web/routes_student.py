@@ -27,6 +27,7 @@ from ams.core.db import (
 from ams.io.web_storage import get_runs_root, list_runs
 from ams.llm.utils import clean_json_response
 from ams.web.auth import get_current_user, login_required
+from ams.web.route_helpers import load_accessible_assignment_or_json, load_accessible_assignment_or_redirect
 
 student_bp = Blueprint("student", __name__, url_prefix="/student")
 
@@ -36,6 +37,7 @@ student_bp = Blueprint("student", __name__, url_prefix="/student")
 
 # Build the student submission view.
 
+# Resolve the current student id and user record.
 def _resolve_student_id() -> tuple[str | None, dict | None]:
     """Return (student_id, preview_info) for the student dashboard."""
     user = get_current_user()
@@ -47,6 +49,7 @@ def _resolve_student_id() -> tuple[str | None, dict | None]:
     return None, None
 
 
+# Collect the current student's runs and assignment ids.
 def _gather_student_runs(student_id: str) -> tuple[list[dict], set[str]]:
     """Collect runs for *student_id*."""
     runs_root = get_runs_root(current_app)
@@ -86,6 +89,7 @@ def _gather_student_runs(student_id: str) -> tuple[list[dict], set[str]]:
     return my_runs, submitted_aids
 
 
+# Keep only the latest run for each assignment.
 def _latest_runs_by_assignment(runs: list[dict]) -> dict[str, dict]:
     """Return latest run for each assignment ID."""
     latest: dict[str, dict] = {}
@@ -124,6 +128,7 @@ def _latest_runs_by_assignment(runs: list[dict]) -> dict[str, dict]:
 
 
 # Build the latest submission cards and attempt counts.
+# Build the dashboard cards for student submissions.
 def _student_submission_cards(runs: list[dict]) -> tuple[list[dict], dict[str, int]]:
     latest_runs = _latest_runs_by_assignment(runs)
     attempt_counts: dict[str, int] = {}
@@ -144,6 +149,7 @@ def _student_submission_cards(runs: list[dict]) -> tuple[list[dict], dict[str, i
     return cards, attempt_counts
 
 
+# Split assignments into released and unreleased groups.
 def _split_assignments(
     assignments: list[dict],
     submitted_aids: set[str],
@@ -172,6 +178,7 @@ def _split_assignments(
 
 # Check grade and feedback visibility.
 
+# Check whether the student can access this assignment.
 def _student_can_access_assignment(assignment: dict | None, student_id: str | None) -> bool:
     if assignment is None or not student_id:
         return False
@@ -184,6 +191,7 @@ def _student_can_access_assignment(assignment: dict | None, student_id: str | No
 
 
 # Check whether student LLM feedback is enabled.
+# Check whether LLM student feedback is enabled.
 def _student_llm_feedback_enabled() -> bool:
     if current_app.testing and "AMS_ENABLE_ANALYTICS_LLM_SUMMARY" not in current_app.config:
         return False
@@ -195,6 +203,7 @@ def _student_llm_feedback_enabled() -> bool:
 
 # Build student analytics responses.
 
+# Build the deterministic student feedback fallback.
 def _deterministic_student_feedback(analytics: dict) -> dict:
     feedback: list[dict[str, object]] = []
     seen_titles: set[str] = set()
@@ -243,11 +252,13 @@ def _deterministic_student_feedback(analytics: dict) -> dict:
 
 
 # Return a fallback response when the LLM output cannot be parsed.
+# Build a validation failure payload for student feedback.
 def _student_feedback_validation_failure(category: str, message: str) -> dict[str, str]:
     return {"category": str(category or "schema_error"), "message": str(message or "Validation failed.")}
 
 
 # Validate student feedback headline.
+# Validate the student feedback headline.
 def _validate_student_feedback_headline(
     candidate: dict,
     banned_markers: tuple[str, ...],
@@ -261,6 +272,7 @@ def _validate_student_feedback_headline(
 
 
 # Validate student feedback item.
+# Validate one generated feedback item.
 def _validate_student_feedback_item(
     item: object,
     allowed_types: set[str],
@@ -299,6 +311,7 @@ def _validate_student_feedback_item(
 
 
 # Validate student feedback.
+# Validate the full student feedback payload.
 def _validate_student_feedback(candidate: object, context: dict) -> tuple[dict | None, dict | None]:
     allowed_types = {"strength", "weakness", "context", "action", "confidence"}
     banned_markers = (
@@ -346,6 +359,7 @@ def _validate_student_feedback(candidate: object, context: dict) -> tuple[dict |
 
 
 # Build deterministic feedback when LLM feedback is unavailable.
+# Build a fallback student feedback response.
 def _student_feedback_fallback(
     deterministic: dict,
     validation_status: str | None = None,
@@ -363,6 +377,7 @@ def _student_feedback_fallback(
 
 
 # Build student feedback request.
+# Build the prompt and schema for student feedback generation.
 def _build_student_feedback_request(context: dict) -> tuple[str, str]:
     prompt_payload = {
         "student_assignment_analytics": context,
@@ -394,6 +409,7 @@ def _build_student_feedback_request(context: dict) -> tuple[str, str]:
 
 
 # Parse student feedback response.
+# Parse and validate the student feedback response.
 def _parse_student_feedback_response(response: object, context: dict, deterministic: dict) -> dict:
     if not getattr(response, "success", False):
         return _student_feedback_fallback(
@@ -429,6 +445,7 @@ def _parse_student_feedback_response(response: object, context: dict, determinis
 
 
 # Build the final student feedback payload.
+# Build the student feedback payload from analytics data.
 def _student_feedback_payload(analytics: dict) -> dict:
     context = dict(analytics.get("feedback_context", {}) or {})
     deterministic = _deterministic_student_feedback(analytics)
@@ -463,6 +480,7 @@ def _student_feedback_payload(analytics: dict) -> dict:
 
 @student_bp.route("/")
 @login_required
+# Show the student dashboard.
 def dashboard():
     student_id, preview_student = _resolve_student_id()
 
@@ -505,6 +523,7 @@ def dashboard():
 # Render the student coursework page.
 @student_bp.route("/coursework")
 @login_required
+# Show the student coursework page.
 def coursework():
     student_id, preview_student = _resolve_student_id()
 
@@ -546,19 +565,21 @@ def coursework():
 # Return assignment analytics for the signed-in student.
 @student_bp.route("/assignment/<assignment_id>/analytics")
 @login_required
+# Show assignment analytics for one student.
 def assignment_analytics(assignment_id: str):
     student_id, preview_student = _resolve_student_id()
     if preview_student is not None:
         flash("Student analytics are unavailable in preview mode.", "info")
         return redirect(url_for("student.coursework"))
 
-    assignment = get_assignment(assignment_id)
-    if assignment is None:
-        flash("Assignment not found.", "error")
-        return redirect(url_for("student.coursework"))
-    if not _student_can_access_assignment(assignment, student_id):
-        flash("You do not have access to this assignment.", "error")
-        return redirect(url_for("student.coursework"))
+    assignment, error_response = load_accessible_assignment_or_redirect(
+        assignment_id,
+        access_checker=lambda current_assignment: _student_can_access_assignment(current_assignment, student_id),
+        loader=get_assignment,
+        redirect_endpoint="student.coursework",
+    )
+    if error_response is not None:
+        return error_response
     if not bool(assignment.get("marks_released")):
         flash("Analytics become available once marks are released for this assignment.", "info")
         return redirect(url_for("student.coursework"))
@@ -581,16 +602,19 @@ def assignment_analytics(assignment_id: str):
 # Return personalised feedback for the signed-in student.
 @student_bp.route("/assignment/<assignment_id>/analytics/personal-feedback.json")
 @login_required
+# Return personalised feedback as JSON.
 def personalised_feedback_json(assignment_id: str):
     student_id, preview_student = _resolve_student_id()
     if preview_student is not None:
         return jsonify({"error": "Student analytics are unavailable in preview mode."}), 403
 
-    assignment = get_assignment(assignment_id)
-    if assignment is None:
-        return jsonify({"error": "Assignment not found."}), 404
-    if not _student_can_access_assignment(assignment, student_id):
-        return jsonify({"error": "You do not have access to this assignment."}), 403
+    assignment, error_response = load_accessible_assignment_or_json(
+        assignment_id,
+        access_checker=lambda current_assignment: _student_can_access_assignment(current_assignment, student_id),
+        loader=get_assignment,
+    )
+    if error_response is not None:
+        return error_response
     if not bool(assignment.get("marks_released")):
         return jsonify({"error": "Analytics become available once marks are released for this assignment."}), 403
 
