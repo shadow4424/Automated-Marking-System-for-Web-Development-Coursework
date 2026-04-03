@@ -5,7 +5,6 @@ import logging
 import re
 from typing import Any
 
-from ams.core.llm_factory import get_llm_provider
 from ams.llm.providers import LLMResponse
 from ams.llm.prompts import FEEDBACK_SYSTEM_PROMPT
 
@@ -48,6 +47,7 @@ from ams.llm.utils import clean_json_response as _clean_json_response  # noqa: F
 
 def ask_llama(prompt: str, system_prompt: str = FEEDBACK_SYSTEM_PROMPT) -> str:
     """Send a prompt to the configured LLM provider and return the response."""
+    from ams.core.llm_factory import get_llm_provider
     provider = get_llm_provider()
 
     response: LLMResponse = provider.complete(
