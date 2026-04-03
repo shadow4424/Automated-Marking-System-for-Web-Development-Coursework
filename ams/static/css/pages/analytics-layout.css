@@ -334,4 +334,7 @@
     .analytics-list-stack,
     .analytics-coverage-grid,
     .analytics-signals-grid,
-    .analytics-reliability-grid,
+    .analytics-reliability-grid {
+        display: grid;
+        gap: var(--space-md);
+    }

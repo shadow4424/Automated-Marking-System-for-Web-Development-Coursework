@@ -28,6 +28,8 @@ SEVERITY_PRIORITY = {"FAIL": 3, "WARN": 2, "SKIPPED": 1, "PASS": 0}
 GRADE_ORDER = {"unknown": 0, "failing": 1, "poor": 2, "partial": 3, "good": 4, "full marks": 5}
 STATIC_ANALYTICS_STAGES = {"static", "quality"}
 FUNCTIONAL_ANALYTICS_STAGES = {"runtime", "browser", "layout"}
+
+# Mappings for requirement titles, signal descriptions and finding labels.
 REQUIREMENT_TITLES = {
     "html": "Required HTML structure",
     "css": "Required CSS requirements",
@@ -36,6 +38,8 @@ REQUIREMENT_TITLES = {
     "sql": "Required SQL/database behaviour",
     "api": "Required API integration behaviour",
 }
+
+# These descriptions are used to provide more context and clarity to the signals identified in the analytics.
 SIGNAL_DESCRIPTIONS = {
     "missing_backend": "Required backend files or backend rubric checks are missing.",
     "missing_frontend": "Required HTML, CSS, or JavaScript artefacts are missing.",
@@ -48,6 +52,7 @@ SIGNAL_DESCRIPTIONS = {
     "browser_skipped": "Browser checks were skipped or unavailable, reducing confidence in UI-related interpretation.",
 }
 
+# These labels are used to provide more user-friendly titles and descriptions for the various findings that can be identified in the analytics.
 FINDING_LABELS = {
     "PHP.MISSING_FILES": ("Missing required backend files (PHP)", "Required PHP files were not found."),
     "SQL.MISSING_FILES": ("Missing required backend files (SQL)", "Required SQL files were not found."),

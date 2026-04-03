@@ -30,20 +30,31 @@
 
     var activeSource = 'upload';
 
+    function _setVisible(el, visible) {
+        if (!el) return;
+        if (visible) {
+            el.classList.remove('d-none');
+            el.style.display = '';
+        } else {
+            el.classList.add('d-none');
+            el.style.display = 'none';
+        }
+    }
+
     // ── Radio button switching ────────────────────────────────────
     function onMethodChange() {
         activeSource = methodGithub.checked ? 'github' : 'upload';
 
         if (activeSource === 'upload') {
-            uploadSection.style.display = '';
-            githubSection.style.display = 'none';
+            _setVisible(uploadSection, true);
+            _setVisible(githubSection, false);
             if (fileInput) fileInput.setAttribute('required', '');
             // Remove name attrs from github selects so they don't submit
             if (repoSelect)   repoSelect.removeAttribute('name');
             if (branchSelect) branchSelect.removeAttribute('name');
         } else {
-            uploadSection.style.display = 'none';
-            githubSection.style.display = '';
+            _setVisible(uploadSection, false);
+            _setVisible(githubSection, true);
             if (fileInput) fileInput.removeAttribute('required');
             // Restore name attrs
             if (repoSelect)   repoSelect.setAttribute('name', 'github_repo');
