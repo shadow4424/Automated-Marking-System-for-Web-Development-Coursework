@@ -71,13 +71,26 @@ class ScoringEngine:
         behavioural_evidence_list = list(behavioural_evidence or [])
         browser_evidence_list = list(browser_evidence or [])
         if context is not None and resolved_config is not None:
-            return self._score_from_requirements(
+            static_results = self._run_static_evaluation(
                 findings_list,
                 context=context,
                 resolved_config=resolved_config,
                 behavioural_evidence=behavioural_evidence_list,
                 browser_evidence=browser_evidence_list,
             )
+            return self._enrich_with_llm_hybrid(static_results, findings_list)
+        return self._score_components_legacy(
+            findings_list, profile, behavioural_evidence_list, browser_evidence_list
+        )
+
+    def _score_components_legacy(
+        self,
+        findings_list: List[Finding],
+        profile: str | None,
+        behavioural_evidence_list: List[BehaviouralEvidence],
+        browser_evidence_list: List[BrowserEvidence],
+    ) -> Tuple[Mapping[str, object], ScoreEvidenceBundle]:
+        """Legacy scoring path using category-based findings."""
         by_category: Dict[str, List[Finding]] = {c: [] for c in self.COMPONENTS}
         for finding in findings_list:
             if finding.category in by_category:
@@ -184,202 +197,18 @@ class ScoringEngine:
         static_results: Mapping[str, object],
         findings: List[Finding],
     ) -> Tuple[Mapping[str, object], ScoreEvidenceBundle]:
-        """Return with llm hybrid."""
-        requirement_results = list(static_results["requirement_results"])
-        self._apply_llm_hybrid_to_requirement_results(requirement_results, findings)
-        relevant_components = list(static_results["relevant_components"])
-        generated_at = str(static_results["generated_at"])
-        findings_by_category = dict(static_results["findings_by_category"])
-        resolved_config = static_results["resolved_config"]
-        context = static_results["context"]
-        behavioural_evidence = list(static_results["behavioural_evidence"])
-        browser_evidence = list(static_results["browser_evidence"])
-        component_results: Dict[str, dict] = {}
-        component_summaries: Dict[str, ComponentScoreSummary] = {}
-        for component in self.COMPONENTS:
-            component_requirements = [
-                result
-                for result in requirement_results
-                if result.component == component and result.required
-            ]
-            if component not in relevant_components:
-                component_results[component] = {
-                    "score": "SKIPPED",
-                    "rationale": [
-                        {
-                            "rule": "component_skipped_profile",
-                            "finding_ids": [],
-                            "note": f"Component not required for profile [{resolved_config.profile_name}]",
-                        }
-                    ],
-                    "requirement_summary": {
-                        "requirement_count": 0,
-                        "met": 0,
-                        "partial": 0,
-                        "failed": 0,
-                        "skipped": 0,
-                    },
-                }
-                continue
-
-            score_value, penalty, summary = self._score_component_from_requirements(
-                component_requirements,
-            )
-            rationale = [
-                {
-                    "rule": result.requirement_id,
-                    "score": result.score,
-                    "status": result.status,
-                    "stage": result.stage,
-                    "aggregation_mode": result.aggregation_mode,
-                }
-                for result in component_requirements
-            ]
-            if penalty > 0:
-                rationale.append(
-                    {
-                        "rule": f"{component}.quality.capped_penalty",
-                        "score": max(0.0, 1.0 - penalty),
-                        "status": "PARTIAL" if penalty < 0.5 else "FAIL",
-                        "stage": "quality",
-                        "aggregation_mode": "CAPPED_PENALTY",
-                        "note": f"Penalty applied: {penalty:.2f}",
-                    }
-                )
-            component_results[component] = {
-                "score": score_value,
-                "rationale": rationale,
-                "requirement_summary": summary.to_dict(),
-                "static_summary": _cs.static_summary(component, findings_by_category.get(component, [])),
-                "behavioural_summary": _cs.behavioural_view(behavioural_evidence),
-                "browser_summary": _cs.browser_view(browser_evidence),
-            }
-            component_summaries[component] = summary
-
-        overall_raw = self._weighted_overall(
-            component_results,
-            relevant_components,
-            resolved_config.component_weights,
-        )
-        confidence_summary = self._build_confidence_summary(requirement_results)
-        review = self._build_review_recommendation(overall_raw, confidence_summary, component_summaries)
-        context.confidence_summary = confidence_summary
-        context.review_recommendation = review
-        scores = {
-            "overall": round(overall_raw, 2),
-            "by_component": component_results,
-            "generated_at": generated_at,
-            "confidence": confidence_summary.to_dict(),
-            "review": review.to_dict(),
-        }
-
-        components_evidence: Dict[str, Mapping[str, object]] = {}
-        for component in self.COMPONENTS:
-            component_requirements = [
-                result.to_dict()
-                for result in requirement_results
-                if result.component == component
-            ]
-            components_evidence[component] = {
-                "score": component_results[component]["score"],
-                "required": component in relevant_components,
-                "weight": float(resolved_config.component_weights.get(component, 0.0)),
-                "requirements": component_requirements,
-                **_extract_component_result(component_results, component),
-            }
-
-        evidence = ScoreEvidenceBundle(
-            profile=resolved_config.profile_name,
-            generated_at=generated_at,
-            environment={
-                "python_version": sys.version.split()[0],
-                "platform": platform.platform(),
-            },
-            components=components_evidence,
-            overall={
-                "raw_average": overall_raw,
-                "final": round(overall_raw, 2),
-                "required_components": list(relevant_components),
-                "component_weights": dict(resolved_config.component_weights),
-                "rationale": [
-                    f"Weighted overall score across required components: {overall_raw:.2f}.",
-                    f"Confidence level: {confidence_summary.level}.",
-                ],
-            },
-            requirements=[result.to_dict() for result in requirement_results],
-            assignment_profile=resolved_config.to_dict(),
-            role_mapping=context.role_mapping.to_dict() if context.role_mapping else {},
-            confidence=confidence_summary.to_dict(),
-            review=review.to_dict(),
-            manifest=context.manifest.to_dict() if context.manifest else {},
-            artefact_inventory=context.artefact_inventory.to_dict() if context.artefact_inventory else {},
-        )
-        return scores, evidence
-
-    def _score_from_requirements(
-        self,
-        findings: List[Finding],
-        *,
-        context: SubmissionContext,
-        resolved_config: ResolvedAssignmentConfig,
-        behavioural_evidence: List[BehaviouralEvidence],
-        browser_evidence: List[BrowserEvidence],
-    ) -> Tuple[Mapping[str, object], ScoreEvidenceBundle]:
-        """Score the from requirements."""
-        static_results = self._run_static_evaluation(
-            findings,
-            context=context,
-            resolved_config=resolved_config,
-            behavioural_evidence=behavioural_evidence,
-            browser_evidence=browser_evidence,
-        )
-        return self._enrich_with_llm_hybrid(static_results, findings)
+        """Delegate to llm.scoring_integration."""
+        from ams.llm.scoring_integration import enrich_with_llm_hybrid
+        return enrich_with_llm_hybrid(self, static_results, findings)
 
     def _apply_llm_hybrid_to_requirement_results(
         self,
         requirement_results: List[RequirementEvaluationResult],
         findings: List[Finding],
     ) -> None:
-        """Fold LLM hybrid partial credit into requirement results before weighted scoring."""
-        hybrid_scores_by_rule: Dict[str, float] = {}
-        for finding in findings:
-            if not finding.id.endswith(".REQ.FAIL"):
-                continue
-            evidence = finding.evidence if isinstance(finding.evidence, Mapping) else {}
-            rule_id = str(evidence.get("rule_id") or "").strip()
-            if not rule_id:
-                continue
-            hybrid = evidence.get("hybrid_score")
-            if not isinstance(hybrid, Mapping):
-                continue
-            final_score = hybrid.get("final_score")
-            if not isinstance(final_score, (int, float)):
-                continue
-            clamped = max(0.0, min(1.0, float(final_score)))
-            existing = hybrid_scores_by_rule.get(rule_id)
-            if existing is None or clamped > existing:
-                hybrid_scores_by_rule[rule_id] = clamped
-
-        if not hybrid_scores_by_rule:
-            return
-
-        for result in requirement_results:
-            if result.requirement_id not in hybrid_scores_by_rule:
-                continue
-            if result.aggregation_mode == "CAPPED_PENALTY":
-                continue
-            if not isinstance(result.score, (int, float)):
-                continue
-            if result.status not in {"FAIL", "PARTIAL"}:
-                continue
-
-            llm_score = round(hybrid_scores_by_rule[result.requirement_id], 2)
-            result.score = llm_score
-            result.status = "PASS" if llm_score >= 1.0 else "PARTIAL"
-            evidence = dict(result.evidence or {})
-            evidence["llm_adjusted"] = True
-            evidence["llm_score"] = llm_score
-            result.evidence = evidence
+        """Delegate to llm.scoring_integration."""
+        from ams.llm.scoring_integration import apply_llm_hybrid_to_requirement_results
+        apply_llm_hybrid_to_requirement_results(requirement_results, findings)
 
     def _score_component_from_requirements(
         self,
