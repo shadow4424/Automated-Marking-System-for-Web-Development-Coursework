@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Mapping, Sequence
@@ -8,6 +9,9 @@ from ams.core.finding_ids import API as AID, CSS as CID, HTML as HID, JS as JID,
 from ams.core.models import Finding, FindingCategory, RequirementEvaluationResult, Severity, SubmissionContext
 from ams.core.profiles import AggregationMode, BehavioralRule, ProfileSpec, RequirementDefinition, RequiredRule
 from ams.core.rule_evaluators import evaluate_rule as _evaluate_rule
+
+logger = logging.getLogger(__name__)
+
 @dataclass(frozen=True)
 class _RuleFileResult:
     path: str
@@ -87,6 +91,36 @@ def build_skipped_requirement_result(
 
 
 class RequirementEvaluationEngine:
+
+    _EVALUATOR_MAP = {
+        "required_rule":           "_evaluate_static_rule",
+        "behavioral_rule":         "_evaluate_behavioral_rule",
+        "browser_page_load":       "_evaluate_browser_page_load",
+        "browser_interaction":     "_evaluate_browser_interaction",
+        "layout_responsive":       "_evaluate_layout_requirement",
+        "quality_penalty":         "_evaluate_quality_penalty",
+        "api_usage_presence":      "_evaluate_api_usage",
+        "browser_console_clean":   "_evaluate_browser_console_clean",
+        "browser_network_assets":  "_evaluate_browser_network_assets",
+        "browser_dom_structure":   "_evaluate_browser_dom_structure",
+        "browser_accessibility":   "_evaluate_browser_accessibility",
+    }
+
+    _CROSS_FILE_MAP = {
+        "cross_file_php_form":      "php_form_alignment",
+        "cross_file_sql_alignment": "sql_alignment",
+        "cross_file_api_alignment": "api_alignment",
+    }
+
+    _COMPONENT_IDS = {
+        "html": (HID.REQ_PASS, HID.REQ_FAIL, HID.REQ_SKIPPED, HID.REQ_MISSING_FILES),
+        "css":  (CID.REQ_PASS, CID.REQ_FAIL, CID.REQ_SKIPPED, CID.REQ_MISSING_FILES),
+        "js":   (JID.REQ_PASS, JID.REQ_FAIL, JID.REQ_SKIPPED, JID.REQ_MISSING_FILES),
+        "php":  (PID.REQ_PASS, PID.REQ_FAIL, PID.REQ_SKIPPED, PID.REQ_MISSING_FILES),
+        "sql":  (SID.REQ_PASS, SID.REQ_FAIL, SID.REQ_SKIPPED, SID.REQ_MISSING_FILES),
+        "api":  (AID.REQ_PASS, AID.REQ_FAIL, AID.REQ_SKIPPED, AID.REQ_MISSING_FILES),
+    }
+
     def evaluate(
         self,
         context: SubmissionContext,
@@ -100,22 +134,16 @@ class RequirementEvaluationEngine:
         profile = resolved.profile
         profile_name = str(context.metadata.get("profile") or profile.name)
         findings_list = list(findings)
-        results: List[RequirementEvaluationResult] = []
-        generated_findings: List[Finding] = []
 
-        for definition in resolved.requirement_definitions:
-            result = self._evaluate_definition(
-                definition=definition,
-                context=context,
-                findings=findings_list,
-                profile=profile,
-            )
-            results.append(result)
-
-            if definition.stage == "static" and definition.rule is not None:
-                generated_findings.append(
-                    self._finding_from_requirement(result, profile_name=profile_name)
-                )
+        results = [
+            self._safe_evaluate_definition(defn, context, findings_list, profile)
+            for defn in resolved.requirement_definitions
+        ]
+        generated_findings = [
+            self._finding_from_requirement(r, profile_name=profile_name)
+            for r, defn in zip(results, resolved.requirement_definitions)
+            if defn.stage == "static" and defn.rule is not None
+        ]
 
         for component in ("html", "css", "js", "php", "sql", "api"):
             if profile.is_component_required(component):
@@ -154,6 +182,17 @@ class RequirementEvaluationEngine:
         context.requirement_results = ordered_results
         return ordered_results, ordered_findings
 
+    def _safe_evaluate_definition(self, definition, context, findings_list, profile):
+        """Wrap _evaluate_definition with error handling."""
+        try:
+            return self._evaluate_definition(
+                definition=definition, context=context,
+                findings=findings_list, profile=profile,
+            )
+        except Exception as exc:
+            logger.exception("Failed to evaluate requirement %s: %s", definition.id, exc)
+            return build_skipped_requirement_result(definition, reason="evaluation_error")
+
     def _evaluate_definition(
         self,
         *,
@@ -162,37 +201,36 @@ class RequirementEvaluationEngine:
         findings: Sequence[Finding],
         profile: ProfileSpec,
     ) -> RequirementEvaluationResult:
-        """Evaluate the definition."""
+        """Evaluate a single requirement definition via registry dispatch."""
         evaluator = definition.evaluator
-        if evaluator == "required_rule" and isinstance(definition.rule, RequiredRule):
-            return self._evaluate_static_rule(definition, context, profile)
-        if evaluator == "behavioral_rule" and isinstance(definition.rule, BehavioralRule):
-            return self._evaluate_behavioral_rule(definition, context)
-        if evaluator == "browser_page_load":
-            return self._evaluate_browser_page_load(definition, context)
-        if evaluator == "browser_interaction":
-            return self._evaluate_browser_interaction(definition, context)
-        if evaluator == "layout_responsive":
-            return self._evaluate_layout_requirement(definition, context, findings)
+
+        # Cross-file evaluators with an extra result_key argument
+        cross_key = self._CROSS_FILE_MAP.get(evaluator)
+        if cross_key is not None:
+            return self._evaluate_cross_file_result(definition, context, cross_key)
+
+        handler_name = self._EVALUATOR_MAP.get(evaluator)
+        if handler_name is None:
+            raise ValueError(f"Unsupported requirement evaluator: {evaluator}")
+
+        handler = getattr(self, handler_name)
+
+        # Type-guarded evaluators
+        if evaluator == "required_rule":
+            if not isinstance(definition.rule, RequiredRule):
+                raise ValueError(f"Unsupported requirement evaluator: {evaluator}")
+            return handler(definition, context, profile)
+        if evaluator == "behavioral_rule":
+            if not isinstance(definition.rule, BehavioralRule):
+                raise ValueError(f"Unsupported requirement evaluator: {evaluator}")
+            return handler(definition, context)
+        # Evaluators needing findings
+        if evaluator in {"layout_responsive", "api_usage_presence"}:
+            return handler(definition, context, findings)
         if evaluator == "quality_penalty":
-            return self._evaluate_quality_penalty(definition, findings)
-        if evaluator == "api_usage_presence":
-            return self._evaluate_api_usage(definition, context, findings)
-        if evaluator == "cross_file_php_form":
-            return self._evaluate_cross_file_result(definition, context, "php_form_alignment")
-        if evaluator == "cross_file_sql_alignment":
-            return self._evaluate_cross_file_result(definition, context, "sql_alignment")
-        if evaluator == "cross_file_api_alignment":
-            return self._evaluate_cross_file_result(definition, context, "api_alignment")
-        if evaluator == "browser_console_clean":
-            return self._evaluate_browser_console_clean(definition, context)
-        if evaluator == "browser_network_assets":
-            return self._evaluate_browser_network_assets(definition, context)
-        if evaluator == "browser_dom_structure":
-            return self._evaluate_browser_dom_structure(definition, context)
-        if evaluator == "browser_accessibility":
-            return self._evaluate_browser_accessibility(definition, context)
-        raise ValueError(f"Unsupported requirement evaluator: {evaluator}")
+            return handler(definition, findings)
+        # Default: (definition, context) signature
+        return handler(definition, context)
 
     def _load_files_for_rule(
         self,
@@ -839,45 +877,29 @@ class RequirementEvaluationEngine:
         *,
         profile_name: str,
     ) -> Finding:
-        """Return from requirement."""
-        component = result.component
-        mapping = {
-            "html": (HID.REQ_PASS, HID.REQ_FAIL, HID.REQ_SKIPPED, HID.REQ_MISSING_FILES),
-            "css": (CID.REQ_PASS, CID.REQ_FAIL, CID.REQ_SKIPPED, CID.REQ_MISSING_FILES),
-            "js": (JID.REQ_PASS, JID.REQ_FAIL, JID.REQ_SKIPPED, JID.REQ_MISSING_FILES),
-            "php": (PID.REQ_PASS, PID.REQ_FAIL, PID.REQ_SKIPPED, PID.REQ_MISSING_FILES),
-            "sql": (SID.REQ_PASS, SID.REQ_FAIL, SID.REQ_SKIPPED, SID.REQ_MISSING_FILES),
-            "api": (AID.REQ_PASS, AID.REQ_FAIL, AID.REQ_SKIPPED, AID.REQ_MISSING_FILES),
-        }
-        passed_id, failed_id, skipped_id, missing_id = mapping[component]
+        """Convert a requirement evaluation result into a Finding."""
+        passed_id, failed_id, skipped_id, missing_id = self._COMPONENT_IDS[result.component]
+
         if result.status == "PASS":
-            finding_id = passed_id
-            severity = Severity.INFO
-            finding_category = FindingCategory.STRUCTURE
+            finding_id, severity, finding_category = passed_id, Severity.INFO, FindingCategory.STRUCTURE
         elif result.status == "SKIPPED":
-            finding_id = skipped_id
-            severity = Severity.SKIPPED
-            finding_category = FindingCategory.OTHER
+            finding_id, severity, finding_category = skipped_id, Severity.SKIPPED, FindingCategory.OTHER
         elif result.skipped_reason == "no_relevant_files":
-            finding_id = missing_id
-            severity = Severity.FAIL
-            finding_category = FindingCategory.MISSING
+            finding_id, severity, finding_category = missing_id, Severity.FAIL, FindingCategory.MISSING
         else:
-            finding_id = failed_id
-            severity = Severity.WARN
-            finding_category = FindingCategory.MISSING
-        primary_snippet = ""
+            finding_id, severity, finding_category = failed_id, Severity.WARN, FindingCategory.MISSING
+
         snippets = result.evidence.get("snippets")
-        if isinstance(snippets, list) and snippets:
-            primary_snippet = str(snippets[0])
+        primary_snippet = str(snippets[0]) if isinstance(snippets, list) and snippets else ""
         evidence = dict(result.evidence)
         evidence.setdefault("rule_id", result.requirement_id)
         evidence.setdefault("weight", result.weight)
         evidence.setdefault("snippet", primary_snippet)
         evidence.setdefault("required", result.required)
+
         return Finding(
             id=finding_id,
-            category=component,
+            category=result.component,
             message=_build_requirement_message(result),
             severity=severity,
             evidence=evidence,
