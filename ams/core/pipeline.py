@@ -122,6 +122,14 @@ class AssessmentPipeline:
         context.metadata["run_id"] = workspace_path.name
         return context, resolved_config
 
+    def _run_assessor_safe(self, assessor: Assessor, context: SubmissionContext) -> list[Finding]:
+        """Run a single assessor with error handling."""
+        try:
+            return list(assessor.run(context))
+        except Exception as exc:
+            logger.exception("Assessor %s failed: %s", type(assessor).__name__, exc)
+            return []
+
     # Context preparation
     def _run_analysis(
         self,
@@ -169,7 +177,7 @@ class AssessmentPipeline:
             )
             # Run each assessor and collect findings.
             for assessor in assessors:
-                findings.extend(assessor.run(context))
+                findings.extend(self._run_assessor_safe(assessor, context))
             _requirement_results, requirement_findings = self.requirement_engine.evaluate(
                 context,
                 findings,
@@ -327,6 +335,29 @@ class AssessmentPipeline:
 
     # Threat Scanning - returns findings and whether the container should be retained for manual review.
     @staticmethod
+    def _threat_to_finding(threat, category_to_id: dict) -> Finding:
+        """Convert a single ThreatMatch into a Finding."""
+        from ams.core.finding_ids import SANDBOX
+        finding_id = category_to_id.get(threat.category, SANDBOX.THREAT.SHELL_EXECUTION)
+        return Finding(
+            id=finding_id,
+            category="security",
+            message=f"Threat detected: {threat.description} in {threat.file}"
+                    + (f" (line {threat.line})" if threat.line else ""),
+            severity=Severity.THREAT,
+            evidence={
+                "file": threat.file,
+                "line": threat.line,
+                "pattern_name": threat.pattern_name,
+                "category": threat.category.value,
+                "threat_severity": threat.severity.value,
+                "snippet": threat.snippet,
+            },
+            source="ThreatScanner",
+            finding_category=FindingCategory.SECURITY,
+        )
+
+    @staticmethod
     def _run_threat_scan(
         context: SubmissionContext,
     ) -> tuple[List[Finding], bool]:
@@ -335,7 +366,6 @@ class AssessmentPipeline:
         from ams.sandbox.threat_patterns import ThreatCategory
         from ams.core.finding_ids import SANDBOX
 
-        # Mapping from internal threat categories to standardised finding IDs for reporting.
         _CATEGORY_TO_ID = {
             ThreatCategory.SHELL_EXECUTION: SANDBOX.THREAT.SHELL_EXECUTION,
             ThreatCategory.PROCESS_CONTROL: SANDBOX.THREAT.PROCESS_CONTROL,
@@ -351,8 +381,6 @@ class AssessmentPipeline:
         findings: List[Finding] = []
         container_retain = False
 
-        # Run the threat scanner and convert results into findings.
-        # Any exceptions during scanning are caught and logged.
         try:
             scanner = ThreatScanner()
             scan_result = scanner.scan(context.submission_path)
@@ -361,34 +389,11 @@ class AssessmentPipeline:
                 return findings, container_retain
 
             container_retain = scan_result.has_high_threats
+            findings = [
+                AssessmentPipeline._threat_to_finding(t, _CATEGORY_TO_ID)
+                for t in scan_result.threats
+            ]
 
-            # Convert each detected threat into a Finding with appropriate evidence for reporting.
-            for threat in scan_result.threats:
-                finding_id = _CATEGORY_TO_ID.get(
-                    threat.category,
-                    SANDBOX.THREAT.SHELL_EXECUTION,  # Fallback
-                )
-
-                # For high severity threats, we flag the container for retention to allow manual review.
-                findings.append(Finding(
-                    id=finding_id,
-                    category="security",
-                    message=f"Threat detected: {threat.description} in {threat.file}"
-                            + (f" (line {threat.line})" if threat.line else ""),
-                    severity=Severity.THREAT,
-                    evidence={
-                        "file": threat.file,
-                        "line": threat.line,
-                        "pattern_name": threat.pattern_name,
-                        "category": threat.category.value,
-                        "threat_severity": threat.severity.value,
-                        "snippet": threat.snippet,
-                    },
-                    source="ThreatScanner",
-                    finding_category=FindingCategory.SECURITY,
-                ))
-
-            # Store scan summary in context metadata
             context.metadata["threat_scan"] = {
                 "total_threats": scan_result.threat_count,
                 "high": scan_result.high_count,
@@ -452,13 +457,7 @@ class AssessmentPipeline:
         if submission_dir.exists():
             search_dirs.append(submission_dir)
 
-        preferred_stems = [
-            "screenshot",
-            "browser_screenshot",
-            "page",
-            "capture",
-            "preview",
-        ]
+        preferred_stems = ("screenshot", "browser_screenshot", "page", "capture", "preview")
         image_extensions = (".png", ".jpg", ".jpeg", ".webp")
 
         for directory in search_dirs:
@@ -469,15 +468,13 @@ class AssessmentPipeline:
                         logger.debug(f"Found screenshot: {path}")
                         return path
 
-
         # Pass 2 — any image file via glob (last resort)
-
-        for directory in search_dirs:
-            for ext in image_extensions:
-                matches = sorted(directory.glob(f"*{ext}"))
-                if matches:
-                    logger.debug(f"Found screenshot (glob fallback): {matches[0]}")
-                    return matches[0]
+        for ext in image_extensions:
+            for directory in search_dirs:
+                match = next(iter(sorted(directory.glob(f"*{ext}"))), None)
+                if match:
+                    logger.debug(f"Found screenshot (glob fallback): {match}")
+                    return match
 
         return None
 
@@ -490,35 +487,26 @@ class AssessmentPipeline:
 
     def _check_config_warnings(self, profile_spec: ProfileSpec, context: SubmissionContext) -> List[Finding]:
         """Check for configuration issues: required components with no required rules."""
-        warnings: List[Finding] = []
-        components = ["html", "css", "js", "php", "sql"]
-
-        for component in components:
-            is_required = profile_spec.is_component_required(component)
-            has_required_rules = profile_spec.has_required_rules(component)
-
-            if is_required and not has_required_rules:
-                # Component is required but has no required rules configured
-                warnings.append(
-                    Finding(
-                        id=f"CONFIG.MISSING_REQUIRED_RULES.{component.upper()}",
-                        category="config",
-                        message=f"Component '{component}' is required for profile '{profile_spec.name}' but has no required rules configured. This may indicate a marker configuration issue.",
-                        severity=Severity.WARN,
-                        evidence={
-                            "component": component,
-                            "profile": profile_spec.name,
-                            "required": True,
-                            "has_required_rules": False,
-                        },
-                        source="pipeline",
-                        finding_category=FindingCategory.CONFIG,
-                        profile=profile_spec.name,
-                        required=True,
-                    )
-                )
-
-        return warnings
+        return [
+            Finding(
+                id=f"CONFIG.MISSING_REQUIRED_RULES.{c.upper()}",
+                category="config",
+                message=f"Component '{c}' is required for profile '{profile_spec.name}' but has no required rules configured. This may indicate a marker configuration issue.",
+                severity=Severity.WARN,
+                evidence={
+                    "component": c,
+                    "profile": profile_spec.name,
+                    "required": True,
+                    "has_required_rules": False,
+                },
+                source="pipeline",
+                finding_category=FindingCategory.CONFIG,
+                profile=profile_spec.name,
+                required=True,
+            )
+            for c in ("html", "css", "js", "php", "sql")
+            if profile_spec.is_component_required(c) and not profile_spec.has_required_rules(c)
+        ]
 
 
 def _default_assessors(
