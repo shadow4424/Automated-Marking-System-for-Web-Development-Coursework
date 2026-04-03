@@ -23,7 +23,6 @@ from ams.io.json_utils import write_json_file
 from ams.io.report_utils import load_report_if_present
 from ams.io.web_storage import (
     extract_review_flags_from_report,
-    find_run_by_id,
     find_submission_root,
     get_runs_root,
     list_runs,
@@ -32,6 +31,7 @@ from ams.io.web_storage import (
     save_run_info,
 )
 from ams.web.auth import get_current_user, login_required, teacher_or_admin_required
+from ams.web.route_helpers import find_run, load_run
 from ams.web.routes_batch import _load_batch_summary_records, _persist_batch_outputs
 from ams.web.routes_dashboard import _flash_assignment_review_state, _user_can_access_assignment
 from ams.web.routes_common import is_async_job_request
@@ -106,8 +106,7 @@ def runs():
 @teacher_or_admin_required
 # Delete one stored run.
 def delete_run(run_id: str):
-    runs_root = get_runs_root(current_app)
-    run_dir = find_run_by_id(runs_root, run_id)
+    run_dir = find_run(run_id)
     if run_dir is None:
         flash("Run not found.", "error")
         return redirect(url_for("runs.runs"))
@@ -130,13 +129,11 @@ def assignment_threat_delete(assignment_id: str):
         flash("Threat resolution failed: missing run ID.", "error")
         return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
 
-    runs_root = get_runs_root(current_app)
-    run_dir = find_run_by_id(runs_root, run_id)
+    run_dir, run_info = load_run(run_id)
     if run_dir is None:
         flash("Threat resolution failed: submission not found.", "error")
         return redirect(url_for("assignment_mgmt.assignment_detail", assignment_id=assignment_id))
 
-    run_info = load_run_info(run_dir) or {}
     if run_info.get("mode") == "batch":
         if not submission_id:
             flash("Threat resolution failed: missing batch submission ID.", "error")
@@ -177,10 +174,10 @@ def assignment_threat_delete(assignment_id: str):
 def run_detail(run_id: str):
     runs_root = get_runs_root(current_app)
     sync_attempts_from_storage(runs_root)
-    run_dir = find_run_by_id(runs_root, run_id)
+    run_dir = find_run(run_id)
     if run_dir is None:
         return "Run not found", 404
-    run_info = load_run_info(run_dir)
+    run_info = load_run_info(run_dir) or {}
 
     user = get_current_user()
     if user and user["role"] == "student":
@@ -282,15 +279,13 @@ def run_detail(run_id: str):
 @teacher_or_admin_required
 # Queue a rerun for one submission run.
 def run_submission_rerun(run_id: str):
-    runs_root = get_runs_root(current_app)
-    run_dir = find_run_by_id(runs_root, run_id)
+    run_dir, run_info = load_run(run_id)
     if run_dir is None:
         if is_async_job_request():
             return jsonify({"error": "Submission not found."}), 404
         flash("Rerun failed: submission not found.", "error")
         return redirect(url_for("runs.runs"))
 
-    run_info = load_run_info(run_dir) or {}
     if run_info.get("mode") != "mark":
         assignment_id = str(run_info.get("assignment_id") or "").strip()
         if is_async_job_request():
@@ -347,12 +342,9 @@ def _run_override_job(
 @teacher_or_admin_required
 # Apply a threat override to one run.
 def override_threat(run_id: str):
-    runs_root = get_runs_root(current_app)
-    run_dir = find_run_by_id(runs_root, run_id)
+    run_dir, run_info = load_run(run_id)
     if run_dir is None:
         return jsonify({"error": "Run not found"}), 404
-
-    run_info = load_run_info(run_dir)
     if not run_info:
         return jsonify({"error": "Run info not found"}), 404
     if run_info.get("mode") != "mark":
@@ -394,8 +386,7 @@ def override_threat(run_id: str):
 @login_required
 # Download a stored run artefact.
 def run_artifact(run_id: str, relpath: str):
-    runs_root = get_runs_root(current_app)
-    run_dir = find_run_by_id(runs_root, run_id)
+    run_dir = find_run(run_id)
     if run_dir is None:
         return "Run not found", 404
     allowed_roots = {"artifacts", "runs", "reports", "evaluation", "submission"}

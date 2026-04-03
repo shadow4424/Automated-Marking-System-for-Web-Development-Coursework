@@ -17,8 +17,9 @@ from ams.io.export_report import (
     validate_export_report,
 )
 from ams.io.report_utils import get_submission_metadata, load_report_if_present
-from ams.io.web_storage import allowed_download, find_run_by_id, get_runs_root, load_run_info
+from ams.io.web_storage import allowed_download
 from ams.web.auth import get_current_user, login_required
+from ams.web.route_helpers import find_run, load_run
 
 export_bp = Blueprint("export", __name__)
 ALLOWED_DOWNLOADS = {
@@ -52,15 +53,12 @@ def individual_submission_export(run_id: str, format: str):
     if format not in ("csv", "txt", "pdf", "json"):
         return "Invalid format", 400
 
-    runs_root = get_runs_root(current_app)
-    run_dir = find_run_by_id(runs_root, run_id)
+    run_dir, run_info = load_run(run_id)
     if run_dir is None:
         return "Run not found", 404
     report_path = run_dir / "report.json"
     if not report_path.exists():
         return "Report not found", 404
-
-    run_info = load_run_info(run_dir) or {}
     report = load_report_if_present(report_path)
     if report is None:
         return "Report not found", 404
@@ -91,12 +89,10 @@ def individual_submission_export(run_id: str, format: str):
 @login_required
 # Download the stored bundle for one run.
 def download_bundle(run_id: str):
-    runs_root = get_runs_root(current_app)
-    run_dir = find_run_by_id(runs_root, run_id)
+    run_dir, run_info = load_run(run_id)
     if run_dir is None:
         return "Run not found", 404
 
-    run_info = load_run_info(run_dir) or {}
     profile = run_info.get("profile", "")
     mode = run_info.get("mode", "mark")
     artifact_image_exts: frozenset[str] = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"})
@@ -153,8 +149,7 @@ def download_bundle(run_id: str):
 def download(run_id: str, filename: str):
     if not allowed_download(filename, allowed=ALLOWED_DOWNLOADS):
         return "Not allowed", 403
-    runs_root = get_runs_root(current_app)
-    run_dir = find_run_by_id(runs_root, run_id)
+    run_dir = find_run(run_id)
     if run_dir is None:
         return "Run not found", 404
 
@@ -166,7 +161,7 @@ def download(run_id: str, filename: str):
     if not target.exists() or not target.is_file():
         return "File not found", 404
 
-    run_info = load_run_info(run_dir) or {}
+    _, run_info = load_run(run_id)
     profile = run_info.get("profile", "")
     dl_name = filename
     if filename.startswith("report"):

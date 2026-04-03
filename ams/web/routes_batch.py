@@ -37,7 +37,6 @@ from ams.io.web_storage import (
     cleanup_batch_run_storage,
     create_run_dir,
     extract_review_flags_from_report,
-    find_run_by_id,
     find_submission_root,
     get_runs_root,
     load_run_info,
@@ -49,6 +48,7 @@ from ams.io.web_storage import (
 )
 from ams.tools.batch import discover_batch_items, run_batch, validate_submission_filename, write_outputs
 from ams.web.auth import get_current_user, login_required, teacher_or_admin_required
+from ams.web.route_helpers import find_run, load_run
 from ams.web.routes_common import (
     is_async_job_request,
     json_error,
@@ -771,8 +771,7 @@ def assignment_submission_rerun(assignment_id: str):
             assignment_id=assignment_id,
         )
 
-    runs_root = get_runs_root(current_app)
-    run_dir = find_run_by_id(runs_root, run_id)
+    run_dir, run_info = load_run(run_id)
     if run_dir is None:
         if is_async_job_request():
             return json_error("Rerun failed: submission not found.", 404)
@@ -783,7 +782,6 @@ def assignment_submission_rerun(assignment_id: str):
             assignment_id=assignment_id,
         )
 
-    run_info = load_run_info(run_dir) or {}
     try:
         if run_info.get("mode") == "batch":
             if not submission_id:
@@ -825,7 +823,7 @@ def batch_submission_view(run_id: str, submission_id: str):
     """View a batch submission's report in the browser (like a single submission)."""
     runs_root = get_runs_root(current_app)
     sync_attempts_from_storage(runs_root)
-    run_dir = find_run_by_id(runs_root, run_id)
+    run_dir = find_run(run_id)
     if run_dir is None:
         return "Run not found", 404
 
@@ -978,8 +976,7 @@ def batch_submission_view(run_id: str, submission_id: str):
 @login_required
 # Show the raw report for one batch submission.
 def batch_submission_report(run_id: str, submission_id: str):
-    runs_root = get_runs_root(current_app)
-    run_dir = find_run_by_id(runs_root, run_id)
+    run_dir, run_info = load_run(run_id)
     if run_dir is None:
         return "Run not found", 404
     report_path = (run_dir / "runs" / submission_id / "report.json").resolve()
@@ -989,7 +986,6 @@ def batch_submission_report(run_id: str, submission_id: str):
         return "Not allowed", 403
     if not report_path.exists():
         return "Report not found", 404
-    run_info = load_run_info(run_dir) or {}
     try:
         report = json.loads(report_path.read_text(encoding="utf-8"))
     except Exception:
@@ -1029,8 +1025,7 @@ def batch_submission_export(run_id: str, submission_id: str, format: str):
     if format not in ("csv", "txt", "pdf", "json"):
         return "Invalid format", 400
 
-    runs_root = get_runs_root(current_app)
-    run_dir = find_run_by_id(runs_root, run_id)
+    run_dir, run_info = load_run(run_id)
     if run_dir is None:
         return "Run not found", 404
     report_path = (run_dir / "runs" / submission_id / "report.json").resolve()
@@ -1041,7 +1036,6 @@ def batch_submission_export(run_id: str, submission_id: str, format: str):
     if not report_path.exists():
         return "Report not found", 404
 
-    run_info = load_run_info(run_dir) or {}
     try:
         report = json.loads(report_path.read_text(encoding="utf-8"))
     except Exception:
@@ -1073,14 +1067,12 @@ def batch_submission_export(run_id: str, submission_id: str, format: str):
 @teacher_or_admin_required
 # Queue a rerun from the batch submission view.
 def batch_submission_rerun(run_id: str, submission_id: str):
-    runs_root = get_runs_root(current_app)
-    run_dir = find_run_by_id(runs_root, run_id)
+    run_dir, run_info = load_run(run_id)
     if run_dir is None:
         if is_async_job_request():
             return json_error("Submission not found.", 404)
         return redirect_with_flash("runs.runs", "Rerun failed: submission not found.", "error")
 
-    run_info = load_run_info(run_dir) or {}
     try:
         return _queue_batch_submission_rerun(
             run_dir,
