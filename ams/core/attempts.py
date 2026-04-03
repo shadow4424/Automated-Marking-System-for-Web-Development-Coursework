@@ -209,10 +209,6 @@ def _build_attempt_metadata(
     assignment_value, student_value = _validate_attempt_identity(assignment_id, student_id)
     attempt_id = str(run_id or generate_attempt_id("attempt"))
     created_value = str(created_at or utc_now_iso())
-    submitted_value = str(submitted_at or created_value)
-    batch_submission_value = str(batch_submission_id or "")
-
-    # Build the metadata dictionary for the attempt.
     return {
         "id": attempt_id,
         "assignment_id": assignment_value,
@@ -220,7 +216,7 @@ def _build_attempt_metadata(
         "source_type": str(source_type or ""),
         "source_actor_user_id": str(source_actor_user_id or ""),
         "created_at": created_value,
-        "submitted_at": submitted_value,
+        "submitted_at": str(submitted_at or created_value),
         "original_filename": str(original_filename or ""),
         "source_ref": str(source_ref or ""),
         "ingestion_status": str(ingestion_status or "pending"),
@@ -230,7 +226,7 @@ def _build_attempt_metadata(
         "run_dir": str(run_dir or ""),
         "report_path": str(report_path or ""),
         "batch_run_id": str(batch_run_id or ""),
-        "batch_submission_id": batch_submission_value,
+        "batch_submission_id": str(batch_submission_id or ""),
         "overall_score": None,
         "confidence": "",
         "manual_review_required": 0,
@@ -340,50 +336,6 @@ def _next_attempt_number(conn: Any, metadata: Mapping[str, Any]) -> int:
         + 1
     )
 
-# Function to insert a new attempt record into the database.
-def _insert_attempt_record(conn: Any, metadata: Mapping[str, Any]) -> None:
-    """Insert a submission attempt record."""
-    shared_values = _attempt_persistence_values(metadata)
-    conn.execute(
-        """
-        INSERT INTO submission_attempts (
-            id,
-            assignment_id,
-            student_id,
-            attempt_number,
-            source_type,
-            source_actor_user_id,
-            created_at,
-            submitted_at,
-            original_filename,
-            source_ref,
-            ingestion_status,
-            pipeline_status,
-            validity_status,
-            run_id,
-            run_dir,
-            report_path,
-            batch_run_id,
-            batch_submission_id,
-            overall_score,
-            confidence,
-            manual_review_required,
-            error_message,
-            is_active,
-            selection_reason,
-            updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
-        """,
-        (
-            str(metadata.get("id") or ""),
-            str(metadata.get("assignment_id") or ""),
-            str(metadata.get("student_id") or ""),
-            int(metadata.get("attempt_number") or 0),
-            *shared_values,
-            utc_now_iso(),
-        ),
-    )
-
 # Create and persist a new submission attempt.
 def create_attempt(
     *,
@@ -423,7 +375,6 @@ def create_attempt(
         batch_run_id=batch_run_id,
         batch_submission_id=batch_submission_id,
     )
-    # Check for an existing attempt with the same run_id and batch_submission_id, and return it if found.
     conn = get_db()
     try:
         existing_attempt_id = _find_existing_attempt_id(conn, metadata)
@@ -431,12 +382,68 @@ def create_attempt(
             return get_attempt(existing_attempt_id) or {}
 
         metadata["attempt_number"] = _next_attempt_number(conn, metadata)
-        _insert_attempt_record(conn, metadata)
+        shared_values = _attempt_persistence_values(metadata)
+        conn.execute(
+            """
+            INSERT INTO submission_attempts (
+                id,
+                assignment_id,
+                student_id,
+                attempt_number,
+                source_type,
+                source_actor_user_id,
+                created_at,
+                submitted_at,
+                original_filename,
+                source_ref,
+                ingestion_status,
+                pipeline_status,
+                validity_status,
+                run_id,
+                run_dir,
+                report_path,
+                batch_run_id,
+                batch_submission_id,
+                overall_score,
+                confidence,
+                manual_review_required,
+                error_message,
+                is_active,
+                selection_reason,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
+            """,
+            (
+                str(metadata.get("id") or ""),
+                str(metadata.get("assignment_id") or ""),
+                str(metadata.get("student_id") or ""),
+                int(metadata.get("attempt_number") or 0),
+                *shared_values,
+                utc_now_iso(),
+            ),
+        )
         conn.commit()
     finally:
         conn.close()
 
     return get_attempt(str(metadata.get("id") or "")) or {}
+
+# Build a filtered UPDATE statement with bool field conversion.
+def _build_update_sql(
+    table: str, id_col: str, allowed: frozenset[str], bool_fields: frozenset[str], **fields: Any
+) -> tuple[str, list[Any]]:
+    """Return (sql, params) for a filtered UPDATE, converting bool fields to int."""
+    filtered = {k: v for k, v in fields.items() if k in allowed}
+    if not filtered:
+        return "", []
+    set_parts = [f"{k} = ?" for k in filtered]
+    params: list[Any] = [
+        (1 if v else 0) if k in bool_fields else v
+        for k, v in filtered.items()
+    ]
+    set_parts.append("updated_at = ?")
+    params.append(utc_now_iso())
+    return f"UPDATE {table} SET {', '.join(set_parts)} WHERE {id_col} = ?", params
 
 # Update an existing attempt record.
 def update_attempt(attempt_id: str, **fields: Any) -> dict[str, Any] | None:
@@ -444,59 +451,25 @@ def update_attempt(attempt_id: str, **fields: Any) -> dict[str, Any] | None:
     if not fields:
         return get_attempt(attempt_id)
 
-    allowed = {
-        "source_type",
-        "source_actor_user_id",
-        "created_at",
-        "submitted_at",
-        "original_filename",
-        "source_ref",
-        "ingestion_status",
-        "pipeline_status",
-        "validity_status",
-        "run_id",
-        "run_dir",
-        "report_path",
-        "batch_run_id",
-        "batch_submission_id",
-        "overall_score",
-        "confidence",
-        "manual_review_required",
-        "error_message",
-        "is_active",
-        "selection_reason",
-    }
+    _ALLOWED = frozenset({
+        "source_type", "source_actor_user_id", "created_at", "submitted_at",
+        "original_filename", "source_ref", "ingestion_status", "pipeline_status",
+        "validity_status", "run_id", "run_dir", "report_path", "batch_run_id",
+        "batch_submission_id", "overall_score", "confidence", "manual_review_required",
+        "error_message", "is_active", "selection_reason",
+    })
+    _BOOL_FIELDS = frozenset({"manual_review_required", "is_active"})
 
-    # Build the SET clause and parameters for the UPDATE statement based on provided fields.
-    assignments: list[str] = []
-    params: list[Any] = []
-    for key, value in fields.items():
-        if key not in allowed:
-            continue
-        assignments.append(f"{key} = ?")
-        if key in {"manual_review_required", "is_active"}:
-            params.append(1 if value else 0)
-        else:
-            params.append(value)
-
-    if not assignments:
+    sql, params = _build_update_sql(
+        "submission_attempts", "id", _ALLOWED, _BOOL_FIELDS, **fields
+    )
+    if not sql:
         return get_attempt(attempt_id)
 
-    assignments.append("updated_at = ?")
-    params.append(utc_now_iso())
     params.append(str(attempt_id))
-
-    # Execute the UPDATE statement to modify the attempt record in the database.
     conn = get_db()
     try:
-        conn.execute(
-            f"""
-            UPDATE submission_attempts
-            SET {', '.join(assignments)}
-            WHERE id = ?
-            """,
-            tuple(params),
-        )
+        conn.execute(sql, tuple(params))
         conn.commit()
     finally:
         conn.close()
