@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from ams.core.db import get_assignment
-from ams.web.routes_common import json_error, redirect_with_flash
+from ams.io.web_storage import find_run_by_id, get_runs_root, load_run_info
+from ams.web.routes_common import is_async_job_request, json_error, redirect_with_flash
 
+
+# -- assignment helpers ----------------------------------------------------
 
 def load_accessible_assignment_or_redirect(
     assignment_id: str,
@@ -38,7 +42,43 @@ def load_accessible_assignment_or_json(
     return assignment, None
 
 
+# -- run helpers -----------------------------------------------------------
+
+def find_run(run_id: str) -> Path | None:
+    """Locate a run directory by *run_id*."""
+    from flask import current_app
+
+    return find_run_by_id(get_runs_root(current_app), run_id)
+
+
+def load_run(run_id: str) -> tuple[Path | None, dict]:
+    """Locate a run and load its metadata.  Returns ``(None, {})`` when missing."""
+    run_dir = find_run(run_id)
+    if run_dir is None:
+        return None, {}
+    return run_dir, load_run_info(run_dir) or {}
+
+
+# -- response helpers ------------------------------------------------------
+
+def dual_error(
+    json_msg: str,
+    json_status: int,
+    endpoint: str,
+    flash_msg: str | None = None,
+    flash_category: str = "error",
+    **url_kwargs: Any,
+):
+    """Return JSON for async requests, flash + redirect for synchronous ones."""
+    if is_async_job_request():
+        return json_error(json_msg, json_status)
+    return redirect_with_flash(endpoint, flash_msg or json_msg, flash_category, **url_kwargs)
+
+
 __all__ = [
+    "dual_error",
+    "find_run",
     "load_accessible_assignment_or_json",
     "load_accessible_assignment_or_redirect",
+    "load_run",
 ]
