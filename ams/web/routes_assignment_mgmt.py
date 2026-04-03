@@ -6,18 +6,18 @@ import logging
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 
 from ams.analytics import generate_assignment_analytics
-from ams.core.db import (
+from ams.core.assignment_store import (
     assignment_teacher_ids,
     create_assignment,
     delete_assignment,
     get_assignment,
-    get_user,
-    list_users,
+    list_assignments,
     release_marks,
     update_assignment_students,
     update_assignment_teachers,
     withhold_marks,
 )
+from ams.core.user_store import get_user, list_users
 from ams.io.web_storage import get_runs_root, purge_assignment_storage
 from ams.web.auth import get_current_user, teacher_or_admin_required
 from ams.web.routes_teacher import (

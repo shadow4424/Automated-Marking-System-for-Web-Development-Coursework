@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def test_api_assessor_name(tmp_path: Path) -> None:
-    from ams.assessors.static.api import APIStaticAssessor
+    from ams.assessors.static.api_static import APIStaticAssessor
     assert APIStaticAssessor.name == "api_static"
 
 

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List
 
 from ams.assessors import Assessor
-from ams.assessors.static.common import (
+from ams.assessors.static.base_static import (
     missing_component_finding,
     resolve_component_requirement,
     skipped_component_finding,

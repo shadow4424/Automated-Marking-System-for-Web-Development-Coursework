@@ -6,7 +6,7 @@ from typing import List
 
 import pytest
 
-from ams.assessors.static.php import PHPStaticAssessor
+from ams.assessors.static.php_static import PHPStaticAssessor
 from ams.core.models import Finding, SubmissionContext
 
 

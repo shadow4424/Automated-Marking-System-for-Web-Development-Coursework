@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ams.core.db import get_assignment
+from ams.core.assignment_store import get_assignment
 from ams.io.web_storage import find_run_by_id, get_runs_root, load_run_info
 from ams.web.routes_common import is_async_job_request, json_error, redirect_with_flash
 

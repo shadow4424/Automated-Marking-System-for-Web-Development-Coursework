@@ -11,7 +11,8 @@ from flask import (
     url_for,
 )
 
-from ams.core.db import create_user, delete_user, list_users, list_assignments
+from ams.core.user_store import create_user, delete_user, list_users
+from ams.core.assignment_store import list_assignments
 from ams.web.auth import admin_required
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")

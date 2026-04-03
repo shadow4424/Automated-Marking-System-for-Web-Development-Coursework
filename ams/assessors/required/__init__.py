@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from .html import HTMLRequiredElementsAssessor
-from .css import CSSRequiredRulesAssessor
-from .js import JSRequiredFeaturesAssessor
-from .php import PHPRequiredFeaturesAssessor
-from .sql import SQLRequiredFeaturesAssessor
-from .api import APIRequiredFeaturesAssessor
+from .html_required import HTMLRequiredElementsAssessor
+from .css_required import CSSRequiredRulesAssessor
+from .js_required import JSRequiredFeaturesAssessor
+from .php_required import PHPRequiredFeaturesAssessor
+from .sql_required import SQLRequiredFeaturesAssessor
+from .api_required import APIRequiredFeaturesAssessor
 
 __all__ = [
     "HTMLRequiredElementsAssessor",

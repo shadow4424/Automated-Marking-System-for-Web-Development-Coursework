@@ -17,13 +17,13 @@ from flask import (
 
 from ams.analytics.assignment_analytics import generate_student_assignment_analytics
 from ams.core.llm_factory import get_llm_provider
-from ams.core.db import (
+from ams.core.database import PREVIEW_STUDENT_ID
+from ams.core.assignment_store import (
     get_assignment,
-    get_preview_student,
     list_assignments,
     list_assignments_for_student,
-    PREVIEW_STUDENT_ID,
 )
+from ams.core.user_store import get_preview_student
 from ams.io.web_storage import get_runs_root, list_runs
 from ams.llm.utils import clean_json_response
 from ams.web.auth import get_current_user, login_required

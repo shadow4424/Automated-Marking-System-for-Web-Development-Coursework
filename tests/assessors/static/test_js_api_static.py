@@ -7,7 +7,7 @@ from typing import List
 
 import pytest
 
-from ams.assessors.static.js import JSStaticAssessor
+from ams.assessors.static.js_static import JSStaticAssessor
 from ams.core.models import Finding, SubmissionContext
 
 

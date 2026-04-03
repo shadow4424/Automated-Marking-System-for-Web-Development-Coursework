@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import List
 
-from ams.assessors.static.common import BaseStaticAssessor
+from ams.assessors.static.base_static import BaseStaticAssessor
 from ams.core.finding_ids import PHP as PID
 from ams.core.models import Finding, FindingCategory, Severity
 

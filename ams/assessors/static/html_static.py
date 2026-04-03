@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
-from ams.assessors.static.common import BaseStaticAssessor
+from ams.assessors.static.base_static import BaseStaticAssessor
 from ams.assessors.html_parser import TagCountingParser
 from ams.core.finding_ids import HTML as HID
 from ams.core.models import Finding, FindingCategory, Severity

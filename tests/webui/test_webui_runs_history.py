@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from time import time
 
-from ams.core.db import init_db
+from ams.core.database import init_db
 from ams.webui import create_app
 from tests.webui.conftest import authenticate_client
 
@@ -59,7 +59,7 @@ def test_runs_history_searches_student_fields(tmp_path: Path) -> None:
 
 
 def _use_temp_db(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr("ams.core.db._DEFAULT_DB_PATH", tmp_path / "ams_users.db")
+    monkeypatch.setattr("ams.core.database._DEFAULT_DB_PATH", tmp_path / "ams_users.db")
     init_db()
 
 

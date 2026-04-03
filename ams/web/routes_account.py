@@ -6,7 +6,7 @@ import re
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
 
-from ams.core.db import (
+from ams.core.user_store import (
     get_user,
     get_user_by_email,
     update_user_email,
