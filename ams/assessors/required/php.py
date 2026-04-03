@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Tuple
 
 from ams.assessors.required.base_required_assessor import BaseRequiredAssessor
@@ -13,6 +14,14 @@ class PHPRequiredFeaturesAssessor(BaseRequiredAssessor):
     _component = "php"
     _finding_ids_class = PID
 
+    _REQUEST_PATTERNS = ["$_get", "$_post", "$_request"]
+    _VALIDATION_FUNCS = ["isset", "empty", "filter_var", "filter_input", "is_numeric", "is_array"]
+    _SANITISE_FUNCS = ["htmlspecialchars", "htmlentities", "strip_tags", "addslashes", "mysqli_real_escape_string"]
+    _DB_PATTERNS = ["mysqli", "pdo", "mysql_connect", "pg_connect"]
+    _PREPARED_PATTERNS = ["prepare(", "bind_param", "execute(", "bindvalue", "bindparam"]
+    _SESSION_PATTERNS = ["session_start", "$_session", "session_destroy"]
+    _ERROR_PATTERNS = ["try", "catch", "error_reporting", "set_error_handler", "exception"]
+
     def _evaluate_rule_impl(
         self, rule: RequiredPHPRule, content: str
     ) -> Tuple[int, bool]:
@@ -25,72 +34,83 @@ class PHPRequiredFeaturesAssessor(BaseRequiredAssessor):
         """Evaluate a single PHP rule and return count and pass status."""
         needle = rule.needle.lower()
 
-        # REQUEST SUPERGLOBALS.
-        if needle == "request_superglobal" or rule.id == "php.uses_request":
-            patterns = ["$_get", "$_post", "$_request"]
-            count = sum(content_lower.count(p) for p in patterns)
-            return count, count >= rule.min_count
+        direct_matchers: dict[str, Callable[[RequiredPHPRule, str], tuple[int, bool]]] = {
+            "request_superglobal": self._match_request_superglobal,
+            "validation": self._match_validation,
+            "sanitisation": self._match_sanitisation,
+            "output": self._match_output,
+            "database": self._match_database,
+            "prepared_statements": self._match_prepared,
+            "sessions": self._match_sessions,
+            "loops": self._match_loops,
+            "error_handling": self._match_error_handling,
+            "response_path_complete": self._match_response_path_complete,
+        }
+        rule_id_matchers: dict[str, Callable[[RequiredPHPRule, str], tuple[int, bool]]] = {
+            "php.uses_request": self._match_request_superglobal,
+            "php.has_validation": self._match_validation,
+            "php.has_sanitisation": self._match_sanitisation,
+            "php.outputs": self._match_output,
+            "php.uses_database": self._match_database,
+            "php.uses_prepared_statements": self._match_prepared,
+            "php.uses_sessions": self._match_sessions,
+            "php.has_loops": self._match_loops,
+            "php.has_error_handling": self._match_error_handling,
+            "php.response_path_complete": self._match_response_path_complete,
+        }
+        matcher = direct_matchers.get(needle) or rule_id_matchers.get(rule.id)
+        if matcher:
+            return matcher(rule, content_lower)
 
-        # VALIDATION.
-        if needle == "validation" or rule.id == "php.has_validation":
-            validation_funcs = ["isset", "empty", "filter_var", "filter_input", "is_numeric", "is_array"]
-            count = sum(1 for f in validation_funcs if f in content_lower)
-            return count, count >= rule.min_count
-
-        # SANITISATION.
-        if needle == "sanitisation" or rule.id == "php.has_sanitisation":
-            sanitise_funcs = ["htmlspecialchars", "htmlentities", "strip_tags", "addslashes", "mysqli_real_escape_string"]
-            count = sum(1 for f in sanitise_funcs if f in content_lower)
-            return count, count >= rule.min_count
-
-        # OUTPUT.
-        if needle == "output" or rule.id == "php.outputs":
-            count = content_lower.count("echo") + content_lower.count("print")
-            return count, count >= rule.min_count
-
-        # DATABASE.
-        if needle == "database" or rule.id == "php.uses_database":
-            db_patterns = ["mysqli", "pdo", "mysql_connect", "pg_connect"]
-            count = sum(1 for p in db_patterns if p in content_lower)
-            return count, count >= rule.min_count
-
-        # PREPARED STATEMENTS.
-        if needle == "prepared_statements" or rule.id == "php.uses_prepared_statements":
-            prep_patterns = ["prepare(", "bind_param", "execute(", "bindvalue", "bindparam"]
-            count = sum(1 for p in prep_patterns if p in content_lower)
-            return count, count >= rule.min_count
-
-        # SESSIONS.
-        if needle == "sessions" or rule.id == "php.uses_sessions":
-            session_patterns = ["session_start", "$_session", "session_destroy"]
-            count = sum(1 for p in session_patterns if p in content_lower)
-            return count, count >= rule.min_count
-
-        # LOOPS.
-        if needle == "loops" or rule.id == "php.has_loops":
-            has_for = "for " in content_lower or "for(" in content_lower
-            has_while = "while " in content_lower or "while(" in content_lower
-            has_foreach = "foreach" in content_lower
-            count = sum([has_for, has_while, has_foreach])
-            return count, count >= rule.min_count
-
-        # ERROR HANDLING.
-        if needle == "error_handling" or rule.id == "php.has_error_handling":
-            error_patterns = ["try", "catch", "error_reporting", "set_error_handler", "exception"]
-            count = sum(1 for p in error_patterns if p in content_lower)
-            return count, count >= rule.min_count
-
-        # RESPONSE PATH COMPLETE.
-        if needle == "response_path_complete" or rule.id == "php.response_path_complete":
-            # Check all three stages of a complete request-response path
-            has_input = "$_post" in content_lower or "$_get" in content_lower or "$_request" in content_lower
-            has_processing = "isset(" in content_lower or "if " in content_lower or "if(" in content_lower
-            has_output = "echo" in content_lower or "print" in content_lower or "json_encode(" in content_lower
-            count = sum([has_input, has_processing, has_output])
-            return count, count >= rule.min_count  # Min_count=2 → needs input + at least one other
-
-        # STANDARD NEEDLE COUNTING.
         count = content_lower.count(needle)
+        return count, count >= rule.min_count
+
+    def _match_request_superglobal(self, rule: RequiredPHPRule, content_lower: str) -> tuple[int, bool]:
+        count = sum(content_lower.count(p) for p in self._REQUEST_PATTERNS)
+        return count, count >= rule.min_count
+
+    def _match_validation(self, rule: RequiredPHPRule, content_lower: str) -> tuple[int, bool]:
+        count = sum(1 for f in self._VALIDATION_FUNCS if f in content_lower)
+        return count, count >= rule.min_count
+
+    def _match_sanitisation(self, rule: RequiredPHPRule, content_lower: str) -> tuple[int, bool]:
+        count = sum(1 for f in self._SANITISE_FUNCS if f in content_lower)
+        return count, count >= rule.min_count
+
+    def _match_output(self, rule: RequiredPHPRule, content_lower: str) -> tuple[int, bool]:
+        count = content_lower.count("echo") + content_lower.count("print")
+        return count, count >= rule.min_count
+
+    def _match_database(self, rule: RequiredPHPRule, content_lower: str) -> tuple[int, bool]:
+        count = sum(1 for p in self._DB_PATTERNS if p in content_lower)
+        return count, count >= rule.min_count
+
+    def _match_prepared(self, rule: RequiredPHPRule, content_lower: str) -> tuple[int, bool]:
+        count = sum(1 for p in self._PREPARED_PATTERNS if p in content_lower)
+        return count, count >= rule.min_count
+
+    def _match_sessions(self, rule: RequiredPHPRule, content_lower: str) -> tuple[int, bool]:
+        count = sum(1 for p in self._SESSION_PATTERNS if p in content_lower)
+        return count, count >= rule.min_count
+
+    @staticmethod
+    def _match_loops(rule: RequiredPHPRule, content_lower: str) -> tuple[int, bool]:
+        has_for = "for " in content_lower or "for(" in content_lower
+        has_while = "while " in content_lower or "while(" in content_lower
+        has_foreach = "foreach" in content_lower
+        count = sum([has_for, has_while, has_foreach])
+        return count, count >= rule.min_count
+
+    def _match_error_handling(self, rule: RequiredPHPRule, content_lower: str) -> tuple[int, bool]:
+        count = sum(1 for p in self._ERROR_PATTERNS if p in content_lower)
+        return count, count >= rule.min_count
+
+    @staticmethod
+    def _match_response_path_complete(rule: RequiredPHPRule, content_lower: str) -> tuple[int, bool]:
+        has_input = "$_post" in content_lower or "$_get" in content_lower or "$_request" in content_lower
+        has_processing = "isset(" in content_lower or "if " in content_lower or "if(" in content_lower
+        has_output = "echo" in content_lower or "print" in content_lower or "json_encode(" in content_lower
+        count = sum([has_input, has_processing, has_output])
         return count, count >= rule.min_count
 
 __all__ = ["PHPRequiredFeaturesAssessor"]

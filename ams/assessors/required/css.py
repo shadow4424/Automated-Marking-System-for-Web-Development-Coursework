@@ -13,6 +13,13 @@ class CSSRequiredRulesAssessor(BaseRequiredAssessor):
     _component = "css"
     _finding_ids_class = CID
 
+    _ELEMENT_SELECTORS = [
+        "body", "html", "h1", "h2", "h3", "p", "a", "div", "span", "ul", "li",
+        "table", "form", "input", "button", "header", "footer", "nav", "main", "section", "article",
+    ]
+    _LAYOUT_PROPS = ["margin", "padding", "display", "position", "width", "height", "top", "left", "right", "bottom"]
+    _TYPO_PROPS = ["font-family", "font-size", "line-height", "font-weight", "letter-spacing", "text-align"]
+
     def _evaluate_rule_impl(
         self, rule: RequiredCSSRule, content: str
     ) -> Tuple[int, bool]:
@@ -37,16 +44,12 @@ class CSSRequiredRulesAssessor(BaseRequiredAssessor):
 
         # SELECTORS.
         if needle == "element_selector" or rule.id == "css.has_element_selector":
-            # Check for common element selectors (before {)
-            element_selectors = ["body", "html", "h1", "h2", "h3", "p", "a", "div", "span", "ul", "li", "table", "form", "input", "button", "header", "footer", "nav", "main", "section", "article"]
-            count = sum(1 for sel in element_selectors if sel in content_lower)
+            count = self._count_present(content_lower, self._ELEMENT_SELECTORS)
             return count, count >= rule.min_count
 
         # LAYOUT.
         if needle == "layout" or rule.id == "css.has_layout":
-            # Check for layout properties
-            layout_props = ["margin", "padding", "display", "position", "width", "height", "top", "left", "right", "bottom"]
-            count = sum(1 for prop in layout_props if prop in content_lower)
+            count = self._count_present(content_lower, self._LAYOUT_PROPS)
             return count, count >= rule.min_count
 
         if needle == "flexbox" or rule.id == "css.has_flexbox":
@@ -65,9 +68,7 @@ class CSSRequiredRulesAssessor(BaseRequiredAssessor):
 
         # STYLING.
         if needle == "typography" or rule.id == "css.has_typography":
-            # Check for typography properties
-            typo_props = ["font-family", "font-size", "line-height", "font-weight", "letter-spacing", "text-align"]
-            count = sum(1 for prop in typo_props if prop in content_lower)
+            count = self._count_present(content_lower, self._TYPO_PROPS)
             return count, count >= rule.min_count
 
         # MAINTAINABILITY.
@@ -108,17 +109,7 @@ class CSSRequiredRulesAssessor(BaseRequiredAssessor):
 
         # CSS LAB VISUAL CHECKS.
         if needle == "body_card_layout" or rule.id == "css.body_card_layout":
-            # Count how many card-layout traits are present (5 total)
-            traits = [
-                "max-width" in content_lower,
-                "margin: auto" in content_lower or "margin:auto" in content_lower or "0 auto" in content_lower,
-                "padding" in content_lower,
-                "box-shadow" in content_lower,
-                "border-radius" in content_lower,
-            ]
-            count = sum(traits)
-            # Return count of traits; rule min_count=1 so presence of any trait counts
-            # But partial credit is applied for 2-3 traits by the LLM/partial system
+            count = self._body_card_layout_trait_count(content_lower)
             return count, count >= 4  # Full pass = 4+ traits
 
         if needle == "h1_styled" or rule.id == "css.h1_styled":
@@ -126,7 +117,6 @@ class CSSRequiredRulesAssessor(BaseRequiredAssessor):
             has_h1_block = "h1" in content_lower
             has_color = "color" in content_lower
             has_size = "font-size" in content_lower or "font-weight" in content_lower
-            count_traits = sum([has_h1_block and has_color, has_h1_block and has_size])
             count = 1 if has_h1_block and (has_color or has_size) else 0
             return count, count >= rule.min_count
 
@@ -167,5 +157,20 @@ class CSSRequiredRulesAssessor(BaseRequiredAssessor):
         # For simple needles like ".", "#", "@media", "colour:"
         count = content.count(rule.needle)
         return count, count >= rule.min_count
+
+    @staticmethod
+    def _count_present(content_lower: str, markers: list[str]) -> int:
+        return sum(1 for marker in markers if marker in content_lower)
+
+    @staticmethod
+    def _body_card_layout_trait_count(content_lower: str) -> int:
+        traits = [
+            "max-width" in content_lower,
+            "margin: auto" in content_lower or "margin:auto" in content_lower or "0 auto" in content_lower,
+            "padding" in content_lower,
+            "box-shadow" in content_lower,
+            "border-radius" in content_lower,
+        ]
+        return sum(traits)
 
 __all__ = ["CSSRequiredRulesAssessor"]

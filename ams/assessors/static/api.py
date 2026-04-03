@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import List
 
 from ams.assessors import Assessor
@@ -22,36 +23,15 @@ class APIStaticAssessor(Assessor):
         findings: List[Finding] = []
         profile_name, is_required = resolve_component_requirement(context, "api")
 
-        php_files = sorted(context.files_for("php", relevant_only=True))
-        js_files = sorted(context.files_for("js", relevant_only=True))
-        candidate_files = php_files + js_files
+        candidate_files = self._candidate_files(context)
 
         if not candidate_files:
-            findings.append(
-                missing_component_finding(
-                    finding_id=AID.MISSING_FILES,
-                    category="api",
-                    message="No PHP or JS files found; API component is required for this profile.",
-                    source=self.name,
-                    profile_name=profile_name,
-                    expected_extensions=[".php", ".js"],
-                )
-                if is_required
-                else skipped_component_finding(
-                    finding_id=AID.SKIPPED,
-                    category="api",
-                    message="No PHP or JS files found; API component is not required for this profile.",
-                    source=self.name,
-                    profile_name=profile_name,
-                    expected_extensions=[".php", ".js"],
-                )
-            )
+            findings.append(self._missing_or_skipped_finding(profile_name, is_required))
             return findings
 
         for path in candidate_files:
-            try:
-                content = path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
+            content = self._read_content(path)
+            if content is None:
                 continue
 
             evidence = self._detect_api_patterns(path, content)
@@ -69,6 +49,38 @@ class APIStaticAssessor(Assessor):
                 )
 
         return findings
+
+    @staticmethod
+    def _candidate_files(context: SubmissionContext) -> list[Path]:
+        php_files = sorted(context.files_for("php", relevant_only=True))
+        js_files = sorted(context.files_for("js", relevant_only=True))
+        return php_files + js_files
+
+    def _missing_or_skipped_finding(self, profile_name: str, is_required: bool) -> Finding:
+        if is_required:
+            return missing_component_finding(
+                finding_id=AID.MISSING_FILES,
+                category="api",
+                message="No PHP or JS files found; API component is required for this profile.",
+                source=self.name,
+                profile_name=profile_name,
+                expected_extensions=[".php", ".js"],
+            )
+        return skipped_component_finding(
+            finding_id=AID.SKIPPED,
+            category="api",
+            message="No PHP or JS files found; API component is not required for this profile.",
+            source=self.name,
+            profile_name=profile_name,
+            expected_extensions=[".php", ".js"],
+        )
+
+    @staticmethod
+    def _read_content(path: Path) -> str | None:
+        try:
+            return path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
 
     # Route the file to the correct API pattern detector.
     def _detect_api_patterns(self, path, content: str) -> dict:

@@ -1,6 +1,7 @@
 """HTML Required Elements Assessor — checks for required HTML structure and semantics."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Tuple
 
 from ams.assessors.required.base_required_assessor import BaseRequiredAssessor
@@ -27,74 +28,59 @@ class HTMLRequiredElementsAssessor(BaseRequiredAssessor):
     ) -> tuple[int, bool]:
         """Evaluate a single rule against the parsed HTML content."""
         selector = rule.selector.lower()
+        bool_matchers: dict[str, Callable[[TagCountingParser], bool]] = {
+            "!doctype": lambda p: p.has_doctype,
+            "semantic": lambda p: p.has_semantic,
+            "heading": lambda p: p.has_heading,
+            "list": lambda p: p.has_list,
+            "meta_charset": lambda p: p.has_meta_charset,
+            "meta_viewport": lambda p: p.has_meta_viewport,
+            "html_lang": lambda p: p.has_html_lang,
+        }
+        if selector in bool_matchers:
+            return self._boolean_check(rule, bool_matchers[selector](parser))
 
-        # DOCTYPE.
-        if selector == "!doctype" or rule.id == "html.has_doctype":
-            count = 1 if parser.has_doctype else 0
-            return count, count >= rule.min_count
+        if rule.id == "html.has_doctype":
+            return self._boolean_check(rule, parser.has_doctype)
+        if rule.id == "html.has_semantic_structure":
+            return self._boolean_check(rule, parser.has_semantic)
+        if rule.id == "html.has_heading_hierarchy":
+            return self._boolean_check(rule, parser.has_heading)
+        if rule.id == "html.has_lists":
+            return self._boolean_check(rule, parser.has_list)
+        if rule.id == "html.has_meta_charset":
+            return self._boolean_check(rule, parser.has_meta_charset)
+        if rule.id == "html.has_meta_viewport":
+            return self._boolean_check(rule, parser.has_meta_viewport)
+        if rule.id == "html.has_lang_attribute":
+            return self._boolean_check(rule, parser.has_html_lang)
 
-        # SEMANTIC STRUCTURE.
-        if selector == "semantic" or rule.id == "html.has_semantic_structure":
-            count = 1 if parser.has_semantic else 0
-            return count, count >= rule.min_count
-
-        # HEADING HIERARCHY.
-        if selector == "heading" or rule.id == "html.has_heading_hierarchy":
-            count = 1 if parser.has_heading else 0
-            return count, count >= rule.min_count
-
-        # LIST ELEMENTS.
-        if selector == "list" or rule.id == "html.has_lists":
-            count = 1 if parser.has_list else 0
-            return count, count >= rule.min_count
-
-        # META CHARSET.
-        if selector == "meta_charset" or rule.id == "html.has_meta_charset":
-            count = 1 if parser.has_meta_charset else 0
-            return count, count >= rule.min_count
-
-        # META VIEWPORT.
-        if selector == "meta_viewport" or rule.id == "html.has_meta_viewport":
-            count = 1 if parser.has_meta_viewport else 0
-            return count, count >= rule.min_count
-
-        # HTML LANG ATTRIBUTE.
-        if selector == "html_lang" or rule.id == "html.has_lang_attribute":
-            count = 1 if parser.has_html_lang else 0
-            return count, count >= rule.min_count
-
-        # IMAGE ALT ATTRIBUTES.
         if selector == "img_alt" or rule.id == "html.has_alt_attributes":
-            # Pass if all images have alt attributes, or if no images exist
             if parser.img_count == 0:
-                return 1, True  # No images means requirement is satisfied
+                return 1, True
             count = parser.img_with_alt
             passed = parser.img_with_alt == parser.img_count
             return count, passed
 
-        # LABELS.
         if selector == "label" or rule.id == "html.has_labels":
-            count = parser.label_count
-            return count, count >= rule.min_count
-
-        # IMAGE ELEMENT.
+            return self._count_check(rule, parser.label_count)
         if selector == "img" or rule.id == "html.has_image":
-            count = parser.img_count
-            return count, count >= rule.min_count
-
-        # STYLESHEET LINKAGE.
+            return self._count_check(rule, parser.img_count)
         if selector == "link_stylesheet" or rule.id == "html.links_stylesheet":
-            count = parser.link_stylesheet_count
-            return count, count >= rule.min_count
-
-        # SCRIPT LINKAGE.
+            return self._count_check(rule, parser.link_stylesheet_count)
         if selector == "link_script" or rule.id == "html.links_script_or_js":
-            count = parser.script_count
-            return count, count >= rule.min_count
+            return self._count_check(rule, parser.script_count)
 
-        # STANDARD TAG COUNTING.
-        # For simple selectors like html, head, body, title, form, input, a, table
         count = parser.counts.get(selector, 0)
+        return self._count_check(rule, count)
+
+    @staticmethod
+    def _boolean_check(rule: RequiredRule, flag: bool) -> tuple[int, bool]:
+        count = 1 if flag else 0
+        return count, count >= rule.min_count
+
+    @staticmethod
+    def _count_check(rule: RequiredRule, count: int) -> tuple[int, bool]:
         return count, count >= rule.min_count
 
     def _build_message(self, rule: RequiredRule, passed: bool, count: int) -> str:
