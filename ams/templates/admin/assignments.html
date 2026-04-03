@@ -2,6 +2,7 @@
 
 {% block title %}All Assignments - AMS{% endblock %}
 
+{% from "macros/_ui.html" import section_heading, empty_state %}
 {% block content %}
 {% set released_count = assignments|selectattr('marks_released')|list|length %}
 {% set withheld_count = assignments|rejectattr('marks_released')|list|length %}
@@ -53,11 +54,7 @@
     </section>
 
     <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">Assignments</h2>
-            </div>
-        </div>
+        {{ section_heading('Assignments') }}
         {% if assignments %}
         <div class="table-container">
             <table class="table table-compact" id="assignments-table">
@@ -113,10 +110,7 @@
             </div>
         </div>
         {% else %}
-        <div class="empty-state">
-            <p class="empty-state-title">No assignments yet</p>
-            <p class="empty-state-text">Create an assignment to start allocating students and tracking releases.</p>
-        </div>
+        {{ empty_state('No assignments yet', 'Create an assignment to start allocating students and tracking releases.') }}
         {% endif %}
     </section>
 </div>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros/_ui.html" import status_badge %}
+{% from "macros/_ui.html" import status_badge, section_heading, empty_state %}
 
 {% block title %}{{ assignment.title }} - AMS{% endblock %}
 
@@ -52,13 +52,7 @@
 
     {% if has_unresolved_threats %}
     <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">Grade release blocked by security threats</h2>
-                <p class="section-note">Review each flagged submission before grades can be released.</p>
-            </div>
-            {{ status_badge(threat_rows|length, 'danger') }}
-        </div>
+        {{ section_heading('Grade release blocked by security threats', badge=threat_rows|length, badge_tone='danger', subtitle='Review each flagged submission before grades can be released.') }}
         <div class="surface-list">
             {% for threat in threat_rows %}
             <div class="surface-item">
@@ -88,13 +82,7 @@
 
     {% if has_unresolved_llm_errors %}
     <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">Grade release blocked by LLM review errors</h2>
-                <p class="section-note">One or more submissions failed during LLM-assisted marking. Resolve or rerun each flagged submission before releasing grades.</p>
-            </div>
-            {{ status_badge(llm_error_rows|length, 'warning') }}
-        </div>
+        {{ section_heading('Grade release blocked by LLM review errors', badge=llm_error_rows|length, badge_tone='warning', subtitle='One or more submissions failed during LLM-assisted marking. Resolve or rerun each flagged submission before releasing grades.') }}
         <div class="surface-list">
             {% for flagged in llm_error_rows %}
             <div class="surface-item">
@@ -124,22 +112,13 @@
 
     {% if assignment.description %}
     <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">Description</h2>
-            </div>
-        </div>
+        {{ section_heading('Description') }}
         <p class="mb-0">{{ assignment.description }}</p>
     </section>
     {% endif %}
 
     <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">Teaching team</h2>
-            </div>
-            <span class="badge badge-secondary">{{ teacher_details|length }}</span>
-        </div>
+        {{ section_heading('Teaching team', badge=teacher_details|length) }}
         <div class="table-container">
             <table class="table table-compact">
                 <thead>
@@ -189,12 +168,7 @@
     </section>
 
     <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">Assigned students</h2>
-            </div>
-            <span class="badge badge-secondary">{{ student_details|length }}</span>
-        </div>
+        {{ section_heading('Assigned students', badge=student_details|length) }}
         {% if student_details %}
         <div class="table-container">
             <table class="table table-compact">
@@ -217,10 +191,7 @@
             </table>
         </div>
         {% else %}
-        <div class="empty-state">
-            <p class="empty-state-title">No students assigned</p>
-            <p class="empty-state-text">Use the allocation panel below to add students to this assignment.</p>
-        </div>
+        {{ empty_state('No students assigned', 'Use the allocation panel below to add students to this assignment.') }}
         {% endif %}
 
         <details class="disclosure-card mt-lg">
@@ -471,10 +442,7 @@
             </table>
         </div>
         {% else %}
-        <div class="empty-state">
-            <p class="empty-state-title">No submissions yet</p>
-            <p class="empty-state-text">Submissions will appear here once students upload work or batch processing runs complete.</p>
-        </div>
+        {{ empty_state('No submissions yet', 'Submissions will appear here once students upload work or batch processing runs complete.') }}
         {% endif %}
     </section>
 </div>

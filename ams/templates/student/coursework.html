@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros/_ui.html" import status_badge %}
+{% from "macros/_ui.html" import status_badge, section_heading, empty_state %}
 
 {% block title %}My Coursework - AMS{% endblock %}
 
@@ -35,12 +35,7 @@
 
     {% if student_id or preview_role == 'student' %}
     <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">To do</h2>
-            </div>
-            <span class="badge badge-warning">{{ todo|length }}</span>
-        </div>
+        {{ section_heading('To do', badge=todo|length, badge_tone='warning') }}
         {% if todo %}
         <div class="table-container">
             <table class="table table-compact">
@@ -76,20 +71,12 @@
             </table>
         </div>
         {% else %}
-        <div class="empty-state">
-            <p class="empty-state-title">All caught up</p>
-            <p class="empty-state-text">There are no pending assignments right now.</p>
-        </div>
+        {{ empty_state('All caught up', 'There are no pending assignments right now.') }}
         {% endif %}
     </section>
 
     <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">Completed assignments</h2>
-            </div>
-            <span class="badge badge-success">{{ completed|length }}</span>
-        </div>
+        {{ section_heading('Completed assignments', badge=completed|length, badge_tone='success') }}
         {% if completed %}
         <div class="table-container">
             <table class="table table-compact">
@@ -140,20 +127,12 @@
             </table>
         </div>
         {% else %}
-        <div class="empty-state">
-            <p class="empty-state-title">No completed assignments yet</p>
-            <p class="empty-state-text">Completed coursework will appear here once deadlines pass or work is submitted.</p>
-        </div>
+        {{ empty_state('No completed assignments yet', 'Completed coursework will appear here once deadlines pass or work is submitted.') }}
         {% endif %}
     </section>
 
     <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">My submissions</h2>
-            </div>
-            <span class="badge badge-secondary">{{ submission_cards|length }}</span>
-        </div>
+        {{ section_heading('My submissions', badge=submission_cards|length) }}
         {% set show_all_attempts = request.args.get('show_all') == '1' %}
         {% set visible_submission_cards = submission_cards if show_all_attempts else submission_cards[:3] %}
         {% if submission_cards %}
@@ -217,17 +196,11 @@
         </div>
         {% endif %}
         {% else %}
-        <div class="empty-state">
-            <p class="empty-state-title">No submissions yet</p>
-            <p class="empty-state-text">Upload your first submission to start building your report history.</p>
-        </div>
+        {{ empty_state('No submissions yet', 'Upload your first submission to start building your report history.') }}
         {% endif %}
     </section>
     {% else %}
-    <div class="empty-state">
-        <p class="empty-state-title">Access restricted</p>
-        <p class="empty-state-text">Please sign in as a student to view this page.</p>
-    </div>
+    {{ empty_state('Access restricted', 'Please sign in as a student to view this page.') }}
     {% endif %}
 </div>
 {% endblock %}

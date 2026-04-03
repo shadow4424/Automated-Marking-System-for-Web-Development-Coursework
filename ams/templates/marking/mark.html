@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{% if effective_role == 'student' %}Submit Coursework{% else %}Mark Submission{% endif %} - AMS{% endblock %}
+{% from "macros/_ui.html" import section_heading %}
 
 {% block content %}
 {% if effective_role == 'student' %}
@@ -38,11 +39,7 @@
 
     <section class="form-layout">
         <div class="card">
-            <div class="section-heading-row">
-                <div class="section-copy">
-                    <h2 class="card-title">Submission details</h2>
-                </div>
-            </div>
+            {{ section_heading('Submission details') }}
             <form method="post" enctype="multipart/form-data" id="markForm">
                 <input type="hidden" id="student_id" name="student_id" value="{{ user_id }}">
                 <input type="hidden" name="scoring_mode" value="static_plus_llm">
@@ -191,11 +188,7 @@
 
     <section class="form-layout">
         <div class="card">
-            <div class="section-heading-row">
-                <div class="section-copy">
-                    <h2 class="card-title">Submission details</h2>
-                </div>
-            </div>
+            {{ section_heading('Submission details') }}
             <form method="post" enctype="multipart/form-data" id="markForm">
                 <div class="grid grid-2">
                     <div class="form-group">

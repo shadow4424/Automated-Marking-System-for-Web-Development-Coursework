@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}Admin Dashboard - AMS{% endblock %}
+{% from "macros/_ui.html" import section_heading %}
 
 {% block content %}
 <div class="page-shell">
@@ -69,11 +70,7 @@
     </section>
 
     <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">Administration</h2>
-            </div>
-        </div>
+        {{ section_heading('Administration') }}
         <div class="action-card-grid">
             <a href="{{ url_for('admin.users_page') }}" class="action-card">
                 <div class="action-card-header">

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros/_ui.html" import role_badge %}
+{% from "macros/_ui.html" import role_badge, section_heading %}
 
 {% block title %}Account Settings — AMS{% endblock %}
 
@@ -44,12 +44,7 @@
     <div class="account-settings-grid">
         {# ── Email update card ── #}
         <section class="card account-settings-card">
-            <div class="section-heading-row">
-                <div class="section-copy">
-                    <h2 class="card-title">Email address</h2>
-                </div>
-                <span class="badge badge-info">Editable</span>
-            </div>
+            {{ section_heading('Email address', badge='Editable', badge_tone='info') }}
 
             <p class="form-hint mb-lg">
                 Current email: <strong>{{ user.email }}</strong>
@@ -73,12 +68,7 @@
 
         {# ── Password change card ── #}
         <section class="card account-settings-card">
-            <div class="section-heading-row">
-                <div class="section-copy">
-                    <h2 class="card-title">Change password</h2>
-                </div>
-                <span class="badge badge-info">Editable</span>
-            </div>
+            {{ section_heading('Change password', badge='Editable', badge_tone='info') }}
 
             <form method="POST" action="{{ url_for('account.update_password') }}" class="account-settings-form">
                 <div class="form-group">

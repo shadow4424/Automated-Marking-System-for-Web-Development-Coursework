@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}Student Dashboard - AMS{% endblock %}
+{% from "macros/_ui.html" import section_heading, empty_state %}
 
 {% block content %}
 <div class="page-shell">
@@ -95,17 +96,11 @@
             {% endfor %}
         </div>
         {% else %}
-        <div class="empty-state">
-            <p class="empty-state-title">No submissions yet</p>
-            <p class="empty-state-text">Upload your first submission to start building your coursework history.</p>
-        </div>
+        {{ empty_state('No submissions yet', 'Upload your first submission to start building your coursework history.') }}
         {% endif %}
     </section>
     {% else %}
-    <div class="empty-state">
-        <p class="empty-state-title">Access restricted</p>
-        <p class="empty-state-text">Please sign in as a student to view this dashboard.</p>
-    </div>
+    {{ empty_state('Access restricted', 'Please sign in as a student to view this dashboard.') }}
     {% endif %}
 </div>
 {% endblock %}

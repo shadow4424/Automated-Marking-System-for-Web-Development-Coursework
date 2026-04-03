@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros/_ui.html" import role_badge %}
+{% from "macros/_ui.html" import role_badge, section_heading, empty_state %}
 
 {% block title %}All Users - AMS{% endblock %}
 
@@ -55,11 +55,7 @@
     </section>
 
     <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">Accounts</h2>
-            </div>
-        </div>
+        {{ section_heading('Accounts') }}
         {% if users %}
         <div class="table-container">
             <table class="table table-compact" id="users-table">
@@ -105,10 +101,7 @@
             </div>
         </div>
         {% else %}
-        <div class="empty-state">
-            <p class="empty-state-title">No users found</p>
-            <p class="empty-state-text">Create a teacher or student account to start using AMS.</p>
-        </div>
+        {{ empty_state('No users found', 'Create a teacher or student account to start using AMS.') }}
         {% endif %}
     </section>
 </div>

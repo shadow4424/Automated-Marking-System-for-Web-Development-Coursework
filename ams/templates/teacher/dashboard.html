@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros/_ui.html" import status_badge %}
+{% from "macros/_ui.html" import status_badge, section_heading, empty_state %}
 
 {% block title %}Teacher Dashboard - AMS{% endblock %}
 
@@ -36,12 +36,7 @@
     </section>
 
     <section class="card">
-        <div class="section-heading-row">
-            <div class="section-copy">
-                <h2 class="card-title">Assignments</h2>
-            </div>
-            <span class="badge badge-secondary">{{ assignments|length }}</span>
-        </div>
+        {{ section_heading('Assignments', badge=assignments|length) }}
         {% if assignments %}
         <div class="table-container">
             <table class="table table-compact">
@@ -84,11 +79,7 @@
             </table>
         </div>
         {% else %}
-        <div class="empty-state">
-            <p class="empty-state-title">No assignments yet</p>
-            <p class="empty-state-text">Create your first assignment to start allocating students and reviewing submissions.</p>
-            <a href="{{ url_for('assignment_mgmt.create_assignment_route') }}" class="btn btn-primary">Create assignment</a>
-        </div>
+        {{ empty_state('No assignments yet', 'Create your first assignment to start allocating students and reviewing submissions.', action_url=url_for('assignment_mgmt.create_assignment_route'), action_label='Create assignment') }}
         {% endif %}
     </section>
 </div>

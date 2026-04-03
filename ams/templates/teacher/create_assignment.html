@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}Create Assignment - AMS{% endblock %}
+{% from "macros/_ui.html" import section_heading %}
 
 {% block content %}
 {% set create_assignment_back_url = url_for('admin.dashboard') if user_role == 'admin' else url_for('teacher_dashboard.dashboard') %}
@@ -39,11 +40,7 @@
 
     <section class="form-layout">
         <div class="card">
-            <div class="section-heading-row">
-                <div class="section-copy">
-                    <h2 class="card-title">Assignment details</h2>
-                </div>
-            </div>
+            {{ section_heading('Assignment details') }}
             <form method="POST" action="{{ url_for('assignment_mgmt.create_assignment_route') }}">
                 <div class="form-group">
                     <label class="form-label" for="assignment_id">Assignment ID <span class="required">*</span></label>

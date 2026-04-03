@@ -18,6 +18,24 @@
   {%- endif %}">{{ label }}</span>
 {% endmacro %}
 
+{% macro section_heading(title, badge=none, badge_tone='secondary', subtitle=none) %}
+<div class="section-heading-row">
+    <div class="section-copy">
+        <h2 class="card-title">{{ title }}</h2>
+        {%- if subtitle %}<p class="section-note">{{ subtitle }}</p>{% endif %}
+    </div>
+    {%- if badge is not none %}<span class="badge badge-{{ badge_tone }}">{{ badge }}</span>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro empty_state(title, text, action_url=none, action_label=none) %}
+<div class="empty-state">
+    <p class="empty-state-title">{{ title }}</p>
+    <p class="empty-state-text">{{ text }}</p>
+    {%- if action_url %}<a href="{{ action_url }}" class="btn btn-primary">{{ action_label }}</a>{% endif %}
+</div>
+{% endmacro %}
+
 {% macro role_badge(role) %}
 {% set normalized_role = (role or '')|lower %}
 <span class="role-badge
