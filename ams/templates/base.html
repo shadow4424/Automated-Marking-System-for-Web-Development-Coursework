@@ -71,6 +71,8 @@
                         class="nav-link {% if request.endpoint and request.endpoint in ('admin.users_page', 'admin.create_account_page') %}active{% endif %}">Users</a>
                     <a href="{{ url_for('admin.assignments_page') }}"
                         class="nav-link {% if request.endpoint and request.endpoint == 'admin.assignments_page' %}active{% endif %}">Assignments</a>
+                    <a href="{{ url_for('runs.runs') }}"
+                        class="nav-link {% if request.endpoint == 'runs.runs' %}active{% endif %}">Runs</a>
                     {% endif %}
 
                     {# Teacher navigation (real teachers OR admin viewing as teacher) #}
