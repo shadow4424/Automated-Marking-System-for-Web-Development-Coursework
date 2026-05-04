@@ -151,6 +151,7 @@ class BatchFeedbackGenerator:
     @property
     def provider(self):
         if self._provider is None:
+            from ams.core.llm_factory import get_llm_provider
             self._provider = get_llm_provider()
         return self._provider
 
