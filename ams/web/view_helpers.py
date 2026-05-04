@@ -288,6 +288,9 @@ def gather_screenshots(evidence: object) -> list[str]:
     direct = evidence.get("screenshot")
     if isinstance(direct, str) and direct.strip():
         add(screenshots, seen, direct)
+    for path in evidence.get("screenshot_paths") or []:
+        if isinstance(path, str) and path.strip():
+            add(screenshots, seen, path)
     ux_review = evidence.get("ux_review")
     if isinstance(ux_review, Mapping):
         shot = ux_review.get("screenshot")

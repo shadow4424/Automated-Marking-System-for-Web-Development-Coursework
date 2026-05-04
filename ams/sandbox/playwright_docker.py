@@ -326,7 +326,10 @@ class DockerPlaywrightRunner(BrowserRunner):
                     # Capture a full-page screenshot to the writable /output mount
                     _shot_path = f"/output/{safe_stem}_{{int(time.time() * 1000)}}.png"
                     try:
-                        page.screenshot(path=_shot_path, full_page=True)
+                        try:
+                            page.screenshot(path=_shot_path, full_page=True)
+                        except Exception:
+                            page.screenshot(path=_shot_path, full_page=False)
                         import os
                         os.chmod(_shot_path, 0o644)  # ensure readable by host
                     except Exception as _se:
@@ -350,7 +353,10 @@ class DockerPlaywrightRunner(BrowserRunner):
                 # Still try to capture whatever rendered before the timeout
                 try:
                     _shot_path = f"/output/{safe_stem}_timeout_{{int(time.time() * 1000)}}.png"
-                    page.screenshot(path=_shot_path, full_page=True, timeout=3000)
+                    try:
+                        page.screenshot(path=_shot_path, full_page=True, timeout=3000)
+                    except Exception:
+                        page.screenshot(path=_shot_path, full_page=False, timeout=3000)
                     import os
                     os.chmod(_shot_path, 0o644)
                     result["screenshot_path"] = _shot_path
